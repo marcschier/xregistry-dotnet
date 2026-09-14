@@ -38,7 +38,7 @@ internal sealed partial class FileOciLayoutNative : IDisposable
             barriers.Add(root, OpenBarrier(root));
             parentBarrier = OperatingSystem.IsWindows()
                 ? WindowsOpen(parent.FullName, 0x40000080, 3, 3)
-                : LinuxOpen(root.RootHandle, "..", 0x10000 | 0x20000 | 0x80000, 0);
+                : LinuxOpen(root.RootHandle, "..", FileDocumentTreeReader.LinuxOpenFlags(directory: true), 0);
             CheckSameFileSystem(parentBarrier, directory: true);
             Flush(root);
             FlushHandle(parentBarrier);
@@ -84,7 +84,7 @@ internal sealed partial class FileOciLayoutNative : IDisposable
         {
             handle = OperatingSystem.IsWindows()
                 ? WindowsOpen(Path.Combine(directory.NativeRoot, name), 0xc0000080, 1, 3)
-                : LinuxOpen(directory.RootHandle, name, 0x20000 | 0x80000 | 0x800, 0);
+                : LinuxOpen(directory.RootHandle, name, FileDocumentTreeReader.LinuxOpenFlags(directory: false) | 0x800, 0);
         }
         catch (FileNotFoundException) { return null; }
         var transferred = false;
@@ -102,7 +102,7 @@ internal sealed partial class FileOciLayoutNative : IDisposable
     {
         var handle = OperatingSystem.IsWindows()
             ? WindowsOpen(Path.Combine(directory.NativeRoot, name), 0xc0010080, 1, 1)
-            : LinuxOpen(directory.RootHandle, name, 2 | 0x40 | 0x80 | 0x20000 | 0x80000 | 0x800, 0x180);
+            : LinuxOpen(directory.RootHandle, name, 2 | 0x40 | 0x80 | FileDocumentTreeReader.LinuxOpenFlags(directory: false) | 0x800, 0x180);
         var transferred = false;
         try
         {
@@ -219,7 +219,7 @@ internal sealed partial class FileOciLayoutNative : IDisposable
     {
         var handle = OperatingSystem.IsWindows()
             ? WindowsOpen(reader.NativeRoot, 0x40000080, 3, 3)
-            : LinuxOpen(reader.RootHandle, ".", 0x10000 | 0x20000 | 0x80000, 0);
+            : LinuxOpen(reader.RootHandle, ".", FileDocumentTreeReader.LinuxOpenFlags(directory: true), 0);
         var retained = false;
         try
         {
@@ -248,7 +248,7 @@ internal sealed partial class FileOciLayoutNative : IDisposable
         }
         else
         {
-            handle = LinuxOpen(root.RootHandle, name, 2 | 0x40 | 0x20000 | 0x80000 | 0x800, 0x180);
+            handle = LinuxOpen(root.RootHandle, name, 2 | 0x40 | FileDocumentTreeReader.LinuxOpenFlags(directory: false) | 0x800, 0x180);
             if (Flock(handle, 2 | 4) != 0)
             {
                 var error = Marshal.GetLastPInvokeError();

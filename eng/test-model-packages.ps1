@@ -90,6 +90,7 @@ try {
     }
     Write-Output "Clean package-model native evidence retained at $run"
     Write-Output 'Other packages, full protocol conformance and unexecuted native platforms remain unqualified.'
+    $global:LASTEXITCODE = 0
 }
 finally {
     $env:PATH = $originalPath

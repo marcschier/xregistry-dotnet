@@ -166,7 +166,14 @@ internal sealed partial class DirectoryDurability : IDisposable
         }
         else
         {
-            var descriptor = OpenNative(path, 0x10000 | 0x20000 | 0x80000);
+            // Linux arm64 assigns O_DIRECTORY/O_NOFOLLOW differently from x64.
+            var directoryFlags = RuntimeInformation.ProcessArchitecture switch
+            {
+                Architecture.X64 => 0x10000 | 0x20000,
+                Architecture.Arm64 => 0x4000 | 0x8000,
+                _ => throw new PlatformNotSupportedException("Native directory durability supports Linux x64 and arm64.")
+            };
+            var descriptor = OpenNative(path, directoryFlags | 0x80000);
             handle = new SafeFileHandle(descriptor, ownsHandle: true);
         }
 

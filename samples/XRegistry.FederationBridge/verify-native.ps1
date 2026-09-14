@@ -101,7 +101,7 @@ try {
     $nativeInfo = Read-RuntimeInfo -Executable $native -Arguments @('--runtime-info') -Name 'native-runtime'
     $evidence['nativeRuntime'] = $nativeInfo
     if (-not (Test-NativeInfo $nativeInfo)) { throw 'The candidate is not the matching native runtime; JIT/feature switches or emulation cannot qualify it.' }
-    $dotnet = (Get-Command dotnet -CommandType Application -ErrorAction Stop).Source
+    $dotnet = (Get-Command dotnet -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
     $jitInfo = Read-RuntimeInfo -Executable $dotnet -Arguments @("`"$managed`"", '--runtime-info') -Name 'jit-runtime'
     $evidence['jitNegativeControl'] = $jitInfo
     if ((Test-NativeInfo $jitInfo) -or $jitInfo.nativeAot -ne $false -or $jitInfo.jitCompiledMethods -le 0) {
