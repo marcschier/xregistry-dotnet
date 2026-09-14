@@ -218,9 +218,21 @@ public sealed partial class FileDocumentTreeReader : IDocumentTreeReader, IDispo
         }
     }
 
+    internal static int LinuxOpenFlags(bool directory)
+    {
+        // arm64 uses distinct O_DIRECTORY/O_NOFOLLOW bits; O_CLOEXEC is common.
+        var flags = RuntimeInformation.ProcessArchitecture switch
+        {
+            Architecture.X64 => 0x20000 | (directory ? 0x10000 : 0),
+            Architecture.Arm64 => 0x8000 | (directory ? 0x4000 : 0),
+            _ => throw new PlatformNotSupportedException("Native File reads support Linux x64 and arm64.")
+        };
+        return flags | 0x80000;
+    }
+
     private static SafeFileHandle OpenLinuxRoot(string path)
     {
-        var descriptor = OpenNative("/", 0x10000 | 0x20000 | 0x80000);
+        var descriptor = OpenNative("/", LinuxOpenFlags(directory: true));
         if (descriptor < 0)
         {
             throw Denied("The filesystem root cannot be opened safely.");
@@ -247,7 +259,7 @@ public sealed partial class FileDocumentTreeReader : IDocumentTreeReader, IDispo
 
     private static SafeFileHandle OpenLinuxAt(SafeFileHandle parent, string name, bool directory)
     {
-        var descriptor = OpenAt(parent, name, 0x20000 | 0x80000 | 0x800 | (directory ? 0x10000 : 0));
+        var descriptor = OpenAt(parent, name, LinuxOpenFlags(directory) | 0x800);
         if (descriptor < 0)
         {
             var error = Marshal.GetLastPInvokeError();

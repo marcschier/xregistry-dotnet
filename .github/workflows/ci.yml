@@ -56,7 +56,8 @@ jobs:
         with:
           python-version: '3.13'
       - name: Install independently hashed oracle dependencies
-        run: python -m pip install --require-hashes --only-binary=:all: -r eng/requirements-oracles.lock
+        run: |
+          python -m pip install --require-hashes --only-binary=:all: -r eng/requirements-oracles.lock
       - name: Locked build and evaluated package contracts
         shell: pwsh
         run: ./eng/build.ps1
@@ -77,7 +78,8 @@ jobs:
         with:
           python-version: '3.13'
       - name: Install independently hashed oracle dependencies
-        run: python -m pip install --require-hashes --only-binary=:all: -r eng/requirements-oracles.lock
+        run: |
+          python -m pip install --require-hashes --only-binary=:all: -r eng/requirements-oracles.lock
       - name: Execute frozen and active-corrected non-OPC-UA specification corpora
         shell: pwsh
         run: ./eng/test-specification.ps1

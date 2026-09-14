@@ -37,7 +37,8 @@ jobs:
             8.0.x
             10.0.x
       - name: Install independently hashed oracle dependencies
-        run: python -m pip install --require-hashes --only-binary=:all: -r eng/requirements-oracles.lock
+        run: |
+          python -m pip install --require-hashes --only-binary=:all: -r eng/requirements-oracles.lock
       - name: Qualify exact tag source and assemble explicit-version packages
         id: build
         shell: pwsh
