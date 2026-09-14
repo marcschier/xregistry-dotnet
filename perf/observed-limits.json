@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "artifact": "artifacts/file-server-native/win-x64/XRegistry.Sample.FileServer.exe",
+  "observations": [
+    {
+      "scenario": "seed-1000-metadata-resources",
+      "status": "not-measured",
+      "alreadySeededResources": 300,
+      "attemptedResourcesAfterBatch": 325,
+      "batchSize": 25,
+      "method": "POST",
+      "path": "/registry/dirs/perf/records",
+      "httpStatus": 413,
+      "problemCode": "too_large",
+      "problemDetail": "The entity operation budget is exhausted.",
+      "evidence": "artifacts/server-performance/shipping-limit-probe/failure.json",
+      "resolution": "The original failure remains preserved. The server owner's indexing/revalidation fix was independently confirmed by the native 100/1000 workload: every 25-resource batch, including 300-to-325, passed in nine 1000-resource rounds. No shipping limits were raised.",
+      "qualifiedFollowUp": "perf/scaling-baseline-win-x64.json",
+      "shippingLimitsChanged": false,
+      "numbersInferredFor1000Resources": false
+    },
+    {
+      "scenario": "atomic-nested-write-at-250-resources",
+      "status": "not-measured",
+      "seededResources": 250,
+      "method": "PATCH",
+      "path": "/registry/",
+      "httpStatus": 413,
+      "problemCode": "too_large",
+      "problemDetail": "The entity operation budget is exhausted.",
+      "evidence": "artifacts/server-performance/baseline-ce8908d7c04844aba2e366df87d9427f/evidence/report.json",
+      "resolution": "The original 250-resource attempt remains failed evidence. A rebuilt native artifact now qualifies root-level atomic two-Resource writes at 1000 initial Resources with unchanged shipping limits. The 250-resource case was not separately rerun.",
+      "qualifiedFollowUp": "perf/scaling-baseline-win-x64.json",
+      "shippingLimitsChanged": false
+    },
+    {
+      "scenario": "repeated-complete-pagination-at-1000-resources",
+      "status": "observed-policy-boundary",
+      "serverSha256": "fd32d230e09a45f1b39f56a76c0fe25da8088cf74b1f189b4e887b84b2658d8e",
+      "method": "GET",
+      "path": "/registry/dirs/perf/records?limit=64",
+      "httpStatus": 503,
+      "problemCode": "server_busy",
+      "problemDetail": "The bounded cursor store is full; existing cursors are not evicted before expiry.",
+      "evidence": "artifacts/server-performance/scaling-0fcd5bfbb8804d959e229413cae654bf/run-1/evidence/report.json",
+      "profileEvidence": "artifacts/server-performance/scaling-0fcd5bfbb8804d959e229413cae654bf/attempt-1-profile.json",
+      "shippingRetainedRecordLimit": 16384,
+      "shippingCursorLifetimeSeconds": 120,
+      "attemptedRetainedRecords": 17000,
+      "resolution": "Keep the failure. The bounded scaling profile uses four measured collection iterations instead of five, with three warmups unchanged: 1 + 2*(3+4) = 15 retained 1000-row queries. All scenarios, 1000 initial Resources, opaque page size 64 and correctness assertions remain. No cursor quota, expiry, durability or server code was changed.",
+      "qualifiedFollowUp": "perf/scaling-baseline-win-x64.json",
+      "shippingLimitsChanged": false
+    }
+  ]
+}

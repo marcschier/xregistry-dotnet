@@ -1,0 +1,38 @@
+{
+  "registryId": "federation-bridge",
+  "hosting": {
+    "publicRoot": "http://127.0.0.1:5091/registry",
+    "listenPort": 5091,
+    "demoLoopback": true,
+    "allowAnonymousReads": false
+  },
+  "modelFile": "bridge-model.json",
+  "sources": [
+    {
+      "name": "frozen-file",
+      "binding": "file",
+      "directory": "../../tests/Conformance/Sources/workingdrafts/bindings/samples/mapping",
+      "authorizedDirectory": "../../tests/Conformance/Sources/workingdrafts/bindings/samples/mapping",
+      "layout": "document-tree",
+      "adminOnly": false
+    }
+  ],
+  "mounts": [],
+  "externalDocumentOrigins": [],
+  "paging": {
+    "maxPageRecords": 256,
+    "maxCaptureRecords": 1024,
+    "maxCaptureBytes": 4194304,
+    "maxCaptures": 16,
+    "maxTotalBytes": 16777216,
+    "maxTokens": 4096,
+    "lifetimeSeconds": 120
+  },
+  "limits": {
+    "maxConcurrentRequests": 4,
+    "maxBodyBytes": 2097152,
+    "maxSourceBytes": 16777216,
+    "maxSourceRequests": 256,
+    "requestTimeoutSeconds": 30
+  }
+}

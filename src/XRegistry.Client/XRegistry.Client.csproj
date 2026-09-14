@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>XRegistry.Client</PackageId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\XRegistry\XRegistry.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="SharpZipLib" />
+  </ItemGroup>
+</Project>

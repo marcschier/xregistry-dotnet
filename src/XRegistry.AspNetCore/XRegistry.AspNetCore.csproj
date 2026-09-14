@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>XRegistry.AspNetCore</PackageId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\XRegistry\XRegistry.csproj" />
+    <ProjectReference Include="..\XRegistry.Server\XRegistry.Server.csproj" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+</Project>

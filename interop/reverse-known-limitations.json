@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "upstreamCommit": "5854af0130db7723bad489f16ba66536126b823a",
+  "entries": [
+    {
+      "id": "XR-CAPABILITIES-MUTABLE",
+      "classification": "pinned-peer-checker-limitation",
+      "condition": "The unmodified xr conform parser rejects the top-level mutable capability.",
+      "observedMessage": "Unknown capability specified: mutable.",
+      "request": "GET /registry/capabilities",
+      "nativeResponseFragment": {"mutable": []},
+      "specification": "tests/Conformance/Sources/core/spec.md:1848-1886 includes mutable and extension capabilities and requires supported capabilities to be serialized even when empty.",
+      "upstreamSource": "common/capabilities.go:ParseCapabilities; cmds/xr/ct_registry.go:TestCapabilities",
+      "initialObservedTotals": {"pass": 30, "fail": 10, "warn": 0, "skip": 0},
+      "gatePolicy": "Record as a known limitation but do not accept conformance, lower expected totals, omit suites, filter the response, patch the peer, or turn the CI lane green.",
+      "removalCondition": "An explicitly reviewed new immutable peer pin supports the frozen capability contract, or a specification-backed correction is established separately."
+    }
+  ]
+}

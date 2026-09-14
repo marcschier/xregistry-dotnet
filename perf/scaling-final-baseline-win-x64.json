@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "kind": "final-retained-metadata-accounting-native-scaling-requalification",
+  "status": "measured",
+  "deploymentSlo": false,
+  "hardCiGate": false,
+  "globalQualification": false,
+  "serverSha256": "e71c8cc2de970b573d18fa02528b3d4a506466a1a97bff84cdcbedb0ea7b5db2",
+  "nativeBinaryBytes": 20862464,
+  "profile": "perf/scaling-profile.json",
+  "profileSha256": "df59c736d3d8d59f9d3e540fcc525aeaaa1bd7f8faf5f1172c23b03adc0e881d",
+  "workloadSha256": "1ca25ad0b28903c1d54a7f4bd992f656a533bc14cf1a3f0c4f231ed1a3d6248f",
+  "sdk": "10.0.401",
+  "runtimeProof": {"nativeAot": true, "jitCompiledMethods": 0, "architecture": "X64"},
+  "managedControl": {"nativeAot": false, "jitCompiledMethods": 59, "architecture": "X64"},
+  "previousBaseline": "artifacts/server-performance/scaling-final-c5b0590b8b364a03aedce4304c92d7be/tracked-baseline.json",
+  "fullQualification": "artifacts/server-performance/scaling-accounted-86d3e50f4d234d2b8a4434b722582c5f/qualification.json",
+  "execution": {
+    "completeInvocations": 3,
+    "totalRounds": 18,
+    "roundsPerScale": 9,
+    "resourceCounts": [100, 1000],
+    "writeResourceCounts": [100, 1000],
+    "scenariosPerScale": 7,
+    "seedBatchSize": 25,
+    "concurrency": 1,
+    "warmupIterations": 3,
+    "collectionIterations": 4,
+    "pageSize": 64,
+    "validatedRequestsPerInvocation": 1320,
+    "validatedRequests": 3960,
+    "elapsedSecondsPerInvocation": [24.140407899998536, 25.859198400001333, 22.521430699998746],
+    "finalResourceCounts": {"100": 116, "1000": 1016},
+    "finalUpdatedVersionEpoch": 8,
+    "shippingLimitsChanged": false,
+    "durabilityChanged": false,
+    "workloadChanged": false,
+    "profileChanged": false,
+    "serverCodeEditedByThisFollowUp": false,
+    "ownedProcessesRemaining": 0,
+    "ownedTemporaryStoresCleaned": true
+  },
+  "selectedResults": [
+    {"resources": 100, "scenario": "point-metadata-get", "samples": 180, "p50Ms": 0.3819, "p95Ms": 0.5386, "p99Ms": 1.1367, "validatedOpsPerSecond": 2231.47},
+    {"resources": 1000, "scenario": "point-metadata-get", "samples": 180, "p50Ms": 0.3943, "p95Ms": 0.5372, "p99Ms": 0.7080, "validatedOpsPerSecond": 2318.57},
+    {"resources": 1000, "scenario": "complete-collection-get", "samples": 36, "p50Ms": 97.8483, "p95Ms": 207.2915, "p99Ms": 291.3831, "validatedOpsPerSecond": 9.00},
+    {"resources": 1000, "scenario": "opaque-paged-collection-get", "samples": 36, "p50Ms": 127.7284, "p95Ms": 254.1258, "p99Ms": 313.9184, "validatedOpsPerSecond": 7.02},
+    {"resources": 1000, "scenario": "streamed-document-small", "samples": 90, "p50Ms": 0.7675, "p95Ms": 2.1391, "p99Ms": 25.8907, "validatedOpsPerSecond": 1230.10},
+    {"resources": 1000, "scenario": "streamed-document-large", "samples": 90, "p50Ms": 3.9439, "p95Ms": 24.2090, "p99Ms": 45.1053, "validatedOpsPerSecond": 138.01},
+    {"resources": 1000, "scenario": "atomic-nested-two-resource-write", "samples": 45, "p50Ms": 18.0128, "p95Ms": 69.6091, "p99Ms": 84.8965, "validatedOpsPerSecond": 21.21},
+    {"resources": 1000, "scenario": "durable-metadata-update", "samples": 45, "p50Ms": 16.6349, "p95Ms": 23.2323, "p99Ms": 46.7321, "validatedOpsPerSecond": 21.84}
+  ],
+  "memoryAt1000": {
+    "workingSetBytesRange": [176390144, 221827072],
+    "peakWorkingSetBytesRange": [218972160, 257339392],
+    "privateCommittedBytesRange": [201252864, 270262272],
+    "source": "GetProcessMemoryInfo"
+  },
+  "diskAt1000": {
+    "afterSeedLogicalBytesRange": [2847088, 2855280],
+    "finalLogicalBytesRange": [2912624, 2924912],
+    "filesPerStore": 8,
+    "physicalAllocationMeasured": false
+  },
+  "reports": [
+    {"path": "artifacts/server-performance/scaling-accounted-86d3e50f4d234d2b8a4434b722582c5f/run-1/evidence/report.json", "sha256": "526ac2c5323a59010bb8843052359b2df16ed3936161b0cb3ee0d8ff561451fc"},
+    {"path": "artifacts/server-performance/scaling-accounted-86d3e50f4d234d2b8a4434b722582c5f/run-2/evidence/report.json", "sha256": "74e853fa5a1506bb4e754c20a20ffb1e00b138ad67330bf8866c6c58feb609d0"},
+    {"path": "artifacts/server-performance/scaling-accounted-86d3e50f4d234d2b8a4434b722582c5f/run-3/evidence/report.json", "sha256": "e1524610e4b535fe121cdc05ebf696629a42f5014938a3c7a77fb1ea179146cd"}
+  ],
+  "interpretation": {
+    "aggregation": "Every successful sample from all 18 rounds retained; complete 14-row metrics and per-round medians are in qualification.json.",
+    "throughput": "Median per-round validated operations/second, including verification reads and between-request validation.",
+    "variance": "Shared-host variation remains substantial. No statistically justified speedup, absence-of-scans claim or deployment tail guarantee is inferred.",
+    "regressionPolicy": "Investigate repeatable >10% degradation under matched conditions; not a hard gate.",
+    "cursorScope": "The unchanged four-iteration profile fits 15000 retained records. The prior 17-query 503 remains preserved under the previous artifact; that sequence was not rerun here."
+  },
+  "notExecuted": ["new Linux qualification", "ARM64", "production TLS/authentication", "in-memory comparison", "cold-storage workload", "more than 1000 initial metadata Resources"]
+}

@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>XRegistry.Federation</PackageId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\XRegistry\XRegistry.csproj" />
+    <ProjectReference Include="..\XRegistry.Client\XRegistry.Client.csproj" />
+    <ProjectReference Include="..\XRegistry.Models\XRegistry.Models.csproj" />
+  </ItemGroup>
+</Project>

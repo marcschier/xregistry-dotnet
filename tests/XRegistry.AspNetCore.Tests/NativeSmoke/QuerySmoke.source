@@ -1,0 +1,235 @@
+using System.Net;
+using System.Runtime.CompilerServices;
+using System.Security.Claims;
+using System.Text;
+using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
+using XRegistry;
+using XRegistry.AspNetCore;
+using XRegistry.Queries;
+using XRegistry.Server;
+
+using (var budget = new RegistryQueryBudget())
+{
+    var detachedModel = RegistryModel.Compile(RegistryJson.Parse("""
+        {"groups":{"sets":{"singular":"set","resources":{"items":{"singular":"item","hasdocument":false,
+          "attributes":{"rank":{"type":"decimal"}}}}}}}
+        """));
+    var selected = await RegistryQuery.EvaluateAsync(detachedModel, new NativeDetachedSource(),
+        new(RegistryPath.Parse("/sets/g/items"), new Uri("https://native.example/catalog"))
+        {
+            Filters = ["rank>9007199254740992,meta.readonly=true"],
+            Sort = "rank=desc"
+        }, budget);
+    if (selected.RootPaths.Single().ToXid() != "/sets/g/items/a" ||
+        !selected.Includes(RegistryPath.Parse("/sets/g/items/a/versions/1")) ||
+        selected.Includes(RegistryPath.Parse("/sets/g/items/b")) ||
+        selected.CollectionUrl(RegistryPath.Parse("/sets/g/items"), 1) !=
+            "https://native.example/catalog/sets/g/items?filter=itemid%3Da")
+    {
+        throw new InvalidOperationException("Native detached shared-query evaluation failed.");
+    }
+}
+
+var builder = WebApplication.CreateSlimBuilder(args);
+builder.Logging.ClearProviders();
+builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, 0));
+await using var app = builder.Build();
+app.Use(async (context, next) =>
+{
+    if (context.Connection.RemoteIpAddress is not { } address || !IPAddress.IsLoopback(address))
+    {
+        context.Response.StatusCode = 403;
+        return;
+    }
+
+    context.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "native-query")], "isolated-loopback"));
+    await next(context);
+});
+var engine = new RegistryEngine(new()
+{
+    RegistryId = "native-query",
+    PublicRoot = new Uri("https://native.example/catalog"),
+    Model = RegistryModel.Compile(RegistryJson.Parse("""
+        {"groups":{"records":{"singular":"record","attributes":{"rank":{"type":"decimal"}}},
+          "dirs":{"singular":"dir","resources":{"records":{"singular":"record","hasdocument":false,
+            "attributes":{"ordinal":{"type":"integer"},"payload":{"type":"string"}}}}}}}
+        """))
+}, new InMemoryRegistryPersistence(), new NativePolicy());
+app.MapXRegistry(engine, new() { MountPath = "/catalog" });
+await app.StartAsync();
+try
+{
+    var address = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
+    using var client = new HttpClient { BaseAddress = new Uri(address) };
+    using var created = await client.PutAsync("/catalog", Json("""
+        {"records":{"a":{"rank":2},"b":{"rank":10},"c":{"rank":9007199254740993},"d":{}}}
+        """));
+    if (created.StatusCode != HttpStatusCode.OK)
+    {
+        throw new InvalidOperationException("Native query seed failed.");
+    }
+
+    using var request = new HttpRequestMessage(HttpMethod.Get, "/catalog/records?filter=rank%3E%3D2&sort=rank%3Ddesc&limit=1");
+    request.Headers.Host = "spoofed.invalid";
+    using var first = await client.SendAsync(request);
+    var root = RegistryJson.Parse(await first.Content.ReadAsByteArrayAsync()).RootElement;
+    if (first.StatusCode != HttpStatusCode.OK || root.EnumerateObject().Single().Name != "c" ||
+        root.GetProperty("c").GetProperty("rank").GetRawText() != "9007199254740993" ||
+        first.Headers.GetValues("xRegistry-count").Single() != "3")
+    {
+        throw new InvalidOperationException("Native exact filter/sort/count failed.");
+    }
+
+    var next = Next(first) ?? throw new InvalidOperationException("Native next link is missing.");
+    if (!next.StartsWith("https://native.example/catalog/records?cursor=", StringComparison.Ordinal))
+    {
+        throw new InvalidOperationException("Native next link is not bound to PublicRoot.");
+    }
+
+    using var changed = await client.PatchAsync("/catalog/records/b", Json("""{"rank":-1}"""));
+    if (changed.StatusCode != HttpStatusCode.OK)
+    {
+        throw new InvalidOperationException("Native mutation failed.");
+    }
+
+    var nextUri = new Uri(next);
+    using var second = await client.GetAsync(nextUri.GetComponents(UriComponents.PathAndQuery, UriFormat.UriEscaped));
+    var retained = RegistryJson.Parse(await second.Content.ReadAsByteArrayAsync()).RootElement;
+    if (second.StatusCode != HttpStatusCode.OK || retained.EnumerateObject().Single().Name != "b" ||
+        retained.GetProperty("b").GetProperty("rank").GetInt32() != 10)
+    {
+        throw new InvalidOperationException("Native frozen page changed after a write.");
+    }
+
+    using var forged = await client.GetAsync("/catalog/records?cursor=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+    if (forged.StatusCode != HttpStatusCode.BadRequest ||
+        RegistryJson.Parse(await forged.Content.ReadAsByteArrayAsync()).RootElement.GetProperty("code").GetString() != "bad_cursor")
+    {
+        throw new InvalidOperationException("Native forged cursor was not rejected explicitly.");
+    }
+
+    for (var offset = 0; offset < 1000; offset += 25)
+    {
+        var batch = new JsonObject();
+        for (var index = offset; index < offset + 25; index++)
+        {
+            batch["r" + index.ToString("D6", System.Globalization.CultureInfo.InvariantCulture)] = new JsonObject
+            {
+                ["versions"] = new JsonObject
+                {
+                    ["v1"] = new JsonObject
+                    {
+                        ["ordinal"] = index,
+                        ["payload"] = "deterministic-native-server-performance-fixture"
+                    }
+                }
+            };
+        }
+
+        using var seeded = await client.PostAsync("/catalog/dirs/perf/records", Json(batch.ToJsonString()));
+        if (seeded.StatusCode != HttpStatusCode.OK)
+        {
+            throw new InvalidOperationException("Native default-limit Resource seed failed at " + offset + ": " +
+                await seeded.Content.ReadAsStringAsync());
+        }
+    }
+
+    using var nested = await client.PatchAsync("/catalog", Json("""
+        {"dirs":{"perf":{"records":{"r000000":{"payload":"nested first"},"r000999":{"payload":"nested last"}}}}}
+        """));
+    using var metadataUpdate = await client.PatchAsync("/catalog/dirs/perf/records/r000500", Json("""{"payload":"metadata update"}"""));
+    using var countResponse = await client.GetAsync("/catalog/dirs/perf");
+    if (nested.StatusCode != HttpStatusCode.OK || metadataUpdate.StatusCode != HttpStatusCode.OK ||
+        RegistryJson.Parse(await countResponse.Content.ReadAsByteArrayAsync()).RootElement.GetProperty("recordscount").GetInt32() != 1000)
+    {
+        throw new InvalidOperationException("Native default-limit nested/point writes failed at 1000 Resources.");
+    }
+
+    using var rollback = await client.PatchAsync("/catalog", Json("""
+        {"dirs":{"perf":{"records":{"r000000":{"payload":"must roll back"},"r000001":{"recordid":"wrong"}}}}}
+        """));
+    using var caseConflict = await client.PostAsync("/catalog/dirs/perf/records", Json("""{"R000000":{}}"""));
+    using var unchanged = await client.GetAsync("/catalog/dirs/perf/records/r000000");
+    if (rollback.StatusCode != HttpStatusCode.BadRequest || caseConflict.StatusCode != HttpStatusCode.BadRequest ||
+        RegistryJson.Parse(await rollback.Content.ReadAsByteArrayAsync()).RootElement.GetProperty("code").GetString() != "mismatched_id" ||
+        RegistryJson.Parse(await caseConflict.Content.ReadAsByteArrayAsync()).RootElement.GetProperty("code").GetString() != "mismatched_id" ||
+        RegistryJson.Parse(await unchanged.Content.ReadAsByteArrayAsync()).RootElement.GetProperty("payload").GetString() != "nested first")
+    {
+        throw new InvalidOperationException("Native indexed collection rollback or sibling identity checks failed.");
+    }
+
+    using var missingEntity = await client.GetAsync("/catalog/records/missing");
+    var missingProblem = RegistryJson.Parse(await missingEntity.Content.ReadAsByteArrayAsync()).RootElement;
+    if (missingEntity.StatusCode != HttpStatusCode.NotFound ||
+        missingProblem.GetProperty("type").GetString() != "https://github.com/xregistry/spec/blob/main/core/spec.md#not_found" ||
+        missingProblem.GetProperty("title").GetString() != "The targeted entity (/records/missing) cannot be found." ||
+        missingProblem.GetProperty("subject").GetString() != "/records/missing" ||
+        missingProblem.TryGetProperty("args", out _) ||
+        missingEntity.Content.Headers.ContentType?.MediaType != "application/json")
+    {
+        throw new InvalidOperationException("Native frozen not_found contract failed.");
+    }
+
+    using var badMethod = await client.DeleteAsync("/catalog");
+    var methodProblem = RegistryJson.Parse(await badMethod.Content.ReadAsByteArrayAsync()).RootElement;
+    if (badMethod.StatusCode != HttpStatusCode.MethodNotAllowed ||
+        methodProblem.GetProperty("title").GetString() != "The specified action (DELETE) is not supported for: /." ||
+        methodProblem.GetProperty("args").GetProperty("action").GetString() != "DELETE" ||
+        !badMethod.Content.Headers.Allow.Contains("GET") ||
+        badMethod.Headers.Contains("xRegistry-xregcorrelationid"))
+    {
+        throw new InvalidOperationException("Native method/Allow/correlation error contract failed.");
+    }
+
+    Console.WriteLine("NATIVE_QUERY_SMOKE_PASSED: shared queries, 1000-Resource default-limit writes, and exact catalog errors/Allow/rollback");
+}
+finally
+{
+    await app.StopAsync();
+}
+
+static StringContent Json(string value) => new(value, Encoding.UTF8, "application/json");
+static string? Next(HttpResponseMessage response)
+{
+    var link = response.Headers.GetValues("Link").SelectMany(static value => value.Split(", "))
+        .SingleOrDefault(static field => field.Contains(";rel=next;", StringComparison.Ordinal));
+    return link is null ? null : link[1..link.IndexOf('>')];
+}
+
+internal sealed class NativePolicy : IRegistryAuthorizationPolicy
+{
+    public ValueTask<bool> AuthorizeAsync(ClaimsPrincipal caller, RegistryAccess access, RegistryPath path,
+        CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult(caller.HasClaim(ClaimTypes.NameIdentifier, "native-query"));
+}
+
+internal sealed class NativeDetachedSource : IRegistryQuerySource
+{
+    public ValueTask<RegistryQueryEntity?> ReadEntityAsync(RegistryPath path, bool includeDocument,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var metadata = path.Kind == RegistryPathKind.Version
+            ? path.ResourceId!.Value == "a" ? """{"versionid":"1","rank":9007199254740993}""" : """{"versionid":"1","rank":2}"""
+            : """{"defaultversionid":"1","readonly":true}""";
+        return ValueTask.FromResult<RegistryQueryEntity?>(new(RegistryJson.Parse(metadata)));
+    }
+
+    public async IAsyncEnumerable<RegistryPath> GetChildrenAsync(RegistryPath collection,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await Task.CompletedTask;
+        cancellationToken.ThrowIfCancellationRequested();
+        if (collection.Kind == RegistryPathKind.ResourceCollection)
+        {
+            yield return RegistryPath.Parse("/sets/g/items/a");
+            yield return RegistryPath.Parse("/sets/g/items/b");
+        }
+        else
+        {
+            yield return RegistryPath.Parse(collection.EscapedPath + "/1");
+        }
+    }
+}

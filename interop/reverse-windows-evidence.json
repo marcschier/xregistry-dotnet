@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "direction": "pinned-upstream-xr-to-native-dotnet",
+  "status": "blocked-conformance",
+  "qualified": false,
+  "platform": "win-x64",
+  "upstream": {
+    "repository": "https://github.com/xregistry/server",
+    "commit": "5854af0130db7723bad489f16ba66536126b823a",
+    "sourceTree": "e6ba7cff56b20cf1871ca2ed04075ae93c843571",
+    "version": "Version: 5854af0130db",
+    "sourceModified": false,
+    "binarySha256": "0fd41422c957733018adf701a89d6569ab77643a023df0994843b3a8bbe2f660",
+    "goVersion": "go version go1.27.1 windows/amd64",
+    "goModSha256": "1625dbcdc8fde6e227aee5cf16a9b03858797b8135765af91d67ff5e6f94585a",
+    "goSumSha256": "eb7f3550531ef7350759097d685dd384264053a7b2f8b5ec2908197ff7808d8b"
+  },
+  "nativeServer": {
+    "path": "artifacts/file-server-native/XRegistry.Sample.FileServer.exe",
+    "sha256": "88e763cd55c61685e96f2c1d5ade585fcc80575bc130b4c7f9b5ed099e9b7bd1",
+    "runtime": {
+      "nativeAot": true,
+      "jitCompiledMethods": 0,
+      "architecture": "X64"
+    }
+  },
+  "fixture": {
+    "path": "interop/reverse-fixture.json",
+    "sha256": "594347a3f45e4f9a38d9d03b8581c1bd07b22935c1f1f5fd6a07864a959d7131",
+    "binaryHex": "00FF7F0D0A41",
+    "defaultVersion": "v1",
+    "presentEmptyVersion": "v2"
+  },
+  "passedCases": [
+    "native-runtime",
+    "pinned-cli-version",
+    "trusted-root-and-discovery",
+    "install-explicit-model",
+    "xr-import",
+    "nonempty-fixture",
+    "xr-get-collection",
+    "xr-get-default-binary",
+    "xr-get-v1-binary",
+    "xr-get-v2-empty",
+    "xr-get-meta",
+    "xr-get-v1-details",
+    "xr-get-v2-details",
+    "restart-model-and-context",
+    "xr-restart-default",
+    "xr-restart-empty",
+    "xr-restart-meta"
+  ],
+  "failedCases": ["xr-conform"],
+  "notExecutedCases": [],
+  "checker": {
+    "exitCode": 2,
+    "observed": {"passes": 30, "failures": 10, "warnings": 0, "skips": 0},
+    "required": {"passes": 101, "failures": 0, "warnings": 0, "skips": 0},
+    "limitation": "XR-CAPABILITIES-MUTABLE"
+  },
+  "artifacts": {
+    "directory": "artifacts/reverse-interop/bootstrap-6e79dc23d2614d33a3af067985ef5798",
+    "buildEvidence": "oracle-build.json",
+    "buildEvidenceSha256": "2e766bb063f95d770ade6786267d60cca1f8f06d5d6994f7d4ec946c6cc3c3a1",
+    "executionEvidence": "qualification/evidence.json",
+    "executionEvidenceSha256": "cd53bf8d240188775ed38ac65f9d14580edb36ff3efe81ab45d83f02dd5ce064",
+    "checkerOutput": "qualification/xr-conform.stdout",
+    "capabilitiesResponse": "qualification/capabilities.body"
+  },
+  "unverified": ["linux-x64-execution", "ARM64", "native-bridge", "production-TLS-and-authentication", "full-Core-conformance"],
+  "notes": [
+    "The CLI and native server were actually executed; outputs were not generated from the .NET implementation.",
+    "Known checker failure remains a nonzero harness/CI outcome, not an accepted exception or reduced-coverage success.",
+    "Go and Git are test oracles only; no .NET runtime package dependency was added."
+  ]
+}

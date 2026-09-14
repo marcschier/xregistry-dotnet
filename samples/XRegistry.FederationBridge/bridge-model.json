@@ -1,0 +1,35 @@
+{
+  "attributes": {
+    "fixture": { "type": "string" }
+  },
+  "groups": {
+    "categories": {
+      "singular": "category",
+      "resources": {
+        "registries": {
+          "singular": "registry",
+          "hasdocument": false,
+          "attributes": { "weburl": { "type": "url" } }
+        }
+      }
+    },
+    "documents": {
+      "singular": "document",
+      "resources": {
+        "assets": {
+          "singular": "asset",
+          "attributes": { "purpose": { "type": "string" } }
+        },
+        "notes": { "singular": "note", "hasdocument": false }
+      }
+    },
+    "independent": {
+      "singular": "independent",
+      "resources": { "assets": { "singular": "asset" } }
+    },
+    "mirrors": {
+      "singular": "mirror",
+      "ximportresources": ["/documents/assets"]
+    }
+  }
+}

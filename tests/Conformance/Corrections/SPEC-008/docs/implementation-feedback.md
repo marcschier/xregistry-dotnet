@@ -1,0 +1,154 @@
+# Implementation feedback
+
+## Built-in model compilation: 2026-09-11
+
+The independent xregistry-dotnet model compiler found invalid artifacts while
+compiling all published domain models, rather than only parsing their JSON.
+
+- CloudEvents model include fragments used `#groups` instead of the RFC6901
+  `#/groups` required by Core. The fragments were corrected.
+- Endpoint `usage` used the Core scalar `enum` aspect on an array and omitted
+  its required flag. Its model now declares a required array of strings;
+  allowed roles and their protocol-specific combinations remain normative
+  domain rules, not a new Core array aspect.
+- Schema regeneration exposed incomplete `$includes` handling and incorrect
+  local/nested include precedence in the generator. The local resolver now
+  preserves source values, ordered includes and each included document's base,
+  rejects cycles and invalid fragments, and has explicit expansion bounds.
+
+The affected Endpoint/CloudEvents JSON Schema, JSON Structure, Avro and OpenAPI
+artifacts were regenerated. `tools/test_implementation_model_regressions.py`
+reproduces the model and generator issues; the focused generator/regression suite
+passes. The .NET implementation keeps original and corrected byte hashes and
+checks all seven models through an explicit packaged resolver.
+
+No OPC UA specification was changed. These are model-artifact and generator
+corrections, not changes to the rc4 HTTP protocol or Endpoint role semantics.
+
+## Calendar-valid examples: 2026-09-11
+
+Eleven CloudEvents modification timestamps used April 31 after an April 30
+creation timestamp. The .NET validator and Python calendar parser independently
+rejected them. The examples now use May 1, preserving next-day ordering.
+`tools/test_implementation_timestamp_regressions.py` guards valid dates and
+ordering without relaxing the Core timestamp rules.
+
+## HTTP discovery response shape: 2026-09-11
+
+The HTTP discovery response sketch used object braces around a list of URL
+strings. Replacing its repetition metavariable with a concrete URL still
+produced invalid JSON. Core's Host-based and Registry-based discovery sections
+both require an array. The HTTP sketch now uses that same array shape.
+`tools/test_implementation_discovery_regressions.py` reproduced the JSON parser
+failure before correction and verifies the concrete payload afterward.
+
+The .NET client independently exercises both distinct discovery locations:
+Registry-relative `.xregistry` and host-origin `/.well-known/xregistry`. The
+latter already exists in Core; recognizing it corrects an implementation-plan
+assumption, not the specification. Advertisements are data, not authorization
+to follow their URLs.
+
+## Escaped Core XID components: 2026-09-12
+
+A clean .NET package consumer exposed a mismatch when a live HTTP Registry
+serialized valid `:` and `@` identifier characters as `%3A` and `%40` in its
+`self`/`xid` paths. Core defines `xid` as the corresponding relative URI path;
+the offline federation example validator incorrectly applied the decoded ID
+grammar directly to escaped components.
+
+The validator now validates escapes, decodes each component exactly once with
+strict UTF-8, and applies the unchanged Core ID grammar to the decoded value.
+It preserves the original XID string and still rejects encoded separators,
+controls, malformed UTF-8 and second-decode candidates. The .NET reader now
+compares typed identities without rewriting source wire metadata.
+`tools/test_implementation_xid_regressions.py` reproduces the rejected valid
+paths and guards invalid partitions. The old regression treating a valid
+escape as an invalid ID now checks a genuinely invalid second-decode candidate.
+No OPC-UA-specific file was changed.
+
+## Canonical native routing keys and decoded mapping identities: 2026-09-12
+
+The native OCI implementation exposed a bounded-lookup ambiguity in the
+unreleased draft: `/items/%61%3Aone` sorts before a split at `/items/a`, while
+its URI-equivalent selector `/items/a%3Aone` sorts after that split. No bounded
+choice of alternate spellings can guarantee complete lookup of arbitrary
+percent-escaped keys without changing the byte-order contract or scanning the
+whole graph.
+
+The corrected version-1 draft requires canonical URI-component spelling for
+internal graph identity annotations and finite routing bounds: strict one-pass
+decoding, unchanged case-sensitive Core IDs, literal unreserved characters and
+uppercase escapes for the other allowed characters. Selectors normalize before
+routing. Portable config XIDs may keep a URI-equivalent spelling; config bytes,
+domain URLs, document bases and Document bytes remain unchanged. Old
+noncanonical draft graphs require explicit regeneration/migration, never a
+silent relabeling or an alternate-spelling fallback.
+
+The complete directory-mapping indexes have no such shard ambiguity. Their
+interpreter and schema now accept valid URI escapes, compare decoded typed
+identities, and use decoded map keys and resolving fragment pointers while
+preserving stored XIDs and exact descriptor commitments. Tests exercise the
+same interpreter through File and managed Git.
+
+`tools/test_implementation_uri_key_regressions.py` contains the independent
+range counterexample and decoding/schema cases. The .NET
+`NoncanonicalRoutingKeysAndBoundsAreRejectedWithoutRewritingPinnedObjects`
+regression failed before the canonical-key guard, then passed along with
+bounded one-leaf routing and retained Document bytes. Full validation remains
+distinct from a selective lookup's evidence about its consumed path.
+
+## Pagination HTTP expiry format: 2026-09-12
+
+The pagination HTTP binding labelled its expiry-format reference as RFC3339
+while linking to RFC7234 section 5.3. The linked HTTP specification defines
+`Expires` as `HTTP-date`, not an RFC3339 timestamp. A raw HTTP integration case
+now checks the literal value `Tue, 01 Jan 2030 00:01:00 GMT`, its unchanged
+deadline on later pages, and cursor expiry at that deadline. The implementation
+already emitted the correct HTTP format; this was a citation/wording defect.
+
+The example's `Thu, 01 Dec 2021` also had the wrong weekday. The corrected
+example keeps the same UTC date/time and uses Wednesday. Independent Python
+regressions in `tools/test_implementation_timestamp_regressions.py` failed on
+both original defects before the prose change. No wire format, cursor lifetime,
+count semantics, or OPC-UA-specific source was changed.
+
+## Schema Registry Protobuf example declarations: 2026-09-12
+
+All four inline Protobuf strings in the Schema Registry's three-Version
+example ended with an unmatched second closing brace. The .NET Protobuf
+validator rejected each independently with `protobuf.brace`; eight executions
+across the two target frameworks reproduced the error before any correction.
+The example now removes only that unmatched brace, preserving the `Metrics`
+message name, field types/names/numbers, Version lineage and default projection.
+
+The independent model-regression script pins the intended four declarations.
+The .NET example tests read and validate the captured successor text, while
+retaining the original invalid strings as negative cases. This corrects the
+example, not the schema language or validator. For metadata-body requests,
+text Documents still require the appropriate non-JSON `contenttype`; the
+abbreviated example omits other Version attributes rather than defining a new
+format-based media-type inference rule.
+
+## Message declaration names and shapes: 2026-09-13
+
+Compiled model calls rejected several declarations that the normative Message
+and Endpoint prose explicitly permits. Independent Python source regressions
+and twelve .NET executions reproduced the inconsistencies before correction:
+
+- Message Model Source now declares `basemessage`, matching its normative
+  attribute, rather than the otherwise undocumented `basemessageuri`.
+- HTTP options include `status` and represent `query` as a string map. The
+  contradictory array-shaped example now matches the table and normative prose.
+- NATS uses the normative `reply-to` name, not `reply`.
+- AMQP's optional `subject` declaration defaults `required` to false. This
+  does not change CloudEvents' distinct mandatory attributes.
+- Endpoint `messagegroups` targets the Message Group type, not individual
+  Messages. A declaration remains data, not authorization to fetch that target.
+- The MQTT table now uses the already-modeled `payload_format_indicator`
+  spelling for the MQTT 5 Payload Format Indicator property.
+
+The affected Message, Endpoint and CloudEvents schema outputs are regenerated
+from those source models. `tools/test_implementation_message_contracts.py`
+guards the reconciled contracts. Existing typed-property/template representation
+issues are separate; these corrections neither loosen generic Core validation
+nor add undocumented effective-model aliases.

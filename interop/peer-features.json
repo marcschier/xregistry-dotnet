@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "peerCommit": "5854af0130db7723bad489f16ba66536126b823a",
+  "features": [
+    {
+      "feature": "HEAD document retrieval",
+      "applicability": "unavailable-at-pinned-peer",
+      "evidence": {
+        "method": "HEAD",
+        "path": "/dirs/native-client/files/binary/versions/v1",
+        "status": 405
+      },
+      "classification": "Peer method support limitation, not an established normative specification defect.",
+      "test": "XRegistry.InteropProbe:pinned-peer-head-unavailable",
+      "policy": "Execute and assert the exact pinned outcome; give no HEAD conformance credit. Unexpected success requires a reviewed peer-feature update.",
+      "dotnetRequirement": "The .NET host's HEAD behavior still needs its independent HTTP/native tests."
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="TUnit" />
+    <ProjectReference Include="..\..\src\XRegistry.Bindings.File\XRegistry.Bindings.File.csproj" />
+    <Compile Include="..\XRegistry.Federation.Tests\MappingUriFixture.cs" Link="MappingUriFixture.cs" />
+    <Content Include="..\Conformance\Sources\workingdrafts\bindings\samples\mapping\**\*.json;..\Conformance\Sources\workingdrafts\bindings\samples\mapping\**\*.bin"
+      Link="Fixtures\Mapping\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\Conformance\Sources\workingdrafts\federation\samples\oci\layout\**\*"
+      Link="Fixtures\Oci\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\Conformance\Sources\tools\oci_examples.py;..\Conformance\Sources\tools\federation_examples.py"
+      Link="Oracle\tools\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\Conformance\Sources\workingdrafts\bindings\schemas\oci-*.schema.json"
+      Link="Oracle\workingdrafts\bindings\schemas\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\Conformance\Sources\core\model.schema.json"
+      Link="Oracle\core\model.schema.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\Conformance\Sources\LICENSE"
+      Link="Oracle\LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

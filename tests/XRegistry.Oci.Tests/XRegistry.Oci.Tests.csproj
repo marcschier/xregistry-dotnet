@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="TUnit" />
+    <ProjectReference Include="..\..\src\XRegistry.Bindings.Oci\XRegistry.Bindings.Oci.csproj" />
+    <ProjectReference Include="..\..\src\XRegistry.Models\XRegistry.Models.csproj" />
+    <Content Include="..\Conformance\Sources\workingdrafts\federation\samples\oci\layout\**\*"
+             Link="Fixtures\layout\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\Conformance\Sources\workingdrafts\federation\samples\oci\expected.json"
+             Link="Fixtures\expected.json" CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\Conformance\Sources\tools\oci_examples.py;..\Conformance\Sources\tools\federation_examples.py"
+             Link="Oracle\tools\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\Conformance\Sources\workingdrafts\bindings\schemas\oci-*.schema.json"
+             Link="Oracle\workingdrafts\bindings\schemas\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\Conformance\Sources\core\model.schema.json"
+             Link="Oracle\core\model.schema.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\Conformance\Sources\LICENSE"
+             Link="Oracle\LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\Conformance\Corrections\SPEC-005\tools\oci_examples.py;..\Conformance\Corrections\SPEC-005\tools\federation_examples.py"
+             Link="CorrectedOracle\tools\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\Conformance\Sources\workingdrafts\bindings\schemas\oci-*.schema.json"
+             Link="CorrectedOracle\workingdrafts\bindings\schemas\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\Conformance\Sources\core\model.schema.json"
+             Link="CorrectedOracle\core\model.schema.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\Conformance\Sources\LICENSE"
+             Link="CorrectedOracle\LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,32 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+indent_style = space
+indent_size = 4
+trim_trailing_whitespace = true
+
+[*.{json,yml,yaml,csproj,props,targets,slnx}]
+indent_size = 2
+
+[*.cs]
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_using_directive_placement = outside_namespace:warning
+dotnet_sort_system_directives_first = true
+dotnet_diagnostic.CA2007.severity = warning
+dotnet_diagnostic.CA5350.severity = warning
+dotnet_diagnostic.CA5351.severity = error
+dotnet_diagnostic.CA5359.severity = error
+dotnet_diagnostic.CA5364.severity = error
+dotnet_diagnostic.CA5397.severity = error
+dotnet_diagnostic.CA3077.severity = error
+dotnet_diagnostic.CA2300.severity = error
+
+[tests/**/*.cs]
+dotnet_diagnostic.CA2007.severity = none
+
+[tests/Conformance/Sources/**]
+insert_final_newline = unset
+trim_trailing_whitespace = false

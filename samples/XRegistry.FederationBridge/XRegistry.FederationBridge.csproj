@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <Compile Include="..\Shared\RegistrySample*.cs" Link="Shared\%(Filename)%(Extension)" />
+    <ProjectReference Include="..\..\src\XRegistry.Server\XRegistry.Server.csproj" />
+    <ProjectReference Include="..\..\src\XRegistry.Federation\XRegistry.Federation.csproj" />
+    <ProjectReference Include="..\..\src\XRegistry.Bindings.File\XRegistry.Bindings.File.csproj" />
+    <ProjectReference Include="..\..\src\XRegistry.Bindings.Git\XRegistry.Bindings.Git.csproj" />
+    <ProjectReference Include="..\..\src\XRegistry.Bindings.Oci\XRegistry.Bindings.Oci.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFrameworks />
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <PublishAot>true</PublishAot>
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+  </PropertyGroup>
+
+</Project>

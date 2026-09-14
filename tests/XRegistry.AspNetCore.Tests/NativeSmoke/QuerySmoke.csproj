@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFrameworks />
+    <TargetFramework>net10.0</TargetFramework>
+    <PublishAot>true</PublishAot>
+    <IsAotCompatible>true</IsAotCompatible>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <NuGetLockFilePath>QuerySmoke.packages.lock.json</NuGetLockFilePath>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="QuerySmoke.source" />
+    <ProjectReference Include="..\..\..\src\XRegistry.AspNetCore\XRegistry.AspNetCore.csproj" />
+  </ItemGroup>
+</Project>

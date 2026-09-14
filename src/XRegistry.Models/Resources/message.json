@@ -1,0 +1,396 @@
+{
+  "$schema": "https://xregistry.io/xregistryspecs/core-v1/schemas/model.schema.json",
+  "groups": {
+    "messagegroups": {
+      "singular": "messagegroup",
+      "modelversion": "1.0-rc4",
+      "modelcompatiblewith": "https://xregistry.io/xreg/domains/message/specs/model.json",
+      "attributes": {
+        "envelope": {
+          "name": "envelope",
+          "type": "string",
+          "description": "Envelope format identifier that defines the common metadata information for the message. All definitions in this group share this envelope format. Mixed-envelope-format groups are not permitted. The predefined envelope format is CloudEvents/1.0"
+        },
+        "protocol": {
+          "name": "protocol",
+          "type": "string",
+          "description": "Protocol identifier that defines the transport message protocol. All definitions in this group share this protocol type. Mixed-protocol groups are not permitted. Predefined protocol formats are 'AMQP/1.0', 'MQTT/3.1.1', 'MQTT/5.0', 'KAFKA', 'HTTP', and 'NATS'"
+        },
+        "*": {
+          "name": "*",
+          "type": "any",
+          "description": "Any other attribute that is common to all definitions in this group"
+        }
+      },
+      "resources": {
+        "messages": {
+          "singular": "message",
+          "maxversions": 1,
+          "hasdocument": false,
+          "modelversion": "1.0-rc4",
+          "modelcompatiblewith": "https://xregistry.io/xreg/domains/message/specs/model.json",
+          "attributes": {
+            "basemessage": {
+              "name": "basemessage",
+              "type": "uri",
+              "target": "/messagegroups/messages[/versions]",
+              "description": "Reference to a base definition for this definition. Relative references are XIDs within the same registry. Absolute URIs reference message definitions in external registries. The base definition is overridden by this definition. If not present, this definition does not override any base definition"
+            },
+            "envelope": {
+              "name": "envelope",
+              "type": "string",
+              "description": "Message envelope format identifier. This attribute MUST be the same as the 'envelope' attribute of the definition group, but is not automatically inherited because definitions may be cross-referenced across groups. The predefined envelope format is 'CloudEvents/1.0'",
+              "ifvalues": {
+                "CloudEvents/1.0": {
+                  "siblingattributes": {
+                    "envelopemetadata": {
+                      "name": "envelopemetadata",
+                      "type": "any",
+                      "description": "CloudEvents attribute declarations, adding constraints to the CloudEvents envelope not yet covered by the CloudEvents spec https://github.com/cloudevents/spec/blob/main/cloudevents/spec.md This declaration object is opaque to the Core attribute walker so literal null value constraints and protocol-defined property names are preserved. Message domain property-definition validation and defaults remain mandatory."
+                    },
+                    "envelopeoptions": {
+                      "name": "envelopeoptions",
+                      "type": "object",
+                      "description": "Envelope metadata constraints",
+                      "attributes": {
+                        "mode": {
+                          "name": "mode",
+                          "type": "string",
+                          "enum": [
+                            "binary",
+                            "structured"
+                          ],
+                          "description": "Whether CloudEvents 'binary' or 'structured' mode will be used"
+                        },
+                        "format": {
+                          "name": "format",
+                          "type": "string",
+                          "description": "The media type format used to serialize the CloudEvent in the case of mode=structured"
+                        },
+                        "*": {
+                          "name": "*",
+                          "type": "any"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "protocol": {
+              "name": "protocol",
+              "description": "Protocol identifier. This attribute MUST be the same as the 'protocol' attribute of the definition group, but is not automatically inherited because definitions may be cross-referenced across groups",
+              "type": "string",
+              "ifvalues": {
+                "AMQP/1.0": {
+                  "siblingattributes": {
+                    "protocoloptions": {
+                      "name": "protocoloptions",
+                      "description": "AMQP message metadata constraints",
+                      "type": "object",
+                      "namecharset": "extended",
+                      "attributes": {
+                        "properties": {
+                          "name": "properties",
+                          "description": "AMQP properties section https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-properties This declaration object is opaque to the Core attribute walker so literal null value constraints and protocol-defined property names are preserved. Message domain property-definition validation and defaults remain mandatory.",
+                          "type": "any"
+                        },
+                        "application-properties": {
+                          "name": "application-properties",
+                          "type": "any",
+                          "description": "AMQP application-properties section https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-application-properties This declaration object is opaque to the Core attribute walker so literal null value constraints and protocol-defined property names are preserved. Message domain property-definition validation and defaults remain mandatory."
+                        },
+                        "message-annotations": {
+                          "name": "message-annotations",
+                          "type": "any",
+                          "description": "AMQP message-annotations section https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-message-annotations This declaration object is opaque to the Core attribute walker so literal null value constraints and protocol-defined property names are preserved. Message domain property-definition validation and defaults remain mandatory."
+                        },
+                        "delivery-annotations": {
+                          "name": "delivery-annotations",
+                          "type": "any",
+                          "description": "AMQP delivery-annotations section https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-delivery-annotations This declaration object is opaque to the Core attribute walker so literal null value constraints and protocol-defined property names are preserved. Message domain property-definition validation and defaults remain mandatory."
+                        },
+                        "header": {
+                          "name": "header",
+                          "type": "object",
+                          "namecharset": "extended",
+                          "description": "AMQP header section https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-header",
+                          "attributes": {
+                            "durable": {
+                              "name": "durable",
+                              "description": "AMQP durable flag",
+                              "type": "boolean",
+                              "required": true,
+                              "default": false
+                            },
+                            "priority": {
+                              "name": "priority",
+                              "description": "AMQP priority",
+                              "type": "integer",
+                              "required": true,
+                              "default": 4
+                            },
+                            "ttl": {
+                              "name": "ttl",
+                              "description": "AMQP time-to-live (milliseconds)",
+                              "type": "integer"
+                            },
+                            "first-acquirer": {
+                              "name": "first-acquirer",
+                              "description": "AMQP first-acquirer flag",
+                              "type": "boolean",
+                              "required": true,
+                              "default": false
+                            },
+                            "delivery-count": {
+                              "name": "delivery-count",
+                              "description": "AMQP delivery-count",
+                              "type": "integer",
+                              "required": true,
+                              "default": 0
+                            }
+                          }
+                        },
+                        "footer": {
+                          "name": "footer",
+                          "type": "any",
+                          "description": "AMQP footer section https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-footer This declaration object is opaque to the Core attribute walker so literal null value constraints and protocol-defined property names are preserved. Message domain property-definition validation and defaults remain mandatory."
+                        }
+                      }
+                    }
+                  }
+                },
+                "MQTT/3.1.1": {
+                  "siblingattributes": {
+                    "protocoloptions": {
+                      "name": "protocoloptions",
+                      "description": "MQTT message metadata constraints",
+                      "type": "object",
+                      "namecharset": "extended",
+                      "attributes": {
+                        "qos": {
+                          "name": "qos",
+                          "description": "MQTT QoS level",
+                          "type": "integer"
+                        },
+                        "retain": {
+                          "name": "retain",
+                          "description": "MQTT retain flag",
+                          "type": "boolean"
+                        },
+                        "topic_name": {
+                          "name": "topic_name",
+                          "description": "MQTT topic name",
+                          "type": "uritemplate"
+                        }
+                      }
+                    }
+                  }
+                },
+                "MQTT/5.0": {
+                  "siblingattributes": {
+                    "protocoloptions": {
+                      "name": "protocoloptions",
+                      "description": "MQTT message metadata constraints",
+                      "type": "object",
+                      "attributes": {
+                        "qos": {
+                          "name": "qos",
+                          "description": "MQTT QoS level",
+                          "type": "integer"
+                        },
+                        "retain": {
+                          "name": "retain",
+                          "description": "MQTT retain flag",
+                          "type": "boolean"
+                        },
+                        "topic_name": {
+                          "name": "topic_name",
+                          "description": "MQTT topic name",
+                          "type": "uritemplate"
+                        },
+                        "payload_format_indicator": {
+                          "name": "payload_format_indicator",
+                          "description": "MQTT payload format indicator",
+                          "type": "integer",
+                          "enum": [
+                            0,
+                            1
+                          ]
+                        },
+                        "message_expiry_interval": {
+                          "name": "message_expiry_interval",
+                          "description": "MQTT message expiry interval",
+                          "type": "integer"
+                        },
+                        "response_topic": {
+                          "name": "response_topic",
+                          "description": "MQTT response topic",
+                          "type": "uritemplate"
+                        },
+                        "correlation_data": {
+                          "name": "correlation_data",
+                          "description": "MQTT binary correlation data, represented as a canonical base64 string",
+                          "type": "string"
+                        },
+                        "content_type": {
+                          "name": "content_type",
+                          "description": "MQTT content type",
+                          "type": "string"
+                        },
+                        "user_properties": {
+                          "name": "user_properties",
+                          "description": "MQTT user properties. Opaque logical declaration object with name, type, required, description, specurl and value. Message property validation retains native protocol value kinds and applies declaration defaults; Core must not erase literal nulls or invalid declaration members before that validation.",
+                          "type": "array",
+                          "item": {
+                            "type": "any"
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "KAFKA": {
+                  "siblingattributes": {
+                    "protocoloptions": {
+                      "name": "protocoloptions",
+                      "description": "Apache Kafka message metadata constraints",
+                      "type": "object",
+                      "attributes": {
+                        "topic": {
+                          "name": "topic",
+                          "description": "The Apache Kafka topic",
+                          "type": "uritemplate"
+                        },
+                        "partition": {
+                          "name": "partition",
+                          "description": "The Apache Kafka partition",
+                          "type": "integer"
+                        },
+                        "key": {
+                          "name": "key",
+                          "description": "The Apache Kafka key as a UTF-8 uri template. Mutually exclusive with 'key_base64'",
+                          "type": "uritemplate"
+                        },
+                        "key_base64": {
+                          "name": "key_base64",
+                          "description": "Binary Apache Kafka key as a base64 encoded string. Mutually exclusive with 'key'",
+                          "type": "string"
+                        },
+                        "headers": {
+                          "name": "headers",
+                          "description": "The Apache Kafka headers. Opaque logical declaration object with name, type, required, description, specurl and value. Message property validation retains native protocol value kinds and applies declaration defaults; Core must not erase literal nulls or invalid declaration members before that validation.",
+                          "type": "map",
+                          "item": {
+                            "type": "any"
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "HTTP": {
+                  "siblingattributes": {
+                    "protocoloptions": {
+                      "name": "protocoloptions",
+                      "description": "The HTTP message metadata constraints",
+                      "type": "object",
+                      "attributes": {
+                        "headers": {
+                          "name": "headers",
+                          "description": "The HTTP headers. Opaque logical declaration object with name, type, required, description, specurl and value. Message property validation retains native protocol value kinds and applies declaration defaults; Core must not erase literal nulls or invalid declaration members before that validation.",
+                          "type": "array",
+                          "item": {
+                            "type": "any"
+                          }
+                        },
+                        "query": {
+                          "name": "query",
+                          "description": "The HTTP query parameters",
+                          "type": "map",
+                          "item": {
+                            "type": "string"
+                          }
+                        },
+                        "path": {
+                          "name": "path",
+                          "description": "The HTTP path as a uri template",
+                          "type": "uritemplate"
+                        },
+                        "method": {
+                          "name": "method",
+                          "description": "The HTTP method",
+                          "type": "string"
+                        },
+                        "status": {
+                          "name": "status",
+                          "description": "The HTTP response status code, mutually exclusive with method",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                },
+                "NATS": {
+                  "siblingattributes": {
+                    "protocoloptions": {
+                      "name": "protocoloptions",
+                      "description": "NATS message metadata constraints",
+                      "type": "object",
+                      "namecharset": "extended",
+                      "attributes": {
+                        "subject": {
+                          "name": "subject",
+                          "description": "The NATS subject",
+                          "type": "uritemplate"
+                        },
+                        "reply-to": {
+                          "name": "reply-to",
+                          "description": "The NATS reply subject",
+                          "type": "uritemplate"
+                        },
+                        "headers": {
+                          "name": "headers",
+                          "description": "The NATS headers. Opaque logical declaration object with name, type, required, description, specurl and value. Message property validation retains native protocol value kinds and applies declaration defaults; Core must not erase literal nulls or invalid declaration members before that validation.",
+                          "type": "array",
+                          "item": {
+                            "type": "any"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "dataschemaformat": {
+              "name": "dataschemaformat",
+              "description": "The schema format applicable to the message payload, equivalent to the 'format' attribute of the schema registry",
+              "type": "string"
+            },
+            "dataschema": {
+              "name": "dataschema",
+              "description": "The inline schema for the message payload, equivalent to the 'schema' attribute of the schema registry",
+              "type": "any"
+            },
+            "dataschemauri": {
+              "name": "dataschemauri",
+              "description": "The URI of the schema for the message payload, equivalent to the 'schemauri' attribute of the schema registry",
+              "type": "uri"
+            },
+            "dataschemaxid": {
+              "name": "dataschemaxid",
+              "description": "Contains the xid of the xRegistry schema Resource entity associated with the dataschemauri referenced schema document. Note that this means the entity MUST be located within the same Registry.",
+              "type": "xid"
+            },
+            "datacontenttype": {
+              "name": "datacontenttype",
+              "description": "The content type for the message payload",
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

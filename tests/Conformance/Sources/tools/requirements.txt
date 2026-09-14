@@ -1,0 +1,13 @@
+markdown
+bs4 
+tenacity
+aiohttp==3.11.12
+tqdm
+pymdown-extensions
+pytest-asyncio
+jsonpointer
+pytest
+pyyaml
+avro
+jsonschema[format-nongpl]
+openapi-spec-validator>=0.7.1

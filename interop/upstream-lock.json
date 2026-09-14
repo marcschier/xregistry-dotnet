@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "repository": "https://github.com/xregistry/server",
+  "branch": "master",
+  "commit": "5854af0130db7723bad489f16ba66536126b823a",
+  "image": "ghcr.io/xregistry/xrserver-all@sha256:f22068a09279de14b95cd7e05bb989ab6d7cc5b1c543c30f1fb2ca90fd20a186",
+  "platform": "linux/amd64",
+  "publisherTag": "20260910-5854af0",
+  "executableVersion": "Version: 5854af0130db",
+  "specVersion": "1.0-rc4",
+  "environmentFixtureCheckerPasses": 101,
+  "signedSourceAttestationEstablished": false,
+  "qualification": {
+    "embeddedVersions": "verified-locally",
+    "coldStart": "verified-locally",
+    "clientToPeer": "pending",
+    "peerToNativeServer": "pending",
+    "note": "Source inspection and embedded-version checks do not establish bidirectional interoperability."
+  }
+}

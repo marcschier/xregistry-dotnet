@@ -1,0 +1,13 @@
+**/bin/
+**/obj/
+artifacts/
+TestResults/
+.vs/
+.idea/
+*.user
+*.suo
+__pycache__/
+.pytest_cache/
+*.pyc
+*.tmp
+report.*.json

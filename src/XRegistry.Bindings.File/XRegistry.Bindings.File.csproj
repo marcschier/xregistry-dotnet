@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>XRegistry.Bindings.File</PackageId>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\XRegistry.Federation\XRegistry.Federation.csproj" />
+    <ProjectReference Include="..\XRegistry.Bindings.Oci\XRegistry.Bindings.Oci.csproj" />
+  </ItemGroup>
+</Project>

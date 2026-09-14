@@ -1,0 +1,71 @@
+#!/bin/bash
+
+# Look for any unused errors in the spec. We should probably remove them.
+
+set -e
+
+START_PATTERN="start-err-def"
+END_PATTERN="end-err-def"
+
+# This assumes the list of errors is in the first file name listed on the
+# cmd line. Then ALL files listed will be parsed to see which errors are used.
+
+echo "> Extracting error list from: $*"
+echo "> Looking for errors usage in: $*"
+
+# Make IFS a dummy char so we save the newlines
+IFS="!" lines=$(sed -r -n "/$START_PATTERN/,/$END_PATTERN/p" $* | \
+  sed -n 's/##* //p')
+
+[[ "$lines" == "" ]] && echo "Can't find any errors" && exit 1
+
+# Look for unused error defs
+readarray -t err_array <<< "$lines"
+rc=0
+first="UNUSED ERRORS:\n"
+
+for err in "${err_array[@]}"; do
+  # ref=$(echo "$err" | tr '[:upper:]' '[:lower:]' | sed "s/ /-/g")
+  # grep -e "(#$ref)" -e "(\./[a-z]*\.md#$ref)" $* > /dev/null && continue
+  grep -e "(.*#$err)" -e "(\./[a-z]*\.md#$err)" $* > /dev/null && continue
+
+  # special case these
+  [[ "$err" == "server_error" ]] && continue
+  [[ "$err" == "server_busy" ]] && continue
+
+  echo -ne $first
+  first=""
+  echo "- $err"
+  rc=1
+done
+
+# Make sure Type uses the right ID
+echo "> Validating the IDs match the Types"
+for err in "${err_array[@]}"; do
+    grep -e "Type: *\`http.*#${err}\`" $* > /dev/null && continue
+    echo "Can't find a Type that uses ID: $err"
+    rc=1
+done
+
+# make sure the errors are alphabetized - per file
+
+for file in $* ; do
+
+  echo "> Checking alphabetical order in: $file"
+
+  IFS="!" lines=$(sed -r -n "/$START_PATTERN/,/$END_PATTERN/p" $file | \
+    sed -n 's/##* //p')
+
+  [[ "$lines" == "" ]] && echo "  - No errors defined" && continue
+
+  diff=$(IFS="!" diff <(echo "$lines") <(echo "$lines" | sort) || true)
+  if [[ "$diff" != "" ]] ; then
+    [[ "$rc" != "0" ]] && echo
+    echo "ALPHABETIZE THESE (in $file):"
+    echo "$diff" | grep "> " | sed "s/> /- /"
+    rc=1
+  fi
+
+done
+
+exit $rc

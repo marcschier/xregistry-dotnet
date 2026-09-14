@@ -1,0 +1,120 @@
+using System.Net;
+using System.Security.Claims;
+using System.Text;
+using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
+using XRegistry;
+using XRegistry.AspNetCore;
+using XRegistry.Server;
+
+var builder = WebApplication.CreateSlimBuilder(args);
+builder.Logging.ClearProviders();
+builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, 0));
+await using var app = builder.Build();
+app.Use(async (context, next) =>
+{
+    if (context.Connection.RemoteIpAddress is not { } address || !IPAddress.IsLoopback(address))
+    {
+        context.Response.StatusCode = 403;
+        return;
+    }
+
+    context.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "native-completion")], "isolated-loopback"));
+    await next(context);
+});
+var store = new InMemoryRegistryPersistence();
+var engine = new RegistryEngine(new()
+{
+    RegistryId = "native-completion", PublicRoot = new Uri("https://native.example/registry"),
+    Model = RegistryModel.Compile(RegistryJson.Parse("""
+        {"groups":{"teams":{"singular":"team","resources":{"files":{"singular":"file"},"notes":{"singular":"note","hasdocument":false}}}}}
+        """)),
+    AllowCapabilityUpdates = true
+}, store, new CompletionPolicy());
+app.MapXRegistry(engine, new() { MountPath = "/registry" });
+await app.StartAsync();
+try
+{
+    var address = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
+    using var client = new HttpClient { BaseAddress = new Uri(address) };
+    using var capabilities = await client.PatchAsync("/registry/capabilities", Json("""{"shortself":true}"""));
+    if (capabilities.StatusCode != HttpStatusCode.OK ||
+        !RegistryJson.Parse(await capabilities.Content.ReadAsByteArrayAsync()).RootElement.GetProperty("shortself").GetBoolean())
+    {
+        throw new InvalidOperationException("Native capability update failed.");
+    }
+
+    using var request = new HttpRequestMessage(HttpMethod.Put, "/registry/teams/g/files/f")
+    {
+        Content = new ByteArrayContent([0, 255, 123, 0])
+    };
+    request.Headers.Host = "spoofed.invalid";
+    using var created = await client.SendAsync(request);
+    var shortUrl = created.Headers.GetValues("xRegistry-shortself").Single();
+    if (created.StatusCode != HttpStatusCode.Created ||
+        !shortUrl.StartsWith("https://native.example/registry/~/", StringComparison.Ordinal) ||
+        shortUrl.Contains('$', StringComparison.Ordinal))
+    {
+        throw new InvalidOperationException("Native shortself header failed.");
+    }
+
+    using var document = await client.GetAsync(new Uri(shortUrl).AbsolutePath);
+    if (document.StatusCode != HttpStatusCode.OK ||
+        Convert.ToBase64String(await document.Content.ReadAsByteArrayAsync()) != "AP97AA==")
+    {
+        throw new InvalidOperationException("Native short URL document navigation failed.");
+    }
+
+    using var details = await client.GetAsync(new Uri(shortUrl).AbsolutePath + "$details");
+    if (RegistryJson.Parse(await details.Content.ReadAsByteArrayAsync()).RootElement.GetProperty("self").GetString()
+        != "https://native.example/registry/teams/g/files/f$details")
+    {
+        throw new InvalidOperationException("Native short URL metadata navigation failed.");
+    }
+
+    using var notes = await client.PostAsync("/registry/teams/g/notes", Json("""{"locked":{"name":"locked"},"open":{"name":"open"}}"""));
+    if (notes.StatusCode != HttpStatusCode.OK)
+    {
+        throw new InvalidOperationException("Native readonly fixture creation failed.");
+    }
+
+    using (var snapshot = await store.ReadSnapshotAsync())
+    {
+        var value = JsonNode.Parse(snapshot.Find("/teams/g/notes/locked")!.Metadata.RootElement.GetRawText())!;
+        value["attributes"]!["readonly"] = true;
+        using var candidate = await store.PrepareAsync(snapshot.Generation,
+            [RegistryMutation.Put("/teams/g/notes/locked", RegistryJson.Parse(value.ToJsonString()))]);
+        await candidate.CommitAsync();
+    }
+
+    using var ignored = await client.PatchAsync("/registry/teams/g/notes?ignore=readonly", Json("""
+        {"locked":{"name":"not changed"},"open":{"name":"updated"}}
+        """));
+    if (ignored.StatusCode != HttpStatusCode.OK ||
+        RegistryJson.Parse(await ignored.Content.ReadAsByteArrayAsync()).RootElement.EnumerateObject().Single().Name != "open")
+    {
+        throw new InvalidOperationException("Native readonly ignore failed.");
+    }
+
+    using var forbidden = await client.PatchAsync("/registry/teams/g/notes/locked?ignore=readonly", Json("{}"));
+    if (forbidden.StatusCode != HttpStatusCode.BadRequest ||
+        RegistryJson.Parse(await forbidden.Content.ReadAsByteArrayAsync()).RootElement.GetProperty("code").GetString() != "bad_flag")
+    {
+        throw new InvalidOperationException("Native readonly single-target rejection failed.");
+    }
+
+    Console.WriteLine("NATIVE_COMPLETION_SMOKE_PASSED: mutable capabilities, trusted shortself navigation, exact bytes, readonly ignore and rejection");
+}
+finally
+{
+    await app.StopAsync();
+}
+
+static StringContent Json(string value) => new(value, Encoding.UTF8, "application/json");
+internal sealed class CompletionPolicy : IRegistryAuthorizationPolicy
+{
+    public ValueTask<bool> AuthorizeAsync(ClaimsPrincipal caller, RegistryAccess access, RegistryPath path,
+        CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult(caller.HasClaim(ClaimTypes.NameIdentifier, "native-completion"));
+}

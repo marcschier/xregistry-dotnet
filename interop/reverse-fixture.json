@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "id": "pinned-xr-to-native-dirs-files-v1",
+  "specVersion": "1.0-rc4",
+  "modelSource": {
+    "groups": {
+      "dirs": {
+        "singular": "dir",
+        "resources": {
+          "files": {
+            "singular": "file",
+            "maxversions": 2
+          }
+        }
+      }
+    }
+  },
+  "importTarget": "/dirs",
+  "importBody": {
+    "team": {
+      "files": {
+        "item": {
+          "meta": {
+            "defaultversionid": "v1",
+            "defaultversionsticky": true
+          },
+          "versions": {
+            "v1": {
+              "ancestorid": "v1",
+              "contenttype": "application/octet-stream",
+              "filebase64": "AP9/DQpB"
+            },
+            "v2": {
+              "ancestorid": "v1",
+              "contenttype": "application/octet-stream",
+              "filebase64": ""
+            }
+          }
+        }
+      }
+    }
+  },
+  "expected": {
+    "groupXid": "/dirs/team",
+    "resourceXid": "/dirs/team/files/item",
+    "defaultVersion": "v1",
+    "versionIds": ["v1", "v2"],
+    "binaryBase64": "AP9/DQpB",
+    "binarySha256": "078b3f62d5260ca2c96e9d81c93dd7416d09ee54f686058b3dee498536b31589",
+    "emptyVersion": "v2"
+  },
+  "checker": {
+    "expectedPasses": 101,
+    "expectedSuites": ["TestCapabilities", "TestGroups", "TestModel", "TestRegistryRoot", "TestResources", "TestSniff"],
+    "derivation": "Pinned checker fixture shape: one Group type with one instance, one Resource type with one instance, inline enabled. Same exercised branch count as upstream-lock environmentFixtureCheckerPasses; no reduced-count or skipped-suite success is accepted.",
+    "cleanReverseRunEstablished": false
+  }
+}

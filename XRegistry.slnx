@@ -1,0 +1,41 @@
+<Solution>
+  <Folder Name="/interop/">
+    <Project Path="interop/XRegistry.InteropProbe/XRegistry.InteropProbe.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/XRegistry.Client/XRegistry.Client.csproj" />
+    <Project Path="samples/XRegistry.FederationBridge/XRegistry.FederationBridge.csproj" />
+    <Project Path="samples/XRegistry.FileServer/XRegistry.FileServer.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/XRegistry.AspNetCore/XRegistry.AspNetCore.csproj" />
+    <Project Path="src/XRegistry.Bindings.File/XRegistry.Bindings.File.csproj" />
+    <Project Path="src/XRegistry.Bindings.Git/XRegistry.Bindings.Git.csproj" />
+    <Project Path="src/XRegistry.Bindings.Oci/XRegistry.Bindings.Oci.csproj" />
+    <Project Path="src/XRegistry.Client/XRegistry.Client.csproj" />
+    <Project Path="src/XRegistry.Federation/XRegistry.Federation.csproj" />
+    <Project Path="src/XRegistry.Models/XRegistry.Models.csproj" />
+    <Project Path="src/XRegistry.Server/XRegistry.Server.csproj" />
+    <Project Path="src/XRegistry.Storage.File/XRegistry.Storage.File.csproj" />
+    <Project Path="src/XRegistry.Validation/XRegistry.Validation.csproj" />
+    <Project Path="src/XRegistry/XRegistry.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/XRegistry.AspNetCore.Tests/XRegistry.AspNetCore.Tests.csproj" />
+    <Project Path="tests/XRegistry.Benchmarks/XRegistry.Benchmarks.csproj" />
+    <Project Path="tests/XRegistry.Bridge.Tests/XRegistry.Bridge.Tests.csproj" />
+    <Project Path="tests/XRegistry.Core.Tests/XRegistry.Core.Tests.csproj" />
+    <Project Path="tests/XRegistry.Federation.Tests/XRegistry.Federation.Tests.csproj" />
+    <Project Path="tests/XRegistry.File.Tests/XRegistry.File.Tests.csproj" />
+    <Project Path="tests/XRegistry.Git.InteropProbe/XRegistry.Git.InteropProbe.csproj" />
+    <Project Path="tests/XRegistry.Git.Tests/XRegistry.Git.Tests.csproj" />
+    <Project Path="tests/XRegistry.Http.Tests/XRegistry.Http.Tests.csproj" />
+    <Project Path="tests/XRegistry.Models.Tests/XRegistry.Models.Tests.csproj" />
+    <Project Path="tests/XRegistry.Oci.Tests/XRegistry.Oci.Tests.csproj" />
+    <Project Path="tests/XRegistry.SampleHosting.Tests/XRegistry.SampleHosting.Tests.csproj" />
+    <Project Path="tests/XRegistry.Server.Tests/XRegistry.Server.Tests.csproj" />
+    <Project Path="tests/XRegistry.Storage.CrashProbe/XRegistry.Storage.CrashProbe.csproj" />
+    <Project Path="tests/XRegistry.Storage.File.Tests/XRegistry.Storage.File.Tests.csproj" />
+    <Project Path="tests/XRegistry.Validation.Tests/XRegistry.Validation.Tests.csproj" />
+  </Folder>
+</Solution>

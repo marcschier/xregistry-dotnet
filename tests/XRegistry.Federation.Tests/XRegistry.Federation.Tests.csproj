@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="TUnit" />
+    <ProjectReference Include="..\..\src\XRegistry.Federation\XRegistry.Federation.csproj" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <Content Include="..\Conformance\Sources\workingdrafts\bindings\samples\mapping\**\*.json;..\Conformance\Sources\workingdrafts\bindings\samples\mapping\**\*.bin"
+             Link="Fixtures\Mapping\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\Conformance\Sources\workingdrafts\bindings\samples\mapping-example\**\*.json"
+             Link="Fixtures\Walkthrough\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\Conformance\Sources\workingdrafts\models\registry\samples\*.json"
+             Link="Fixtures\Catalog\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\Conformance\Sources\workingdrafts\federation\samples\selection.json"
+             Link="Fixtures\selection.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

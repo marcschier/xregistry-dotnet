@@ -1,0 +1,1101 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://xregistry.io/xreg/xregistryspecs/endpoint-v1/schemas/document-schema.json",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Name of the object"
+    },
+    "epoch": {
+      "type": "integer",
+      "description": "Epoch time of the object creation"
+    },
+    "self": {
+      "type": "string",
+      "format": "uri-reference",
+      "description": "URL of the object"
+    },
+    "xid": {
+      "type": "string",
+      "format": "xid",
+      "description": "Relative URL of the object"
+    },
+    "description": {
+      "type": "string",
+      "description": "Description of the object"
+    },
+    "documentation": {
+      "type": "string",
+      "format": "uri-reference",
+      "description": "URI of the documentation of the object"
+    },
+    "labels": {
+      "type": "object",
+      "description": "Labels for the object"
+    },
+    "createdat": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Time of the object creation"
+    },
+    "modifiedat": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Time of the object modification"
+    },
+    "registryid": {
+      "type": "string"
+    },
+    "specversion": {
+      "type": "string"
+    },
+    "model": {
+      "type": "object"
+    },
+    "modelsource": {
+      "type": "object"
+    },
+    "capabilities": {
+      "type": "object"
+    },
+    "messagegroups": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/messagegroup-schema/messagegroup"
+      }
+    },
+    "messagegroupsurl": {
+      "type": "string",
+      "format": "uri-reference"
+    },
+    "messagegroupscount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "endpoints": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/endpoint-schema/endpoint"
+      }
+    },
+    "endpointsurl": {
+      "type": "string",
+      "format": "uri-reference"
+    },
+    "endpointscount": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "definitions": {
+    "messagegroup-schema": {
+      "message": {
+        "type": "object",
+        "properties": {
+          "messageid": {
+            "type": "string",
+            "description": "ID of the message object"
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the object"
+          },
+          "epoch": {
+            "type": "integer",
+            "description": "Epoch time of the object creation"
+          },
+          "self": {
+            "type": "string",
+            "format": "uri-reference",
+            "description": "URL of the object"
+          },
+          "xid": {
+            "type": "string",
+            "format": "xid",
+            "description": "Relative URL of the object"
+          },
+          "description": {
+            "type": "string",
+            "description": "Description of the object"
+          },
+          "documentation": {
+            "type": "string",
+            "format": "uri-reference",
+            "description": "URI of the documentation of the object"
+          },
+          "labels": {
+            "type": "object",
+            "description": "Labels for the object"
+          },
+          "createdat": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Time of the object creation"
+          },
+          "modifiedat": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Time of the object modification"
+          },
+          "metaurl": {
+            "type": "string",
+            "format": "uri-reference"
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Name of the object"
+              },
+              "epoch": {
+                "type": "integer",
+                "description": "Epoch time of the object creation"
+              },
+              "self": {
+                "type": "string",
+                "format": "uri-reference",
+                "description": "URL of the object"
+              },
+              "xid": {
+                "type": "string",
+                "format": "xid",
+                "description": "Relative URL of the object"
+              },
+              "description": {
+                "type": "string",
+                "description": "Description of the object"
+              },
+              "documentation": {
+                "type": "string",
+                "format": "uri-reference",
+                "description": "URI of the documentation of the object"
+              },
+              "labels": {
+                "type": "object",
+                "description": "Labels for the object"
+              },
+              "createdat": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Time of the object creation"
+              },
+              "modifiedat": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Time of the object modification"
+              },
+              "messageid": {
+                "type": "string"
+              },
+              "xref": {
+                "type": "string",
+                "format": "uri-reference",
+                "pattern": "^/"
+              },
+              "readonly": {
+                "type": "boolean"
+              },
+              "compatibility": {
+                "type": "string"
+              },
+              "deprecated": {
+                "type": "object",
+                "properties": {
+                  "effective": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "removal": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "alternative": {
+                    "type": "string",
+                    "format": "uri-reference"
+                  },
+                  "documentation": {
+                    "type": "string",
+                    "format": "uri-reference"
+                  }
+                }
+              },
+              "defaultversionid": {
+                "type": "string"
+              },
+              "defaultversionurl": {
+                "type": "string",
+                "format": "uri-reference"
+              },
+              "defaultversionsticky": {
+                "type": "boolean"
+              }
+            }
+          },
+          "basemessage": {
+            "type": "string",
+            "format": "uri-reference",
+            "description": "Reference to a base definition for this definition. Relative references are XIDs within the same registry. Absolute URIs reference message definitions in external registries. The base definition is overridden by this definition. If not present, this definition does not override any base definition"
+          },
+          "dataschemaformat": {
+            "type": "string",
+            "description": "The schema format applicable to the message payload, equivalent to the 'format' attribute of the schema registry"
+          },
+          "dataschema": {
+            "description": "The inline schema for the message payload, equivalent to the 'schema' attribute of the schema registry"
+          },
+          "dataschemauri": {
+            "type": "string",
+            "format": "uri-reference",
+            "description": "The URI of the schema for the message payload, equivalent to the 'schemauri' attribute of the schema registry"
+          },
+          "dataschemaxid": {
+            "type": "string",
+            "format": "uri-reference",
+            "pattern": "^/",
+            "description": "Contains the xid of the xRegistry schema Resource entity associated with the dataschemauri referenced schema document. Note that this means the entity MUST be located within the same Registry."
+          },
+          "datacontenttype": {
+            "type": "string",
+            "description": "The content type for the message payload"
+          }
+        },
+        "allOf": [
+          {
+            "oneOf": [
+              {
+                "properties": {
+                  "envelope": {
+                    "type": "string",
+                    "description": "Message envelope format identifier. This attribute MUST be the same as the 'envelope' attribute of the definition group, but is not automatically inherited because definitions may be cross-referenced across groups. The predefined envelope format is 'CloudEvents/1.0'",
+                    "enum": [
+                      "CloudEvents/1.0"
+                    ]
+                  },
+                  "envelopemetadata": {
+                    "description": "CloudEvents attribute declarations, adding constraints to the CloudEvents envelope not yet covered by the CloudEvents spec https://github.com/cloudevents/spec/blob/main/cloudevents/spec.md This declaration object is opaque to the Core attribute walker so literal null value constraints and protocol-defined property names are preserved. Message domain property-definition validation and defaults remain mandatory."
+                  },
+                  "envelopeoptions": {
+                    "type": "object",
+                    "description": "Envelope metadata constraints",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "description": "Whether CloudEvents 'binary' or 'structured' mode will be used"
+                      },
+                      "format": {
+                        "type": "string",
+                        "description": "The media type format used to serialize the CloudEvent in the case of mode=structured"
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "envelope"
+                ]
+              },
+              {
+                "anyOf": [
+                  {
+                    "not": {
+                      "required": [
+                        "envelope"
+                      ]
+                    }
+                  },
+                  {
+                    "properties": {
+                      "envelope": {
+                        "not": {
+                          "enum": [
+                            "CloudEvents/1.0"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "envelope"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "oneOf": [
+              {
+                "properties": {
+                  "protocol": {
+                    "type": "string",
+                    "description": "Protocol identifier. This attribute MUST be the same as the 'protocol' attribute of the definition group, but is not automatically inherited because definitions may be cross-referenced across groups",
+                    "enum": [
+                      "AMQP/1.0"
+                    ]
+                  },
+                  "protocoloptions": {
+                    "type": "object",
+                    "description": "AMQP message metadata constraints",
+                    "properties": {
+                      "properties": {
+                        "description": "AMQP properties section https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-properties This declaration object is opaque to the Core attribute walker so literal null value constraints and protocol-defined property names are preserved. Message domain property-definition validation and defaults remain mandatory."
+                      },
+                      "application-properties": {
+                        "description": "AMQP application-properties section https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-application-properties This declaration object is opaque to the Core attribute walker so literal null value constraints and protocol-defined property names are preserved. Message domain property-definition validation and defaults remain mandatory."
+                      },
+                      "message-annotations": {
+                        "description": "AMQP message-annotations section https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-message-annotations This declaration object is opaque to the Core attribute walker so literal null value constraints and protocol-defined property names are preserved. Message domain property-definition validation and defaults remain mandatory."
+                      },
+                      "delivery-annotations": {
+                        "description": "AMQP delivery-annotations section https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-delivery-annotations This declaration object is opaque to the Core attribute walker so literal null value constraints and protocol-defined property names are preserved. Message domain property-definition validation and defaults remain mandatory."
+                      },
+                      "header": {
+                        "type": "object",
+                        "description": "AMQP header section https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-header",
+                        "properties": {
+                          "durable": {
+                            "type": "boolean",
+                            "description": "AMQP durable flag"
+                          },
+                          "priority": {
+                            "type": "integer",
+                            "description": "AMQP priority"
+                          },
+                          "ttl": {
+                            "type": "integer",
+                            "description": "AMQP time-to-live (milliseconds)"
+                          },
+                          "first-acquirer": {
+                            "type": "boolean",
+                            "description": "AMQP first-acquirer flag"
+                          },
+                          "delivery-count": {
+                            "type": "integer",
+                            "description": "AMQP delivery-count"
+                          }
+                        }
+                      },
+                      "footer": {
+                        "description": "AMQP footer section https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-footer This declaration object is opaque to the Core attribute walker so literal null value constraints and protocol-defined property names are preserved. Message domain property-definition validation and defaults remain mandatory."
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "protocol"
+                ]
+              },
+              {
+                "properties": {
+                  "protocol": {
+                    "type": "string",
+                    "description": "Protocol identifier. This attribute MUST be the same as the 'protocol' attribute of the definition group, but is not automatically inherited because definitions may be cross-referenced across groups",
+                    "enum": [
+                      "MQTT/3.1.1"
+                    ]
+                  },
+                  "protocoloptions": {
+                    "type": "object",
+                    "description": "MQTT message metadata constraints",
+                    "properties": {
+                      "qos": {
+                        "type": "integer",
+                        "description": "MQTT QoS level"
+                      },
+                      "retain": {
+                        "type": "boolean",
+                        "description": "MQTT retain flag"
+                      },
+                      "topic_name": {
+                        "type": "string",
+                        "format": "uri-template",
+                        "description": "MQTT topic name"
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "protocol"
+                ]
+              },
+              {
+                "properties": {
+                  "protocol": {
+                    "type": "string",
+                    "description": "Protocol identifier. This attribute MUST be the same as the 'protocol' attribute of the definition group, but is not automatically inherited because definitions may be cross-referenced across groups",
+                    "enum": [
+                      "MQTT/5.0"
+                    ]
+                  },
+                  "protocoloptions": {
+                    "type": "object",
+                    "description": "MQTT message metadata constraints",
+                    "properties": {
+                      "qos": {
+                        "type": "integer",
+                        "description": "MQTT QoS level"
+                      },
+                      "retain": {
+                        "type": "boolean",
+                        "description": "MQTT retain flag"
+                      },
+                      "topic_name": {
+                        "type": "string",
+                        "format": "uri-template",
+                        "description": "MQTT topic name"
+                      },
+                      "payload_format_indicator": {
+                        "type": "integer",
+                        "description": "MQTT payload format indicator"
+                      },
+                      "message_expiry_interval": {
+                        "type": "integer",
+                        "description": "MQTT message expiry interval"
+                      },
+                      "response_topic": {
+                        "type": "string",
+                        "format": "uri-template",
+                        "description": "MQTT response topic"
+                      },
+                      "correlation_data": {
+                        "type": "string",
+                        "format": "uri-template",
+                        "description": "MQTT correlation data"
+                      },
+                      "content_type": {
+                        "type": "string",
+                        "format": "uri-template",
+                        "description": "MQTT content type"
+                      },
+                      "user_properties": {
+                        "type": "array",
+                        "description": "MQTT user properties",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "description": "MQTT user property name"
+                            },
+                            "description": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string",
+                              "description": "MQTT user property value constraint"
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "protocol"
+                ]
+              },
+              {
+                "properties": {
+                  "protocol": {
+                    "type": "string",
+                    "description": "Protocol identifier. This attribute MUST be the same as the 'protocol' attribute of the definition group, but is not automatically inherited because definitions may be cross-referenced across groups",
+                    "enum": [
+                      "KAFKA"
+                    ]
+                  },
+                  "protocoloptions": {
+                    "type": "object",
+                    "description": "Apache Kafka message metadata constraints",
+                    "properties": {
+                      "topic": {
+                        "type": "string",
+                        "format": "uri-template",
+                        "description": "The Apache Kafka topic"
+                      },
+                      "partition": {
+                        "type": "integer",
+                        "description": "The Apache Kafka partition"
+                      },
+                      "key": {
+                        "type": "string",
+                        "format": "uri-template",
+                        "description": "The Apache Kafka key as a UTF-8 uri template. Mutually exclusive with 'key_base64'"
+                      },
+                      "key_base64": {
+                        "type": "string",
+                        "description": "Binary Apache Kafka key as a base64 encoded string. Mutually exclusive with 'key'"
+                      },
+                      "headers": {
+                        "type": "object",
+                        "description": "The Apache Kafka headers",
+                        "additionalProperties": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "description": "Kafka header name"
+                            },
+                            "description": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string",
+                              "description": "Kafka header value constraint"
+                            },
+                            "required": {
+                              "type": "boolean",
+                              "description": "Kafka header required"
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "protocol"
+                ]
+              },
+              {
+                "properties": {
+                  "protocol": {
+                    "type": "string",
+                    "description": "Protocol identifier. This attribute MUST be the same as the 'protocol' attribute of the definition group, but is not automatically inherited because definitions may be cross-referenced across groups",
+                    "enum": [
+                      "HTTP"
+                    ]
+                  },
+                  "protocoloptions": {
+                    "type": "object",
+                    "description": "The HTTP message metadata constraints",
+                    "properties": {
+                      "headers": {
+                        "type": "array",
+                        "description": "The HTTP headers",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "description": "The HTTP header name"
+                            },
+                            "description": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string",
+                              "description": "The HTTP header value"
+                            },
+                            "required": {
+                              "type": "boolean",
+                              "description": "The HTTP header required"
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ]
+                        }
+                      },
+                      "query": {
+                        "type": "object",
+                        "description": "The HTTP query parameters",
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      },
+                      "path": {
+                        "type": "string",
+                        "format": "uri-template",
+                        "description": "The HTTP path as a uri template"
+                      },
+                      "method": {
+                        "type": "string",
+                        "description": "The HTTP method"
+                      },
+                      "status": {
+                        "type": "string",
+                        "description": "The HTTP response status code, mutually exclusive with method"
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "protocol"
+                ]
+              },
+              {
+                "properties": {
+                  "protocol": {
+                    "type": "string",
+                    "description": "Protocol identifier. This attribute MUST be the same as the 'protocol' attribute of the definition group, but is not automatically inherited because definitions may be cross-referenced across groups",
+                    "enum": [
+                      "NATS"
+                    ]
+                  },
+                  "protocoloptions": {
+                    "type": "object",
+                    "description": "NATS message metadata constraints",
+                    "properties": {
+                      "subject": {
+                        "type": "string",
+                        "format": "uri-template",
+                        "description": "The NATS subject"
+                      },
+                      "reply-to": {
+                        "type": "string",
+                        "format": "uri-template",
+                        "description": "The NATS reply subject"
+                      },
+                      "headers": {
+                        "type": "array",
+                        "description": "The NATS headers",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "description": "The NATS header name"
+                            },
+                            "description": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string",
+                              "description": "The NATS header value"
+                            },
+                            "required": {
+                              "type": "boolean",
+                              "description": "The NATS header required"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "protocol"
+                ]
+              },
+              {
+                "anyOf": [
+                  {
+                    "not": {
+                      "required": [
+                        "protocol"
+                      ]
+                    }
+                  },
+                  {
+                    "properties": {
+                      "protocol": {
+                        "not": {
+                          "enum": [
+                            "AMQP/1.0",
+                            "MQTT/3.1.1",
+                            "MQTT/5.0",
+                            "KAFKA",
+                            "HTTP",
+                            "NATS"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "protocol"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "messagegroup": {
+        "type": "object",
+        "properties": {
+          "messagegroupid": {
+            "type": "string",
+            "description": "ID of the messagegroup object"
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the object"
+          },
+          "epoch": {
+            "type": "integer",
+            "description": "Epoch time of the object creation"
+          },
+          "self": {
+            "type": "string",
+            "format": "uri-reference",
+            "description": "URL of the object"
+          },
+          "xid": {
+            "type": "string",
+            "format": "xid",
+            "description": "Relative URL of the object"
+          },
+          "description": {
+            "type": "string",
+            "description": "Description of the object"
+          },
+          "documentation": {
+            "type": "string",
+            "format": "uri-reference",
+            "description": "URI of the documentation of the object"
+          },
+          "labels": {
+            "type": "object",
+            "description": "Labels for the object"
+          },
+          "createdat": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Time of the object creation"
+          },
+          "modifiedat": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Time of the object modification"
+          },
+          "envelope": {
+            "type": "string",
+            "description": "Envelope format identifier that defines the common metadata information for the message. All definitions in this group share this envelope format. Mixed-envelope-format groups are not permitted. The predefined envelope format is CloudEvents/1.0"
+          },
+          "protocol": {
+            "type": "string",
+            "description": "Protocol identifier that defines the transport message protocol. All definitions in this group share this protocol type. Mixed-protocol groups are not permitted. Predefined protocol formats are 'AMQP/1.0', 'MQTT/3.1.1', 'MQTT/5.0', 'KAFKA', 'HTTP', and 'NATS'"
+          },
+          "messages": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/definitions/messagegroup-schema/message"
+            }
+          },
+          "messagesurl": {
+            "type": "string",
+            "format": "uri-reference"
+          },
+          "messagescount": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "endpoint-schema": {
+      "endpoint": {
+        "type": "object",
+        "properties": {
+          "endpointid": {
+            "type": "string",
+            "description": "ID of the endpoint object"
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the object"
+          },
+          "epoch": {
+            "type": "integer",
+            "description": "Epoch time of the object creation"
+          },
+          "self": {
+            "type": "string",
+            "format": "uri-reference",
+            "description": "URL of the object"
+          },
+          "xid": {
+            "type": "string",
+            "format": "xid",
+            "description": "Relative URL of the object"
+          },
+          "description": {
+            "type": "string",
+            "description": "Description of the object"
+          },
+          "documentation": {
+            "type": "string",
+            "format": "uri-reference",
+            "description": "URI of the documentation of the object"
+          },
+          "labels": {
+            "type": "object",
+            "description": "Labels for the object"
+          },
+          "createdat": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Time of the object creation"
+          },
+          "modifiedat": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Time of the object modification"
+          },
+          "usage": {
+            "type": "array",
+            "description": "Required endpoint roles: subscriber, consumer, or producer. The Endpoint specification defines allowed combinations by protocol. These are domain constraints; the Core model's scalar enum aspect does not apply to arrays.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "channel": {
+            "type": "string",
+            "description": "The name of the channel"
+          },
+          "deprecated": {
+            "type": "object",
+            "description": "Indicates whether the endpoint is deprecated",
+            "properties": {
+              "effective": {
+                "type": "string",
+                "format": "date-time",
+                "description": "tbd"
+              },
+              "removal": {
+                "type": "string",
+                "format": "date-time",
+                "description": "tbd"
+              },
+              "alternative": {
+                "type": "string",
+                "format": "uri-reference",
+                "description": "tbd"
+              },
+              "docs": {
+                "type": "string",
+                "format": "uri-reference",
+                "description": "tbd"
+              }
+            }
+          },
+          "messagegroups": {
+            "type": "array",
+            "description": "The message groups that are supported by this endpoint. Relative references are XIDs within the same registry. Absolute URIs reference message groups in external registries.",
+            "items": {
+              "type": "string",
+              "format": "uri-reference"
+            }
+          },
+          "messages": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/definitions/messagegroup-schema/message"
+            }
+          },
+          "messagesurl": {
+            "type": "string",
+            "format": "uri-reference"
+          },
+          "messagescount": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "usage"
+        ],
+        "allOf": [
+          {
+            "oneOf": [
+              {
+                "properties": {
+                  "envelope": {
+                    "type": "string",
+                    "description": "Envelope metadata format identifier. If set, all definitions MUST use this format value",
+                    "enum": [
+                      "CloudEvents/1.0"
+                    ]
+                  },
+                  "envelopeoptions": {
+                    "type": "object",
+                    "description": "Envelope metadata constraints",
+                    "properties": {
+                      "mode": {
+                        "type": "string"
+                      },
+                      "format": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "envelope"
+                ]
+              },
+              {
+                "anyOf": [
+                  {
+                    "not": {
+                      "required": [
+                        "envelope"
+                      ]
+                    }
+                  },
+                  {
+                    "properties": {
+                      "envelope": {
+                        "not": {
+                          "enum": [
+                            "CloudEvents/1.0"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "envelope"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "oneOf": [
+              {
+                "properties": {
+                  "protocol": {
+                    "type": "string",
+                    "description": "Endpoint protocol identifier. If set, all definitions MUST use this protocol value",
+                    "enum": [
+                      "AMQP/1.0"
+                    ]
+                  },
+                  "protocoloptions": {
+                    "description": "Configuration information for this endpoint Opaque authoring Map: permitted string values and Map keys may contain RFC6570 Level-1 placeholders. Native JSON types and structural record names are retained; resolve variables and enforce the Endpoint consumer protocol contract before use."
+                  }
+                },
+                "required": [
+                  "protocol"
+                ]
+              },
+              {
+                "properties": {
+                  "protocol": {
+                    "type": "string",
+                    "description": "Endpoint protocol identifier. If set, all definitions MUST use this protocol value",
+                    "enum": [
+                      "MQTT/5.0"
+                    ]
+                  },
+                  "protocoloptions": {
+                    "description": "Configuration information for this endpoint Opaque authoring Map: permitted string values and Map keys may contain RFC6570 Level-1 placeholders. Native JSON types and structural record names are retained; resolve variables and enforce the Endpoint consumer protocol contract before use."
+                  }
+                },
+                "required": [
+                  "protocol"
+                ]
+              },
+              {
+                "properties": {
+                  "protocol": {
+                    "type": "string",
+                    "description": "Endpoint protocol identifier. If set, all definitions MUST use this protocol value",
+                    "enum": [
+                      "MQTT/3.1.1"
+                    ]
+                  },
+                  "protocoloptions": {
+                    "description": "Configuration information for this endpoint Opaque authoring Map: permitted string values and Map keys may contain RFC6570 Level-1 placeholders. Native JSON types and structural record names are retained; resolve variables and enforce the Endpoint consumer protocol contract before use."
+                  }
+                },
+                "required": [
+                  "protocol"
+                ]
+              },
+              {
+                "properties": {
+                  "protocol": {
+                    "type": "string",
+                    "description": "Endpoint protocol identifier. If set, all definitions MUST use this protocol value",
+                    "enum": [
+                      "HTTP"
+                    ]
+                  },
+                  "protocoloptions": {
+                    "description": "Configuration information for this endpoint Opaque authoring Map: permitted string values and Map keys may contain RFC6570 Level-1 placeholders. Native JSON types and structural record names are retained; resolve variables and enforce the Endpoint consumer protocol contract before use."
+                  }
+                },
+                "required": [
+                  "protocol"
+                ]
+              },
+              {
+                "properties": {
+                  "protocol": {
+                    "type": "string",
+                    "description": "Endpoint protocol identifier. If set, all definitions MUST use this protocol value",
+                    "enum": [
+                      "KAFKA"
+                    ]
+                  },
+                  "protocoloptions": {
+                    "description": "Configuration information for this endpoint Opaque authoring Map: permitted string values and Map keys may contain RFC6570 Level-1 placeholders. Native JSON types and structural record names are retained; resolve variables and enforce the Endpoint consumer protocol contract before use."
+                  }
+                },
+                "required": [
+                  "protocol"
+                ]
+              },
+              {
+                "properties": {
+                  "protocol": {
+                    "type": "string",
+                    "description": "Endpoint protocol identifier. If set, all definitions MUST use this protocol value",
+                    "enum": [
+                      "NATS"
+                    ]
+                  },
+                  "protocoloptions": {
+                    "description": "Configuration information for this endpoint Opaque authoring Map: permitted string values and Map keys may contain RFC6570 Level-1 placeholders. Native JSON types and structural record names are retained; resolve variables and enforce the Endpoint consumer protocol contract before use."
+                  }
+                },
+                "required": [
+                  "protocol"
+                ]
+              },
+              {
+                "anyOf": [
+                  {
+                    "not": {
+                      "required": [
+                        "protocol"
+                      ]
+                    }
+                  },
+                  {
+                    "properties": {
+                      "protocol": {
+                        "not": {
+                          "enum": [
+                            "AMQP/1.0",
+                            "MQTT/5.0",
+                            "MQTT/3.1.1",
+                            "HTTP",
+                            "KAFKA",
+                            "NATS"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "protocol"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "type": "object"
+}

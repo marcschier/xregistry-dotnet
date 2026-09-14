@@ -1,0 +1,70 @@
+{
+  "registryId": "federation-bridge",
+  "hosting": {
+    "publicRoot": "https://bridge.example/registry",
+    "listenPort": 8443,
+    "demoLoopback": false,
+    "allowAnonymousReads": false,
+    "certificatePath": "certificates/bridge.pfx",
+    "certificatePasswordEnvironment": "BRIDGE_CERTIFICATE_PASSWORD",
+    "writeTokenEnvironment": "BRIDGE_ADMIN_TOKEN",
+    "readTokenEnvironment": "BRIDGE_READER_TOKEN"
+  },
+  "modelFile": "bridge-model.json",
+  "sources": [
+    {
+      "name": "local",
+      "binding": "file",
+      "directory": "data/local",
+      "authorizedDirectory": "data",
+      "layout": "document-tree"
+    },
+    {
+      "name": "http-source",
+      "binding": "http",
+      "endpoint": "https://upstream.example/registry",
+      "credentialEnvironment": "BRIDGE_HTTP_READ_TOKEN",
+      "view": "api"
+    },
+    {
+      "name": "git-source",
+      "binding": "git",
+      "endpoint": "https://git.example/registries.git",
+      "reference": "refs/tags/reviewed-snapshot",
+      "rootPath": "xregistry",
+      "credentialEnvironment": "BRIDGE_GIT_READ_TOKEN"
+    },
+    {
+      "name": "oci-source",
+      "binding": "oci",
+      "endpoint": "oci://registry.example/team/xregistry",
+      "reference": "reviewed-snapshot",
+      "credentialEnvironment": "BRIDGE_OCI_READ_TOKEN"
+    }
+  ],
+  "mounts": [
+    {
+      "name": "authoritative",
+      "upstreamRoot": "https://authoritative.example/registry",
+      "modelFile": "bridge-model.json",
+      "credentialEnvironment": "BRIDGE_UPSTREAM_WRITE_TOKEN"
+    }
+  ],
+  "externalDocumentOrigins": ["https://documents.example.org/"],
+  "paging": {
+    "maxPageRecords": 256,
+    "maxCaptureRecords": 1024,
+    "maxCaptureBytes": 4194304,
+    "maxCaptures": 16,
+    "maxTotalBytes": 16777216,
+    "maxTokens": 4096,
+    "lifetimeSeconds": 120
+  },
+  "limits": {
+    "maxConcurrentRequests": 4,
+    "maxBodyBytes": 2097152,
+    "maxSourceBytes": 16777216,
+    "maxSourceRequests": 256,
+    "requestTimeoutSeconds": 30
+  }
+}

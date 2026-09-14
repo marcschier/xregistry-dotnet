@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>XRegistry.Bindings.Oci</PackageId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\XRegistry.Federation\XRegistry.Federation.csproj" />
+    <ProjectReference Include="..\XRegistry.Client\XRegistry.Client.csproj" />
+  </ItemGroup>
+</Project>

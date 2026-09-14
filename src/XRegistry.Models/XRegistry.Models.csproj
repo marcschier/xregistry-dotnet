@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>XRegistry.Models</PackageId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\XRegistry\XRegistry.csproj" />
+    <EmbeddedResource Include="Resources\*.json" LogicalName="XRegistry.Models.BuiltIn.%(Filename).json" />
+    <None Include="Resources\LICENSE" Pack="true" PackagePath="licenses\xRegistry-Specification.txt" />
+  </ItemGroup>
+</Project>

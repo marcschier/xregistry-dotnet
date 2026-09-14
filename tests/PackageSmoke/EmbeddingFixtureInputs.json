@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "directories": [
+    {
+      "name": "mapping",
+      "source": "tests\\Conformance\\Sources\\workingdrafts\\bindings\\samples\\mapping",
+      "files": 41,
+      "bytes": 19473,
+      "treeSha256": "a8ceaa2df1a8c6d1e1c7c6bb4a432ddfb99e92589bd723fd0313574781584916"
+    },
+    {
+      "name": "oci",
+      "source": "tests\\Conformance\\Sources\\workingdrafts\\federation\\samples\\oci",
+      "files": 120,
+      "bytes": 200642,
+      "treeSha256": "e02a3b204bd9b11cf2b1fe76d7b91b03e590775cf6fc7b70774ba3e3bf937420"
+    }
+  ],
+  "files": [
+    {
+      "name": "CONFORMANCE-LICENSE",
+      "source": "tests\\Conformance\\Sources\\LICENSE",
+      "bytes": 11349,
+      "sha256": "c07c2bf22d1b6eadecdbc008b0693c9a876f85c1485c375ff57301085ffc8db9"
+    },
+    {
+      "name": "git-fixtures.json",
+      "source": "tests\\XRegistry.Git.Tests\\Fixtures\\git-fixtures.json",
+      "bytes": 21646,
+      "sha256": "b1314adf70490210671ba9fe5914b9c5a5d3d2a62be69cedfdfa709994217f40"
+    }
+  ]
+}

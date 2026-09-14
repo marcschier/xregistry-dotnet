@@ -1,0 +1,1572 @@
+import argparse
+import copy
+import json
+import os
+import re
+from jsonpointer import resolve_pointer
+
+avro_generic_record_name = "GenericRecord"
+avro_generic_record_qualified_name = "io.xregistry.GenericRecord"
+avro_generic_record = {
+  "type": "record",
+  "name": avro_generic_record_name,
+  "fields": [
+    {
+      "name": "object",
+      "type": {
+        "type": "map",
+        "values": [
+          "null",
+          "boolean",
+          "int",
+          "long",
+          "float",
+          "double",
+          "bytes",
+          "string",
+          {
+            "type": "array",
+            "items": [
+              "null",
+              "boolean",
+              "int",
+              "long",
+              "float",
+              "double",
+              "bytes",
+              "string",
+              avro_generic_record_qualified_name
+            ]
+          },
+          avro_generic_record_qualified_name
+        ]
+      }
+    }
+  ]
+}
+
+
+avro_type_mapping = {
+    "string": {"type": "string"},
+    "object": {"type": "record"},
+    "map": {"type": { "type": "map"}},
+    "uri": {"type": "string"},
+    "url": {"type": "string"},
+    "datetime": {"type": {"type":"int", "logicalType": "time-millis"}},
+    "integer": {"type": "int"},
+    "uinteger": {"type": "int"},
+    "boolean": {"type": "boolean"},
+    "array": {"type":{"type": "array", "items": ""}},
+    "uritemplate": {"type": "string"},
+    "binary": {"type": "bytes"},
+    "timestamp": {"type": {"type":"long", "logicalType": "timestamp-millis"}},
+    "any": {"type": avro_generic_record_qualified_name},
+    "var": {"type": avro_generic_record_qualified_name},
+    "xid": {"type": "string"}
+}
+
+json_type_mapping = {
+    "string": {"type": "string"},
+    "object": {"type": "object"},
+    "map": {"type": "object"},
+    "uri": {"type": "string", "format": "uri-reference"},
+    "url": {"type": "string", "format": "uri-reference"},
+    "xid": {"type": "string", "format": "uri-reference", "pattern": "^/"},
+    "datetime": {"type": "string", "format": "date-time"},
+    "integer": {"type": "integer"},
+    "uinteger": {"type": "integer", "minimum": 0},
+    "boolean": {"type": "boolean"},
+    "array": {"type": "array"},
+    "uritemplate": {"type": "string", "format": "uri-template"},
+    "binary": {"type": "string", "format": "base64"},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "any": {},
+    "var": {"type": "object"}
+}
+
+json_structure_type_mapping = {
+    "string": "string",
+    "uri": "string",
+    "url": "string",
+    "xid": "string",
+    "datetime": "datetime",
+    "integer": "integer",
+    "uinteger": "uint32",
+    "boolean": "boolean",
+    "uritemplate": "string",
+    "binary": "binary",
+    "timestamp": "datetime",
+    "any": "any",
+    "var": "any"
+}
+
+json_common_attributes = {
+    "name": {"type": "string", "description": "Name of the object"},
+    "epoch": {"type": "integer", "description": "Epoch time of the object creation"},
+    "self": {"type": "string", "format": "uri-reference", "description": "URL of the object"},
+    "xid": {"type": "string", "format": "xid", "description": "Relative URL of the object"},
+    "description": {"type": "string", "description": "Description of the object"},
+    "documentation": {"type": "string", "format": "uri-reference", "description": "URI of the documentation of the object"},
+    "labels": {"type": "object", "description": "Labels for the object"},
+    "createdat": {"type": "string", "format": "date-time", "description": "Time of the object creation"},
+    "modifiedat": {"type": "string", "format": "date-time", "description": "Time of the object modification"}
+}
+
+avro_common_attributes = [
+    {"name": "name", "type": ["string", "null"], "doc": "Name of the object"},
+    {"name": "epoch", "type": ["int", "null"], "doc": "Epoch time of the object creation"},
+    {"name": "self", "type": "string", "doc": "URL of the object"},
+    {"name": "xid", "type": "string", "doc": "XID of the object"},
+    {"name": "description", "type": ["string", "null"], "doc": "Description of the object"},
+    {"name": "documentation", "type": ["string", "null"], "doc": "URI of the documentation of the object"},
+    {"name": "labels", "type": { "type": "map", "values": ["string", "null"]} , "doc": "Labels for the object"},
+    {"name": "createdat", "type": [{"type":"long", "logicalType": "timestamp-millis"}, "null"], "doc": "Time of the object creation"},
+    {"name": "modifiedat", "type": [{"type":"long", "logicalType": "timestamp-millis"},"null"], "doc": "Time of the object modification"}
+]
+
+core_meta_attributes = {
+    "xref": {"type": "xid"},
+    "readonly": {"type": "boolean"},
+    "compatibility": {"type": "string"},
+    "deprecated": {
+        "type": "object",
+        "attributes": {
+            "effective": {"type": "timestamp"},
+            "removal": {"type": "timestamp"},
+            "alternative": {"type": "url"},
+            "documentation": {"type": "url"},
+        },
+    },
+    "defaultversionid": {"type": "string"},
+    "defaultversionurl": {"type": "url"},
+    "defaultversionsticky": {"type": "boolean"},
+}
+
+
+def pascal(string):
+    if not string or len(string) == 0:
+        return string
+    words = []
+    if '_' in string:
+        # snake_case
+        words = re.split(r'_', string)
+    elif '-' in string:
+        # dash-case
+        words = re.split(r'-', string)
+    elif string[0].isupper():
+        # PascalCase
+        words = re.findall(r'[A-Z][a-z0-9_]*\.?', string)
+    else:
+        # camelCase
+        words = re.findall(r'[a-z]+\.?|[A-Z][a-z0-9_]*\.?', string)
+    result = ''.join(word.capitalize() for word in words)
+    return result
+
+def camel(string):
+    pascalString = pascal(string)
+    return pascalString[0:1].lower() + pascalString[1:]
+
+
+def generate_openapi(model_definition):
+
+    # now recursively find all $ref attributes in the template and replace them with references to the appropriate schema
+    def replace_refs(schema_fragment: dict, expression: str, reference: str):
+        for k,v in schema_fragment.items():
+            if k == "$ref":
+                if expression in v:
+                    schema_fragment[k] = v.replace(expression, reference)
+            if isinstance(v, dict):
+                replace_refs(v, expression, reference)
+            elif isinstance(v, list):
+                for item in v:
+                    if isinstance(item, dict):
+                        replace_refs(item, expression, reference)
+
+    def replace_ops(schema_fragment: dict, expression: str, reference: str):
+        for k,v in schema_fragment.items():
+            if k == "operationId":
+                if v.find(expression) != -1:
+                    schema_fragment[k] = v.replace(expression, reference)
+            if isinstance(v, dict):
+                replace_ops(v, expression, reference)
+            elif isinstance(v, list):
+                for item in v:
+                    if isinstance(item, dict):
+                        replace_ops(item, expression, reference)
+
+    def metadata_content(value):
+        if isinstance(value, dict):
+            if "content" in value:
+                value["content"].pop("application/octet-stream", None)
+            for child in value.values():
+                metadata_content(child)
+        elif isinstance(value, list):
+            for child in value:
+                metadata_content(child)
+
+    try:
+        template_file_name = os.path.join(os.path.dirname(__file__), '..', 'core', 'templates', 'xregistry_openapi_template.json')
+        with open(template_file_name, encoding='utf-8') as file:
+            openapi = json.load(file)
+        json_schema = generate_json_schema(model_definition, True)
+        # merge JSON schema with template
+        for schema_name, schema in json_schema["components"]["schemas"].items():
+            openapi["components"]["schemas"][schema_name] = schema
+        # do the fixups
+
+        path = "/"
+        root_template = openapi["paths"][path]
+        replace_refs(root_template, "{%-documentTypeReference-%}", f"#/components/schemas/document")
+
+        path = "/{%-groupNamePlural-%}"
+        path_template = openapi["paths"][path]
+        for _, group in model_definition.get("groups", {}).items():
+            path_template_copy = copy.deepcopy(path_template)
+            replace_refs(path_template_copy, "{%-groupTypeReference-%}", f"#/components/schemas/{group['singular']}")
+            replace_ops(path_template_copy, "{%-groupNamePlural-%}", f"{pascal(group['plural'])}")
+            openapi["paths"][f"/{group['plural']}"] = path_template_copy
+        openapi["paths"].pop(path)
+
+        path = "/{%-groupNamePlural-%}/{groupid}"
+        group_template = openapi["paths"][path]
+        for _, group in model_definition.get("groups", {}).items():
+            group_template_copy = copy.deepcopy(group_template)
+            replace_refs(group_template_copy, "{%-groupTypeReference-%}", f"#/components/schemas/{group['singular']}")
+            replace_ops(group_template_copy, "{%-groupNameSingular-%}", f"{pascal(group['singular'])}")
+            openapi["paths"][f"/{group['plural']}/{{groupid}}"] = group_template_copy
+
+        openapi["paths"].pop(path)
+        path = "/{%-groupNamePlural-%}/{groupid}/{%-resourceNamePlural-%}"
+        resource_template = openapi["paths"][path]
+        for _, group in model_definition.get("groups", {}).items():
+            for _, resource in group.get("resources", {}).items():
+                resource = resolve_resource(group, resource)
+                resource_template_copy = copy.deepcopy(resource_template)
+                replace_refs(resource_template_copy, "{%-resourceTypeReference-%}", f"#/components/schemas/{resource['singular']}")
+                replace_refs(resource_template_copy, "{%-groupTypeReference-%}", f"#/components/schemas/{group['singular']}")
+                replace_ops(resource_template_copy, "{%-resourceNamePlural-%}", f"{pascal(group['singular'])}{pascal(resource['plural'])}")
+                openapi["paths"][f"/{group['plural']}/{{groupid}}/{resource['plural']}"]= resource_template_copy
+            for ximportresources_xid in group.get("ximportresources", []):
+                xid_group_plural, xid_resource_plural = ximportresources_xid.split("/")[1:]
+                xid_resource_singular = model_definition["groups"][xid_group_plural]["resources"][xid_resource_plural]["singular"]
+                xid_group_singular = model_definition["groups"][xid_group_plural]["singular"]
+                resource_template_copy = copy.deepcopy(resource_template)
+                replace_refs(resource_template_copy, "{%-resourceTypeReference-%}", f"#/components/schemas/{xid_resource_singular}")
+                replace_refs(resource_template_copy, "{%-groupTypeReference-%}", f"#/components/schemas/{xid_group_singular}")
+                replace_ops(resource_template_copy, "{%-resourceNamePlural-%}", f"{pascal(group['singular'])}{pascal(xid_resource_plural)}")
+                openapi["paths"][f"/{group['plural']}/{{groupid}}/{xid_resource_plural}"]= resource_template_copy
+
+        openapi["paths"].pop(path)
+        path = "/{%-groupNamePlural-%}/{groupid}/{%-resourceNamePlural-%}/{resourceid}/meta"
+        meta_template = openapi["paths"][path]
+        for _, group in model_definition.get("groups", {}).items():
+            for _, resource in group.get("resources", {}).items():
+                resource = resolve_resource(group, resource)
+                meta_template_copy = copy.deepcopy(meta_template)
+                replace_refs(meta_template_copy, "{%-resourceTypeReference-%}", f"#/components/schemas/{resource['singular']}")
+                replace_refs(meta_template_copy, "{%-groupTypeReference-%}", f"#/components/schemas/{group['singular']}")
+                replace_ops(meta_template_copy, "{%-resourceNameSingular-%}", f"{pascal(group['singular'])}{pascal(resource['singular'])}")
+                openapi["paths"][f"/{group['plural']}/{{groupid}}/{resource['plural']}/{{resourceid}}/meta"]= meta_template_copy
+            for ximportresources_xid in group.get("ximportresources", []):
+                xid_group_plural, xid_resource_plural = ximportresources_xid.split("/")[1:]
+                xid_resource_singular = model_definition["groups"][xid_group_plural]["resources"][xid_resource_plural]["singular"]
+                xid_group_singular = model_definition["groups"][xid_group_plural]["singular"]
+                meta_template_copy = copy.deepcopy(meta_template)
+                replace_refs(meta_template_copy, "{%-resourceTypeReference-%}", f"#/components/schemas/{xid_resource_singular}")
+                replace_refs(meta_template_copy, "{%-groupTypeReference-%}", f"#/components/schemas/{xid_group_singular}")
+                replace_ops(meta_template_copy, "{%-resourceNameSingular-%}", f"{pascal(group['singular'])}{pascal(xid_resource_plural)}")
+                openapi["paths"][f"/{group['plural']}/{{groupid}}/{xid_resource_plural}/{{resourceid}}/meta"]= meta_template_copy
+
+        openapi["paths"].pop(path)
+        path = "/{%-groupNamePlural-%}/{groupid}/{%-resourceNamePlural-%}/{resourceid}$details"
+        details_template = openapi["paths"][path]
+        for _, group in model_definition.get("groups", {}).items():
+            for _, resource in group.get("resources", {}).items():
+                resource = resolve_resource(group, resource)
+                details_template_copy = copy.deepcopy(details_template)
+                replace_refs(details_template_copy, "{%-resourceTypeReference-%}", f"#/components/schemas/{resource['singular']}")
+                replace_refs(details_template_copy, "{%-groupTypeReference-%}", f"#/components/schemas/{group['singular']}")
+                replace_ops(details_template_copy, "{%-resourceNameSingular-%}", f"{pascal(group['singular'])}{pascal(resource['singular'])}")
+                openapi["paths"][f"/{group['plural']}/{{groupid}}/{resource['plural']}/{{resourceid}}$details"]= details_template_copy
+            for ximportresources_xid in group.get("ximportresources", []):
+                xid_group_plural, xid_resource_plural = ximportresources_xid.split("/")[1:]
+                xid_resource_singular = model_definition["groups"][xid_group_plural]["resources"][xid_resource_plural]["singular"]
+                xid_group_singular = model_definition["groups"][xid_group_plural]["singular"]
+                details_template_copy = copy.deepcopy(details_template)
+                replace_refs(details_template_copy, "{%-resourceTypeReference-%}", f"#/components/schemas/{xid_resource_singular}")
+                replace_refs(details_template_copy, "{%-groupTypeReference-%}", f"#/components/schemas/{xid_group_singular}")
+                replace_ops(details_template_copy, "{%-resourceNameSingular-%}", f"{pascal(group['singular'])}{pascal(xid_resource_plural)}")
+                openapi["paths"][f"/{group['plural']}/{{groupid}}/{xid_resource_plural}/{{resourceid}}$details"]= details_template_copy
+
+        openapi["paths"].pop(path)
+        path = "/{%-groupNamePlural-%}/{groupid}/{%-resourceNamePlural-%}/{resourceid}"
+        resourceid_template = openapi["paths"][path]
+        for _, group in model_definition.get("groups", {}).items():
+            for _, resource in group.get("resources", {}).items():
+                resource = resolve_resource(group, resource)
+                resourceid_template_copy = copy.deepcopy(resourceid_template)
+                replace_refs(resourceid_template_copy, "{%-resourceTypeReference-%}", f"#/components/schemas/{resource['singular']}")
+                replace_refs(resourceid_template_copy, "{%-groupTypeReference-%}", f"#/components/schemas/{group['singular']}")
+                replace_ops(resourceid_template_copy, "{%-resourceNameSingular-%}", f"{pascal(group['singular'])}{pascal(resource['singular'])}")
+                openapi["paths"][f"/{group['plural']}/{{groupid}}/{resource['plural']}/{{resourceid}}"]= resourceid_template_copy
+            for ximportresources_xid in group.get("ximportresources", []):
+                xid_group_plural, xid_resource_plural = ximportresources_xid.split("/")[1:]
+                xid_resource_singular = model_definition["groups"][xid_group_plural]["resources"][xid_resource_plural]["singular"]
+                xid_group_singular = model_definition["groups"][xid_group_plural]["singular"]
+                resourceid_template_copy = copy.deepcopy(resourceid_template)
+                replace_refs(resourceid_template_copy, "{%-resourceTypeReference-%}", f"#/components/schemas/{xid_resource_singular}")
+                replace_refs(resourceid_template_copy, "{%-groupTypeReference-%}", f"#/components/schemas/{xid_group_singular}")
+                replace_ops(resourceid_template_copy, "{%-resourceNameSingular-%}", f"{pascal(group['singular'])}{pascal(xid_resource_plural)}")
+                openapi["paths"][f"/{group['plural']}/{{groupid}}/{xid_resource_plural}/{{resourceid}}"]= resourceid_template_copy
+
+        openapi["paths"].pop(path)
+        path = "/{%-groupNamePlural-%}/{groupid}/{%-resourceNamePlural-%}/{resourceid}/versions"
+        versions_template = openapi["paths"][path]
+        for _, group in model_definition.get("groups", {}).items():
+            for _, resource in group.get("resources", {}).items():
+                resource = resolve_resource(group, resource)
+                versions_template_copy = copy.deepcopy(versions_template)
+                replace_refs(versions_template_copy, "{%-resourceTypeReference-%}", f"#/components/schemas/{resource['singular']}")
+                replace_refs(versions_template_copy, "{%-groupTypeReference-%}", f"#/components/schemas/{group['singular']}")
+                replace_ops(versions_template_copy, "{%-resourceNameSingular-%}", f"{pascal(group['singular'])}{pascal(resource['singular'])}")
+                openapi["paths"][f"/{group['plural']}/{{groupid}}/{resource['plural']}/{{resourceid}}/versions"]= versions_template_copy
+            for ximportresources_xid in group.get("ximportresources", []):
+                xid_group_plural, xid_resource_plural = ximportresources_xid.split("/")[1:]
+                xid_resource_singular = model_definition["groups"][xid_group_plural]["resources"][xid_resource_plural]["singular"]
+                xid_group_singular = model_definition["groups"][xid_group_plural]["singular"]
+                versions_template_copy = copy.deepcopy(versions_template)
+                replace_refs(versions_template_copy, "{%-resourceTypeReference-%}", f"#/components/schemas/{xid_resource_singular}")
+                replace_refs(versions_template_copy, "{%-groupTypeReference-%}", f"#/components/schemas/{xid_group_singular}")
+                replace_ops(versions_template_copy, "{%-resourceNameSingular-%}", f"{pascal(group['singular'])}{pascal(xid_resource_plural)}")
+                openapi["paths"][f"/{group['plural']}/{{groupid}}/{xid_resource_plural}/{{resourceid}}/versions"]= versions_template_copy
+
+        openapi["paths"].pop(path)
+        path = "/{%-groupNamePlural-%}/{groupid}/{%-resourceNamePlural-%}/{resourceid}/versions/{versionid}"
+        versionid_template = openapi["paths"][path]
+        for _, group in model_definition.get("groups", {}).items():
+            for _, resource in group.get("resources", {}).items():
+                resource = resolve_resource(group, resource)
+                versionid_template_copy = copy.deepcopy(versionid_template)
+                replace_refs(versionid_template_copy, "{%-resourceTypeReference-%}", f"#/components/schemas/{resource['singular']}")
+                replace_refs(versionid_template_copy, "{%-groupTypeReference-%}", f"#/components/schemas/{group['singular']}")
+                replace_ops(versionid_template_copy, "{%-resourceNameSingular-%}", f"{pascal(group['singular'])}{pascal(resource['singular'])}")
+                openapi["paths"][f"/{group['plural']}/{{groupid}}/{resource['plural']}/{{resourceid}}/versions/{{versionid}}"]= versionid_template_copy
+            for ximportresources_xid in group.get("ximportresources", []):
+                xid_group_plural, xid_resource_plural = ximportresources_xid.split("/")[1:]
+                xid_resource_singular = model_definition["groups"][xid_group_plural]["resources"][xid_resource_plural]["singular"]
+                xid_group_singular = model_definition["groups"][xid_group_plural]["singular"]
+                versionid_template_copy = copy.deepcopy(versionid_template)
+                replace_refs(versionid_template_copy, "{%-resourceTypeReference-%}", f"#/components/schemas/{xid_resource_singular}")
+                replace_refs(versionid_template_copy, "{%-groupTypeReference-%}", f"#/components/schemas/{xid_group_singular}")
+                replace_ops(versionid_template_copy, "{%-resourceNameSingular-%}", f"{pascal(group['singular'])}{pascal(xid_resource_plural)}")
+                openapi["paths"][f"/{group['plural']}/{{groupid}}/{xid_resource_plural}/{{resourceid}}/versions/{{versionid}}"]= versionid_template_copy
+
+        openapi["paths"].pop(path)
+
+        for group in model_definition.get("groups", {}).values():
+            resources = dict(group.get("resources", {}))
+            for imported in group.get("ximportresources", []):
+                source_group, resource_name = imported.split("/")[1:]
+                resources[resource_name] = model_definition["groups"][source_group]["resources"][resource_name]
+            for plural, definition in resources.items():
+                resource = resolve_resource(group, definition)
+                base = f"/{group['plural']}/{{groupid}}/{plural}/{{resourceid}}"
+                version_type = resource["singular"]
+                if resource.get("maxversions", -1) != 1:
+                    version_type += "Version"
+                reference = f"#/components/schemas/{version_type}"
+                versions = openapi["paths"][base + "/versions"]
+                version = openapi["paths"][base + "/versions/{versionid}"]
+                for item in (versions, version):
+                    replace_refs(item, f"#/components/schemas/{resource['singular']}", reference)
+                versions["get"]["responses"]["200"]["content"]["application/json"]["schema"] = {
+                    "type": "object", "additionalProperties": {"$ref": reference}
+                }
+                for item in (openapi["paths"][base], version):
+                    item["parameters"] = [
+                        parameter for parameter in item.get("parameters", [])
+                        if parameter.get("name") != "meta"
+                    ]
+                    if not resource.get("hasdocument", True):
+                        metadata_content(item)
+                version_details = {
+                    key: copy.deepcopy(value) for key, value in version.items()
+                    if key in ("parameters", "get", "put", "patch")
+                }
+                metadata_content(version_details)
+                for method in ("get", "put", "patch"):
+                    if method in version_details:
+                        version_details[method]["operationId"] += "Metadata"
+                openapi["paths"][base + "/versions/{versionid}$details"] = version_details
+
+        registry_entity_schema = openapi["components"]["schemas"]["RegistryEntity"]
+        for _, group in model_definition.get("groups", {}).items():
+            group_plural = group["plural"]
+            group_singular = group["singular"]
+            registry_entity_schema["properties"][f"{group_plural}url"] = {
+            "type": "string",
+            "format": "uri",
+            "description": f"The URL for retrieving the {group_plural} (e.g. endpointsurl)."
+            }
+            registry_entity_schema["properties"][f"{group_plural}count"] = {
+            "type": "integer",
+            "minimum": 0,
+            "description": f"The count of {group_plural} in the registry."
+            }
+            registry_entity_schema["properties"][group_plural] = {
+            "type": "object",
+            "description": f"A map of {group_plural} in the registry, keyed by {group_singular} identifier. Present only if inlined.",
+            "additionalProperties": {
+                "$ref": f"#/components/schemas/{group_singular}"
+            },
+            "nullable": True
+            }
+
+        return openapi
+    except:
+        print(f"Error opening template file {template_file_name}")
+        raise
+
+
+def generate_json_schema(model_definition, for_openapi=False, schema_id='') -> dict:
+    """
+    Generate a JSON schema for the given model definition.
+
+    Args:
+        model_definition (dict): The model definition to generate the schema for.
+        for_openapi (bool, optional): Whether the schema is being generated for OpenAPI. Defaults to False.
+        schema_id (str, optional): The URI to use for the schema's $id. Defaults to ''.
+
+    Returns:
+        dict: The generated JSON schema.
+    """
+
+    def handle_item(resource_schema, type, item, enum_values=None):
+        if type == "object":
+            resource_schema["type"] = "object"
+            if "attributes" in item:
+                handle_attributes(resource_schema,  item["attributes"])
+        elif type == "map":
+            resource_schema["type"] = "object"
+            if "type" in item:
+                if item["type"] == "object":
+                    attr_schema = {"type": "object", "description": "", "properties": {}}
+                    if "attributes" in item:
+                        handle_attributes(attr_schema, item["attributes"])
+                else:
+                    attr_schema = copy.deepcopy(json_type_mapping[item["type"]])
+                if "description" in item:
+                    attr_schema["description"] = item["description"]
+                if "description" in attr_schema and attr_schema["description"] == "":
+                    del attr_schema["description"]
+                resource_schema["additionalProperties"] = attr_schema
+                if item["type"] == "object" or item["type"] == "map" or item["type"] == "array":
+                    if "item" in item:
+                        handle_item(resource_schema["additionalProperties"], item["type"], item["item"])
+        elif type == "array":
+            resource_schema["type"] = "array"
+            if "type" in item:
+                if item["type"] == "object":
+                    attr_schema = {"type": "object", "description": "", "properties": {}}
+                    if "attributes" in item:
+                        handle_attributes(attr_schema, item["attributes"])
+                    else:
+                        attr_schema = copy.deepcopy(attr_schema)
+                else:
+                    attr_schema = copy.deepcopy(json_type_mapping[item["type"]])
+                if "description" in item:
+                    attr_schema["description"] = item["description"]
+                if "description" in attr_schema and attr_schema["description"] == "":
+                    del attr_schema["description"]
+                # Apply enum constraint to array items if provided
+                if enum_values is not None and len(enum_values) > 0:
+                    attr_schema["enum"] = enum_values
+                resource_schema["items"] = attr_schema
+                if item["type"] == "object" or item["type"] == "map" or item["type"] == "array":
+                    if "item" in item:
+                        handle_item(resource_schema["items"], item["type"], item["item"])
+
+
+
+    def handle_attributes(resource_schema, attributes):
+        """
+        This function takes in a resource schema and a dictionary of attributes and their properties.
+        It iterates through each attribute and creates a JSON schema for it based on its properties.
+        The function also handles nested attributes and conditional attributes using the "ifvalues" property.
+        The resulting schema is added to the resource schema.
+        """
+        for attr_name, attr_props in attributes.items():
+            if attr_props["type"] == "object":
+                attr_schema = {"type": "object", "description": "", "properties": {}}
+                if "attributes" in attr_props:
+                    handle_attributes(attr_schema, attr_props["attributes"])
+            else:
+                attr_schema = copy.deepcopy(json_type_mapping[attr_props["type"]])
+
+            if "description" in attr_props:
+                attr_schema["description"] = attr_props["description"]
+            if "description" in attr_schema and attr_schema["description"] == "":
+                del attr_schema["description"]
+
+            if attr_props["type"] == "object" or attr_props["type"] == "map" or attr_props["type"] == "array":
+                if "item" in attr_props:
+                    # Pass enum values if this is an array with enum constraint
+                    enum_values = attr_props.get("enum") if attr_props["type"] == "array" else None
+                    handle_item(attr_schema, attr_props["type"], attr_props["item"], enum_values)
+
+            if "required" in attr_props and attr_props["required"] == True and not "default" in attr_props:
+                if "required" not in resource_schema:
+                    resource_schema["required"] = []
+                resource_schema["required"].append(attr_name)
+
+            if "ifvalues" in attr_props:
+                if attr_name == "*":
+                    raise Exception("Can't use wild card attribute name with ifvalues")
+
+                if for_openapi:
+                    resource_schema["discriminator"] = {
+                        "propertyName": attr_name,
+                        "mapping": {}
+                    }
+
+                if attr_name in resource_schema["properties"]:
+                    resource_schema["properties"].pop(attr_name)
+                    if "required" in resource_schema and attr_name in resource_schema["required"]:
+                        resource_schema["required"].remove(attr_name)
+
+                one_of = []
+                for condition_value, condition_props in attr_props["ifvalues"].items():
+                    # create an identifier from condition_value, turning all spaces and special characters in to underscore
+                    condition_schema_identifier = attr_name + "_" + "".join([c if c.isalnum() else "_" for c in condition_value])
+                    # for openapi, add a reference to this schema in the discriminator mapping
+                    if for_openapi:
+                        resource_schema["discriminator"]["mapping"][condition_value] = f"#/components/schemas/{condition_schema_identifier}"
+
+                    conditional_attr_schema = copy.deepcopy(attr_schema)
+                    conditional_attr_schema.update({
+                                "enum": [condition_value],
+                            })
+                    if "siblingattributes" in condition_props:
+                        conditional_schema = {
+                                    "properties": {
+                                        attr_name: conditional_attr_schema
+                                    },
+                                    "required": [attr_name]
+                                }
+                        handle_attributes(conditional_schema,  condition_props.get("siblingattributes", {}))
+                    else:
+                        conditional_attr_schema.update({
+                            "default": condition_value
+                        })
+                        conditional_schema = {
+                            "properties": {
+                                        attr_name: conditional_attr_schema
+                                    },
+                        }
+
+                    if for_openapi:
+                        resource_schema["discriminator"]["mapping"][condition_value] = f"#/components/schemas/{condition_schema_identifier}"
+                        schema_definitions[condition_schema_identifier] = copy.deepcopy(conditional_schema)
+                    else:
+                        one_of.append(copy.deepcopy(conditional_schema))
+                if len(one_of) > 0:
+                    one_of.append({
+                        "anyOf": [
+                            { "not": { "required": [attr_name] } },
+                            {
+                                "properties": {
+                                    attr_name: { "not": { "enum": list(attr_props["ifvalues"].keys()) } }
+                                },
+                                "required": [attr_name]
+                            }
+                        ]
+                    })
+                    if "oneOf" in resource_schema:
+                        resource_schema["allOf"] = [{"oneOf" : resource_schema.pop("oneOf")}]
+                        resource_schema["allOf"].append({"oneOf": one_of})
+                    else:
+                        resource_schema["oneOf"] = one_of
+            else:
+                if attr_name == "*":
+                    if attr_props["type"] == "any":
+                        continue
+                    if "additionalProperties" in resource_schema:
+                        resource_schema["additionalProperties"].update(attr_schema)
+                    else:
+                        resource_schema["additionalProperties"] = copy.deepcopy(attr_schema)
+                else:
+                    if not "properties" in resource_schema:
+                        resource_schema["properties"] = {}
+                    resource_schema["properties"][attr_name] = copy.deepcopy(attr_schema)
+
+    ## body of the core function starts here
+    schema_group_names = []
+    for k in model_definition.get("groups", {}).keys():
+        schema_group_names.append(k.lower())
+
+    if for_openapi:
+        reference_prefix = "#/components/schemas/"
+        schema = {
+            "components": {
+                "schemas": {
+                    "document": {
+                        "type": "object",
+                        "properties": {},
+                    }
+                }
+            }
+        }
+        document_properties = schema["components"]["schemas"]["document"]["properties"]
+        schema_definitions = schema["components"]["schemas"]
+    else:
+        reference_prefix = "#/definitions/"
+        schema = {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "$id": schema_id if schema_id else "http://xregistry.io/schema/"+"-".join(schema_group_names),
+            "properties": {},
+            "definitions": {}
+        }
+        document_properties = schema["properties"]
+        schema_definitions = schema["definitions"]
+
+    root_schema = schema["components"]["schemas"]["document"] if for_openapi else schema
+    root_schema["type"] = "object"
+    document_properties.update(copy.deepcopy(json_common_attributes))
+    document_properties.update({
+        "registryid": {"type": "string"},
+        "specversion": {"type": "string"},
+        "model": {"type": "object"},
+        "modelsource": {"type": "object"},
+        "capabilities": {"type": "object"},
+    })
+    handle_attributes(root_schema, model_definition.get("attributes", {}))
+
+    for key, group in model_definition.get("groups", {}).items():
+        if "plural" not in group: group["plural"] = key
+        groups_name = group["plural"]
+        group_name = group["singular"]
+        # Create a namespace folder for this group's definitions
+        # For OpenAPI: use flat keys without -schema suffix
+        # For JSON Schema: use nested structure with -schema suffix
+        if for_openapi:
+            group_definition_prefix = f"{reference_prefix}"
+        else:
+            group_definition_prefix = f"{reference_prefix}{group_name}-schema/"
+        groups_schema = {
+            "type": "object",
+            "additionalProperties": {"$ref": f"{group_definition_prefix}{group_name}"}
+        }
+
+        document_properties[groups_name] = groups_schema
+        document_properties[groups_name + "url"] = {"type": "string", "format": "uri-reference"}
+        document_properties[groups_name + "count"] = {"type": "integer", "minimum": 0}
+        resource_collection_properties = {}
+
+        for rKey, resource in group.get("resources", {}).items():
+            if "plural" not in resource: resource["plural"] = rKey
+            resource = resolve_resource(group, resource)
+            resource_name = resource["singular"]
+            props = {}
+            props[resource_name+"id"] = {"type": "string", "description": f"ID of the {resource_name} object"}
+            props.update(copy.deepcopy(json_common_attributes))
+
+            if resource.get("hasdocument", True):
+                props.update({
+                    resource_name: {
+                        "description": f"Embedded {resource_name} object",
+                        "oneOf": [{"type": "object"}, {"type": "string"}],
+                    },
+                    resource_name + "base64": {
+                        "type": "string", "format": "base64",
+                    },
+                    resource_name + "url": {
+                        "type": "string", "format": "uri-reference",
+                    },
+                })
+                resource_schema = {
+                    "type": "object",
+                    "properties": props,
+                    "oneOf": [
+                        {"required": [resource_name]},
+                        {"required": [resource_name + "base64"]},
+                        {"required": [resource_name + "url"]},
+                        {"not": {"anyOf": [
+                            {"required": [resource_name]},
+                            {"required": [resource_name + "base64"]},
+                            {"required": [resource_name + "url"]},
+                        ]}},
+                    ]
+                }
+            else:
+                resource_schema = {
+                    "type": "object",
+                    "properties": props
+                }
+
+            meta_schema = {
+                "type": "object",
+                "properties": {
+                    **copy.deepcopy(json_common_attributes),
+                    resource_name + "id": {"type": "string"},
+                },
+            }
+            handle_attributes(meta_schema, {
+                **core_meta_attributes, **resource.get("metaattributes", {})
+            })
+            resource_schema["properties"]["metaurl"] = {
+                "type": "string", "format": "uri-reference",
+            }
+            resource_schema["properties"]["meta"] = meta_schema
+            attributes = resource.get("attributes", {})
+            if resource.get("maxversions", -1) != 1:
+                resource_version_schema = copy.deepcopy(resource_schema)
+                resource_version_schema["properties"].pop("meta")
+                resource_version_schema["properties"].pop("metaurl")
+                props = {}
+                props["versionid"] = {"type": "string", "description": f"ID of the {resource_name} version"}
+                props.update(copy.deepcopy(resource_version_schema["properties"]))
+                props.update({
+                    "ancestorid": {"type": "string"},
+                    "isdefault": {"type": "boolean"},
+                    "contenttype": {"type": "string"},
+                })
+                resource_version_schema["properties"] = props
+                handle_attributes(resource_version_schema, attributes)
+
+                resource_schema.pop("oneOf", None)
+                resource_schema["properties"].update({
+                    "versionsurl": {"type": "string", "format": "uri-reference"},
+                    "versionscount": {"type": "integer", "minimum": 0},
+                    "versions": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "$ref": f"{group_definition_prefix}{resource_name}Version"
+                        }
+                    },
+                })
+                resource_schema["anyOf"] = [
+                        {"required": ["versionsurl"]},
+                        {"required": ["versions"]},
+                        {
+                            "properties": {"meta": {"required": ["xref"]}},
+                            "required": ["meta"]
+                        }
+                    ]
+
+                # For OpenAPI: flat keys, for JSON Schema: nested structure
+                if for_openapi:
+                    schema_definitions[f"{resource_name}Version"] = resource_version_schema
+                else:
+                    if f"{group_name}-schema" not in schema_definitions:
+                        schema_definitions[f"{group_name}-schema"] = {}
+                    schema_definitions[f"{group_name}-schema"][f"{resource_name}Version"] = resource_version_schema
+            else:
+                handle_attributes(resource_schema, attributes)
+
+            # For OpenAPI: flat keys, for JSON Schema: nested structure
+            if for_openapi:
+                schema_definitions[resource_name] = resource_schema
+            else:
+                if f"{group_name}-schema" not in schema_definitions:
+                    schema_definitions[f"{group_name}-schema"] = {}
+                schema_definitions[f"{group_name}-schema"][resource_name] = resource_schema
+            resource_collection_properties[resource["plural"]] = {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": f"{group_definition_prefix}{resource_name}",
+                    }
+                }
+
+        for ximportresources_xid in group.get("ximportresources", []):
+            xid_group_plural, xid_resource_plural = ximportresources_xid.split("/")[1:]
+            xid_group_singular = model_definition["groups"][xid_group_plural]["singular"]
+            xid_resource_singular = model_definition["groups"][xid_group_plural]["resources"][xid_resource_plural]["singular"]
+            # Use the source group's namespace for imported resources
+            # For OpenAPI: flat keys, for JSON Schema: nested structure
+            if for_openapi:
+                xid_group_definition_prefix = f"{reference_prefix}"
+            else:
+                xid_group_definition_prefix = f"{reference_prefix}{xid_group_singular}-schema/"
+            resource_collection_properties[xid_resource_plural] = {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": f"{xid_group_definition_prefix}{xid_resource_singular}",
+                    }
+                }
+
+        props = {}
+        props[group_name+"id"] = {"type": "string", "description": f"ID of the {group_name} object"}
+        props.update(copy.deepcopy(json_common_attributes))
+        group_schema = {
+            "type": "object",
+            "properties": props
+        }
+        attributes = group.get("attributes", {})
+        handle_attributes(group_schema, attributes)
+        for resource_collection_name, resource_collection_schema in resource_collection_properties.items():
+            group_schema["properties"][resource_collection_name] = resource_collection_schema
+            group_schema["properties"][resource_collection_name + "url"] = {
+                "type": "string", "format": "uri-reference",
+            }
+            group_schema["properties"][resource_collection_name + "count"] = {
+                "type": "integer", "minimum": 0,
+            }
+        # For OpenAPI: flat keys, for JSON Schema: nested structure
+        if for_openapi:
+            schema_definitions[group_name] = group_schema
+        else:
+            if f"{group_name}-schema" not in schema_definitions:
+                schema_definitions[f"{group_name}-schema"] = {}
+            schema_definitions[f"{group_name}-schema"][group_name] = group_schema
+    return schema
+
+
+
+def generate_json_structure(model_definition, schema_id='', schema_name='') -> dict:
+    """Generate a native JSON Structure schema for an xRegistry document."""
+    definitions = {}
+
+    def identifier(wire_name):
+        words = [word for word in re.split(r'[^A-Za-z0-9]+', wire_name) if word]
+        logical_name = words[0] + ''.join(
+            word[:1].upper() + word[1:] for word in words[1:]
+        ) if words else "value"
+        if logical_name[0].isdigit():
+            logical_name = "value" + logical_name
+        return logical_name
+
+    def type_identifier(wire_name):
+        logical_name = identifier(wire_name)
+        return logical_name[:1].upper() + logical_name[1:]
+
+    def reference(namespace, type_name):
+        return {"type": {"$ref": f"#/definitions/{namespace}/{type_name}"}}
+
+    def add_definition(namespace, suggested_name, schema):
+        namespace_definitions = definitions.setdefault(namespace, {})
+        type_name = type_identifier(suggested_name)
+        existing = namespace_definitions.get(type_name)
+        if existing is not None and existing != schema:
+            raise ValueError(
+                f"Conflicting JSON Structure definition: {namespace}/{type_name}"
+            )
+        if existing is None:
+            namespace_definitions[type_name] = schema
+        return type_name
+
+    def apply_annotations(schema, definition):
+        if definition.get("description"):
+            schema["description"] = definition["description"]
+        if definition.get("enum") and definition.get("strict", True):
+            schema["enum"] = copy.deepcopy(definition["enum"])
+
+    def value_schema(definition, namespace, suggested_name, require_reference=False):
+        value_type = definition["type"]
+        if value_type == "object":
+            schema = object_schema(
+                definition.get("attributes", {}), namespace, suggested_name
+            )
+            apply_annotations(schema, definition)
+            if require_reference:
+                type_name = add_definition(namespace, suggested_name, schema)
+                return reference(namespace, type_name)
+            return schema
+        if value_type == "map":
+            item = definition.get("item", {"type": "any"})
+            schema = {
+                "type": "map",
+                "values": value_schema(item, namespace, suggested_name + "Value", True)
+            }
+            apply_annotations(schema, definition)
+            return schema
+        if value_type == "array":
+            item = definition.get("item", {"type": "any"})
+            schema = {
+                "type": "array",
+                "items": value_schema(item, namespace, suggested_name + "Item", True)
+            }
+            if definition.get("enum"):
+                schema["items"]["enum"] = copy.deepcopy(definition["enum"])
+            apply_annotations(schema, definition)
+            return schema
+        if value_type not in json_structure_type_mapping:
+            raise ValueError(f"Unsupported JSON Structure type: {value_type}")
+        schema = {"type": json_structure_type_mapping[value_type]}
+        apply_annotations(schema, definition)
+        return schema
+
+    def collect_attributes(attributes):
+        collected = dict(attributes)
+        for definition in attributes.values():
+            for condition in definition.get("ifvalues", {}).values():
+                for sibling_name, sibling_definition in condition.get(
+                    "siblingattributes", {}
+                ).items():
+                    collected.setdefault(sibling_name, sibling_definition)
+        return collected
+
+    def object_schema(attributes, namespace, owner_name):
+        properties = {}
+        required = []
+        used_names = {}
+        additional_properties = False
+        for wire_name, definition in collect_attributes(attributes).items():
+            if wire_name == "*":
+                additional_properties = definition["type"] == "any"
+                continue
+            logical_name = identifier(wire_name)
+            if logical_name in used_names and used_names[logical_name] != wire_name:
+                raise ValueError(
+                    f"JSON Structure name collision: '{wire_name}' and "
+                    f"'{used_names[logical_name]}' both map to '{logical_name}'"
+                )
+            used_names[logical_name] = wire_name
+            property_schema = value_schema(
+                definition, namespace, owner_name + type_identifier(logical_name)
+            )
+            if logical_name != wire_name:
+                property_schema["altnames"] = {"json": wire_name}
+            properties[logical_name] = property_schema
+            if definition.get("required") is True and "default" not in definition:
+                required.append(logical_name)
+        schema = {
+            "type": "object",
+            "properties": properties,
+            "additionalProperties": additional_properties
+        }
+        if required:
+            schema["required"] = required
+        return schema
+
+    common_attributes = {
+        "name": {"type": "string", "description": "Name of the object"},
+        "epoch": {"type": "integer", "description": "Epoch of the object"},
+        "self": {"type": "url", "description": "URL of the object"},
+        "xid": {"type": "xid", "description": "XID of the object"},
+        "description": {"type": "string", "description": "Description of the object"},
+        "documentation": {"type": "url", "description": "Documentation URL"},
+        "labels": {"type": "map", "item": {"type": "string"}},
+        "createdat": {"type": "timestamp", "description": "Creation time"},
+        "modifiedat": {"type": "timestamp", "description": "Modification time"}
+    }
+    root_schema = object_schema(
+        {
+            "registryid": {"type": "string"},
+            "specversion": {"type": "string"},
+            **common_attributes,
+            "model": {"type": "any"},
+            "modelsource": {"type": "any"},
+            "capabilities": {"type": "any"},
+            **model_definition.get("attributes", {}),
+        },
+        "Registry",
+        "Registry",
+    )
+    root_properties = root_schema["properties"]
+    group_metadata = {}
+    groups = model_definition.get("groups", {})
+
+    for group_key, group in groups.items():
+        group_plural = group.get("plural", group_key)
+        namespace = type_identifier(group_plural)
+        resource_collections = {}
+        for resource_key, unresolved_resource in group.get("resources", {}).items():
+            resource = resolve_resource(group, unresolved_resource)
+            resource_plural = resource.get("plural", resource_key)
+            resource_singular = resource["singular"]
+            resource_type_name = type_identifier(resource_singular)
+            identity_attributes = {
+                resource_singular + "id": {
+                    "type": "string",
+                    "description": f"ID of the {resource_singular} object"
+                },
+                **common_attributes
+            }
+            resource_attributes = dict(identity_attributes)
+            if resource.get("maxversions", -1) == 1:
+                resource_attributes.update(resource.get("attributes", {}))
+            resource_schema = object_schema(
+                resource_attributes, namespace, resource_type_name
+            )
+            meta_schema = object_schema(
+                {
+                    **identity_attributes,
+                    **core_meta_attributes,
+                    **resource.get("metaattributes", {}),
+                },
+                namespace,
+                resource_type_name + "Meta",
+            )
+            resource_schema["properties"].update({
+                "metaurl": {"type": "string"},
+                "meta": meta_schema,
+            })
+            if resource.get("hasdocument", True):
+                resource_schema["properties"].update({
+                    resource_singular: {
+                        "type": "any",
+                        "description": f"Embedded {resource_singular} document"
+                    },
+                    resource_singular + "base64": {
+                        "type": "binary",
+                        "description": f"Base64-encoded {resource_singular} document"
+                    },
+                    resource_singular + "url": {
+                        "type": "string",
+                        "description": f"URL of the {resource_singular} document"
+                    }
+                })
+            if resource.get("maxversions", -1) != 1:
+                version_type_name = resource_type_name + "Version"
+                version_schema = object_schema(
+                    {
+                        "versionid": {
+                            "type": "string",
+                            "description": f"ID of the {resource_singular} version"
+                        },
+                        **identity_attributes,
+                        "isdefault": {"type": "boolean"},
+                        "ancestorid": {"type": "string"},
+                        "contenttype": {"type": "string"},
+                        "readonly": {"type": "boolean"},
+                        "compatibility": {"type": "string"},
+                        "deprecated": {"type": "any"},
+                        **resource.get("attributes", {})
+                    },
+                    namespace,
+                    version_type_name
+                )
+                if resource.get("hasdocument", True):
+                    version_schema["properties"].update({
+                        resource_singular: {"type": "any"},
+                        resource_singular + "base64": {"type": "binary"},
+                        resource_singular + "url": {"type": "string"}
+                    })
+                add_definition(namespace, version_type_name, version_schema)
+                resource_schema["properties"].update({
+                    "versionsurl": {"type": "string"},
+                    "versionscount": {"type": "uint32"},
+                    "versions": {
+                        "type": "map",
+                        "values": reference(namespace, version_type_name)
+                    }
+                })
+            add_definition(namespace, resource_type_name, resource_schema)
+            resource_collections[resource_plural] = {
+                "type": "map",
+                "values": reference(namespace, resource_type_name)
+            }
+        group_metadata[group_plural] = {
+            "group": group,
+            "namespace": namespace,
+            "resource_collections": resource_collections
+        }
+
+    for group_plural, metadata in group_metadata.items():
+        group = metadata["group"]
+        namespace = metadata["namespace"]
+        group_singular = group["singular"]
+        group_type_name = type_identifier(group_singular)
+        group_schema = object_schema(
+            {
+                group_singular + "id": {
+                    "type": "string",
+                    "description": f"ID of the {group_singular} object"
+                },
+                **common_attributes,
+                **group.get("attributes", {})
+            },
+            namespace,
+            group_type_name
+        )
+        group_schema["properties"].update(metadata["resource_collections"])
+        for resource_xid in group.get("ximportresources", []):
+            source_group_plural, source_resource_plural = resource_xid.split("/")[1:]
+            source_metadata = group_metadata[source_group_plural]
+            source_resource = resolve_resource(
+                groups[source_group_plural],
+                groups[source_group_plural]["resources"][source_resource_plural]
+            )
+            source_resource_type = type_identifier(source_resource["singular"])
+            group_schema["properties"][source_resource_plural] = {
+                "type": "map",
+                "values": reference(source_metadata["namespace"], source_resource_type)
+            }
+        collection_names = set(metadata["resource_collections"])
+        collection_names.update(
+            xid.split("/")[2] for xid in group.get("ximportresources", [])
+        )
+        for collection_name in sorted(collection_names):
+            group_schema["properties"][collection_name + "url"] = {"type": "string"}
+            group_schema["properties"][collection_name + "count"] = {"type": "uint32"}
+        add_definition(namespace, group_type_name, group_schema)
+        root_properties[group_plural] = {
+            "type": "map",
+            "values": reference(namespace, group_type_name)
+        }
+        root_properties[group_plural + "url"] = {"type": "string"}
+        root_properties[group_plural + "count"] = {"type": "uint32"}
+
+    return {
+        "$schema": "https://json-structure.org/meta/extended/v0/#",
+        "$id": schema_id or "https://xregistry.io/schemas/xregistry.struct.json",
+        "$uses": ["JSONStructureAlternateNames"],
+        "name": type_identifier(schema_name or "xRegistryDocument"),
+        "type": "object",
+        "properties": root_properties,
+        "additionalProperties": root_schema["additionalProperties"],
+        **({"required": root_schema["required"]} if "required" in root_schema else {}),
+        "definitions": definitions
+    }
+
+
+def generate_avro_schema(model_definition) -> dict:
+    """
+    Generates an Avro schema based on the given model definition.
+
+    Args:
+        model_definition (dict): The model definition to generate the schema from.
+
+    Returns:
+        dict: The generated Avro schema.
+    """
+
+    record_types = set()
+
+    def handle_item(resource_schema, type, item, name, prefix, enum_values=None):
+        if type == "object":
+            if "attributes" in item:
+                item_schema = { "type": "record", "name" : prefix+name+"Type", "fields": []}
+                handle_attributes(item_schema, item["attributes"], prefix + name)
+                resource_schema["type"] = item_schema
+            else:
+                # Use GenericRecord reference (it's defined at document level if needed)
+                resource_schema["type"] = avro_generic_record_qualified_name
+        elif type == "map":
+            resource_schema["type"] =  { "type": "map", "name": prefix+name+"Type","values": "" }
+            if "type" in item:
+                item_schema = copy.deepcopy(avro_type_mapping[item["type"]])
+                if item["type"] == "object":
+                    handle_item(item_schema, "object", item, name+"Item", prefix)
+                elif item["type"] in ("map", "array"):
+                    handle_item(item_schema, item["type"], item["item"], name+"Item", prefix)
+                resource_schema["type"]["values"] = item_schema["type"]
+            else:
+                raise Exception("Map item must have a type specified")
+        elif type == "array":
+            resource_schema["type"] = { "type": "array", "name": prefix+name+"ArrayType", "items": "" }
+            if "type" in item:
+                item_schema = copy.deepcopy(avro_type_mapping[item["type"]])
+                if item["type"] == "object":
+                    handle_item(item_schema, "object", item, name+"Item", prefix)
+                    resource_schema["type"]["items"] = item_schema["type"]
+                elif item["type"] in ("map", "array"):
+                    handle_item(item_schema, item["type"], item["item"], name+"Item", prefix)
+                    resource_schema["type"]["items"] = item_schema["type"]
+                else:
+                    # Apply enum constraint to array items if provided
+                    if enum_values is not None and len(enum_values) > 0:
+                        item_schema = {
+                            "type": "enum",
+                            "name": prefix+name+"EnumType",
+                            "symbols": enum_values
+                        }
+                    resource_schema["type"]["items"] = item_schema
+            else:
+                raise Exception("Array item must have a type specified")
+
+
+    def handle_attributes(resource_schema, attributes, type_prefix=""):
+        def emit(field):
+            for index, existing in enumerate(resource_schema["fields"]):
+                if existing["name"] == field["name"]:
+                    resource_schema["fields"][index] = field
+                    return
+            resource_schema["fields"].append(field)
+
+        for attr_name, attr_props in attributes.items():
+            pascal_attr_name = pascal(attr_name)
+            # attribute schema is based on the type mapping
+            if "type" in attr_props:
+                attr_schema = copy.deepcopy(avro_type_mapping[attr_props["type"]])
+            else:
+                # If 'type' is missing, skip this attribute or handle as needed
+                continue
+            # Only add a "name" field for types that are actual inline record definitions.
+            # If attr_schema["type"] is a dict and has "type" == "record", it's an inline record definition.
+            # Do not add "name" for simple types or references like "any"/"var".
+            if attr_name != "*" and attr_props["type"] not in ["any", "var"]:
+                if isinstance(attr_schema.get("type"), dict) and attr_schema["type"].get("type") == "record":
+                    attr_schema["name"] = type_prefix+pascal_attr_name+"Type"
+                if isinstance(attr_schema.get("type"), dict) or attr_schema.get("type") == "record":
+                    attr_schema["name"] = type_prefix+pascal_attr_name+"Type"
+                if isinstance(attr_schema.get("type"), dict) or attr_schema.get("type") == "record":
+                    attr_schema["name"] = type_prefix+pascal_attr_name+"Type"
+
+            # add the description, if any, as a doc attribute
+            if "description" in attr_props:
+                attr_schema["doc"] = attr_props["description"]
+
+            if attr_props["type"] == "object" or attr_props["type"] == "map" or attr_props["type"] == "array":
+                if "item" in attr_props:
+                    # Pass enum values if this is an array with enum constraint
+                    enum_values = attr_props.get("enum") if attr_props["type"] == "array" else None
+                    handle_item(attr_schema, attr_props["type"], attr_props["item"], pascal_attr_name, type_prefix, enum_values)
+                else:
+                    if attr_props["type"] == "object":
+                        handle_item(attr_schema, "object", attr_props, pascal_attr_name, type_prefix)
+                    else:
+                        raise Exception("array or map attribute must have an item specified")
+
+            if "ifvalues" in attr_props:
+                if attr_name == "*":
+                    raise Exception("Can't use wild card attribute name with ifvalues")
+
+                if pascal_attr_name in resource_schema["fields"]:
+                    resource_schema["fields"].pop(pascal_attr_name)
+
+                union = []
+                for condition_value, condition_props in attr_props["ifvalues"].items():
+                    # create an identifier from condition_value, turning all spaces and special characters in to underscore
+                    condition_schema_identifier = pascal_attr_name + pascal("".join([c if c.isalnum() else "_" for c in condition_value]))
+                    conditional_schema = {
+                                "type": "record",
+                                "namespace": group_namespace,
+                                "name": type_prefix+condition_schema_identifier+"Type",
+                                "fields": []
+                            }
+                    handle_attributes(conditional_schema,  condition_props.get("siblingattributes", {}), condition_schema_identifier)
+                    union.append(conditional_schema)
+                if len(union) > 0:
+                    field_schema = {
+                            "name": camel(pascal_attr_name),
+                             "type":  union
+                    }
+                    if "description" in attr_props:
+                        field_schema["doc"] = attr_props["description"]
+                    emit(field_schema)
+            else:
+                if attr_name == "*":
+                    # For extension attributes, we need to handle named types properly
+                    # Named types cannot be defined inline in a map's values field
+                    values_type = attr_schema["type"]
+
+                    # Handle the case where the type needs to be resolved
+                    if isinstance(values_type, dict) and "name" in values_type:
+                        # This is a named type (like GenericRecord) - use only the name as a reference
+                        values_type_ref = values_type["name"]
+                    elif isinstance(values_type, dict):
+                        # This is a complex unnamed type - should not happen but use as-is
+                        values_type_ref = values_type
+                    elif values_type == "record":
+                        # This is an incomplete object type - use GenericRecord reference
+                        # (GenericRecord is defined at document level if needed)
+                        values_type_ref = avro_generic_record_qualified_name
+                    else:
+                        # This is a simple type reference (string like "string", "int", etc.)
+                        values_type_ref = values_type
+
+                    field_schema = {
+                            "name": "Extensions",
+                            "type":  {
+                               "type": "map",
+                               "name": type_prefix+"ExtensionsType",
+                               "default": {},
+                               "values": values_type_ref
+                             }}
+                    if "description" in attr_props:
+                        field_schema["doc"] = attr_props["description"]
+                    emit(field_schema)
+                else:
+                    attr_schema["name"] = camel(pascal_attr_name)
+                    if not attr_props.get("required", False) or "default" in attr_props:
+                        attr_schema["type"] = ["null", attr_schema["type"]]
+                        attr_schema["default"] = None
+                    emit(attr_schema)
+
+
+
+    ## body of the core function starts here
+    document_type = {
+        "type": "record",
+        "name": "DocumentType",
+        "namespace": "io.xregistry",
+        "fields": [],
+    }
+    document_properties = document_type["fields"]
+
+    # Root model/capabilities and extension values share one recursive type.
+    document_properties.append({
+        "name": "genericRecordDefinition",
+        "type": {"type": "array", "items": copy.deepcopy(avro_generic_record)},
+        "default": [],
+        "doc": "Internal field defining the shared recursive extension type",
+    })
+
+    document_properties.extend([
+        {"name": "registryid", "type": "string"},
+        {"name": "specversion", "type": "string"},
+        *copy.deepcopy(avro_common_attributes),
+    ])
+    for name in ("model", "modelsource", "capabilities"):
+        document_properties.append({
+            "name": name, "type": ["null", avro_generic_record_qualified_name],
+            "default": None,
+        })
+    handle_attributes(document_type, model_definition.get("attributes", {}), "Registry")
+
+    for key, group in model_definition.get("groups", {}).items():
+        if "plural" not in group: group["plural"] = key
+        groups_name = group["plural"]
+        group_name = group["singular"]
+        # Create a namespace for this group to avoid type name collisions
+        group_namespace = f"io.xregistry.{groups_name}"
+        resource_collection_fields = []
+
+        for rKey, resource in group.get("resources", {}).items():
+            if "plural" not in resource: resource["plural"] = rKey
+            resource = resolve_resource(group, resource)
+            resource_name = resource["singular"]
+            if (group_namespace, resource_name) in record_types:
+                resource_collection_fields.append({
+                    "name": camel(resource["plural"]),
+                    "type" :{
+                        "type": "map",
+                        "values": f"{group_namespace}.{pascal(resource_name)}Type"
+                    }
+                    })
+            else:
+                record_types.add((group_namespace, resource_name))
+                props = copy.deepcopy(avro_common_attributes)
+                props.insert(0, {"name": resource_name+"id", "type": "string", "description": f"ID of the {resource_name} object"})
+                resource_schema = {
+                    "type": "record",
+                    "name": pascal(resource_name)+"Type",
+                    "namespace": group_namespace,
+                    "fields": props
+                }
+                attributes = resource.get("attributes", {})
+                if resource.get("maxversions", -1) != 1:
+                    resource_version_schema = copy.deepcopy(resource_schema)
+                    resource_version_schema["fields"].insert(0, {"name" : "versionid", "type": "string", "description": f"ID of the {resource_name} version"})
+                    handle_attributes(resource_version_schema, attributes)
+                    resource_version_schema["name"] = pascal(resource_name)+"VersionType"
+                    resource_version_schema["fields"].extend([
+                        {"name": "ancestorid", "type": "string"},
+                        {"name": "isdefault", "type": "boolean"},
+                        {"name": "contenttype", "type": ["null", "string"], "default": None},
+                    ])
+                    resource_schema["fields"].append(
+                        {
+                            "name": "versions",
+                            "type": {"type": "map", "values": resource_version_schema},
+                            "default": {},
+                        })
+                    resource_schema["fields"].extend([
+                        {"name": "versionsurl", "type": ["null", "string"], "default": None},
+                        {"name": "versionscount", "type": ["null", "long"], "default": None},
+                    ])
+                else:
+                    handle_attributes(resource_schema, attributes)
+
+                meta_schema = {
+                    "type": "record", "namespace": group_namespace,
+                    "name": pascal(resource_name) + "MetaType",
+                    "fields": [
+                        {"name": resource_name + "id", "type": "string"},
+                        *copy.deepcopy(avro_common_attributes),
+                    ],
+                }
+                handle_attributes(meta_schema, {
+                    **core_meta_attributes,
+                    **resource.get("metaattributes", {}),
+                }, pascal(resource_name) + "Meta")
+                resource_schema["fields"].extend([
+                    {"name": "metaurl", "type": ["null", "string"], "default": None},
+                    {"name": "meta", "type": ["null", meta_schema], "default": None},
+                ])
+                resource_collection_fields.append({
+                    "name": camel(resource["plural"]),
+                    "type" :{
+                        "type": "map",
+                        "values": resource_schema
+                    }
+                })
+
+        for ximportresources_xid in group.get("ximportresources", []):
+            xid_group_plural, xid_resource_plural = ximportresources_xid.split("/")[1:]
+            xid_resource_singular = model_definition["groups"][xid_group_plural]["resources"][xid_resource_plural]["singular"]
+            # Use the source group's namespace for imported resources
+            xid_group_namespace = f"io.xregistry.{xid_group_plural}"
+            resource_collection_fields.append({
+                    "name": camel(xid_resource_plural),
+                    "type" :{
+                        "type": "map",
+                        "values": f"{xid_group_namespace}.{pascal(xid_resource_singular)}Type"
+                    }
+                    })
+        props = copy.deepcopy(avro_common_attributes)
+        props.insert(0, {"name" : group_name+"id", "type": "string", "description": f"ID of the {group_name} object"})
+        group_schema = {
+            "type": "record",
+            "name": pascal(group_name)+"Type",
+            "fields": props,
+        }
+        attributes = group.get("attributes", {})
+        handle_attributes(group_schema, attributes)
+        for resource_collection in resource_collection_fields:
+            group_schema["fields"].append(resource_collection)
+            for suffix, field_type in (("url", "string"), ("count", "long")):
+                group_schema["fields"].append({
+                    "name": resource_collection["name"] + suffix,
+                    "type": ["null", field_type], "default": None,
+                })
+        groups_schema = {
+            "name": camel(groups_name),
+            "type": {
+                "type": "map",
+                "values": group_schema
+            }
+        }
+        document_properties.append(groups_schema)
+        for suffix, field_type in (("url", "string"), ("count", "long")):
+            document_properties.append({
+                "name": camel(groups_name) + suffix,
+                "type": ["null", field_type], "default": None,
+            })
+
+    return document_type
+
+
+def resolve_resource(group, resource):
+    if "uri" in resource:
+        try:
+            base_uri = group["$source"]
+            file_uri = resource["uri"]
+
+                    # split off the JSON pointer part, if any
+            if "#" in file_uri:
+                file_uri, json_pointer = file_uri.split("#", 1)
+                    # find out if it is a http URL or a relative path
+            if file_uri.lower().startswith('http'):
+                        # it is a http URL, retrieve the file
+                import requests
+                response = requests.get(file_uri)
+                resource_object = response.json()
+            else:
+                file_uri = file_uri.replace('/', os.sep)
+                path = os.path.join(os.path.dirname(base_uri), file_uri)
+                        # it is a file path, load the file
+                with open(path, encoding='utf-8') as file:
+                    resource_object = json.load(file)
+            if json_pointer:
+                resource = resolve_pointer(resource_object, json_pointer)
+            else:
+                resource = resource_object
+        except:
+            print(f"Error loading model definition from {file_uri}")
+            raise
+    return resource
+
+
+
+
+
+# Replace this with your model definition
+model_definition = {
+    "schemas": ["json-schema/draft-07"],
+    #... rest of your model definition
+}
+
+
+def resolve_imports(basedir, node):
+    """
+    recursively resolve all $includes in the model definition.
+    This code handles two cases. The legacy case where the $include is
+    relative file path (URL)
+    """
+
+    if isinstance(node, dict):
+        if "$include" in node:
+            obj_ref = ''
+            file_ref = node["$include"]
+            # strip # anchor portion from the file reference
+            if "#" in file_ref:
+                fr = file_ref.split("#")
+                file_ref = fr[0]
+                obj_ref = fr[1]
+            file_ref = file_ref.replace('/', os.sep)
+            import_file = os.path.join(basedir, file_ref)
+            with open(import_file, encoding='utf-8') as file:
+                import_definition = json.load(file)
+            del node["$include"]
+            if obj_ref:
+                node.update(resolve_pointer(import_definition, obj_ref))
+            else:
+                node.update(import_definition)
+        for k,v in node.items():
+            node[k] = resolve_imports(basedir, v)
+    elif isinstance(node, list):
+        for i, item in enumerate(node):
+            node[i] = resolve_imports(basedir, item)
+    return node
+
+
+# read model definition from file ../schema/model.json
+# make the path relative to this script file, irrespective of working directory
+
+def write_schema(schema, output):
+    if output:
+        with open(output, "w", encoding="utf-8", newline="\n") as file:
+            json.dump(schema, file, indent=2)
+            file.write("\n")
+    else:
+        print(json.dumps(schema, indent=2))
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Generate JSON schema from model definition')
+    parser.add_argument('--type', type=str, help='type of document to generate', choices=['json-schema', 'json-structure', 'avro-schema', 'openapi'], default='json-schema')
+    parser.add_argument('--output', type=str, help='Path for output file', default='', required=False)
+    parser.add_argument('--schema-id', type=str, help='URI for the $id field in the schema', default='', required=False)
+    parser.add_argument('--schema-name', type=str, help='Root type name for JSON Structure output', default='', required=False)
+    parser.add_argument('input_files', type=str, help='Path to input files', nargs='+')
+
+    args = parser.parse_args()
+
+    json_schema = None
+    model_definition = { "groups": {} }
+    for input_file in args.input_files:
+        with open(input_file, encoding='utf-8') as file:
+            print(f"> {input_file} as '{args.type}'")
+            input_definition = json.load(file)
+            input_definition = resolve_imports(os.path.dirname(input_file), input_definition)
+            for name, definition in input_definition.get("attributes", {}).items():
+                model_definition.setdefault("attributes", {}).setdefault(name, definition)
+            if "groups" in input_definition:
+                for group_name, group_definition in input_definition["groups"].items():
+                    # convert file.name to using OS separators
+                    file_name = file.name.replace('/', os.sep)
+                    group_definition["$source"] = os.path.join(os.getcwd(),file_name)
+                    if group_name not in model_definition["groups"]:
+                        model_definition["groups"][group_name] = group_definition
+    if (args.type == 'json-schema'):
+        json_schema = generate_json_schema(model_definition, schema_id=args.schema_id)
+        write_schema(json_schema, args.output)
+    elif (args.type == 'json-structure'):
+        json_structure = generate_json_structure(
+            model_definition,
+            schema_id=args.schema_id,
+            schema_name=args.schema_name
+        )
+        write_schema(json_structure, args.output)
+    elif (args.type == 'avro-schema'):
+        avro_schema = generate_avro_schema(model_definition)
+        write_schema(avro_schema, args.output)
+    elif (args.type == 'openapi'):
+        openapi = generate_openapi(model_definition)
+        write_schema(openapi, args.output)
+
+
+if __name__ == '__main__':
+    main()

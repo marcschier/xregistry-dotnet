@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "baselineManifestSha256": "1ac85c1403324e1ea5bf2d50fe5d5d567aa2c5cc272e27eb3645c6679ddc6bdb",
+  "sourceRepository": "https://github.com/marcschier/spec",
+  "upstreamRepository": "https://github.com/xregistry/spec",
+  "commit": "5258e71ad14ed3317498146e6b26be483ac2ca9b",
+  "branch": "main",
+  "includesUncommittedChanges": true,
+  "normative": {
+    "core/spec.md": "core",
+    "core/http.md": "http",
+    "core/model.md": "model",
+    "core/events.md": "events",
+    "endpoint/spec.md": "endpoint",
+    "message/spec.md": "message",
+    "schema/spec.md": "schema",
+    "cloudevents/spec.md": "cloudevents",
+    "pagination/spec.md": "pagination",
+    "workingdrafts/models/registry/spec.md": "catalog",
+    "workingdrafts/models/openusd/spec.md": "openusd",
+    "workingdrafts/federation/spec.md": "federation",
+    "workingdrafts/bindings/http-federation.md": "http-federation",
+    "workingdrafts/bindings/mapping.md": "mapping",
+    "workingdrafts/bindings/file.md": "file",
+    "workingdrafts/bindings/git.md": "git",
+    "workingdrafts/bindings/oci.md": "oci"
+  },
+  "excludeSuffixes": [
+    ".png",
+    ".pptx"
+  ]
+}

@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <NuGetLockFilePath>$(GitInteropLockRoot)\$(MSBuildProjectName).lock.json</NuGetLockFilePath>
+    <RestoreLockedMode Condition="'$(MSBuildProjectName)' == 'XRegistry.Git.InteropProbe'">true</RestoreLockedMode>
+  </PropertyGroup>
+</Project>

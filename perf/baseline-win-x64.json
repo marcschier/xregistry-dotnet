@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "kind": "observed-native-durable-baseline",
+  "status": "measured",
+  "deploymentSlo": false,
+  "hardCiGate": false,
+  "serverSha256": "dc53982305c0870898dff64fdd61087c3c171ee5db9ae3519472a1c4b325f3f8",
+  "nativeBinaryBytes": 20645376,
+  "workloadSha256": "1ca25ad0b28903c1d54a7f4bd992f656a533bc14cf1a3f0c4f231ed1a3d6248f",
+  "profileSha256": "2af72863fa49c5c90c56aa56ffe574fabbafcb6caa8cb3b8da6efa5102b1ab5e",
+  "sdk": "10.0.401",
+  "runtimeProof": {"nativeAot": true, "jitCompiledMethods": 0, "architecture": "X64"},
+  "managedControl": {"nativeAot": false, "jitCompiledMethods": 59, "architecture": "X64"},
+  "host": {
+    "cpu": "Intel(R) Core(TM) Ultra 7 265K",
+    "cores": 20,
+    "logicalProcessors": 20,
+    "physicalMemoryBytes": 68009082880,
+    "os": "Windows 11 Enterprise 10.0.26200",
+    "volume": "D:",
+    "filesystem": "NTFS",
+    "driveType": "Fixed",
+    "disk": "Micron MTFDKBA2T0TGD-2BK15ABLT",
+    "bus": "NVMe",
+    "sharedHost": true,
+    "affinityPinned": false,
+    "priorityChanged": false
+  },
+  "execution": {
+    "roundsPerSize": 3,
+    "resourceCounts": [100, 250],
+    "writeResourceCounts": [100],
+    "concurrency": 1,
+    "validatedRequests": 741,
+    "totalElapsedSeconds": 12.444927900003677,
+    "startupMilliseconds": [539.6394, 533.0494, 528.5533, 534.6969, 531.8323, 1036.5818],
+    "shippingLimitsChanged": false,
+    "durabilityChanged": false
+  },
+  "results": [
+    {"resources": 100, "scenario": "point-metadata-get", "samples": 60, "p50Ms": 0.3316, "p95Ms": 0.4309, "p99Ms": 0.4883, "validatedOpsPerSecond": 2757.213559976288, "roundMedianCv": 0.05250104117483502},
+    {"resources": 250, "scenario": "point-metadata-get", "samples": 60, "p50Ms": 0.3418, "p95Ms": 0.4727, "p99Ms": 2.2425, "validatedOpsPerSecond": 2673.2249786142, "roundMedianCv": 0.14786296704966453},
+    {"resources": 100, "scenario": "complete-collection-get", "samples": 15, "p50Ms": 4.4985, "p95Ms": 12.9705, "p99Ms": 12.9705, "validatedOpsPerSecond": 165.60842880659254, "roundMedianCv": 0.10055353736224217},
+    {"resources": 250, "scenario": "complete-collection-get", "samples": 15, "p50Ms": 16.905, "p95Ms": 22.4226, "p99Ms": 22.4226, "validatedOpsPerSecond": 57.00506775052302, "roundMedianCv": 0.05875075628747281},
+    {"resources": 100, "scenario": "opaque-paged-collection-get", "samples": 15, "p50Ms": 4.9792, "p95Ms": 9.2989, "p99Ms": 9.2989, "validatedOpsPerSecond": 175.4853925959203, "roundMedianCv": 0.13038241093293906},
+    {"resources": 250, "scenario": "opaque-paged-collection-get", "samples": 15, "p50Ms": 17.5477, "p95Ms": 19.4214, "p99Ms": 19.4214, "validatedOpsPerSecond": 54.70058540566501, "roundMedianCv": 0.03498038440305982},
+    {"resources": 100, "scenario": "streamed-document-small", "samples": 30, "p50Ms": 0.579, "p95Ms": 0.8144, "p99Ms": 1.0302, "validatedOpsPerSecond": 1500.8705048928377, "roundMedianCv": 0.037446961046882624},
+    {"resources": 250, "scenario": "streamed-document-small", "samples": 30, "p50Ms": 0.5413, "p95Ms": 0.6486, "p99Ms": 0.7586, "validatedOpsPerSecond": 1788.6527867210418, "roundMedianCv": 0.057933400958460245},
+    {"resources": 100, "scenario": "streamed-document-large", "samples": 30, "p50Ms": 3.1495, "p95Ms": 15.3462, "p99Ms": 22.8563, "validatedOpsPerSecond": 201.75242153343945, "roundMedianCv": 0.06117675660178669},
+    {"resources": 250, "scenario": "streamed-document-large", "samples": 30, "p50Ms": 3.0704, "p95Ms": 18.7137, "p99Ms": 19.9426, "validatedOpsPerSecond": 197.47508358132913, "roundMedianCv": 0.052355688037812396},
+    {"resources": 100, "scenario": "atomic-nested-two-resource-write", "samples": 15, "p50Ms": 26.943, "p95Ms": 31.5533, "p99Ms": 31.5533, "validatedOpsPerSecond": 31.58342224066694, "roundMedianCv": 0.03270356404581149},
+    {"resources": 100, "scenario": "durable-metadata-update", "samples": 15, "p50Ms": 10.7428, "p95Ms": 11.5872, "p99Ms": 11.5872, "validatedOpsPerSecond": 68.72039868826504, "roundMedianCv": 0.016454968921157026}
+  ],
+  "memory": {
+    "source": "GetProcessMemoryInfo",
+    "finalWorkingSetBytes100": [81633280, 94814208, 93020160],
+    "peakWorkingSetBytes100": [94736384, 108183552, 100962304],
+    "finalPrivateCommittedBytes100": [68763648, 84037632, 81358848],
+    "finalWorkingSetBytes250": [133885952, 126763008, 121847808],
+    "peakWorkingSetBytes250": [150024192, 131698688, 138719232],
+    "finalPrivateCommittedBytes250": [128765952, 117399552, 114831360]
+  },
+  "disk": {
+    "kind": "sum-of-logical-file-lengths",
+    "afterSeedBytes100": [1311088, 1311088, 1311088],
+    "finalBytes100": [1380720, 1376624, 1380720],
+    "afterSeedBytes250": [1565040, 1569136, 1565040],
+    "finalBytes250": [1565040, 1569136, 1565040],
+    "physicalAllocatedBytesMeasured": false
+  },
+  "reports": [
+    {"role": "final", "path": "artifacts/server-performance/final-38ba3a4567aa4a7887282bc96ac9a36b/evidence/report.json", "sha256": "f082f17bff7979d495e41c170ed50c2c6464c88057eba9d96e8b3086afe8935c"},
+    {"role": "first-complete", "path": "artifacts/server-performance/baseline-b366eb6391674e018b27b30e75534f70/evidence/report.json", "sha256": "5f2185932e247d0ca729309aa6f41f1b7718f1c3092ecde8930c66fb4377bff9"},
+    {"role": "repeat", "path": "artifacts/server-performance/repeat-9005bf542f9e487497a4e438492650ea/evidence/report.json", "sha256": "8b255a7bbdf6e7c04a053c1b17504a66f03bed776dd94a9b030aae184b05b1a4"}
+  ],
+  "interpretation": {
+    "latency": "HTTP request through complete response consumption and SHA-256; JSON correctness checks excluded.",
+    "pagedLatency": "Sum of HTTP request durations for the verified complete page chain.",
+    "throughput": "Median of validated per-round operations/second, including between-request validation and verification reads.",
+    "tailWarning": "Small developer sample counts; p95/p99 are observations, not stable production tail estimates.",
+    "regressionPolicy": "Investigate >10% degradation only when repeatable under matched hardware/storage/artifact/profile conditions; never a hard CI gate."
+  },
+  "notMeasured": ["1000-resource workload blocked by shipping entity-operation limit", "250-resource writes blocked by shipping limit", "in-memory server", "cold-storage reads", "physical disk allocation", "CPU cycles/GC allocation", "Linux", "ARM64", "production TLS/auth"]
+}

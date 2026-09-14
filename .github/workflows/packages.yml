@@ -1,0 +1,51 @@
+name: package-build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  packages:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          global-json-file: global.json
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - name: Validate build and publishing tooling
+        run: python -B -m unittest discover -s tests/Tooling -p "test_*release*.py"
+      - name: Verify package build contract
+        run: python -B -m unittest discover -s tests/Tooling -p test_package_build.py
+      - name: Locked build
+        shell: pwsh
+        run: ./eng/build.ps1
+      - name: Build exact source-version packages without publishing
+        run: python -B eng/package_build.py
+      - name: Upload package and symbol inventory
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: ci-packages-${{ github.sha }}-${{ github.run_id }}
+          path: artifacts/ci-packages/*
+          if-no-files-found: error
+          overwrite: false
+          compression-level: 0
+          retention-days: 30

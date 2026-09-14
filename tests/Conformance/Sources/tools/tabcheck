@@ -1,0 +1,21 @@
+#!/bin/bash
+
+# Tabs are evil
+# And extra spaces at the end of lines are just annoying
+
+set -e
+
+for f in $* ; do
+  echo "> $f"
+
+  if grep -nP '\t' $f ; then
+    echo "There are tabs in the file"
+    exit 1
+  fi
+
+  if grep -n "  *$" $f ; then
+    echo "There are extra spaces at the end of some lines"
+    exit 1
+  fi
+
+done

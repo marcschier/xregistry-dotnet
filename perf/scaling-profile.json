@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "id": "native-durable-fileserver-scaling-v1",
+  "storage": "durable",
+  "resourceCounts": [100, 1000],
+  "writeResourceCounts": [100, 1000],
+  "rounds": 3,
+  "warmupIterations": 3,
+  "readIterations": 20,
+  "collectionIterations": 4,
+  "documentIterations": 10,
+  "writeIterations": 5,
+  "seedBatchSize": 25,
+  "pageSize": 64,
+  "concurrency": 1,
+  "smallDocumentBytes": 256,
+  "largeDocumentBytes": 1048576,
+  "metadataPayload": "deterministic-native-server-performance-fixture",
+  "limits": {
+    "maxResourceCount": 1000,
+    "maxRounds": 5,
+    "maxIterations": 100,
+    "maxRequests": 4096,
+    "maxElapsedSeconds": 900,
+    "maxResponseBytes": 16777216,
+    "maxStoreBytes": 268435456,
+    "maxStoreFiles": 20000
+  },
+  "modelSource": {
+    "groups": {
+      "dirs": {
+        "singular": "dir",
+        "resources": {
+          "records": {
+            "singular": "record",
+            "hasdocument": false,
+            "maxversions": 1,
+            "attributes": {
+              "ordinal": {"type": "uinteger"},
+              "payload": {"type": "string"}
+            }
+          },
+          "files": {
+            "singular": "file",
+            "maxversions": 1
+          }
+        }
+      }
+    }
+  },
+  "comparisonPolicy": {
+    "investigationThresholdPercent": 10,
+    "requiresRepeatedRuns": true,
+    "requiresSameHardwareStorageArtifactAndProfile": true,
+    "hardCiGate": false,
+    "deploymentSlo": false
+  }
+}

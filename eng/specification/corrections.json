@@ -1,0 +1,2444 @@
+{
+  "schemaVersion": 2,
+  "baselineManifestSha256": "1ac85c1403324e1ea5bf2d50fe5d5d567aa2c5cc272e27eb3645c6679ddc6bdb",
+  "entries": [
+    {
+      "case": "SPEC-001",
+      "path": "cloudevents/model.json",
+      "originalSha256": "5d7122c63a2210be2e84ce928e4d9de55f72abed94e9e2c6cdbb4d4eb082e7cf",
+      "sha256": "8000babf16b868ff97144b534b0639a68d408285c9ced823e5d5c3414eff08f7",
+      "bytes": 249,
+      "file": "tests/Conformance/Corrections/SPEC-001/cloudevents/model.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiling built-in domain models exposed non-RFC6901 CloudEvents include fragments, an unsupported scalar enum on Endpoint usage arrays, a missing required role field, and incomplete generator include expansion. Normative endpoint role constraints remain domain rules.",
+      "testIds": [
+        "EveryPackagedModelCompilesWithOnlyExplicitPackagedDependencies",
+        "test_cloudevents_include_fragments_are_resolvable_json_pointers",
+        "test_endpoint_usage_model_uses_only_core_defined_array_aspects",
+        "test_generator_include_precedence_and_nested_document_base"
+      ],
+      "predecessorSha256": "5d7122c63a2210be2e84ce928e4d9de55f72abed94e9e2c6cdbb4d4eb082e7cf",
+      "predecessorCase": null
+    },
+    {
+      "case": "SPEC-001",
+      "path": "cloudevents/schemas/document-schema.avsc",
+      "originalSha256": "fe956b12106f25e03cc2f8c27c41b7d062540a843de496bf22bdfd535d6d1a9a",
+      "sha256": "b9b028a8e7326a630857bc40c3ab8d3d69cf983ff6584bcd7318d0986590767f",
+      "bytes": 237710,
+      "file": "tests/Conformance/Corrections/SPEC-001/cloudevents/schemas/document-schema.avsc",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiling built-in domain models exposed non-RFC6901 CloudEvents include fragments, an unsupported scalar enum on Endpoint usage arrays, a missing required role field, and incomplete generator include expansion. Normative endpoint role constraints remain domain rules.",
+      "testIds": [
+        "EveryPackagedModelCompilesWithOnlyExplicitPackagedDependencies",
+        "test_cloudevents_include_fragments_are_resolvable_json_pointers",
+        "test_endpoint_usage_model_uses_only_core_defined_array_aspects",
+        "test_generator_include_precedence_and_nested_document_base"
+      ],
+      "predecessorSha256": "fe956b12106f25e03cc2f8c27c41b7d062540a843de496bf22bdfd535d6d1a9a",
+      "predecessorCase": null
+    },
+    {
+      "case": "SPEC-001",
+      "path": "cloudevents/schemas/document-schema.json",
+      "originalSha256": "40520617547a5f22bc8fc0a6109d1ae5aab234c6b9a3204d88273d841478d798",
+      "sha256": "4f9fc8f7f0677b2085dd4beb1720705ffe2163c194635ef7be5428458773180f",
+      "bytes": 109905,
+      "file": "tests/Conformance/Corrections/SPEC-001/cloudevents/schemas/document-schema.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiling built-in domain models exposed non-RFC6901 CloudEvents include fragments, an unsupported scalar enum on Endpoint usage arrays, a missing required role field, and incomplete generator include expansion. Normative endpoint role constraints remain domain rules.",
+      "testIds": [
+        "EveryPackagedModelCompilesWithOnlyExplicitPackagedDependencies",
+        "test_cloudevents_include_fragments_are_resolvable_json_pointers",
+        "test_endpoint_usage_model_uses_only_core_defined_array_aspects",
+        "test_generator_include_precedence_and_nested_document_base"
+      ],
+      "predecessorSha256": "40520617547a5f22bc8fc0a6109d1ae5aab234c6b9a3204d88273d841478d798",
+      "predecessorCase": null
+    },
+    {
+      "case": "SPEC-001",
+      "path": "cloudevents/schemas/document-schema.struct.json",
+      "originalSha256": "a15d7ad12b9b78d9d5dc7868592a56e2fe7c53328c892b87eccf403529d8f868",
+      "sha256": "a398252a5e7574836c38bdc028c1c589d8fbbfc90a9bb10b6bd27d4fd2de3ec2",
+      "bytes": 61527,
+      "file": "tests/Conformance/Corrections/SPEC-001/cloudevents/schemas/document-schema.struct.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiling built-in domain models exposed non-RFC6901 CloudEvents include fragments, an unsupported scalar enum on Endpoint usage arrays, a missing required role field, and incomplete generator include expansion. Normative endpoint role constraints remain domain rules.",
+      "testIds": [
+        "EveryPackagedModelCompilesWithOnlyExplicitPackagedDependencies",
+        "test_cloudevents_include_fragments_are_resolvable_json_pointers",
+        "test_endpoint_usage_model_uses_only_core_defined_array_aspects",
+        "test_generator_include_precedence_and_nested_document_base"
+      ],
+      "predecessorSha256": "a15d7ad12b9b78d9d5dc7868592a56e2fe7c53328c892b87eccf403529d8f868",
+      "predecessorCase": null
+    },
+    {
+      "case": "SPEC-001",
+      "path": "cloudevents/schemas/openapi.json",
+      "originalSha256": "84586d1e008e7c33290f2ce74169116b590b8d1d464384570e77d49236e5fc83",
+      "sha256": "3afe301204f5db33c94747e9436f277c4628f0e635e39d0c816df13b994ddbc1",
+      "bytes": 193167,
+      "file": "tests/Conformance/Corrections/SPEC-001/cloudevents/schemas/openapi.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiling built-in domain models exposed non-RFC6901 CloudEvents include fragments, an unsupported scalar enum on Endpoint usage arrays, a missing required role field, and incomplete generator include expansion. Normative endpoint role constraints remain domain rules.",
+      "testIds": [
+        "EveryPackagedModelCompilesWithOnlyExplicitPackagedDependencies",
+        "test_cloudevents_include_fragments_are_resolvable_json_pointers",
+        "test_endpoint_usage_model_uses_only_core_defined_array_aspects",
+        "test_generator_include_precedence_and_nested_document_base"
+      ],
+      "predecessorSha256": "84586d1e008e7c33290f2ce74169116b590b8d1d464384570e77d49236e5fc83",
+      "predecessorCase": null
+    },
+    {
+      "case": "SPEC-002",
+      "path": "cloudevents/spec.md",
+      "originalSha256": "56b564b8249a9687fcca461d6ffce1e4c2937f690d8f1d1fb4d17fa3d7470b2d",
+      "sha256": "7e630f52b130b33c4183448e7220795cb6b566465c1f947e47e4f99a6da3ea74",
+      "bytes": 18476,
+      "file": "tests/Conformance/Corrections/SPEC-002/cloudevents/spec.md",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Calendar validation rejects April 31; use May 1 to preserve modification after April 30 creation in all eleven CloudEvents example pairs.",
+      "testIds": [
+        "test_cloudevents_created_and_modified_examples_are_calendar_valid",
+        "InvalidScalarsReturnExactFieldDiagnostics"
+      ],
+      "predecessorSha256": "56b564b8249a9687fcca461d6ffce1e4c2937f690d8f1d1fb4d17fa3d7470b2d",
+      "predecessorCase": null
+    },
+    {
+      "case": "SPEC-003",
+      "path": "core/http.md",
+      "originalSha256": "97bf93e996dead5256e5c507601f022c8d71bae926719915509033f9f845492a",
+      "sha256": "416163f19216e9bd988ee5437ac59541d36e3c5f07a8b4fc2283b501fb4a3402",
+      "bytes": 104151,
+      "file": "tests/Conformance/Corrections/SPEC-003/core/http.md",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "The HTTP discovery sketch used object braces for a URL list, producing invalid JSON and contradicting the core array contract. Registry-based and Host-based discovery remain distinct existing mechanisms.",
+      "testIds": [
+        "test_http_discovery_uses_the_core_array_shape",
+        "RegistryAndHostDiscoveryUseTheirDistinctNormativeLocations",
+        "MalformedDiscoveryDoesNotBecomeAnEmptySuccess"
+      ],
+      "predecessorSha256": "97bf93e996dead5256e5c507601f022c8d71bae926719915509033f9f845492a",
+      "predecessorCase": null
+    },
+    {
+      "case": "SPEC-001",
+      "path": "endpoint/model.json",
+      "originalSha256": "c4156d7524567a9eed883e06b06f1e302249f740cebf4289887c8c434bc32c92",
+      "sha256": "6e52f6f0758c057af5ecdf26b9cfdefc36ffa53c67986d1ad68c7bcc623df841",
+      "bytes": 45982,
+      "file": "tests/Conformance/Corrections/SPEC-001/endpoint/model.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiling built-in domain models exposed non-RFC6901 CloudEvents include fragments, an unsupported scalar enum on Endpoint usage arrays, a missing required role field, and incomplete generator include expansion. Normative endpoint role constraints remain domain rules.",
+      "testIds": [
+        "EveryPackagedModelCompilesWithOnlyExplicitPackagedDependencies",
+        "test_cloudevents_include_fragments_are_resolvable_json_pointers",
+        "test_endpoint_usage_model_uses_only_core_defined_array_aspects",
+        "test_generator_include_precedence_and_nested_document_base"
+      ],
+      "predecessorSha256": "c4156d7524567a9eed883e06b06f1e302249f740cebf4289887c8c434bc32c92",
+      "predecessorCase": null
+    },
+    {
+      "case": "SPEC-001",
+      "path": "endpoint/schemas/document-schema.avsc",
+      "originalSha256": "311aeb670c26e85ea8800034c4f4aa5971dc0fbf377f8e9d41cb5cc9c3be041e",
+      "sha256": "ccef3c576478eca618fc83ae71415fc1d5bc74fcf09d9daf4972961e266ee24d",
+      "bytes": 216980,
+      "file": "tests/Conformance/Corrections/SPEC-001/endpoint/schemas/document-schema.avsc",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiling built-in domain models exposed non-RFC6901 CloudEvents include fragments, an unsupported scalar enum on Endpoint usage arrays, a missing required role field, and incomplete generator include expansion. Normative endpoint role constraints remain domain rules.",
+      "testIds": [
+        "EveryPackagedModelCompilesWithOnlyExplicitPackagedDependencies",
+        "test_cloudevents_include_fragments_are_resolvable_json_pointers",
+        "test_endpoint_usage_model_uses_only_core_defined_array_aspects",
+        "test_generator_include_precedence_and_nested_document_base"
+      ],
+      "predecessorSha256": "311aeb670c26e85ea8800034c4f4aa5971dc0fbf377f8e9d41cb5cc9c3be041e",
+      "predecessorCase": null
+    },
+    {
+      "case": "SPEC-001",
+      "path": "endpoint/schemas/document-schema.json",
+      "originalSha256": "ef05a5511439a4f9008fa3f259f294321b126a774b6f0e67acb9f83654d1324c",
+      "sha256": "d9f6e0d703e7a2af3dbcbf4c9fbbac1f227a56ddd5d756711a0292426972f287",
+      "bytes": 98603,
+      "file": "tests/Conformance/Corrections/SPEC-001/endpoint/schemas/document-schema.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiling built-in domain models exposed non-RFC6901 CloudEvents include fragments, an unsupported scalar enum on Endpoint usage arrays, a missing required role field, and incomplete generator include expansion. Normative endpoint role constraints remain domain rules.",
+      "testIds": [
+        "EveryPackagedModelCompilesWithOnlyExplicitPackagedDependencies",
+        "test_cloudevents_include_fragments_are_resolvable_json_pointers",
+        "test_endpoint_usage_model_uses_only_core_defined_array_aspects",
+        "test_generator_include_precedence_and_nested_document_base"
+      ],
+      "predecessorSha256": "ef05a5511439a4f9008fa3f259f294321b126a774b6f0e67acb9f83654d1324c",
+      "predecessorCase": null
+    },
+    {
+      "case": "SPEC-001",
+      "path": "endpoint/schemas/document-schema.struct.json",
+      "originalSha256": "c5612c7fc56c940be620534112854db5c58bb9fe1f63a9f963553c200aa02926",
+      "sha256": "d3ec72c3315f157afb26934872a5d95731b26b800b5e7c94cb47446b7e812561",
+      "bytes": 52747,
+      "file": "tests/Conformance/Corrections/SPEC-001/endpoint/schemas/document-schema.struct.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiling built-in domain models exposed non-RFC6901 CloudEvents include fragments, an unsupported scalar enum on Endpoint usage arrays, a missing required role field, and incomplete generator include expansion. Normative endpoint role constraints remain domain rules.",
+      "testIds": [
+        "EveryPackagedModelCompilesWithOnlyExplicitPackagedDependencies",
+        "test_cloudevents_include_fragments_are_resolvable_json_pointers",
+        "test_endpoint_usage_model_uses_only_core_defined_array_aspects",
+        "test_generator_include_precedence_and_nested_document_base"
+      ],
+      "predecessorSha256": "c5612c7fc56c940be620534112854db5c58bb9fe1f63a9f963553c200aa02926",
+      "predecessorCase": null
+    },
+    {
+      "case": "SPEC-001",
+      "path": "endpoint/schemas/openapi.json",
+      "originalSha256": "20a2df1b5e3bcda830e2c9f56313a7413b68ea307e610b6d3c6c3cabca30c4cd",
+      "sha256": "4fcf0032dc45fd9af84f5ebbdd3bdf234e79110623c8ef3b559fb8aabd15c79e",
+      "bytes": 146069,
+      "file": "tests/Conformance/Corrections/SPEC-001/endpoint/schemas/openapi.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiling built-in domain models exposed non-RFC6901 CloudEvents include fragments, an unsupported scalar enum on Endpoint usage arrays, a missing required role field, and incomplete generator include expansion. Normative endpoint role constraints remain domain rules.",
+      "testIds": [
+        "EveryPackagedModelCompilesWithOnlyExplicitPackagedDependencies",
+        "test_cloudevents_include_fragments_are_resolvable_json_pointers",
+        "test_endpoint_usage_model_uses_only_core_defined_array_aspects",
+        "test_generator_include_precedence_and_nested_document_base"
+      ],
+      "predecessorSha256": "20a2df1b5e3bcda830e2c9f56313a7413b68ea307e610b6d3c6c3cabca30c4cd",
+      "predecessorCase": null
+    },
+    {
+      "case": "SPEC-001",
+      "path": "endpoint/spec.md",
+      "originalSha256": "56e2e17b1faf6bacfba3f042fc3cf9c37c90a2cd65a7316fde14814ce00040bf",
+      "sha256": "e8f2294a1a3c7ff7b5775304d87112a2c2091b0503c180e8da75affa765f81c4",
+      "bytes": 54274,
+      "file": "tests/Conformance/Corrections/SPEC-001/endpoint/spec.md",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiling built-in domain models exposed non-RFC6901 CloudEvents include fragments, an unsupported scalar enum on Endpoint usage arrays, a missing required role field, and incomplete generator include expansion. Normative endpoint role constraints remain domain rules.",
+      "testIds": [
+        "EveryPackagedModelCompilesWithOnlyExplicitPackagedDependencies",
+        "test_cloudevents_include_fragments_are_resolvable_json_pointers",
+        "test_endpoint_usage_model_uses_only_core_defined_array_aspects",
+        "test_generator_include_precedence_and_nested_document_base"
+      ],
+      "predecessorSha256": "56e2e17b1faf6bacfba3f042fc3cf9c37c90a2cd65a7316fde14814ce00040bf",
+      "predecessorCase": null
+    },
+    {
+      "case": "SPEC-004",
+      "path": "tools/federation_examples.py",
+      "originalSha256": "a489c9e7b755a5e1b9e86b0d9328262edb9579e513dbe64a09039403338286aa",
+      "sha256": "3fdbf854717e709ae173ac1878c634f013a1a10c53e84012157f4185c2072a0a",
+      "bytes": 13031,
+      "file": "tests/Conformance/Corrections/SPEC-004/tools/federation_examples.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Core XIDs are relative URI paths; validate percent-escaped components after one strict UTF-8 decode while preserving the original value and rejecting illegal decoded identifiers and second-decode candidates.",
+      "testIds": [
+        "test_core_xid_uri_escapes_are_valid_without_changing_the_original_value",
+        "test_xid_decoding_is_strict_and_never_turns_a_second_decode_into_an_identifier",
+        "EncodedAndLiteralReservedIdsPreserveOneTypedHttpIdentity"
+      ],
+      "predecessorSha256": "a489c9e7b755a5e1b9e86b0d9328262edb9579e513dbe64a09039403338286aa",
+      "predecessorCase": null
+    },
+    {
+      "case": "SPEC-001",
+      "path": "tools/schema-generator.py",
+      "originalSha256": "9824a6532f09a853539fca52c9a1fa97b81baa227b2d9a089e02ab025b6a759f",
+      "sha256": "6fb376dd82dfce4b227815abcb7a874df0384d648b4bd92f4a666edcf72b9bd0",
+      "bytes": 81196,
+      "file": "tests/Conformance/Corrections/SPEC-001/tools/schema-generator.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiling built-in domain models exposed non-RFC6901 CloudEvents include fragments, an unsupported scalar enum on Endpoint usage arrays, a missing required role field, and incomplete generator include expansion. Normative endpoint role constraints remain domain rules.",
+      "testIds": [
+        "EveryPackagedModelCompilesWithOnlyExplicitPackagedDependencies",
+        "test_cloudevents_include_fragments_are_resolvable_json_pointers",
+        "test_endpoint_usage_model_uses_only_core_defined_array_aspects",
+        "test_generator_include_precedence_and_nested_document_base"
+      ],
+      "predecessorSha256": "9824a6532f09a853539fca52c9a1fa97b81baa227b2d9a089e02ab025b6a759f",
+      "predecessorCase": null
+    },
+    {
+      "case": "SPEC-004",
+      "path": "tools/test_federation_examples.py",
+      "originalSha256": "76c8ca8fd7dc42b437b0a7bf5780fa39bee944afdb4177ed45304e2105025e4a",
+      "sha256": "9f891fbe4021ba0736a0e15c045defa573cae6dc48d73ae65a4520cae4a433af",
+      "bytes": 51855,
+      "file": "tests/Conformance/Corrections/SPEC-004/tools/test_federation_examples.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Core XIDs are relative URI paths; validate percent-escaped components after one strict UTF-8 decode while preserving the original value and rejecting illegal decoded identifiers and second-decode candidates.",
+      "testIds": [
+        "test_core_xid_uri_escapes_are_valid_without_changing_the_original_value",
+        "test_xid_decoding_is_strict_and_never_turns_a_second_decode_into_an_identifier",
+        "EncodedAndLiteralReservedIdsPreserveOneTypedHttpIdentity"
+      ],
+      "predecessorSha256": "76c8ca8fd7dc42b437b0a7bf5780fa39bee944afdb4177ed45304e2105025e4a",
+      "predecessorCase": null
+    },
+    {
+      "case": "SPEC-003",
+      "path": "tools/test_implementation_discovery_regressions.py",
+      "originalSha256": null,
+      "sha256": "00e738b0c61a948d763307b44867bd552bd162b4c960bada06e393570ce9a244",
+      "bytes": 732,
+      "file": "tests/Conformance/Corrections/SPEC-003/tools/test_implementation_discovery_regressions.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "The HTTP discovery sketch used object braces for a URL list, producing invalid JSON and contradicting the core array contract. Registry-based and Host-based discovery remain distinct existing mechanisms.",
+      "testIds": [
+        "test_http_discovery_uses_the_core_array_shape",
+        "RegistryAndHostDiscoveryUseTheirDistinctNormativeLocations",
+        "MalformedDiscoveryDoesNotBecomeAnEmptySuccess"
+      ],
+      "predecessorSha256": null,
+      "predecessorCase": null
+    },
+    {
+      "case": "SPEC-001",
+      "path": "tools/test_implementation_model_regressions.py",
+      "originalSha256": null,
+      "sha256": "d9d671517a48e6516ee8001e3966930b247bb51e44e3436cbaec8ec07de29bd0",
+      "bytes": 3432,
+      "file": "tests/Conformance/Corrections/SPEC-001/tools/test_implementation_model_regressions.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiling built-in domain models exposed non-RFC6901 CloudEvents include fragments, an unsupported scalar enum on Endpoint usage arrays, a missing required role field, and incomplete generator include expansion. Normative endpoint role constraints remain domain rules.",
+      "testIds": [
+        "EveryPackagedModelCompilesWithOnlyExplicitPackagedDependencies",
+        "test_cloudevents_include_fragments_are_resolvable_json_pointers",
+        "test_endpoint_usage_model_uses_only_core_defined_array_aspects",
+        "test_generator_include_precedence_and_nested_document_base"
+      ],
+      "predecessorSha256": null,
+      "predecessorCase": null
+    },
+    {
+      "case": "SPEC-002",
+      "path": "tools/test_implementation_timestamp_regressions.py",
+      "originalSha256": null,
+      "sha256": "fb3e491d7566a16d95e44fc6f4d7d8cd46338af79a02f78cd9ecf961010d2d78",
+      "bytes": 739,
+      "file": "tests/Conformance/Corrections/SPEC-002/tools/test_implementation_timestamp_regressions.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Calendar validation rejects April 31; use May 1 to preserve modification after April 30 creation in all eleven CloudEvents example pairs.",
+      "testIds": [
+        "test_cloudevents_created_and_modified_examples_are_calendar_valid",
+        "InvalidScalarsReturnExactFieldDiagnostics"
+      ],
+      "predecessorSha256": null,
+      "predecessorCase": null
+    },
+    {
+      "case": "SPEC-004",
+      "path": "tools/test_implementation_xid_regressions.py",
+      "originalSha256": null,
+      "sha256": "d2981a6d51eab8cedbcb16b49e3ce3967913d43a182eb428f488dde0a9ba6244",
+      "bytes": 964,
+      "file": "tests/Conformance/Corrections/SPEC-004/tools/test_implementation_xid_regressions.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Core XIDs are relative URI paths; validate percent-escaped components after one strict UTF-8 decode while preserving the original value and rejecting illegal decoded identifiers and second-decode candidates.",
+      "testIds": [
+        "test_core_xid_uri_escapes_are_valid_without_changing_the_original_value",
+        "test_xid_decoding_is_strict_and_never_turns_a_second_decode_into_an_identifier",
+        "EncodedAndLiteralReservedIdsPreserveOneTypedHttpIdentity"
+      ],
+      "predecessorSha256": null,
+      "predecessorCase": null
+    },
+    {
+      "case": "SPEC-005",
+      "path": "workingdrafts/bindings/oci.md",
+      "originalSha256": "3baa6cf9820d0aff7630e23cd6fa52090dda248906854ee9256016b19880a26f",
+      "predecessorSha256": "3baa6cf9820d0aff7630e23cd6fa52090dda248906854ee9256016b19880a26f",
+      "predecessorCase": null,
+      "sha256": "6743373b66bff3402fb5f8cd735d35a77da17d7acc18eb3f0b954ed7b80ec0ad",
+      "bytes": 44173,
+      "file": "tests/Conformance/Corrections/SPEC-005/workingdrafts/bindings/oci.md",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Unreleased native OCI routing requires one canonical URI key encoding to preserve complete bounded byte-ordered lookup. Directory mapping compares one-pass decoded typed identities while retaining original metadata, exact bytes and opaque locators; predecessor corrections remain immutable.",
+      "testIds": [
+        "NoncanonicalRoutingKeysAndBoundsAreRejectedWithoutRewritingPinnedObjects",
+        "LegacyNoncanonicalShardKeysRequireExplicitMigration",
+        "RewrittenStoredUrisPreserveIdsBytesAndResponseLocalMetaPointers",
+        "PinnedGitMappingComposesEscapedEntityCollectionAndDocumentSelection",
+        "test_byte_range_counterexample_requires_rejecting_the_legacy_leaf",
+        "test_frozen_mapping_uri_selectors_preserve_raw_identity_and_exact_bytes"
+      ]
+    },
+    {
+      "case": "SPEC-005",
+      "path": "workingdrafts/bindings/schemas/document-index.schema.json",
+      "originalSha256": "7ad27a426ea86831c3b1f043b1cafe37c8e35382d3cd7c446c2cd1a960ab1891",
+      "predecessorSha256": "7ad27a426ea86831c3b1f043b1cafe37c8e35382d3cd7c446c2cd1a960ab1891",
+      "predecessorCase": null,
+      "sha256": "8ced382d62e090a2e9bb68f1bd4e8b4504b1e82cc5c65023051ca356b6f781e3",
+      "bytes": 1021,
+      "file": "tests/Conformance/Corrections/SPEC-005/workingdrafts/bindings/schemas/document-index.schema.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Unreleased native OCI routing requires one canonical URI key encoding to preserve complete bounded byte-ordered lookup. Directory mapping compares one-pass decoded typed identities while retaining original metadata, exact bytes and opaque locators; predecessor corrections remain immutable.",
+      "testIds": [
+        "NoncanonicalRoutingKeysAndBoundsAreRejectedWithoutRewritingPinnedObjects",
+        "LegacyNoncanonicalShardKeysRequireExplicitMigration",
+        "RewrittenStoredUrisPreserveIdsBytesAndResponseLocalMetaPointers",
+        "PinnedGitMappingComposesEscapedEntityCollectionAndDocumentSelection",
+        "test_byte_range_counterexample_requires_rejecting_the_legacy_leaf",
+        "test_frozen_mapping_uri_selectors_preserve_raw_identity_and_exact_bytes"
+      ]
+    },
+    {
+      "case": "SPEC-005",
+      "path": "workingdrafts/bindings/schemas/document-record.schema.json",
+      "originalSha256": "3d204787934b57dacb21884b5759b76857aea3c25d5cecc8e72bbc360f27d356",
+      "predecessorSha256": "3d204787934b57dacb21884b5759b76857aea3c25d5cecc8e72bbc360f27d356",
+      "predecessorCase": null,
+      "sha256": "e3eb1c907a3bf6d2dc3c938ae0aac7321e63dd1b9599f687e3ca60c578747ed1",
+      "bytes": 9154,
+      "file": "tests/Conformance/Corrections/SPEC-005/workingdrafts/bindings/schemas/document-record.schema.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Unreleased native OCI routing requires one canonical URI key encoding to preserve complete bounded byte-ordered lookup. Directory mapping compares one-pass decoded typed identities while retaining original metadata, exact bytes and opaque locators; predecessor corrections remain immutable.",
+      "testIds": [
+        "NoncanonicalRoutingKeysAndBoundsAreRejectedWithoutRewritingPinnedObjects",
+        "LegacyNoncanonicalShardKeysRequireExplicitMigration",
+        "RewrittenStoredUrisPreserveIdsBytesAndResponseLocalMetaPointers",
+        "PinnedGitMappingComposesEscapedEntityCollectionAndDocumentSelection",
+        "test_byte_range_counterexample_requires_rejecting_the_legacy_leaf",
+        "test_frozen_mapping_uri_selectors_preserve_raw_identity_and_exact_bytes"
+      ]
+    },
+    {
+      "case": "SPEC-005",
+      "path": "tools/federation_examples.py",
+      "originalSha256": "a489c9e7b755a5e1b9e86b0d9328262edb9579e513dbe64a09039403338286aa",
+      "predecessorSha256": "3fdbf854717e709ae173ac1878c634f013a1a10c53e84012157f4185c2072a0a",
+      "predecessorCase": "SPEC-004",
+      "sha256": "c3e2b27218fbf83a0c1ef964fc75e41eb9961a4955a0f9f7b3c6420ae7b85c2c",
+      "bytes": 13577,
+      "file": "tests/Conformance/Corrections/SPEC-005/tools/federation_examples.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Unreleased native OCI routing requires one canonical URI key encoding to preserve complete bounded byte-ordered lookup. Directory mapping compares one-pass decoded typed identities while retaining original metadata, exact bytes and opaque locators; predecessor corrections remain immutable.",
+      "testIds": [
+        "NoncanonicalRoutingKeysAndBoundsAreRejectedWithoutRewritingPinnedObjects",
+        "LegacyNoncanonicalShardKeysRequireExplicitMigration",
+        "RewrittenStoredUrisPreserveIdsBytesAndResponseLocalMetaPointers",
+        "PinnedGitMappingComposesEscapedEntityCollectionAndDocumentSelection",
+        "test_byte_range_counterexample_requires_rejecting_the_legacy_leaf",
+        "test_frozen_mapping_uri_selectors_preserve_raw_identity_and_exact_bytes"
+      ]
+    },
+    {
+      "case": "SPEC-005",
+      "path": "tools/mapping_examples.py",
+      "originalSha256": "f2424aa0881e00655575aec9d74595f8f288ae08a623ef4d343969366051be1f",
+      "predecessorSha256": "f2424aa0881e00655575aec9d74595f8f288ae08a623ef4d343969366051be1f",
+      "predecessorCase": null,
+      "sha256": "2bc75be9747c8b512f54aacf2c65494d1057f4bdac0b8314247a1fa91c4d133f",
+      "bytes": 60573,
+      "file": "tests/Conformance/Corrections/SPEC-005/tools/mapping_examples.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Unreleased native OCI routing requires one canonical URI key encoding to preserve complete bounded byte-ordered lookup. Directory mapping compares one-pass decoded typed identities while retaining original metadata, exact bytes and opaque locators; predecessor corrections remain immutable.",
+      "testIds": [
+        "NoncanonicalRoutingKeysAndBoundsAreRejectedWithoutRewritingPinnedObjects",
+        "LegacyNoncanonicalShardKeysRequireExplicitMigration",
+        "RewrittenStoredUrisPreserveIdsBytesAndResponseLocalMetaPointers",
+        "PinnedGitMappingComposesEscapedEntityCollectionAndDocumentSelection",
+        "test_byte_range_counterexample_requires_rejecting_the_legacy_leaf",
+        "test_frozen_mapping_uri_selectors_preserve_raw_identity_and_exact_bytes"
+      ]
+    },
+    {
+      "case": "SPEC-005",
+      "path": "tools/oci_examples.py",
+      "originalSha256": "f65861e11332b8a61441ee247a33d3cd3193820bfe875da9624af63e04110d00",
+      "predecessorSha256": "f65861e11332b8a61441ee247a33d3cd3193820bfe875da9624af63e04110d00",
+      "predecessorCase": null,
+      "sha256": "1015ade0472e624b0de8ce0d83441d2a3868bc3212680ccfe45b7e1add4cf8b4",
+      "bytes": 81511,
+      "file": "tests/Conformance/Corrections/SPEC-005/tools/oci_examples.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Unreleased native OCI routing requires one canonical URI key encoding to preserve complete bounded byte-ordered lookup. Directory mapping compares one-pass decoded typed identities while retaining original metadata, exact bytes and opaque locators; predecessor corrections remain immutable.",
+      "testIds": [
+        "NoncanonicalRoutingKeysAndBoundsAreRejectedWithoutRewritingPinnedObjects",
+        "LegacyNoncanonicalShardKeysRequireExplicitMigration",
+        "RewrittenStoredUrisPreserveIdsBytesAndResponseLocalMetaPointers",
+        "PinnedGitMappingComposesEscapedEntityCollectionAndDocumentSelection",
+        "test_byte_range_counterexample_requires_rejecting_the_legacy_leaf",
+        "test_frozen_mapping_uri_selectors_preserve_raw_identity_and_exact_bytes"
+      ]
+    },
+    {
+      "case": "SPEC-005",
+      "path": "tools/test_oci_examples.py",
+      "originalSha256": "4ad4b310239f2c58a82abb40d3c0a1b0e9b406a29762045437bdd7ab67da00aa",
+      "predecessorSha256": "4ad4b310239f2c58a82abb40d3c0a1b0e9b406a29762045437bdd7ab67da00aa",
+      "predecessorCase": null,
+      "sha256": "d240064cfbc0bd3d1441425a3feb13d7102ed142c92d34ac13ed1f54fc603645",
+      "bytes": 81230,
+      "file": "tests/Conformance/Corrections/SPEC-005/tools/test_oci_examples.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Unreleased native OCI routing requires one canonical URI key encoding to preserve complete bounded byte-ordered lookup. Directory mapping compares one-pass decoded typed identities while retaining original metadata, exact bytes and opaque locators; predecessor corrections remain immutable.",
+      "testIds": [
+        "NoncanonicalRoutingKeysAndBoundsAreRejectedWithoutRewritingPinnedObjects",
+        "LegacyNoncanonicalShardKeysRequireExplicitMigration",
+        "RewrittenStoredUrisPreserveIdsBytesAndResponseLocalMetaPointers",
+        "PinnedGitMappingComposesEscapedEntityCollectionAndDocumentSelection",
+        "test_byte_range_counterexample_requires_rejecting_the_legacy_leaf",
+        "test_frozen_mapping_uri_selectors_preserve_raw_identity_and_exact_bytes"
+      ]
+    },
+    {
+      "case": "SPEC-005",
+      "path": "tools/test_implementation_uri_key_regressions.py",
+      "originalSha256": null,
+      "predecessorSha256": null,
+      "predecessorCase": null,
+      "sha256": "5eb2187df974f76e47f5bb0e5cfe661054e8f36e0df80c194d3454a9caae41ad",
+      "bytes": 4952,
+      "file": "tests/Conformance/Corrections/SPEC-005/tools/test_implementation_uri_key_regressions.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Unreleased native OCI routing requires one canonical URI key encoding to preserve complete bounded byte-ordered lookup. Directory mapping compares one-pass decoded typed identities while retaining original metadata, exact bytes and opaque locators; predecessor corrections remain immutable.",
+      "testIds": [
+        "NoncanonicalRoutingKeysAndBoundsAreRejectedWithoutRewritingPinnedObjects",
+        "LegacyNoncanonicalShardKeysRequireExplicitMigration",
+        "RewrittenStoredUrisPreserveIdsBytesAndResponseLocalMetaPointers",
+        "PinnedGitMappingComposesEscapedEntityCollectionAndDocumentSelection",
+        "test_byte_range_counterexample_requires_rejecting_the_legacy_leaf",
+        "test_frozen_mapping_uri_selectors_preserve_raw_identity_and_exact_bytes"
+      ]
+    },
+    {
+      "case": "SPEC-006",
+      "path": "pagination/spec.md",
+      "originalSha256": "d0a69ed47aa3408b334c2f93aaafaa322dad955e61dd2a7f3424931a7f046483",
+      "predecessorSha256": "d0a69ed47aa3408b334c2f93aaafaa322dad955e61dd2a7f3424931a7f046483",
+      "predecessorCase": null,
+      "sha256": "dcd1a49a2f438a6334d4b4c7e6b5ec14692ce29e4aa416868298dd28426aa754",
+      "bytes": 8496,
+      "file": "tests/Conformance/Corrections/SPEC-006/pagination/spec.md",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Pagination Expires cited RFC3339 while linking to RFC7234 HTTP-date, and its example weekday did not match the unchanged UTC date. Correct the reference and weekday; retain the already correct HTTP wire behavior.",
+      "testIds": [
+        "test_pagination_expiry_references_http_date_instead_of_rfc3339",
+        "test_pagination_expiry_examples_are_canonical_http_dates",
+        "PaginationExpiryUsesHttpDateAndKeepsTheOriginalDeadline"
+      ]
+    },
+    {
+      "case": "SPEC-006",
+      "path": "tools/test_implementation_timestamp_regressions.py",
+      "originalSha256": null,
+      "predecessorSha256": "fb3e491d7566a16d95e44fc6f4d7d8cd46338af79a02f78cd9ecf961010d2d78",
+      "predecessorCase": "SPEC-002",
+      "sha256": "b620e256c4f46f7bf73572007276de11c8428e56a01e71eba877547215f8422e",
+      "bytes": 1609,
+      "file": "tests/Conformance/Corrections/SPEC-006/tools/test_implementation_timestamp_regressions.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Pagination Expires cited RFC3339 while linking to RFC7234 HTTP-date, and its example weekday did not match the unchanged UTC date. Correct the reference and weekday; retain the already correct HTTP wire behavior.",
+      "testIds": [
+        "test_pagination_expiry_references_http_date_instead_of_rfc3339",
+        "test_pagination_expiry_examples_are_canonical_http_dates",
+        "PaginationExpiryUsesHttpDateAndKeepsTheOriginalDeadline"
+      ]
+    },
+    {
+      "case": "SPEC-007",
+      "path": "schema/spec.md",
+      "originalSha256": "367e15c1e9eeb62489dee74982585b9a2a6111d370110731cd1a74de6267c113",
+      "predecessorSha256": "367e15c1e9eeb62489dee74982585b9a2a6111d370110731cd1a74de6267c113",
+      "predecessorCase": null,
+      "sha256": "fe8d248db717d246b97492d476067e3da1fd67ff04da02c90216979cf1e805b9",
+      "bytes": 28842,
+      "file": "tests/Conformance/Corrections/SPEC-007/schema/spec.md",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Each of the four Schema Registry Protobuf example strings had an unmatched closing brace. Remove only the extra brace, retaining message fields, Version lineage and default projection; preserve prior model regression history.",
+      "testIds": [
+        "EveryPublishedProtobufSchemaExampleIsValid",
+        "OriginalProtobufExamplesRemainRejectedForTheUnmatchedBrace",
+        "test_schema_registry_protobuf_examples_preserve_fields_without_unmatched_braces"
+      ]
+    },
+    {
+      "case": "SPEC-007",
+      "path": "tools/test_implementation_model_regressions.py",
+      "originalSha256": null,
+      "predecessorSha256": "d9d671517a48e6516ee8001e3966930b247bb51e44e3436cbaec8ec07de29bd0",
+      "predecessorCase": "SPEC-001",
+      "sha256": "6eb79d48c5eec68d91ae071662d5d06e9eb04eac96e99b3da5d9587fdee0c1ce",
+      "bytes": 4080,
+      "file": "tests/Conformance/Corrections/SPEC-007/tools/test_implementation_model_regressions.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Each of the four Schema Registry Protobuf example strings had an unmatched closing brace. Remove only the extra brace, retaining message fields, Version lineage and default projection; preserve prior model regression history.",
+      "testIds": [
+        "EveryPublishedProtobufSchemaExampleIsValid",
+        "OriginalProtobufExamplesRemainRejectedForTheUnmatchedBrace",
+        "test_schema_registry_protobuf_examples_preserve_fields_without_unmatched_braces"
+      ]
+    },
+    {
+      "case": "SPEC-008",
+      "path": "message/model.json",
+      "originalSha256": "dfc5028ec32b871a70e67803d08ccb1bec4bc4527a626cf396069e5963cbefbc",
+      "predecessorSha256": "dfc5028ec32b871a70e67803d08ccb1bec4bc4527a626cf396069e5963cbefbc",
+      "predecessorCase": null,
+      "sha256": "4ffc18e1a504e7f66d010a5f5cb0063fdd098ffb95d5b0c0aa283b161b449237",
+      "bytes": 65341,
+      "file": "tests/Conformance/Corrections/SPEC-008/message/model.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiled Message/Endpoint model calls reject normative basemessage, HTTP query/status, NATS reply-to and Group-target declarations; AMQP subject incorrectly defaults required. Align source names/shapes/defaults, MQTT table spelling and regenerate all dependent schemas. Original and successor histories retained; no generic Core relaxation.",
+      "testIds": [
+        "MessageEndpointModelCorrectionTests",
+        "tools/test_implementation_message_contracts.py"
+      ]
+    },
+    {
+      "case": "SPEC-008",
+      "path": "message/spec.md",
+      "originalSha256": "9f15286dbe7bcb5a42cd134f519a74b6c4613f2b4eaa46939a4bff70362b2ac6",
+      "predecessorSha256": "9f15286dbe7bcb5a42cd134f519a74b6c4613f2b4eaa46939a4bff70362b2ac6",
+      "predecessorCase": null,
+      "sha256": "e988777c3be631e13292723cfccfac3dc5a94a290a7d6a7778e98d671726b20d",
+      "bytes": 60860,
+      "file": "tests/Conformance/Corrections/SPEC-008/message/spec.md",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiled Message/Endpoint model calls reject normative basemessage, HTTP query/status, NATS reply-to and Group-target declarations; AMQP subject incorrectly defaults required. Align source names/shapes/defaults, MQTT table spelling and regenerate all dependent schemas. Original and successor histories retained; no generic Core relaxation.",
+      "testIds": [
+        "MessageEndpointModelCorrectionTests",
+        "tools/test_implementation_message_contracts.py"
+      ]
+    },
+    {
+      "case": "SPEC-008",
+      "path": "endpoint/model.json",
+      "originalSha256": "c4156d7524567a9eed883e06b06f1e302249f740cebf4289887c8c434bc32c92",
+      "predecessorSha256": "6e52f6f0758c057af5ecdf26b9cfdefc36ffa53c67986d1ad68c7bcc623df841",
+      "predecessorCase": "SPEC-001",
+      "sha256": "b85495e59e92d3acdee525ebfb662f299155117b08412ac1ea70ab3162af9ab0",
+      "bytes": 45973,
+      "file": "tests/Conformance/Corrections/SPEC-008/endpoint/model.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiled Message/Endpoint model calls reject normative basemessage, HTTP query/status, NATS reply-to and Group-target declarations; AMQP subject incorrectly defaults required. Align source names/shapes/defaults, MQTT table spelling and regenerate all dependent schemas. Original and successor histories retained; no generic Core relaxation.",
+      "testIds": [
+        "MessageEndpointModelCorrectionTests",
+        "tools/test_implementation_message_contracts.py"
+      ]
+    },
+    {
+      "case": "SPEC-008",
+      "path": "tools/test_implementation_message_contracts.py",
+      "originalSha256": null,
+      "predecessorSha256": null,
+      "predecessorCase": null,
+      "sha256": "81f4853372656931ea225bea0c5f3a59eae811efd44509b6c8b5e358ad793c53",
+      "bytes": 2457,
+      "file": "tests/Conformance/Corrections/SPEC-008/tools/test_implementation_message_contracts.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiled Message/Endpoint model calls reject normative basemessage, HTTP query/status, NATS reply-to and Group-target declarations; AMQP subject incorrectly defaults required. Align source names/shapes/defaults, MQTT table spelling and regenerate all dependent schemas. Original and successor histories retained; no generic Core relaxation.",
+      "testIds": [
+        "MessageEndpointModelCorrectionTests",
+        "tools/test_implementation_message_contracts.py"
+      ]
+    },
+    {
+      "case": "SPEC-008",
+      "path": "docs/implementation-feedback.md",
+      "originalSha256": null,
+      "predecessorSha256": null,
+      "predecessorCase": null,
+      "sha256": "a6e42ac712ab2e6ed088f9e963cc44951516a31f97ccf46999eb6ebbbf55c20a",
+      "bytes": 9044,
+      "file": "tests/Conformance/Corrections/SPEC-008/docs/implementation-feedback.md",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiled Message/Endpoint model calls reject normative basemessage, HTTP query/status, NATS reply-to and Group-target declarations; AMQP subject incorrectly defaults required. Align source names/shapes/defaults, MQTT table spelling and regenerate all dependent schemas. Original and successor histories retained; no generic Core relaxation.",
+      "testIds": [
+        "MessageEndpointModelCorrectionTests",
+        "tools/test_implementation_message_contracts.py"
+      ]
+    },
+    {
+      "case": "SPEC-008",
+      "path": "message/schemas/document-schema.json",
+      "originalSha256": "890d58b9452a2958489bb5f02d5ec56f52fbd3833507c2104e91507f3487bed4",
+      "predecessorSha256": "890d58b9452a2958489bb5f02d5ec56f52fbd3833507c2104e91507f3487bed4",
+      "predecessorCase": null,
+      "sha256": "a973b5e17747d817bd115ea0b56e661a72fec8fdfc796ba18d7cea691f45cdf0",
+      "bytes": 55329,
+      "file": "tests/Conformance/Corrections/SPEC-008/message/schemas/document-schema.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiled Message/Endpoint model calls reject normative basemessage, HTTP query/status, NATS reply-to and Group-target declarations; AMQP subject incorrectly defaults required. Align source names/shapes/defaults, MQTT table spelling and regenerate all dependent schemas. Original and successor histories retained; no generic Core relaxation.",
+      "testIds": [
+        "MessageEndpointModelCorrectionTests",
+        "tools/test_implementation_message_contracts.py"
+      ]
+    },
+    {
+      "case": "SPEC-008",
+      "path": "message/schemas/document-schema.struct.json",
+      "originalSha256": "364c4d78e218413b97f2f372641626891a40ae5680aa6b941977d1d14daf13ef",
+      "predecessorSha256": "364c4d78e218413b97f2f372641626891a40ae5680aa6b941977d1d14daf13ef",
+      "predecessorCase": null,
+      "sha256": "db5546d573cbca7cd40848eb5043bad2b40aa9d302475d6268faffb18123ab65",
+      "bytes": 40398,
+      "file": "tests/Conformance/Corrections/SPEC-008/message/schemas/document-schema.struct.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiled Message/Endpoint model calls reject normative basemessage, HTTP query/status, NATS reply-to and Group-target declarations; AMQP subject incorrectly defaults required. Align source names/shapes/defaults, MQTT table spelling and regenerate all dependent schemas. Original and successor histories retained; no generic Core relaxation.",
+      "testIds": [
+        "MessageEndpointModelCorrectionTests",
+        "tools/test_implementation_message_contracts.py"
+      ]
+    },
+    {
+      "case": "SPEC-008",
+      "path": "message/schemas/document-schema.avsc",
+      "originalSha256": "18f1b02fd49b53815668c245758982cd717236dc991660186fc9a748b99bd98f",
+      "predecessorSha256": "18f1b02fd49b53815668c245758982cd717236dc991660186fc9a748b99bd98f",
+      "predecessorCase": null,
+      "sha256": "2c96138baf72b45373d23c0b43077f582ec2e69e89d203e049de7c3771c82107",
+      "bytes": 132855,
+      "file": "tests/Conformance/Corrections/SPEC-008/message/schemas/document-schema.avsc",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiled Message/Endpoint model calls reject normative basemessage, HTTP query/status, NATS reply-to and Group-target declarations; AMQP subject incorrectly defaults required. Align source names/shapes/defaults, MQTT table spelling and regenerate all dependent schemas. Original and successor histories retained; no generic Core relaxation.",
+      "testIds": [
+        "MessageEndpointModelCorrectionTests",
+        "tools/test_implementation_message_contracts.py"
+      ]
+    },
+    {
+      "case": "SPEC-008",
+      "path": "message/schemas/openapi.json",
+      "originalSha256": "c15c4af364697737ffac552d05f90ce9ef0a2b5862f58d545c7ab7ea9109c00d",
+      "predecessorSha256": "c15c4af364697737ffac552d05f90ce9ef0a2b5862f58d545c7ab7ea9109c00d",
+      "predecessorCase": null,
+      "sha256": "d874c6d45fa72fa818802366bcb32b0faa2861f21830fde3e1cb9fb4f9eec214",
+      "bytes": 110945,
+      "file": "tests/Conformance/Corrections/SPEC-008/message/schemas/openapi.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiled Message/Endpoint model calls reject normative basemessage, HTTP query/status, NATS reply-to and Group-target declarations; AMQP subject incorrectly defaults required. Align source names/shapes/defaults, MQTT table spelling and regenerate all dependent schemas. Original and successor histories retained; no generic Core relaxation.",
+      "testIds": [
+        "MessageEndpointModelCorrectionTests",
+        "tools/test_implementation_message_contracts.py"
+      ]
+    },
+    {
+      "case": "SPEC-008",
+      "path": "endpoint/schemas/document-schema.json",
+      "originalSha256": "ef05a5511439a4f9008fa3f259f294321b126a774b6f0e67acb9f83654d1324c",
+      "predecessorSha256": "d9f6e0d703e7a2af3dbcbf4c9fbbac1f227a56ddd5d756711a0292426972f287",
+      "predecessorCase": "SPEC-001",
+      "sha256": "527ee610cee1a42a6ef8ac2b1efc8cb84686b6ab1b69547a04cff0430587d614",
+      "bytes": 97938,
+      "file": "tests/Conformance/Corrections/SPEC-008/endpoint/schemas/document-schema.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiled Message/Endpoint model calls reject normative basemessage, HTTP query/status, NATS reply-to and Group-target declarations; AMQP subject incorrectly defaults required. Align source names/shapes/defaults, MQTT table spelling and regenerate all dependent schemas. Original and successor histories retained; no generic Core relaxation.",
+      "testIds": [
+        "MessageEndpointModelCorrectionTests",
+        "tools/test_implementation_message_contracts.py"
+      ]
+    },
+    {
+      "case": "SPEC-008",
+      "path": "endpoint/schemas/document-schema.struct.json",
+      "originalSha256": "c5612c7fc56c940be620534112854db5c58bb9fe1f63a9f963553c200aa02926",
+      "predecessorSha256": "d3ec72c3315f157afb26934872a5d95731b26b800b5e7c94cb47446b7e812561",
+      "predecessorCase": "SPEC-001",
+      "sha256": "c185e5b2e3a7e6602a7b7ccfc42f7665374587a97674572f94f13d274986f35c",
+      "bytes": 52744,
+      "file": "tests/Conformance/Corrections/SPEC-008/endpoint/schemas/document-schema.struct.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiled Message/Endpoint model calls reject normative basemessage, HTTP query/status, NATS reply-to and Group-target declarations; AMQP subject incorrectly defaults required. Align source names/shapes/defaults, MQTT table spelling and regenerate all dependent schemas. Original and successor histories retained; no generic Core relaxation.",
+      "testIds": [
+        "MessageEndpointModelCorrectionTests",
+        "tools/test_implementation_message_contracts.py"
+      ]
+    },
+    {
+      "case": "SPEC-008",
+      "path": "endpoint/schemas/document-schema.avsc",
+      "originalSha256": "311aeb670c26e85ea8800034c4f4aa5971dc0fbf377f8e9d41cb5cc9c3be041e",
+      "predecessorSha256": "ccef3c576478eca618fc83ae71415fc1d5bc74fcf09d9daf4972961e266ee24d",
+      "predecessorCase": "SPEC-001",
+      "sha256": "6442fecf432f598225a45e2d084c2233cb2738cd4477ab48be03948d4de9ebef",
+      "bytes": 215304,
+      "file": "tests/Conformance/Corrections/SPEC-008/endpoint/schemas/document-schema.avsc",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiled Message/Endpoint model calls reject normative basemessage, HTTP query/status, NATS reply-to and Group-target declarations; AMQP subject incorrectly defaults required. Align source names/shapes/defaults, MQTT table spelling and regenerate all dependent schemas. Original and successor histories retained; no generic Core relaxation.",
+      "testIds": [
+        "MessageEndpointModelCorrectionTests",
+        "tools/test_implementation_message_contracts.py"
+      ]
+    },
+    {
+      "case": "SPEC-008",
+      "path": "endpoint/schemas/openapi.json",
+      "originalSha256": "20a2df1b5e3bcda830e2c9f56313a7413b68ea307e610b6d3c6c3cabca30c4cd",
+      "predecessorSha256": "4fcf0032dc45fd9af84f5ebbdd3bdf234e79110623c8ef3b559fb8aabd15c79e",
+      "predecessorCase": "SPEC-001",
+      "sha256": "33f913c1206231ba8116828330be54db486007f5670f4a45e5fd5e5195bfe0b0",
+      "bytes": 146066,
+      "file": "tests/Conformance/Corrections/SPEC-008/endpoint/schemas/openapi.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiled Message/Endpoint model calls reject normative basemessage, HTTP query/status, NATS reply-to and Group-target declarations; AMQP subject incorrectly defaults required. Align source names/shapes/defaults, MQTT table spelling and regenerate all dependent schemas. Original and successor histories retained; no generic Core relaxation.",
+      "testIds": [
+        "MessageEndpointModelCorrectionTests",
+        "tools/test_implementation_message_contracts.py"
+      ]
+    },
+    {
+      "case": "SPEC-008",
+      "path": "cloudevents/schemas/document-schema.json",
+      "originalSha256": "40520617547a5f22bc8fc0a6109d1ae5aab234c6b9a3204d88273d841478d798",
+      "predecessorSha256": "4f9fc8f7f0677b2085dd4beb1720705ffe2163c194635ef7be5428458773180f",
+      "predecessorCase": "SPEC-001",
+      "sha256": "b22e7f7d8cb6db7bae07baa2358b9d99fef3a1f6b64ee43d8750433a37ed8ed3",
+      "bytes": 109240,
+      "file": "tests/Conformance/Corrections/SPEC-008/cloudevents/schemas/document-schema.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiled Message/Endpoint model calls reject normative basemessage, HTTP query/status, NATS reply-to and Group-target declarations; AMQP subject incorrectly defaults required. Align source names/shapes/defaults, MQTT table spelling and regenerate all dependent schemas. Original and successor histories retained; no generic Core relaxation.",
+      "testIds": [
+        "MessageEndpointModelCorrectionTests",
+        "tools/test_implementation_message_contracts.py"
+      ]
+    },
+    {
+      "case": "SPEC-008",
+      "path": "cloudevents/schemas/document-schema.struct.json",
+      "originalSha256": "a15d7ad12b9b78d9d5dc7868592a56e2fe7c53328c892b87eccf403529d8f868",
+      "predecessorSha256": "a398252a5e7574836c38bdc028c1c589d8fbbfc90a9bb10b6bd27d4fd2de3ec2",
+      "predecessorCase": "SPEC-001",
+      "sha256": "fd0937b4d4788f21a99a549d97bf8feb2506b76e009e114dc55666bf50866409",
+      "bytes": 61524,
+      "file": "tests/Conformance/Corrections/SPEC-008/cloudevents/schemas/document-schema.struct.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiled Message/Endpoint model calls reject normative basemessage, HTTP query/status, NATS reply-to and Group-target declarations; AMQP subject incorrectly defaults required. Align source names/shapes/defaults, MQTT table spelling and regenerate all dependent schemas. Original and successor histories retained; no generic Core relaxation.",
+      "testIds": [
+        "MessageEndpointModelCorrectionTests",
+        "tools/test_implementation_message_contracts.py"
+      ]
+    },
+    {
+      "case": "SPEC-008",
+      "path": "cloudevents/schemas/document-schema.avsc",
+      "originalSha256": "fe956b12106f25e03cc2f8c27c41b7d062540a843de496bf22bdfd535d6d1a9a",
+      "predecessorSha256": "b9b028a8e7326a630857bc40c3ab8d3d69cf983ff6584bcd7318d0986590767f",
+      "predecessorCase": "SPEC-001",
+      "sha256": "2d998a600f6c126c0c7aba64d2573f65121cf8130e6851786c5b6a98e14348ab",
+      "bytes": 236034,
+      "file": "tests/Conformance/Corrections/SPEC-008/cloudevents/schemas/document-schema.avsc",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiled Message/Endpoint model calls reject normative basemessage, HTTP query/status, NATS reply-to and Group-target declarations; AMQP subject incorrectly defaults required. Align source names/shapes/defaults, MQTT table spelling and regenerate all dependent schemas. Original and successor histories retained; no generic Core relaxation.",
+      "testIds": [
+        "MessageEndpointModelCorrectionTests",
+        "tools/test_implementation_message_contracts.py"
+      ]
+    },
+    {
+      "case": "SPEC-008",
+      "path": "cloudevents/schemas/openapi.json",
+      "originalSha256": "84586d1e008e7c33290f2ce74169116b590b8d1d464384570e77d49236e5fc83",
+      "predecessorSha256": "3afe301204f5db33c94747e9436f277c4628f0e635e39d0c816df13b994ddbc1",
+      "predecessorCase": "SPEC-001",
+      "sha256": "78c03693298be54eea1d22ca9d863877a969e6ef7967a58b17b6e284e6229acf",
+      "bytes": 193164,
+      "file": "tests/Conformance/Corrections/SPEC-008/cloudevents/schemas/openapi.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Compiled Message/Endpoint model calls reject normative basemessage, HTTP query/status, NATS reply-to and Group-target declarations; AMQP subject incorrectly defaults required. Align source names/shapes/defaults, MQTT table spelling and regenerate all dependent schemas. Original and successor histories retained; no generic Core relaxation.",
+      "testIds": [
+        "MessageEndpointModelCorrectionTests",
+        "tools/test_implementation_message_contracts.py"
+      ]
+    },
+    {
+      "case": "SPEC-009",
+      "path": "workingdrafts/models/openusd/model.json",
+      "originalSha256": "4a6a8272e9de926d5bf458c579a2351302d7ff0e078948235fafe63f9ddeb007",
+      "predecessorSha256": "4a6a8272e9de926d5bf458c579a2351302d7ff0e078948235fafe63f9ddeb007",
+      "predecessorCase": null,
+      "sha256": "bd2209ff833d3016809eb699330c5ebf798f610925a583796998427eff7a242d",
+      "bytes": 4866,
+      "file": "tests/Conformance/Corrections/SPEC-009/workingdrafts/models/openusd/model.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "OpenUSD sections4.4/5.3 declare one shared usdasset Resource type; duplicated model definitions reject valid cross-Group aliases under Core identity rules. Replace plugin duplicate with Core ximportresources and retain all original/correction evidence.",
+      "testIds": [
+        "AssetAndPluginGroupsShareTheSameDeclaredResourceType",
+        "PluginGroupsCanAliasTheSameResourceTypeDeclaredInAnAssetContainer",
+        "tools/test_implementation_openusd_model_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-009",
+      "path": "tools/test_implementation_openusd_model_regressions.py",
+      "originalSha256": null,
+      "predecessorSha256": null,
+      "predecessorCase": null,
+      "sha256": "a45252d49c1871447a476dd997cf45a3ef39bffda234117540c6bda3c815931a",
+      "bytes": 843,
+      "file": "tests/Conformance/Corrections/SPEC-009/tools/test_implementation_openusd_model_regressions.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "OpenUSD sections4.4/5.3 declare one shared usdasset Resource type; duplicated model definitions reject valid cross-Group aliases under Core identity rules. Replace plugin duplicate with Core ximportresources and retain all original/correction evidence.",
+      "testIds": [
+        "AssetAndPluginGroupsShareTheSameDeclaredResourceType",
+        "PluginGroupsCanAliasTheSameResourceTypeDeclaredInAnAssetContainer",
+        "tools/test_implementation_openusd_model_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-009",
+      "path": "docs/implementation-feedback.md",
+      "originalSha256": null,
+      "predecessorSha256": "a6e42ac712ab2e6ed088f9e963cc44951516a31f97ccf46999eb6ebbbf55c20a",
+      "predecessorCase": "SPEC-008",
+      "sha256": "66433380313357a91cdcccd62eb07d41c78f90faad5367743c3a278d32837f29",
+      "bytes": 10153,
+      "file": "tests/Conformance/Corrections/SPEC-009/docs/implementation-feedback.md",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "OpenUSD sections4.4/5.3 declare one shared usdasset Resource type; duplicated model definitions reject valid cross-Group aliases under Core identity rules. Replace plugin duplicate with Core ximportresources and retain all original/correction evidence.",
+      "testIds": [
+        "AssetAndPluginGroupsShareTheSameDeclaredResourceType",
+        "PluginGroupsCanAliasTheSameResourceTypeDeclaredInAnAssetContainer",
+        "tools/test_implementation_openusd_model_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-010",
+      "path": "message/model.json",
+      "originalSha256": "dfc5028ec32b871a70e67803d08ccb1bec4bc4527a626cf396069e5963cbefbc",
+      "predecessorSha256": "4ffc18e1a504e7f66d010a5f5cb0063fdd098ffb95d5b0c0aa283b161b449237",
+      "predecessorCase": "SPEC-008",
+      "sha256": "7881fd49aac2338797ee37a02fb4bef7346b559f1a0a5d4eec0c47cd91ea5cfc",
+      "bytes": 23995,
+      "file": "tests/Conformance/Corrections/SPEC-010/message/model.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Message property declarations must preserve typed literals, explicit null constraints and protocol-defined names. Use opaque domain object boundaries without weakening Core; enforce typed/default/fixed-field semantics procedurally. Clarify flat CloudEvents declarations, actual duration profile and AMQP-specific scalar representations.",
+      "testIds": [
+        "MessagePropertyDeclarationTests",
+        "tools/test_implementation_message_property_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-010",
+      "path": "message/spec.md",
+      "originalSha256": "9f15286dbe7bcb5a42cd134f519a74b6c4613f2b4eaa46939a4bff70362b2ac6",
+      "predecessorSha256": "e988777c3be631e13292723cfccfac3dc5a94a290a7d6a7778e98d671726b20d",
+      "predecessorCase": "SPEC-008",
+      "sha256": "5013983bf54de12a37245a6ed6b01de9dd428f605a6dc265572e7a2b7bc1ee2a",
+      "bytes": 62372,
+      "file": "tests/Conformance/Corrections/SPEC-010/message/spec.md",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Message property declarations must preserve typed literals, explicit null constraints and protocol-defined names. Use opaque domain object boundaries without weakening Core; enforce typed/default/fixed-field semantics procedurally. Clarify flat CloudEvents declarations, actual duration profile and AMQP-specific scalar representations.",
+      "testIds": [
+        "MessagePropertyDeclarationTests",
+        "tools/test_implementation_message_property_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-010",
+      "path": "tools/test_implementation_message_property_regressions.py",
+      "originalSha256": null,
+      "predecessorSha256": null,
+      "predecessorCase": null,
+      "sha256": "9a5e470707c8bd752d22d7c95ea70439a3b7a311d598c008ae76ef386f39c2e4",
+      "bytes": 1310,
+      "file": "tests/Conformance/Corrections/SPEC-010/tools/test_implementation_message_property_regressions.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Message property declarations must preserve typed literals, explicit null constraints and protocol-defined names. Use opaque domain object boundaries without weakening Core; enforce typed/default/fixed-field semantics procedurally. Clarify flat CloudEvents declarations, actual duration profile and AMQP-specific scalar representations.",
+      "testIds": [
+        "MessagePropertyDeclarationTests",
+        "tools/test_implementation_message_property_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-010",
+      "path": "tools/test_implementation_message_contracts.py",
+      "originalSha256": null,
+      "predecessorSha256": "81f4853372656931ea225bea0c5f3a59eae811efd44509b6c8b5e358ad793c53",
+      "predecessorCase": "SPEC-008",
+      "sha256": "ed68a8192a374a48d3c00c6cdf9a28e9dd36831d18673c7471a5f6cf89d6d8d8",
+      "bytes": 2606,
+      "file": "tests/Conformance/Corrections/SPEC-010/tools/test_implementation_message_contracts.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Message property declarations must preserve typed literals, explicit null constraints and protocol-defined names. Use opaque domain object boundaries without weakening Core; enforce typed/default/fixed-field semantics procedurally. Clarify flat CloudEvents declarations, actual duration profile and AMQP-specific scalar representations.",
+      "testIds": [
+        "MessagePropertyDeclarationTests",
+        "tools/test_implementation_message_property_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-010",
+      "path": "docs/implementation-feedback.md",
+      "originalSha256": null,
+      "predecessorSha256": "66433380313357a91cdcccd62eb07d41c78f90faad5367743c3a278d32837f29",
+      "predecessorCase": "SPEC-009",
+      "sha256": "99567d50caccf7f5c20b27577fce740ae7b87dc6ee1d40e47466ecc6fd6bba51",
+      "bytes": 11616,
+      "file": "tests/Conformance/Corrections/SPEC-010/docs/implementation-feedback.md",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Message property declarations must preserve typed literals, explicit null constraints and protocol-defined names. Use opaque domain object boundaries without weakening Core; enforce typed/default/fixed-field semantics procedurally. Clarify flat CloudEvents declarations, actual duration profile and AMQP-specific scalar representations.",
+      "testIds": [
+        "MessagePropertyDeclarationTests",
+        "tools/test_implementation_message_property_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-010",
+      "path": "message/schemas/document-schema.json",
+      "originalSha256": "890d58b9452a2958489bb5f02d5ec56f52fbd3833507c2104e91507f3487bed4",
+      "predecessorSha256": "a973b5e17747d817bd115ea0b56e661a72fec8fdfc796ba18d7cea691f45cdf0",
+      "predecessorCase": "SPEC-008",
+      "sha256": "7d23c3554ab9397749c365e603126d46dd58ea02e2a7c9ce292affe9d29add90",
+      "bytes": 30973,
+      "file": "tests/Conformance/Corrections/SPEC-010/message/schemas/document-schema.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Message property declarations must preserve typed literals, explicit null constraints and protocol-defined names. Use opaque domain object boundaries without weakening Core; enforce typed/default/fixed-field semantics procedurally. Clarify flat CloudEvents declarations, actual duration profile and AMQP-specific scalar representations.",
+      "testIds": [
+        "MessagePropertyDeclarationTests",
+        "tools/test_implementation_message_property_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-010",
+      "path": "message/schemas/document-schema.struct.json",
+      "originalSha256": "364c4d78e218413b97f2f372641626891a40ae5680aa6b941977d1d14daf13ef",
+      "predecessorSha256": "db5546d573cbca7cd40848eb5043bad2b40aa9d302475d6268faffb18123ab65",
+      "predecessorCase": "SPEC-008",
+      "sha256": "94483da5a9663fcd0978fe64bd7d86cc7ff57188babe464a9f312df6726bdaf0",
+      "bytes": 15453,
+      "file": "tests/Conformance/Corrections/SPEC-010/message/schemas/document-schema.struct.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Message property declarations must preserve typed literals, explicit null constraints and protocol-defined names. Use opaque domain object boundaries without weakening Core; enforce typed/default/fixed-field semantics procedurally. Clarify flat CloudEvents declarations, actual duration profile and AMQP-specific scalar representations.",
+      "testIds": [
+        "MessagePropertyDeclarationTests",
+        "tools/test_implementation_message_property_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-010",
+      "path": "message/schemas/document-schema.avsc",
+      "originalSha256": "18f1b02fd49b53815668c245758982cd717236dc991660186fc9a748b99bd98f",
+      "predecessorSha256": "2c96138baf72b45373d23c0b43077f582ec2e69e89d203e049de7c3771c82107",
+      "predecessorCase": "SPEC-008",
+      "sha256": "ef5c03ddd9765c743fd45e65ad04634292841e452aee88d734a89d7d60f24e72",
+      "bytes": 59261,
+      "file": "tests/Conformance/Corrections/SPEC-010/message/schemas/document-schema.avsc",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Message property declarations must preserve typed literals, explicit null constraints and protocol-defined names. Use opaque domain object boundaries without weakening Core; enforce typed/default/fixed-field semantics procedurally. Clarify flat CloudEvents declarations, actual duration profile and AMQP-specific scalar representations.",
+      "testIds": [
+        "MessagePropertyDeclarationTests",
+        "tools/test_implementation_message_property_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-010",
+      "path": "message/schemas/openapi.json",
+      "originalSha256": "c15c4af364697737ffac552d05f90ce9ef0a2b5862f58d545c7ab7ea9109c00d",
+      "predecessorSha256": "d874c6d45fa72fa818802366bcb32b0faa2861f21830fde3e1cb9fb4f9eec214",
+      "predecessorCase": "SPEC-008",
+      "sha256": "d6fe1e5dcc7fd5d698b2a306809d875b86ce4446c2c67460f3d43b5ba3f36859",
+      "bytes": 90925,
+      "file": "tests/Conformance/Corrections/SPEC-010/message/schemas/openapi.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Message property declarations must preserve typed literals, explicit null constraints and protocol-defined names. Use opaque domain object boundaries without weakening Core; enforce typed/default/fixed-field semantics procedurally. Clarify flat CloudEvents declarations, actual duration profile and AMQP-specific scalar representations.",
+      "testIds": [
+        "MessagePropertyDeclarationTests",
+        "tools/test_implementation_message_property_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-010",
+      "path": "endpoint/schemas/document-schema.json",
+      "originalSha256": "ef05a5511439a4f9008fa3f259f294321b126a774b6f0e67acb9f83654d1324c",
+      "predecessorSha256": "527ee610cee1a42a6ef8ac2b1efc8cb84686b6ab1b69547a04cff0430587d614",
+      "predecessorCase": "SPEC-008",
+      "sha256": "52068a28e5b1120f7e87fc0647e5a3f998900eebd018b8d3f7eb80dfe4da1443",
+      "bytes": 73582,
+      "file": "tests/Conformance/Corrections/SPEC-010/endpoint/schemas/document-schema.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Message property declarations must preserve typed literals, explicit null constraints and protocol-defined names. Use opaque domain object boundaries without weakening Core; enforce typed/default/fixed-field semantics procedurally. Clarify flat CloudEvents declarations, actual duration profile and AMQP-specific scalar representations.",
+      "testIds": [
+        "MessagePropertyDeclarationTests",
+        "tools/test_implementation_message_property_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-010",
+      "path": "endpoint/schemas/document-schema.struct.json",
+      "originalSha256": "c5612c7fc56c940be620534112854db5c58bb9fe1f63a9f963553c200aa02926",
+      "predecessorSha256": "c185e5b2e3a7e6602a7b7ccfc42f7665374587a97674572f94f13d274986f35c",
+      "predecessorCase": "SPEC-008",
+      "sha256": "a836993eb3363dd18bc978e757ec1816ae0f64b97f8c097e90f5bedc34050600",
+      "bytes": 27799,
+      "file": "tests/Conformance/Corrections/SPEC-010/endpoint/schemas/document-schema.struct.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Message property declarations must preserve typed literals, explicit null constraints and protocol-defined names. Use opaque domain object boundaries without weakening Core; enforce typed/default/fixed-field semantics procedurally. Clarify flat CloudEvents declarations, actual duration profile and AMQP-specific scalar representations.",
+      "testIds": [
+        "MessagePropertyDeclarationTests",
+        "tools/test_implementation_message_property_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-010",
+      "path": "endpoint/schemas/document-schema.avsc",
+      "originalSha256": "311aeb670c26e85ea8800034c4f4aa5971dc0fbf377f8e9d41cb5cc9c3be041e",
+      "predecessorSha256": "6442fecf432f598225a45e2d084c2233cb2738cd4477ab48be03948d4de9ebef",
+      "predecessorCase": "SPEC-008",
+      "sha256": "253ab35d38019c11a110221446e3746f4e309528e92314e10b4ac73fd4fbe6b4",
+      "bytes": 141710,
+      "file": "tests/Conformance/Corrections/SPEC-010/endpoint/schemas/document-schema.avsc",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Message property declarations must preserve typed literals, explicit null constraints and protocol-defined names. Use opaque domain object boundaries without weakening Core; enforce typed/default/fixed-field semantics procedurally. Clarify flat CloudEvents declarations, actual duration profile and AMQP-specific scalar representations.",
+      "testIds": [
+        "MessagePropertyDeclarationTests",
+        "tools/test_implementation_message_property_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-010",
+      "path": "endpoint/schemas/openapi.json",
+      "originalSha256": "20a2df1b5e3bcda830e2c9f56313a7413b68ea307e610b6d3c6c3cabca30c4cd",
+      "predecessorSha256": "33f913c1206231ba8116828330be54db486007f5670f4a45e5fd5e5195bfe0b0",
+      "predecessorCase": "SPEC-008",
+      "sha256": "33f913c1206231ba8116828330be54db486007f5670f4a45e5fd5e5195bfe0b0",
+      "bytes": 146066,
+      "file": "tests/Conformance/Corrections/SPEC-010/endpoint/schemas/openapi.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Message property declarations must preserve typed literals, explicit null constraints and protocol-defined names. Use opaque domain object boundaries without weakening Core; enforce typed/default/fixed-field semantics procedurally. Clarify flat CloudEvents declarations, actual duration profile and AMQP-specific scalar representations.",
+      "testIds": [
+        "MessagePropertyDeclarationTests",
+        "tools/test_implementation_message_property_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-010",
+      "path": "cloudevents/schemas/document-schema.json",
+      "originalSha256": "40520617547a5f22bc8fc0a6109d1ae5aab234c6b9a3204d88273d841478d798",
+      "predecessorSha256": "b22e7f7d8cb6db7bae07baa2358b9d99fef3a1f6b64ee43d8750433a37ed8ed3",
+      "predecessorCase": "SPEC-008",
+      "sha256": "f75a69ba42ba39279de00a6a71ecd7990d01453c14dce88118b0f0364d944c91",
+      "bytes": 84884,
+      "file": "tests/Conformance/Corrections/SPEC-010/cloudevents/schemas/document-schema.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Message property declarations must preserve typed literals, explicit null constraints and protocol-defined names. Use opaque domain object boundaries without weakening Core; enforce typed/default/fixed-field semantics procedurally. Clarify flat CloudEvents declarations, actual duration profile and AMQP-specific scalar representations.",
+      "testIds": [
+        "MessagePropertyDeclarationTests",
+        "tools/test_implementation_message_property_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-010",
+      "path": "cloudevents/schemas/document-schema.struct.json",
+      "originalSha256": "a15d7ad12b9b78d9d5dc7868592a56e2fe7c53328c892b87eccf403529d8f868",
+      "predecessorSha256": "fd0937b4d4788f21a99a549d97bf8feb2506b76e009e114dc55666bf50866409",
+      "predecessorCase": "SPEC-008",
+      "sha256": "dab484e67f35d53d895a047399b00e2157bc0e70912c5957de99d6183092f952",
+      "bytes": 36579,
+      "file": "tests/Conformance/Corrections/SPEC-010/cloudevents/schemas/document-schema.struct.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Message property declarations must preserve typed literals, explicit null constraints and protocol-defined names. Use opaque domain object boundaries without weakening Core; enforce typed/default/fixed-field semantics procedurally. Clarify flat CloudEvents declarations, actual duration profile and AMQP-specific scalar representations.",
+      "testIds": [
+        "MessagePropertyDeclarationTests",
+        "tools/test_implementation_message_property_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-010",
+      "path": "cloudevents/schemas/document-schema.avsc",
+      "originalSha256": "fe956b12106f25e03cc2f8c27c41b7d062540a843de496bf22bdfd535d6d1a9a",
+      "predecessorSha256": "2d998a600f6c126c0c7aba64d2573f65121cf8130e6851786c5b6a98e14348ab",
+      "predecessorCase": "SPEC-008",
+      "sha256": "268b9f861d59387a85d94ba677f5f319a3cc8c7d7f81e9783968d2ead4507fb5",
+      "bytes": 162440,
+      "file": "tests/Conformance/Corrections/SPEC-010/cloudevents/schemas/document-schema.avsc",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Message property declarations must preserve typed literals, explicit null constraints and protocol-defined names. Use opaque domain object boundaries without weakening Core; enforce typed/default/fixed-field semantics procedurally. Clarify flat CloudEvents declarations, actual duration profile and AMQP-specific scalar representations.",
+      "testIds": [
+        "MessagePropertyDeclarationTests",
+        "tools/test_implementation_message_property_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-010",
+      "path": "cloudevents/schemas/openapi.json",
+      "originalSha256": "84586d1e008e7c33290f2ce74169116b590b8d1d464384570e77d49236e5fc83",
+      "predecessorSha256": "78c03693298be54eea1d22ca9d863877a969e6ef7967a58b17b6e284e6229acf",
+      "predecessorCase": "SPEC-008",
+      "sha256": "78c03693298be54eea1d22ca9d863877a969e6ef7967a58b17b6e284e6229acf",
+      "bytes": 193164,
+      "file": "tests/Conformance/Corrections/SPEC-010/cloudevents/schemas/openapi.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Message property declarations must preserve typed literals, explicit null constraints and protocol-defined names. Use opaque domain object boundaries without weakening Core; enforce typed/default/fixed-field semantics procedurally. Clarify flat CloudEvents declarations, actual duration profile and AMQP-specific scalar representations.",
+      "testIds": [
+        "MessagePropertyDeclarationTests",
+        "tools/test_implementation_message_property_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-011",
+      "path": "workingdrafts/models/openusd/spec.md",
+      "originalSha256": "77b824ef148a8db8e16e2af5daa241c80c43604436370aaf03c4340416bd4e07",
+      "predecessorSha256": "77b824ef148a8db8e16e2af5daa241c80c43604436370aaf03c4340416bd4e07",
+      "predecessorCase": null,
+      "sha256": "42c3c5eba52b6031485a591c9ac466caa5a77a7ee54e94d41ec84fe6a7b276a0",
+      "bytes": 48613,
+      "file": "tests/Conformance/Corrections/SPEC-011/workingdrafts/models/openusd/spec.md",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Reconcile stable OpenUSD identifier assignment with sibling collisions and Core128-character bounds. Preserve candidate construction, define one bounded fallback, reject real secondary collisions, and resolve through at most two authorized identity-checked metadata locations without implicit acquisition.",
+      "testIds": [
+        "OpenUsdCollisionAssignmentTests",
+        "OpenUsdCollisionResolutionTests",
+        "tools/test_implementation_openusd_identifier_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-011",
+      "path": "tools/test_implementation_openusd_identifier_regressions.py",
+      "originalSha256": null,
+      "predecessorSha256": null,
+      "predecessorCase": null,
+      "sha256": "4ce4ec81e2734f68ee03d22a7dbabceab693585f62ae28184361a6a381a803d5",
+      "bytes": 5926,
+      "file": "tests/Conformance/Corrections/SPEC-011/tools/test_implementation_openusd_identifier_regressions.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Reconcile stable OpenUSD identifier assignment with sibling collisions and Core128-character bounds. Preserve candidate construction, define one bounded fallback, reject real secondary collisions, and resolve through at most two authorized identity-checked metadata locations without implicit acquisition.",
+      "testIds": [
+        "OpenUsdCollisionAssignmentTests",
+        "OpenUsdCollisionResolutionTests",
+        "tools/test_implementation_openusd_identifier_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-011",
+      "path": "docs/implementation-feedback.md",
+      "originalSha256": null,
+      "predecessorSha256": "99567d50caccf7f5c20b27577fce740ae7b87dc6ee1d40e47466ecc6fd6bba51",
+      "predecessorCase": "SPEC-010",
+      "sha256": "9e92a11284c773c4255deafcc6b88f48b660647ac157c72b7458d6ae892c80c1",
+      "bytes": 12958,
+      "file": "tests/Conformance/Corrections/SPEC-011/docs/implementation-feedback.md",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Reconcile stable OpenUSD identifier assignment with sibling collisions and Core128-character bounds. Preserve candidate construction, define one bounded fallback, reject real secondary collisions, and resolve through at most two authorized identity-checked metadata locations without implicit acquisition.",
+      "testIds": [
+        "OpenUsdCollisionAssignmentTests",
+        "OpenUsdCollisionResolutionTests",
+        "tools/test_implementation_openusd_identifier_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-012",
+      "path": "endpoint/model.json",
+      "originalSha256": "c4156d7524567a9eed883e06b06f1e302249f740cebf4289887c8c434bc32c92",
+      "predecessorSha256": "b85495e59e92d3acdee525ebfb662f299155117b08412ac1ea70ab3162af9ab0",
+      "predecessorCase": "SPEC-008",
+      "sha256": "9533a1720ec2da0b74b8f0bdb9df32057fc59b257aabb46f6aaae6535fc814e7",
+      "bytes": 7010,
+      "file": "tests/Conformance/Corrections/SPEC-012/endpoint/model.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Endpoint protocol-option string/Map-key/enum templates need a faithful opaque authoring boundary distinct from resolved consumer semantics. Keep native JSON kinds and structural names, preserve Core grammar, and regenerate dependent structural schemas.",
+      "testIds": [
+        "EndpointAuthoredModelTests",
+        "tools/test_implementation_endpoint_authoring_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-012",
+      "path": "endpoint/spec.md",
+      "originalSha256": "56e2e17b1faf6bacfba3f042fc3cf9c37c90a2cd65a7316fde14814ce00040bf",
+      "predecessorSha256": "e8f2294a1a3c7ff7b5775304d87112a2c2091b0503c180e8da75affa765f81c4",
+      "predecessorCase": "SPEC-001",
+      "sha256": "9cc6d33141691b0ea91b011ffa728e4d3c0c0edb50aeaf641725171cdf051fa8",
+      "bytes": 55194,
+      "file": "tests/Conformance/Corrections/SPEC-012/endpoint/spec.md",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Endpoint protocol-option string/Map-key/enum templates need a faithful opaque authoring boundary distinct from resolved consumer semantics. Keep native JSON kinds and structural names, preserve Core grammar, and regenerate dependent structural schemas.",
+      "testIds": [
+        "EndpointAuthoredModelTests",
+        "tools/test_implementation_endpoint_authoring_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-012",
+      "path": "tools/test_implementation_endpoint_authoring_regressions.py",
+      "originalSha256": null,
+      "predecessorSha256": null,
+      "predecessorCase": null,
+      "sha256": "1d7e3949ab97a14c463977bfb8cc620defbf90726bac578b0c213654dc447c28",
+      "bytes": 1087,
+      "file": "tests/Conformance/Corrections/SPEC-012/tools/test_implementation_endpoint_authoring_regressions.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Endpoint protocol-option string/Map-key/enum templates need a faithful opaque authoring boundary distinct from resolved consumer semantics. Keep native JSON kinds and structural names, preserve Core grammar, and regenerate dependent structural schemas.",
+      "testIds": [
+        "EndpointAuthoredModelTests",
+        "tools/test_implementation_endpoint_authoring_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-012",
+      "path": "docs/implementation-feedback.md",
+      "originalSha256": null,
+      "predecessorSha256": "9e92a11284c773c4255deafcc6b88f48b660647ac157c72b7458d6ae892c80c1",
+      "predecessorCase": "SPEC-011",
+      "sha256": "f8ce66eac313be3f5ed7794fb7af6994831b407fb18ee2ee8a9fce65bd47c593",
+      "bytes": 13964,
+      "file": "tests/Conformance/Corrections/SPEC-012/docs/implementation-feedback.md",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Endpoint protocol-option string/Map-key/enum templates need a faithful opaque authoring boundary distinct from resolved consumer semantics. Keep native JSON kinds and structural names, preserve Core grammar, and regenerate dependent structural schemas.",
+      "testIds": [
+        "EndpointAuthoredModelTests",
+        "tools/test_implementation_endpoint_authoring_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-012",
+      "path": "endpoint/schemas/document-schema.json",
+      "originalSha256": "ef05a5511439a4f9008fa3f259f294321b126a774b6f0e67acb9f83654d1324c",
+      "predecessorSha256": "52068a28e5b1120f7e87fc0647e5a3f998900eebd018b8d3f7eb80dfe4da1443",
+      "predecessorCase": "SPEC-010",
+      "sha256": "d190b16fe95059baaeb77f5ef40cffcfed5a68615e00487e89afd65198312647",
+      "bytes": 42569,
+      "file": "tests/Conformance/Corrections/SPEC-012/endpoint/schemas/document-schema.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Endpoint protocol-option string/Map-key/enum templates need a faithful opaque authoring boundary distinct from resolved consumer semantics. Keep native JSON kinds and structural names, preserve Core grammar, and regenerate dependent structural schemas.",
+      "testIds": [
+        "EndpointAuthoredModelTests",
+        "tools/test_implementation_endpoint_authoring_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-012",
+      "path": "endpoint/schemas/document-schema.struct.json",
+      "originalSha256": "c5612c7fc56c940be620534112854db5c58bb9fe1f63a9f963553c200aa02926",
+      "predecessorSha256": "a836993eb3363dd18bc978e757ec1816ae0f64b97f8c097e90f5bedc34050600",
+      "predecessorCase": "SPEC-010",
+      "sha256": "779937d42105d5118cded0f78f7c1dc085bc64961aaf01b3d5bb1cf37ea2fe18",
+      "bytes": 20194,
+      "file": "tests/Conformance/Corrections/SPEC-012/endpoint/schemas/document-schema.struct.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Endpoint protocol-option string/Map-key/enum templates need a faithful opaque authoring boundary distinct from resolved consumer semantics. Keep native JSON kinds and structural names, preserve Core grammar, and regenerate dependent structural schemas.",
+      "testIds": [
+        "EndpointAuthoredModelTests",
+        "tools/test_implementation_endpoint_authoring_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-012",
+      "path": "endpoint/schemas/document-schema.avsc",
+      "originalSha256": "311aeb670c26e85ea8800034c4f4aa5971dc0fbf377f8e9d41cb5cc9c3be041e",
+      "predecessorSha256": "253ab35d38019c11a110221446e3746f4e309528e92314e10b4ac73fd4fbe6b4",
+      "predecessorCase": "SPEC-010",
+      "sha256": "ce72839685955e224c699be6adec2aa9c01813c7e82eee4bc46bd487a67db2ef",
+      "bytes": 73247,
+      "file": "tests/Conformance/Corrections/SPEC-012/endpoint/schemas/document-schema.avsc",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Endpoint protocol-option string/Map-key/enum templates need a faithful opaque authoring boundary distinct from resolved consumer semantics. Keep native JSON kinds and structural names, preserve Core grammar, and regenerate dependent structural schemas.",
+      "testIds": [
+        "EndpointAuthoredModelTests",
+        "tools/test_implementation_endpoint_authoring_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-012",
+      "path": "endpoint/schemas/openapi.json",
+      "originalSha256": "20a2df1b5e3bcda830e2c9f56313a7413b68ea307e610b6d3c6c3cabca30c4cd",
+      "predecessorSha256": "33f913c1206231ba8116828330be54db486007f5670f4a45e5fd5e5195bfe0b0",
+      "predecessorCase": "SPEC-010",
+      "sha256": "0ee73c9cba15b1e2d179635484884362e33c82aab1f296ce705edcebce2a13bf",
+      "bytes": 119517,
+      "file": "tests/Conformance/Corrections/SPEC-012/endpoint/schemas/openapi.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Endpoint protocol-option string/Map-key/enum templates need a faithful opaque authoring boundary distinct from resolved consumer semantics. Keep native JSON kinds and structural names, preserve Core grammar, and regenerate dependent structural schemas.",
+      "testIds": [
+        "EndpointAuthoredModelTests",
+        "tools/test_implementation_endpoint_authoring_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-012",
+      "path": "cloudevents/schemas/document-schema.json",
+      "originalSha256": "40520617547a5f22bc8fc0a6109d1ae5aab234c6b9a3204d88273d841478d798",
+      "predecessorSha256": "f75a69ba42ba39279de00a6a71ecd7990d01453c14dce88118b0f0364d944c91",
+      "predecessorCase": "SPEC-010",
+      "sha256": "cbbabb3d6204b1a5634c180f1583e9aa12cfed0de0c16bcd4d11731bb291282d",
+      "bytes": 53871,
+      "file": "tests/Conformance/Corrections/SPEC-012/cloudevents/schemas/document-schema.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Endpoint protocol-option string/Map-key/enum templates need a faithful opaque authoring boundary distinct from resolved consumer semantics. Keep native JSON kinds and structural names, preserve Core grammar, and regenerate dependent structural schemas.",
+      "testIds": [
+        "EndpointAuthoredModelTests",
+        "tools/test_implementation_endpoint_authoring_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-012",
+      "path": "cloudevents/schemas/document-schema.struct.json",
+      "originalSha256": "a15d7ad12b9b78d9d5dc7868592a56e2fe7c53328c892b87eccf403529d8f868",
+      "predecessorSha256": "dab484e67f35d53d895a047399b00e2157bc0e70912c5957de99d6183092f952",
+      "predecessorCase": "SPEC-010",
+      "sha256": "1728de6a5ce76d698c8b67e1c5de05c81be3dab9d3eda55be55c981535af1888",
+      "bytes": 28974,
+      "file": "tests/Conformance/Corrections/SPEC-012/cloudevents/schemas/document-schema.struct.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Endpoint protocol-option string/Map-key/enum templates need a faithful opaque authoring boundary distinct from resolved consumer semantics. Keep native JSON kinds and structural names, preserve Core grammar, and regenerate dependent structural schemas.",
+      "testIds": [
+        "EndpointAuthoredModelTests",
+        "tools/test_implementation_endpoint_authoring_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-012",
+      "path": "cloudevents/schemas/document-schema.avsc",
+      "originalSha256": "fe956b12106f25e03cc2f8c27c41b7d062540a843de496bf22bdfd535d6d1a9a",
+      "predecessorSha256": "268b9f861d59387a85d94ba677f5f319a3cc8c7d7f81e9783968d2ead4507fb5",
+      "predecessorCase": "SPEC-010",
+      "sha256": "143408abfa03ba77def5e03a094762111a0583bb28e902e08a26f04b843e7196",
+      "bytes": 93977,
+      "file": "tests/Conformance/Corrections/SPEC-012/cloudevents/schemas/document-schema.avsc",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Endpoint protocol-option string/Map-key/enum templates need a faithful opaque authoring boundary distinct from resolved consumer semantics. Keep native JSON kinds and structural names, preserve Core grammar, and regenerate dependent structural schemas.",
+      "testIds": [
+        "EndpointAuthoredModelTests",
+        "tools/test_implementation_endpoint_authoring_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-012",
+      "path": "cloudevents/schemas/openapi.json",
+      "originalSha256": "84586d1e008e7c33290f2ce74169116b590b8d1d464384570e77d49236e5fc83",
+      "predecessorSha256": "78c03693298be54eea1d22ca9d863877a969e6ef7967a58b17b6e284e6229acf",
+      "predecessorCase": "SPEC-010",
+      "sha256": "f09c3b11c630865d6a22b42c4e05f45ad164bbbf3be67db907cb6993cf39ed14",
+      "bytes": 166615,
+      "file": "tests/Conformance/Corrections/SPEC-012/cloudevents/schemas/openapi.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Endpoint protocol-option string/Map-key/enum templates need a faithful opaque authoring boundary distinct from resolved consumer semantics. Keep native JSON kinds and structural names, preserve Core grammar, and regenerate dependent structural schemas.",
+      "testIds": [
+        "EndpointAuthoredModelTests",
+        "tools/test_implementation_endpoint_authoring_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-013",
+      "path": "message/model.json",
+      "originalSha256": "dfc5028ec32b871a70e67803d08ccb1bec4bc4527a626cf396069e5963cbefbc",
+      "predecessorSha256": "7881fd49aac2338797ee37a02fb4bef7346b559f1a0a5d4eec0c47cd91ea5cfc",
+      "predecessorCase": "SPEC-010",
+      "sha256": "c37d862488b298e677b6129a5b68be33536eb856b199ea38326f999274612435",
+      "bytes": 25206,
+      "file": "tests/Conformance/Corrections/SPEC-013/message/model.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations must admit specurl; binary MQTT correlation_data is base64 not a URI template; MQTT content_type is a MIME string with parameters rather than a symbol/URI. Regenerate all dependent schemas without changing Core scalar rules.",
+      "testIds": [
+        "MessageBinaryAndHeaderTests",
+        "tools/test_implementation_message_header_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-013",
+      "path": "message/spec.md",
+      "originalSha256": "9f15286dbe7bcb5a42cd134f519a74b6c4613f2b4eaa46939a4bff70362b2ac6",
+      "predecessorSha256": "5013983bf54de12a37245a6ed6b01de9dd428f605a6dc265572e7a2b7bc1ee2a",
+      "predecessorCase": "SPEC-010",
+      "sha256": "53d61b539c2583b47d00e4094c50dd25f3089b3d53804bc4aa59ee79f8b0681b",
+      "bytes": 62681,
+      "file": "tests/Conformance/Corrections/SPEC-013/message/spec.md",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations must admit specurl; binary MQTT correlation_data is base64 not a URI template; MQTT content_type is a MIME string with parameters rather than a symbol/URI. Regenerate all dependent schemas without changing Core scalar rules.",
+      "testIds": [
+        "MessageBinaryAndHeaderTests",
+        "tools/test_implementation_message_header_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-013",
+      "path": "tools/test_implementation_message_header_regressions.py",
+      "originalSha256": null,
+      "predecessorSha256": null,
+      "predecessorCase": null,
+      "sha256": "32c6726400904493f4e37b9a919c9e846c3aea9d8a96686ad68bd075b592c084",
+      "bytes": 1509,
+      "file": "tests/Conformance/Corrections/SPEC-013/tools/test_implementation_message_header_regressions.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations must admit specurl; binary MQTT correlation_data is base64 not a URI template; MQTT content_type is a MIME string with parameters rather than a symbol/URI. Regenerate all dependent schemas without changing Core scalar rules.",
+      "testIds": [
+        "MessageBinaryAndHeaderTests",
+        "tools/test_implementation_message_header_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-013",
+      "path": "docs/implementation-feedback.md",
+      "originalSha256": null,
+      "predecessorSha256": "f8ce66eac313be3f5ed7794fb7af6994831b407fb18ee2ee8a9fce65bd47c593",
+      "predecessorCase": "SPEC-012",
+      "sha256": "34d3b198c011a51008e82ad5275301cf9d9bc9ba228556094eb0091289965095",
+      "bytes": 14882,
+      "file": "tests/Conformance/Corrections/SPEC-013/docs/implementation-feedback.md",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations must admit specurl; binary MQTT correlation_data is base64 not a URI template; MQTT content_type is a MIME string with parameters rather than a symbol/URI. Regenerate all dependent schemas without changing Core scalar rules.",
+      "testIds": [
+        "MessageBinaryAndHeaderTests",
+        "tools/test_implementation_message_header_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-013",
+      "path": "message/schemas/document-schema.json",
+      "originalSha256": "890d58b9452a2958489bb5f02d5ec56f52fbd3833507c2104e91507f3487bed4",
+      "predecessorSha256": "7d23c3554ab9397749c365e603126d46dd58ea02e2a7c9ce292affe9d29add90",
+      "predecessorCase": "SPEC-010",
+      "sha256": "bb4d9dff06e274104bb23dfe91be0a08eb722f51578f6fce418292eabe5b6463",
+      "bytes": 32098,
+      "file": "tests/Conformance/Corrections/SPEC-013/message/schemas/document-schema.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations must admit specurl; binary MQTT correlation_data is base64 not a URI template; MQTT content_type is a MIME string with parameters rather than a symbol/URI. Regenerate all dependent schemas without changing Core scalar rules.",
+      "testIds": [
+        "MessageBinaryAndHeaderTests",
+        "tools/test_implementation_message_header_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-013",
+      "path": "message/schemas/document-schema.struct.json",
+      "originalSha256": "364c4d78e218413b97f2f372641626891a40ae5680aa6b941977d1d14daf13ef",
+      "predecessorSha256": "94483da5a9663fcd0978fe64bd7d86cc7ff57188babe464a9f312df6726bdaf0",
+      "predecessorCase": "SPEC-010",
+      "sha256": "94483da5a9663fcd0978fe64bd7d86cc7ff57188babe464a9f312df6726bdaf0",
+      "bytes": 15453,
+      "file": "tests/Conformance/Corrections/SPEC-013/message/schemas/document-schema.struct.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations must admit specurl; binary MQTT correlation_data is base64 not a URI template; MQTT content_type is a MIME string with parameters rather than a symbol/URI. Regenerate all dependent schemas without changing Core scalar rules.",
+      "testIds": [
+        "MessageBinaryAndHeaderTests",
+        "tools/test_implementation_message_header_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-013",
+      "path": "message/schemas/document-schema.avsc",
+      "originalSha256": "18f1b02fd49b53815668c245758982cd717236dc991660186fc9a748b99bd98f",
+      "predecessorSha256": "ef5c03ddd9765c743fd45e65ad04634292841e452aee88d734a89d7d60f24e72",
+      "predecessorCase": "SPEC-010",
+      "sha256": "bdf5915c92c1e8629ce0b2581897a601315bb4fed24c95305def447457d068f0",
+      "bytes": 61638,
+      "file": "tests/Conformance/Corrections/SPEC-013/message/schemas/document-schema.avsc",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations must admit specurl; binary MQTT correlation_data is base64 not a URI template; MQTT content_type is a MIME string with parameters rather than a symbol/URI. Regenerate all dependent schemas without changing Core scalar rules.",
+      "testIds": [
+        "MessageBinaryAndHeaderTests",
+        "tools/test_implementation_message_header_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-013",
+      "path": "message/schemas/openapi.json",
+      "originalSha256": "c15c4af364697737ffac552d05f90ce9ef0a2b5862f58d545c7ab7ea9109c00d",
+      "predecessorSha256": "d6fe1e5dcc7fd5d698b2a306809d875b86ce4446c2c67460f3d43b5ba3f36859",
+      "predecessorCase": "SPEC-010",
+      "sha256": "ba83363ef298bef42155efe05fe626eabc28727fdba712ff95c1bff6ab58f217",
+      "bytes": 91906,
+      "file": "tests/Conformance/Corrections/SPEC-013/message/schemas/openapi.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations must admit specurl; binary MQTT correlation_data is base64 not a URI template; MQTT content_type is a MIME string with parameters rather than a symbol/URI. Regenerate all dependent schemas without changing Core scalar rules.",
+      "testIds": [
+        "MessageBinaryAndHeaderTests",
+        "tools/test_implementation_message_header_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-013",
+      "path": "endpoint/schemas/document-schema.json",
+      "originalSha256": "ef05a5511439a4f9008fa3f259f294321b126a774b6f0e67acb9f83654d1324c",
+      "predecessorSha256": "d190b16fe95059baaeb77f5ef40cffcfed5a68615e00487e89afd65198312647",
+      "predecessorCase": "SPEC-012",
+      "sha256": "f25eca0a161bc456d54849cc98cb1fdfd8ed08863c546aa18b1723f70617c704",
+      "bytes": 43694,
+      "file": "tests/Conformance/Corrections/SPEC-013/endpoint/schemas/document-schema.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations must admit specurl; binary MQTT correlation_data is base64 not a URI template; MQTT content_type is a MIME string with parameters rather than a symbol/URI. Regenerate all dependent schemas without changing Core scalar rules.",
+      "testIds": [
+        "MessageBinaryAndHeaderTests",
+        "tools/test_implementation_message_header_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-013",
+      "path": "endpoint/schemas/document-schema.struct.json",
+      "originalSha256": "c5612c7fc56c940be620534112854db5c58bb9fe1f63a9f963553c200aa02926",
+      "predecessorSha256": "779937d42105d5118cded0f78f7c1dc085bc64961aaf01b3d5bb1cf37ea2fe18",
+      "predecessorCase": "SPEC-012",
+      "sha256": "779937d42105d5118cded0f78f7c1dc085bc64961aaf01b3d5bb1cf37ea2fe18",
+      "bytes": 20194,
+      "file": "tests/Conformance/Corrections/SPEC-013/endpoint/schemas/document-schema.struct.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations must admit specurl; binary MQTT correlation_data is base64 not a URI template; MQTT content_type is a MIME string with parameters rather than a symbol/URI. Regenerate all dependent schemas without changing Core scalar rules.",
+      "testIds": [
+        "MessageBinaryAndHeaderTests",
+        "tools/test_implementation_message_header_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-013",
+      "path": "endpoint/schemas/document-schema.avsc",
+      "originalSha256": "311aeb670c26e85ea8800034c4f4aa5971dc0fbf377f8e9d41cb5cc9c3be041e",
+      "predecessorSha256": "ce72839685955e224c699be6adec2aa9c01813c7e82eee4bc46bd487a67db2ef",
+      "predecessorCase": "SPEC-012",
+      "sha256": "ff5e51373e03e82809573c50606fb139823d2403cc6f3a8b451745f8af30110f",
+      "bytes": 75624,
+      "file": "tests/Conformance/Corrections/SPEC-013/endpoint/schemas/document-schema.avsc",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations must admit specurl; binary MQTT correlation_data is base64 not a URI template; MQTT content_type is a MIME string with parameters rather than a symbol/URI. Regenerate all dependent schemas without changing Core scalar rules.",
+      "testIds": [
+        "MessageBinaryAndHeaderTests",
+        "tools/test_implementation_message_header_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-013",
+      "path": "endpoint/schemas/openapi.json",
+      "originalSha256": "20a2df1b5e3bcda830e2c9f56313a7413b68ea307e610b6d3c6c3cabca30c4cd",
+      "predecessorSha256": "0ee73c9cba15b1e2d179635484884362e33c82aab1f296ce705edcebce2a13bf",
+      "predecessorCase": "SPEC-012",
+      "sha256": "0ee73c9cba15b1e2d179635484884362e33c82aab1f296ce705edcebce2a13bf",
+      "bytes": 119517,
+      "file": "tests/Conformance/Corrections/SPEC-013/endpoint/schemas/openapi.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations must admit specurl; binary MQTT correlation_data is base64 not a URI template; MQTT content_type is a MIME string with parameters rather than a symbol/URI. Regenerate all dependent schemas without changing Core scalar rules.",
+      "testIds": [
+        "MessageBinaryAndHeaderTests",
+        "tools/test_implementation_message_header_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-013",
+      "path": "cloudevents/schemas/document-schema.json",
+      "originalSha256": "40520617547a5f22bc8fc0a6109d1ae5aab234c6b9a3204d88273d841478d798",
+      "predecessorSha256": "cbbabb3d6204b1a5634c180f1583e9aa12cfed0de0c16bcd4d11731bb291282d",
+      "predecessorCase": "SPEC-012",
+      "sha256": "6dc46ff8d583a979bd7b9a48fae5db8a3ad1f1dcc1cbde95c8102875354bc400",
+      "bytes": 54996,
+      "file": "tests/Conformance/Corrections/SPEC-013/cloudevents/schemas/document-schema.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations must admit specurl; binary MQTT correlation_data is base64 not a URI template; MQTT content_type is a MIME string with parameters rather than a symbol/URI. Regenerate all dependent schemas without changing Core scalar rules.",
+      "testIds": [
+        "MessageBinaryAndHeaderTests",
+        "tools/test_implementation_message_header_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-013",
+      "path": "cloudevents/schemas/document-schema.struct.json",
+      "originalSha256": "a15d7ad12b9b78d9d5dc7868592a56e2fe7c53328c892b87eccf403529d8f868",
+      "predecessorSha256": "1728de6a5ce76d698c8b67e1c5de05c81be3dab9d3eda55be55c981535af1888",
+      "predecessorCase": "SPEC-012",
+      "sha256": "1728de6a5ce76d698c8b67e1c5de05c81be3dab9d3eda55be55c981535af1888",
+      "bytes": 28974,
+      "file": "tests/Conformance/Corrections/SPEC-013/cloudevents/schemas/document-schema.struct.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations must admit specurl; binary MQTT correlation_data is base64 not a URI template; MQTT content_type is a MIME string with parameters rather than a symbol/URI. Regenerate all dependent schemas without changing Core scalar rules.",
+      "testIds": [
+        "MessageBinaryAndHeaderTests",
+        "tools/test_implementation_message_header_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-013",
+      "path": "cloudevents/schemas/document-schema.avsc",
+      "originalSha256": "fe956b12106f25e03cc2f8c27c41b7d062540a843de496bf22bdfd535d6d1a9a",
+      "predecessorSha256": "143408abfa03ba77def5e03a094762111a0583bb28e902e08a26f04b843e7196",
+      "predecessorCase": "SPEC-012",
+      "sha256": "d751dc0aaef583d39fd96facc92adf87a245ad356dac805d0124376d11e5200e",
+      "bytes": 96354,
+      "file": "tests/Conformance/Corrections/SPEC-013/cloudevents/schemas/document-schema.avsc",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations must admit specurl; binary MQTT correlation_data is base64 not a URI template; MQTT content_type is a MIME string with parameters rather than a symbol/URI. Regenerate all dependent schemas without changing Core scalar rules.",
+      "testIds": [
+        "MessageBinaryAndHeaderTests",
+        "tools/test_implementation_message_header_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-013",
+      "path": "cloudevents/schemas/openapi.json",
+      "originalSha256": "84586d1e008e7c33290f2ce74169116b590b8d1d464384570e77d49236e5fc83",
+      "predecessorSha256": "f09c3b11c630865d6a22b42c4e05f45ad164bbbf3be67db907cb6993cf39ed14",
+      "predecessorCase": "SPEC-012",
+      "sha256": "f09c3b11c630865d6a22b42c4e05f45ad164bbbf3be67db907cb6993cf39ed14",
+      "bytes": 166615,
+      "file": "tests/Conformance/Corrections/SPEC-013/cloudevents/schemas/openapi.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations must admit specurl; binary MQTT correlation_data is base64 not a URI template; MQTT content_type is a MIME string with parameters rather than a symbol/URI. Regenerate all dependent schemas without changing Core scalar rules.",
+      "testIds": [
+        "MessageBinaryAndHeaderTests",
+        "tools/test_implementation_message_header_regressions.py"
+      ]
+    },
+    {
+      "case": "SPEC-014",
+      "path": "workingdrafts/bindings/mapping.md",
+      "originalSha256": "8a456fb985e7881f53146bbb5651af01b8c0b8024e82547cfdab60a4f877cbca",
+      "predecessorSha256": "8a456fb985e7881f53146bbb5651af01b8c0b8024e82547cfdab60a4f877cbca",
+      "predecessorCase": null,
+      "sha256": "9626dac7ff9ad274fd5c2b39d7261aa5ef9dbef79633adfc8776f5e97ad890a0",
+      "bytes": 36166,
+      "file": "tests/Conformance/Corrections/SPEC-014/workingdrafts/bindings/mapping.md",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Directory mapping must preserve model-admitted ordinary Document-like field names for hasdocument:false. Apply detachment only when the Document feature exists; retain model checks, no-acquisition and unsupported Document reads.",
+      "testIds": [
+        "DirectoryMappingMetadataOnlyFieldsTests",
+        "tools/test_implementation_metadata_only_documents.py"
+      ]
+    },
+    {
+      "case": "SPEC-014",
+      "path": "tools/mapping_examples.py",
+      "originalSha256": "f2424aa0881e00655575aec9d74595f8f288ae08a623ef4d343969366051be1f",
+      "predecessorSha256": "2bc75be9747c8b512f54aacf2c65494d1057f4bdac0b8314247a1fa91c4d133f",
+      "predecessorCase": "SPEC-005",
+      "sha256": "54106cbfe38dc7989f3db47f1b4777f42a8284e7e55c52736e784268f6363ade",
+      "bytes": 60940,
+      "file": "tests/Conformance/Corrections/SPEC-014/tools/mapping_examples.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Directory mapping must preserve model-admitted ordinary Document-like field names for hasdocument:false. Apply detachment only when the Document feature exists; retain model checks, no-acquisition and unsupported Document reads.",
+      "testIds": [
+        "DirectoryMappingMetadataOnlyFieldsTests",
+        "tools/test_implementation_metadata_only_documents.py"
+      ]
+    },
+    {
+      "case": "SPEC-014",
+      "path": "tools/test_implementation_metadata_only_documents.py",
+      "originalSha256": null,
+      "predecessorSha256": null,
+      "predecessorCase": null,
+      "sha256": "68a07cec0f5cbfb733864e462ee0117f96dd375a5932139765f372c797bad79d",
+      "bytes": 1390,
+      "file": "tests/Conformance/Corrections/SPEC-014/tools/test_implementation_metadata_only_documents.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Directory mapping must preserve model-admitted ordinary Document-like field names for hasdocument:false. Apply detachment only when the Document feature exists; retain model checks, no-acquisition and unsupported Document reads.",
+      "testIds": [
+        "DirectoryMappingMetadataOnlyFieldsTests",
+        "tools/test_implementation_metadata_only_documents.py"
+      ]
+    },
+    {
+      "case": "SPEC-014",
+      "path": "docs/implementation-feedback.md",
+      "originalSha256": null,
+      "predecessorSha256": "34d3b198c011a51008e82ad5275301cf9d9bc9ba228556094eb0091289965095",
+      "predecessorCase": "SPEC-013",
+      "sha256": "212af0ad09fbee263a2c41e933a821a573c16115045593002317915d6292c133",
+      "bytes": 15744,
+      "file": "tests/Conformance/Corrections/SPEC-014/docs/implementation-feedback.md",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Directory mapping must preserve model-admitted ordinary Document-like field names for hasdocument:false. Apply detachment only when the Document feature exists; retain model checks, no-acquisition and unsupported Document reads.",
+      "testIds": [
+        "DirectoryMappingMetadataOnlyFieldsTests",
+        "tools/test_implementation_metadata_only_documents.py"
+      ]
+    },
+    {
+      "case": "SPEC-015",
+      "path": "workingdrafts/bindings/oci.md",
+      "originalSha256": "3baa6cf9820d0aff7630e23cd6fa52090dda248906854ee9256016b19880a26f",
+      "predecessorSha256": "6743373b66bff3402fb5f8cd735d35a77da17d7acc18eb3f0b954ed7b80ec0ad",
+      "predecessorCase": "SPEC-005",
+      "sha256": "746ebab2c2a621826543115a6b60248eba8b4791ec4a9272474a18d956c16411",
+      "bytes": 44988,
+      "file": "tests/Conformance/Corrections/SPEC-015/workingdrafts/bindings/oci.md",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "OCI must preserve model-admitted metadata-only singular/base64/url names, explicit nulls and required defaults instead of rejecting or dropping them. Apply Document field and locator restrictions only to document-bearing Resource types.",
+      "testIds": [
+        "OciMetadataOnlyFieldsTests",
+        "tools/test_implementation_oci_metadata_only_fields.py"
+      ]
+    },
+    {
+      "case": "SPEC-015",
+      "path": "tools/oci_examples.py",
+      "originalSha256": "f65861e11332b8a61441ee247a33d3cd3193820bfe875da9624af63e04110d00",
+      "predecessorSha256": "1015ade0472e624b0de8ce0d83441d2a3868bc3212680ccfe45b7e1add4cf8b4",
+      "predecessorCase": "SPEC-005",
+      "sha256": "b2eeccf549d44bbd48722023ef798326b38f9e1945a47615ad52428fef13dd33",
+      "bytes": 81577,
+      "file": "tests/Conformance/Corrections/SPEC-015/tools/oci_examples.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "OCI must preserve model-admitted metadata-only singular/base64/url names, explicit nulls and required defaults instead of rejecting or dropping them. Apply Document field and locator restrictions only to document-bearing Resource types.",
+      "testIds": [
+        "OciMetadataOnlyFieldsTests",
+        "tools/test_implementation_oci_metadata_only_fields.py"
+      ]
+    },
+    {
+      "case": "SPEC-015",
+      "path": "tools/test_implementation_oci_metadata_only_fields.py",
+      "originalSha256": null,
+      "predecessorSha256": null,
+      "predecessorCase": null,
+      "sha256": "e0188cfe380c87a13e91b7103c1d031169b00abbc08b588619a42ed12805c83b",
+      "bytes": 3094,
+      "file": "tests/Conformance/Corrections/SPEC-015/tools/test_implementation_oci_metadata_only_fields.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "OCI must preserve model-admitted metadata-only singular/base64/url names, explicit nulls and required defaults instead of rejecting or dropping them. Apply Document field and locator restrictions only to document-bearing Resource types.",
+      "testIds": [
+        "OciMetadataOnlyFieldsTests",
+        "tools/test_implementation_oci_metadata_only_fields.py"
+      ]
+    },
+    {
+      "case": "SPEC-015",
+      "path": "docs/implementation-feedback.md",
+      "originalSha256": null,
+      "predecessorSha256": "212af0ad09fbee263a2c41e933a821a573c16115045593002317915d6292c133",
+      "predecessorCase": "SPEC-014",
+      "sha256": "7cae8a24d042bbe2074b9175ba1727e96bacbbc416b1d3b1c8236af04e87e3d4",
+      "bytes": 16274,
+      "file": "tests/Conformance/Corrections/SPEC-015/docs/implementation-feedback.md",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "OCI must preserve model-admitted metadata-only singular/base64/url names, explicit nulls and required defaults instead of rejecting or dropping them. Apply Document field and locator restrictions only to document-bearing Resource types.",
+      "testIds": [
+        "OciMetadataOnlyFieldsTests",
+        "tools/test_implementation_oci_metadata_only_fields.py"
+      ]
+    },
+    {
+      "case": "SPEC-016",
+      "path": "tools/test_implementation_oci_metadata_only_fields.py",
+      "originalSha256": null,
+      "predecessorSha256": "e0188cfe380c87a13e91b7103c1d031169b00abbc08b588619a42ed12805c83b",
+      "predecessorCase": "SPEC-015",
+      "sha256": "9f24901a3a8050622bcb4d1adec9ac20a1de934cf668db01ef7430ae1580c584",
+      "bytes": 3258,
+      "file": "tests/Conformance/Corrections/SPEC-016/tools/test_implementation_oci_metadata_only_fields.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Test-only OCI successor: preserve all three negative field controls as individual unittest methods because pytest 9 counts successful subtests without emitting matching XML testcase records. Keep exact fail-closed oracle accounting unchanged.",
+      "testIds": [
+        "tools/test_implementation_oci_metadata_only_fields.py"
+      ]
+    },
+    {
+      "case": "SPEC-016",
+      "path": "docs/implementation-feedback.md",
+      "originalSha256": null,
+      "predecessorSha256": "7cae8a24d042bbe2074b9175ba1727e96bacbbc416b1d3b1c8236af04e87e3d4",
+      "predecessorCase": "SPEC-015",
+      "sha256": "2be213e35dac6c417fe3e201f0acf4bf30e4ab9873ccf6c69f68f5667cf53283",
+      "bytes": 16701,
+      "file": "tests/Conformance/Corrections/SPEC-016/docs/implementation-feedback.md",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Test-only OCI successor: preserve all three negative field controls as individual unittest methods because pytest 9 counts successful subtests without emitting matching XML testcase records. Keep exact fail-closed oracle accounting unchanged.",
+      "testIds": [
+        "tools/test_implementation_oci_metadata_only_fields.py"
+      ]
+    },
+    {
+      "case": "SPEC-017",
+      "path": "workingdrafts/models/registry/spec.md",
+      "originalSha256": "cb7121d5797b50dee58522b1695c764ae8cfd2985496d859b27bd817aabff01d",
+      "predecessorSha256": "cb7121d5797b50dee58522b1695c764ae8cfd2985496d859b27bd817aabff01d",
+      "predecessorCase": null,
+      "sha256": "ec61684ca1efaf5847279e15ce77f1038fe004d7bf2bba9429f65854d624d5b6",
+      "bytes": 43016,
+      "file": "tests/Conformance/Corrections/SPEC-017/workingdrafts/models/registry/spec.md",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Catalog priority is Core uinteger mathematical value, not an unsigned-only JSON lexeme. Clarify integer-valued decimal/exponent/negative-zero admission, preserve exact ordering and tokens, and align independent procedural checks without relaxing fractional/negative/nonfinite/wrong-kind rejection.",
+      "testIds": [
+        "CatalogPriorityValueTests",
+        "tools/test_implementation_catalog_priority_values.py"
+      ]
+    },
+    {
+      "case": "SPEC-017",
+      "path": "tools/federation_examples.py",
+      "originalSha256": "a489c9e7b755a5e1b9e86b0d9328262edb9579e513dbe64a09039403338286aa",
+      "predecessorSha256": "c3e2b27218fbf83a0c1ef964fc75e41eb9961a4955a0f9f7b3c6420ae7b85c2c",
+      "predecessorCase": "SPEC-005",
+      "sha256": "3c9cf376e3f01b71703461f78132d5e0074b0b5051a67a3dfd727e5d89c11c52",
+      "bytes": 13920,
+      "file": "tests/Conformance/Corrections/SPEC-017/tools/federation_examples.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Catalog priority is Core uinteger mathematical value, not an unsigned-only JSON lexeme. Clarify integer-valued decimal/exponent/negative-zero admission, preserve exact ordering and tokens, and align independent procedural checks without relaxing fractional/negative/nonfinite/wrong-kind rejection.",
+      "testIds": [
+        "CatalogPriorityValueTests",
+        "tools/test_implementation_catalog_priority_values.py"
+      ]
+    },
+    {
+      "case": "SPEC-017",
+      "path": "tools/test_federation_examples.py",
+      "originalSha256": "76c8ca8fd7dc42b437b0a7bf5780fa39bee944afdb4177ed45304e2105025e4a",
+      "predecessorSha256": "9f891fbe4021ba0736a0e15c045defa573cae6dc48d73ae65a4520cae4a433af",
+      "predecessorCase": "SPEC-004",
+      "sha256": "30811bf58de4d6a28a3658ce9ee72f0e99074fcfaa26e4971dc396ae5af08c79",
+      "bytes": 51865,
+      "file": "tests/Conformance/Corrections/SPEC-017/tools/test_federation_examples.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Catalog priority is Core uinteger mathematical value, not an unsigned-only JSON lexeme. Clarify integer-valued decimal/exponent/negative-zero admission, preserve exact ordering and tokens, and align independent procedural checks without relaxing fractional/negative/nonfinite/wrong-kind rejection.",
+      "testIds": [
+        "CatalogPriorityValueTests",
+        "tools/test_implementation_catalog_priority_values.py"
+      ]
+    },
+    {
+      "case": "SPEC-017",
+      "path": "tools/test_implementation_catalog_priority_values.py",
+      "originalSha256": null,
+      "predecessorSha256": null,
+      "predecessorCase": null,
+      "sha256": "083f3ce75c8c34540c10170ab78bc031a1cc7a6891b7e56a5326e3fe9e2dad0b",
+      "bytes": 1837,
+      "file": "tests/Conformance/Corrections/SPEC-017/tools/test_implementation_catalog_priority_values.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Catalog priority is Core uinteger mathematical value, not an unsigned-only JSON lexeme. Clarify integer-valued decimal/exponent/negative-zero admission, preserve exact ordering and tokens, and align independent procedural checks without relaxing fractional/negative/nonfinite/wrong-kind rejection.",
+      "testIds": [
+        "CatalogPriorityValueTests",
+        "tools/test_implementation_catalog_priority_values.py"
+      ]
+    },
+    {
+      "case": "SPEC-017",
+      "path": "docs/implementation-feedback.md",
+      "originalSha256": null,
+      "predecessorSha256": "2be213e35dac6c417fe3e201f0acf4bf30e4ab9873ccf6c69f68f5667cf53283",
+      "predecessorCase": "SPEC-016",
+      "sha256": "9f42f5551a0931c861d873ab47df6120bf174c038f60d6bdb50618ab2d17a0ee",
+      "bytes": 17596,
+      "file": "tests/Conformance/Corrections/SPEC-017/docs/implementation-feedback.md",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Catalog priority is Core uinteger mathematical value, not an unsigned-only JSON lexeme. Clarify integer-valued decimal/exponent/negative-zero admission, preserve exact ordering and tokens, and align independent procedural checks without relaxing fractional/negative/nonfinite/wrong-kind rejection.",
+      "testIds": [
+        "CatalogPriorityValueTests",
+        "tools/test_implementation_catalog_priority_values.py"
+      ]
+    },
+    {
+      "case": "SPEC-018",
+      "path": "tools/test_registry_model.py",
+      "originalSha256": "8fa9613506958b7bb14f15cdf6aa2be72ef84d27745c15947931eee0395613c7",
+      "predecessorSha256": "8fa9613506958b7bb14f15cdf6aa2be72ef84d27745c15947931eee0395613c7",
+      "predecessorCase": null,
+      "sha256": "1374ca001ba719d11503ca7c53d276e5dc6404588eec42684eb3b3f9286ec542",
+      "bytes": 63406,
+      "file": "tests/Conformance/Corrections/SPEC-018/tools/test_registry_model.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Test-only completion of SPEC-017: the Registry generated-shape/resolvable-entry vector must expect successful 0.0 priority selection under the clarified Core uinteger value semantics. Preserve its shape, selected-object and nonmutation assertions.",
+      "testIds": [
+        "tools/test_registry_model.py::test_registry_resolvable_entry_requires_supported_valid_advertisement"
+      ]
+    },
+    {
+      "case": "SPEC-018",
+      "path": "docs/implementation-feedback.md",
+      "originalSha256": null,
+      "predecessorSha256": "9f42f5551a0931c861d873ab47df6120bf174c038f60d6bdb50618ab2d17a0ee",
+      "predecessorCase": "SPEC-017",
+      "sha256": "c194aff23164cf8a43a016a6c1c099ba150c6909d7a2f467ea9c99ad9b05068b",
+      "bytes": 17978,
+      "file": "tests/Conformance/Corrections/SPEC-018/docs/implementation-feedback.md",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Test-only completion of SPEC-017: the Registry generated-shape/resolvable-entry vector must expect successful 0.0 priority selection under the clarified Core uinteger value semantics. Preserve its shape, selected-object and nonmutation assertions.",
+      "testIds": [
+        "tools/test_registry_model.py::test_registry_resolvable_entry_requires_supported_valid_advertisement"
+      ]
+    },
+    {
+      "case": "SPEC-019",
+      "path": "message/model.json",
+      "originalSha256": "dfc5028ec32b871a70e67803d08ccb1bec4bc4527a626cf396069e5963cbefbc",
+      "predecessorSha256": "c37d862488b298e677b6129a5b68be33536eb856b199ea38326f999274612435",
+      "predecessorCase": "SPEC-013",
+      "sha256": "f9571472ca35b4fbdf54891357cdc9ea34ce6ea8ed3eb94af5d92d32fe613a1c",
+      "bytes": 21123,
+      "file": "tests/Conformance/Corrections/SPEC-019/message/model.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations require type and required fields, shared domain defaults and null-aware item boundaries; constrain refinements to native string/explicit Kafka byte representations without implicit coercion. Preserve array/map kinds and regenerate dependent schemas.",
+      "testIds": [
+        "MessageHeaderDeclarationTests",
+        "tools/test_implementation_message_header_types.py"
+      ]
+    },
+    {
+      "case": "SPEC-019",
+      "path": "message/spec.md",
+      "originalSha256": "9f15286dbe7bcb5a42cd134f519a74b6c4613f2b4eaa46939a4bff70362b2ac6",
+      "predecessorSha256": "53d61b539c2583b47d00e4094c50dd25f3089b3d53804bc4aa59ee79f8b0681b",
+      "predecessorCase": "SPEC-013",
+      "sha256": "2bb0b8743bfea835a37c134e67bfbd1cb996fc79e686dfa18346130781925988",
+      "bytes": 63837,
+      "file": "tests/Conformance/Corrections/SPEC-019/message/spec.md",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations require type and required fields, shared domain defaults and null-aware item boundaries; constrain refinements to native string/explicit Kafka byte representations without implicit coercion. Preserve array/map kinds and regenerate dependent schemas.",
+      "testIds": [
+        "MessageHeaderDeclarationTests",
+        "tools/test_implementation_message_header_types.py"
+      ]
+    },
+    {
+      "case": "SPEC-019",
+      "path": "tools/test_implementation_message_header_types.py",
+      "originalSha256": null,
+      "predecessorSha256": null,
+      "predecessorCase": null,
+      "sha256": "f66b69d7f7861745d3994b6fadd57749f3acd56fba4a45a1b4ad00b9939b4104",
+      "bytes": 1305,
+      "file": "tests/Conformance/Corrections/SPEC-019/tools/test_implementation_message_header_types.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations require type and required fields, shared domain defaults and null-aware item boundaries; constrain refinements to native string/explicit Kafka byte representations without implicit coercion. Preserve array/map kinds and regenerate dependent schemas.",
+      "testIds": [
+        "MessageHeaderDeclarationTests",
+        "tools/test_implementation_message_header_types.py"
+      ]
+    },
+    {
+      "case": "SPEC-019",
+      "path": "tools/test_implementation_message_header_regressions.py",
+      "originalSha256": null,
+      "predecessorSha256": "32c6726400904493f4e37b9a919c9e846c3aea9d8a96686ad68bd075b592c084",
+      "predecessorCase": "SPEC-013",
+      "sha256": "c2a6cfe3f611e71147f3b0e74c844f1271d44387bfbb663ad63fd60cf6c4496e",
+      "bytes": 1588,
+      "file": "tests/Conformance/Corrections/SPEC-019/tools/test_implementation_message_header_regressions.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations require type and required fields, shared domain defaults and null-aware item boundaries; constrain refinements to native string/explicit Kafka byte representations without implicit coercion. Preserve array/map kinds and regenerate dependent schemas.",
+      "testIds": [
+        "MessageHeaderDeclarationTests",
+        "tools/test_implementation_message_header_types.py"
+      ]
+    },
+    {
+      "case": "SPEC-019",
+      "path": "docs/implementation-feedback.md",
+      "originalSha256": null,
+      "predecessorSha256": "c194aff23164cf8a43a016a6c1c099ba150c6909d7a2f467ea9c99ad9b05068b",
+      "predecessorCase": "SPEC-018",
+      "sha256": "5ac8a166520873f465760aec622d85c5ff929786beb42588e9343f77e9e00e53",
+      "bytes": 18983,
+      "file": "tests/Conformance/Corrections/SPEC-019/docs/implementation-feedback.md",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations require type and required fields, shared domain defaults and null-aware item boundaries; constrain refinements to native string/explicit Kafka byte representations without implicit coercion. Preserve array/map kinds and regenerate dependent schemas.",
+      "testIds": [
+        "MessageHeaderDeclarationTests",
+        "tools/test_implementation_message_header_types.py"
+      ]
+    },
+    {
+      "case": "SPEC-019",
+      "path": "message/schemas/document-schema.json",
+      "originalSha256": "890d58b9452a2958489bb5f02d5ec56f52fbd3833507c2104e91507f3487bed4",
+      "predecessorSha256": "bb4d9dff06e274104bb23dfe91be0a08eb722f51578f6fce418292eabe5b6463",
+      "predecessorCase": "SPEC-013",
+      "sha256": "9b88b004ff547b4d678661824ef64cfbec6e7a28238edbbabfe91c3ef8db0570",
+      "bytes": 28869,
+      "file": "tests/Conformance/Corrections/SPEC-019/message/schemas/document-schema.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations require type and required fields, shared domain defaults and null-aware item boundaries; constrain refinements to native string/explicit Kafka byte representations without implicit coercion. Preserve array/map kinds and regenerate dependent schemas.",
+      "testIds": [
+        "MessageHeaderDeclarationTests",
+        "tools/test_implementation_message_header_types.py"
+      ]
+    },
+    {
+      "case": "SPEC-019",
+      "path": "message/schemas/document-schema.struct.json",
+      "originalSha256": "364c4d78e218413b97f2f372641626891a40ae5680aa6b941977d1d14daf13ef",
+      "predecessorSha256": "94483da5a9663fcd0978fe64bd7d86cc7ff57188babe464a9f312df6726bdaf0",
+      "predecessorCase": "SPEC-013",
+      "sha256": "94483da5a9663fcd0978fe64bd7d86cc7ff57188babe464a9f312df6726bdaf0",
+      "bytes": 15453,
+      "file": "tests/Conformance/Corrections/SPEC-019/message/schemas/document-schema.struct.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations require type and required fields, shared domain defaults and null-aware item boundaries; constrain refinements to native string/explicit Kafka byte representations without implicit coercion. Preserve array/map kinds and regenerate dependent schemas.",
+      "testIds": [
+        "MessageHeaderDeclarationTests",
+        "tools/test_implementation_message_header_types.py"
+      ]
+    },
+    {
+      "case": "SPEC-019",
+      "path": "message/schemas/document-schema.avsc",
+      "originalSha256": "18f1b02fd49b53815668c245758982cd717236dc991660186fc9a748b99bd98f",
+      "predecessorSha256": "bdf5915c92c1e8629ce0b2581897a601315bb4fed24c95305def447457d068f0",
+      "predecessorCase": "SPEC-013",
+      "sha256": "8f514efa8675b26f8ce6c58c1397be8f4d57eec1097cac503f53ac0ede93d103",
+      "bytes": 51441,
+      "file": "tests/Conformance/Corrections/SPEC-019/message/schemas/document-schema.avsc",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations require type and required fields, shared domain defaults and null-aware item boundaries; constrain refinements to native string/explicit Kafka byte representations without implicit coercion. Preserve array/map kinds and regenerate dependent schemas.",
+      "testIds": [
+        "MessageHeaderDeclarationTests",
+        "tools/test_implementation_message_header_types.py"
+      ]
+    },
+    {
+      "case": "SPEC-019",
+      "path": "message/schemas/openapi.json",
+      "originalSha256": "c15c4af364697737ffac552d05f90ce9ef0a2b5862f58d545c7ab7ea9109c00d",
+      "predecessorSha256": "ba83363ef298bef42155efe05fe626eabc28727fdba712ff95c1bff6ab58f217",
+      "predecessorCase": "SPEC-013",
+      "sha256": "17841be27e1f6bbc23d69f87e88b0074242b50f385686bbb9021bd661676d5d6",
+      "bytes": 89421,
+      "file": "tests/Conformance/Corrections/SPEC-019/message/schemas/openapi.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations require type and required fields, shared domain defaults and null-aware item boundaries; constrain refinements to native string/explicit Kafka byte representations without implicit coercion. Preserve array/map kinds and regenerate dependent schemas.",
+      "testIds": [
+        "MessageHeaderDeclarationTests",
+        "tools/test_implementation_message_header_types.py"
+      ]
+    },
+    {
+      "case": "SPEC-019",
+      "path": "endpoint/schemas/document-schema.json",
+      "originalSha256": "ef05a5511439a4f9008fa3f259f294321b126a774b6f0e67acb9f83654d1324c",
+      "predecessorSha256": "f25eca0a161bc456d54849cc98cb1fdfd8ed08863c546aa18b1723f70617c704",
+      "predecessorCase": "SPEC-013",
+      "sha256": "4d8ad1655ac62630aab26597a42b8fdb8589c50319840e4a903420e6de51d263",
+      "bytes": 40465,
+      "file": "tests/Conformance/Corrections/SPEC-019/endpoint/schemas/document-schema.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations require type and required fields, shared domain defaults and null-aware item boundaries; constrain refinements to native string/explicit Kafka byte representations without implicit coercion. Preserve array/map kinds and regenerate dependent schemas.",
+      "testIds": [
+        "MessageHeaderDeclarationTests",
+        "tools/test_implementation_message_header_types.py"
+      ]
+    },
+    {
+      "case": "SPEC-019",
+      "path": "endpoint/schemas/document-schema.struct.json",
+      "originalSha256": "c5612c7fc56c940be620534112854db5c58bb9fe1f63a9f963553c200aa02926",
+      "predecessorSha256": "779937d42105d5118cded0f78f7c1dc085bc64961aaf01b3d5bb1cf37ea2fe18",
+      "predecessorCase": "SPEC-013",
+      "sha256": "779937d42105d5118cded0f78f7c1dc085bc64961aaf01b3d5bb1cf37ea2fe18",
+      "bytes": 20194,
+      "file": "tests/Conformance/Corrections/SPEC-019/endpoint/schemas/document-schema.struct.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations require type and required fields, shared domain defaults and null-aware item boundaries; constrain refinements to native string/explicit Kafka byte representations without implicit coercion. Preserve array/map kinds and regenerate dependent schemas.",
+      "testIds": [
+        "MessageHeaderDeclarationTests",
+        "tools/test_implementation_message_header_types.py"
+      ]
+    },
+    {
+      "case": "SPEC-019",
+      "path": "endpoint/schemas/document-schema.avsc",
+      "originalSha256": "311aeb670c26e85ea8800034c4f4aa5971dc0fbf377f8e9d41cb5cc9c3be041e",
+      "predecessorSha256": "ff5e51373e03e82809573c50606fb139823d2403cc6f3a8b451745f8af30110f",
+      "predecessorCase": "SPEC-013",
+      "sha256": "39c70b9203e4764480148f2088524af427ee19da052b11867cdf2c7128ca65ff",
+      "bytes": 65427,
+      "file": "tests/Conformance/Corrections/SPEC-019/endpoint/schemas/document-schema.avsc",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations require type and required fields, shared domain defaults and null-aware item boundaries; constrain refinements to native string/explicit Kafka byte representations without implicit coercion. Preserve array/map kinds and regenerate dependent schemas.",
+      "testIds": [
+        "MessageHeaderDeclarationTests",
+        "tools/test_implementation_message_header_types.py"
+      ]
+    },
+    {
+      "case": "SPEC-019",
+      "path": "endpoint/schemas/openapi.json",
+      "originalSha256": "20a2df1b5e3bcda830e2c9f56313a7413b68ea307e610b6d3c6c3cabca30c4cd",
+      "predecessorSha256": "0ee73c9cba15b1e2d179635484884362e33c82aab1f296ce705edcebce2a13bf",
+      "predecessorCase": "SPEC-013",
+      "sha256": "0ee73c9cba15b1e2d179635484884362e33c82aab1f296ce705edcebce2a13bf",
+      "bytes": 119517,
+      "file": "tests/Conformance/Corrections/SPEC-019/endpoint/schemas/openapi.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations require type and required fields, shared domain defaults and null-aware item boundaries; constrain refinements to native string/explicit Kafka byte representations without implicit coercion. Preserve array/map kinds and regenerate dependent schemas.",
+      "testIds": [
+        "MessageHeaderDeclarationTests",
+        "tools/test_implementation_message_header_types.py"
+      ]
+    },
+    {
+      "case": "SPEC-019",
+      "path": "cloudevents/schemas/document-schema.json",
+      "originalSha256": "40520617547a5f22bc8fc0a6109d1ae5aab234c6b9a3204d88273d841478d798",
+      "predecessorSha256": "6dc46ff8d583a979bd7b9a48fae5db8a3ad1f1dcc1cbde95c8102875354bc400",
+      "predecessorCase": "SPEC-013",
+      "sha256": "753303b295b867141517a0671f3f05c13937103b78379976c13604cdc0624513",
+      "bytes": 51767,
+      "file": "tests/Conformance/Corrections/SPEC-019/cloudevents/schemas/document-schema.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations require type and required fields, shared domain defaults and null-aware item boundaries; constrain refinements to native string/explicit Kafka byte representations without implicit coercion. Preserve array/map kinds and regenerate dependent schemas.",
+      "testIds": [
+        "MessageHeaderDeclarationTests",
+        "tools/test_implementation_message_header_types.py"
+      ]
+    },
+    {
+      "case": "SPEC-019",
+      "path": "cloudevents/schemas/document-schema.struct.json",
+      "originalSha256": "a15d7ad12b9b78d9d5dc7868592a56e2fe7c53328c892b87eccf403529d8f868",
+      "predecessorSha256": "1728de6a5ce76d698c8b67e1c5de05c81be3dab9d3eda55be55c981535af1888",
+      "predecessorCase": "SPEC-013",
+      "sha256": "1728de6a5ce76d698c8b67e1c5de05c81be3dab9d3eda55be55c981535af1888",
+      "bytes": 28974,
+      "file": "tests/Conformance/Corrections/SPEC-019/cloudevents/schemas/document-schema.struct.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations require type and required fields, shared domain defaults and null-aware item boundaries; constrain refinements to native string/explicit Kafka byte representations without implicit coercion. Preserve array/map kinds and regenerate dependent schemas.",
+      "testIds": [
+        "MessageHeaderDeclarationTests",
+        "tools/test_implementation_message_header_types.py"
+      ]
+    },
+    {
+      "case": "SPEC-019",
+      "path": "cloudevents/schemas/document-schema.avsc",
+      "originalSha256": "fe956b12106f25e03cc2f8c27c41b7d062540a843de496bf22bdfd535d6d1a9a",
+      "predecessorSha256": "d751dc0aaef583d39fd96facc92adf87a245ad356dac805d0124376d11e5200e",
+      "predecessorCase": "SPEC-013",
+      "sha256": "7dced4538ffcf19f5d5823622de11f3e5075b0dee8c053b17f95ef625b0bcb47",
+      "bytes": 86157,
+      "file": "tests/Conformance/Corrections/SPEC-019/cloudevents/schemas/document-schema.avsc",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations require type and required fields, shared domain defaults and null-aware item boundaries; constrain refinements to native string/explicit Kafka byte representations without implicit coercion. Preserve array/map kinds and regenerate dependent schemas.",
+      "testIds": [
+        "MessageHeaderDeclarationTests",
+        "tools/test_implementation_message_header_types.py"
+      ]
+    },
+    {
+      "case": "SPEC-019",
+      "path": "cloudevents/schemas/openapi.json",
+      "originalSha256": "84586d1e008e7c33290f2ce74169116b590b8d1d464384570e77d49236e5fc83",
+      "predecessorSha256": "f09c3b11c630865d6a22b42c4e05f45ad164bbbf3be67db907cb6993cf39ed14",
+      "predecessorCase": "SPEC-013",
+      "sha256": "f09c3b11c630865d6a22b42c4e05f45ad164bbbf3be67db907cb6993cf39ed14",
+      "bytes": 166615,
+      "file": "tests/Conformance/Corrections/SPEC-019/cloudevents/schemas/openapi.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Common header declarations require type and required fields, shared domain defaults and null-aware item boundaries; constrain refinements to native string/explicit Kafka byte representations without implicit coercion. Preserve array/map kinds and regenerate dependent schemas.",
+      "testIds": [
+        "MessageHeaderDeclarationTests",
+        "tools/test_implementation_message_header_types.py"
+      ]
+    },
+    {
+      "case": "SPEC-020",
+      "path": "message/model.json",
+      "originalSha256": "dfc5028ec32b871a70e67803d08ccb1bec4bc4527a626cf396069e5963cbefbc",
+      "predecessorSha256": "f9571472ca35b4fbdf54891357cdc9ea34ce6ea8ed3eb94af5d92d32fe613a1c",
+      "predecessorCase": "SPEC-019",
+      "sha256": "0b72ea67304b040f7057ee0a924999a09d0a41605eff47ab196199278bd6e121",
+      "bytes": 20943,
+      "file": "tests/Conformance/Corrections/SPEC-020/message/model.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Core item shapes do not admit annotation fields: move Message header item documentation to the owning attribute while preserving the opaque declaration item and all constraints. Corrected compiled-model failure from SPEC-019; no Core language relaxation.",
+      "testIds": [
+        "MessageHeaderDeclarationTests"
+      ]
+    },
+    {
+      "case": "SPEC-020",
+      "path": "tools/test_implementation_message_header_types.py",
+      "originalSha256": null,
+      "predecessorSha256": "f66b69d7f7861745d3994b6fadd57749f3acd56fba4a45a1b4ad00b9939b4104",
+      "predecessorCase": "SPEC-019",
+      "sha256": "e1a7199ba97f1b3dac20547dc732292d68ee19c11def486cf7fd473cfa2d67dd",
+      "bytes": 1345,
+      "file": "tests/Conformance/Corrections/SPEC-020/tools/test_implementation_message_header_types.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Core item shapes do not admit annotation fields: move Message header item documentation to the owning attribute while preserving the opaque declaration item and all constraints. Corrected compiled-model failure from SPEC-019; no Core language relaxation.",
+      "testIds": [
+        "MessageHeaderDeclarationTests"
+      ]
+    },
+    {
+      "case": "SPEC-020",
+      "path": "tools/test_implementation_message_header_regressions.py",
+      "originalSha256": null,
+      "predecessorSha256": "c2a6cfe3f611e71147f3b0e74c844f1271d44387bfbb663ad63fd60cf6c4496e",
+      "predecessorCase": "SPEC-019",
+      "sha256": "bab66c84f2753e150aafda60aff5d0897805de4d4bb5900bade191cc3df99222",
+      "bytes": 1591,
+      "file": "tests/Conformance/Corrections/SPEC-020/tools/test_implementation_message_header_regressions.py",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Core item shapes do not admit annotation fields: move Message header item documentation to the owning attribute while preserving the opaque declaration item and all constraints. Corrected compiled-model failure from SPEC-019; no Core language relaxation.",
+      "testIds": [
+        "MessageHeaderDeclarationTests"
+      ]
+    },
+    {
+      "case": "SPEC-020",
+      "path": "message/schemas/document-schema.json",
+      "originalSha256": "890d58b9452a2958489bb5f02d5ec56f52fbd3833507c2104e91507f3487bed4",
+      "predecessorSha256": "9b88b004ff547b4d678661824ef64cfbec6e7a28238edbbabfe91c3ef8db0570",
+      "predecessorCase": "SPEC-019",
+      "sha256": "20837b82de1537976a7f6bf3fdbd707da50fd02a7b8b2e5b4449a4545042bc85",
+      "bytes": 28601,
+      "file": "tests/Conformance/Corrections/SPEC-020/message/schemas/document-schema.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Core item shapes do not admit annotation fields: move Message header item documentation to the owning attribute while preserving the opaque declaration item and all constraints. Corrected compiled-model failure from SPEC-019; no Core language relaxation.",
+      "testIds": [
+        "MessageHeaderDeclarationTests"
+      ]
+    },
+    {
+      "case": "SPEC-020",
+      "path": "message/schemas/document-schema.struct.json",
+      "originalSha256": "364c4d78e218413b97f2f372641626891a40ae5680aa6b941977d1d14daf13ef",
+      "predecessorSha256": "94483da5a9663fcd0978fe64bd7d86cc7ff57188babe464a9f312df6726bdaf0",
+      "predecessorCase": "SPEC-019",
+      "sha256": "94483da5a9663fcd0978fe64bd7d86cc7ff57188babe464a9f312df6726bdaf0",
+      "bytes": 15453,
+      "file": "tests/Conformance/Corrections/SPEC-020/message/schemas/document-schema.struct.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Core item shapes do not admit annotation fields: move Message header item documentation to the owning attribute while preserving the opaque declaration item and all constraints. Corrected compiled-model failure from SPEC-019; no Core language relaxation.",
+      "testIds": [
+        "MessageHeaderDeclarationTests"
+      ]
+    },
+    {
+      "case": "SPEC-020",
+      "path": "message/schemas/document-schema.avsc",
+      "originalSha256": "18f1b02fd49b53815668c245758982cd717236dc991660186fc9a748b99bd98f",
+      "predecessorSha256": "8f514efa8675b26f8ce6c58c1397be8f4d57eec1097cac503f53ac0ede93d103",
+      "predecessorCase": "SPEC-019",
+      "sha256": "641abe5f5634db04bcef3450626d855f773704dae859e2ca5f1e7fa9a3987cf6",
+      "bytes": 52565,
+      "file": "tests/Conformance/Corrections/SPEC-020/message/schemas/document-schema.avsc",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Core item shapes do not admit annotation fields: move Message header item documentation to the owning attribute while preserving the opaque declaration item and all constraints. Corrected compiled-model failure from SPEC-019; no Core language relaxation.",
+      "testIds": [
+        "MessageHeaderDeclarationTests"
+      ]
+    },
+    {
+      "case": "SPEC-020",
+      "path": "message/schemas/openapi.json",
+      "originalSha256": "c15c4af364697737ffac552d05f90ce9ef0a2b5862f58d545c7ab7ea9109c00d",
+      "predecessorSha256": "17841be27e1f6bbc23d69f87e88b0074242b50f385686bbb9021bd661676d5d6",
+      "predecessorCase": "SPEC-019",
+      "sha256": "05b19ab014ca380b8d30bd1b622b1cbff479087998f38366efa78cc1b5a632ae",
+      "bytes": 89217,
+      "file": "tests/Conformance/Corrections/SPEC-020/message/schemas/openapi.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Core item shapes do not admit annotation fields: move Message header item documentation to the owning attribute while preserving the opaque declaration item and all constraints. Corrected compiled-model failure from SPEC-019; no Core language relaxation.",
+      "testIds": [
+        "MessageHeaderDeclarationTests"
+      ]
+    },
+    {
+      "case": "SPEC-020",
+      "path": "endpoint/schemas/document-schema.json",
+      "originalSha256": "ef05a5511439a4f9008fa3f259f294321b126a774b6f0e67acb9f83654d1324c",
+      "predecessorSha256": "4d8ad1655ac62630aab26597a42b8fdb8589c50319840e4a903420e6de51d263",
+      "predecessorCase": "SPEC-019",
+      "sha256": "65a26ca67d28b46d8344dce5b3ed032a0037eed9bb7fe331217693344b93a1fc",
+      "bytes": 40197,
+      "file": "tests/Conformance/Corrections/SPEC-020/endpoint/schemas/document-schema.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Core item shapes do not admit annotation fields: move Message header item documentation to the owning attribute while preserving the opaque declaration item and all constraints. Corrected compiled-model failure from SPEC-019; no Core language relaxation.",
+      "testIds": [
+        "MessageHeaderDeclarationTests"
+      ]
+    },
+    {
+      "case": "SPEC-020",
+      "path": "endpoint/schemas/document-schema.struct.json",
+      "originalSha256": "c5612c7fc56c940be620534112854db5c58bb9fe1f63a9f963553c200aa02926",
+      "predecessorSha256": "779937d42105d5118cded0f78f7c1dc085bc64961aaf01b3d5bb1cf37ea2fe18",
+      "predecessorCase": "SPEC-019",
+      "sha256": "779937d42105d5118cded0f78f7c1dc085bc64961aaf01b3d5bb1cf37ea2fe18",
+      "bytes": 20194,
+      "file": "tests/Conformance/Corrections/SPEC-020/endpoint/schemas/document-schema.struct.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Core item shapes do not admit annotation fields: move Message header item documentation to the owning attribute while preserving the opaque declaration item and all constraints. Corrected compiled-model failure from SPEC-019; no Core language relaxation.",
+      "testIds": [
+        "MessageHeaderDeclarationTests"
+      ]
+    },
+    {
+      "case": "SPEC-020",
+      "path": "endpoint/schemas/document-schema.avsc",
+      "originalSha256": "311aeb670c26e85ea8800034c4f4aa5971dc0fbf377f8e9d41cb5cc9c3be041e",
+      "predecessorSha256": "39c70b9203e4764480148f2088524af427ee19da052b11867cdf2c7128ca65ff",
+      "predecessorCase": "SPEC-019",
+      "sha256": "efa2a899ce63614fc0986da11c9650a91e99c0dab8f8fd179421d4385284b9de",
+      "bytes": 66551,
+      "file": "tests/Conformance/Corrections/SPEC-020/endpoint/schemas/document-schema.avsc",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Core item shapes do not admit annotation fields: move Message header item documentation to the owning attribute while preserving the opaque declaration item and all constraints. Corrected compiled-model failure from SPEC-019; no Core language relaxation.",
+      "testIds": [
+        "MessageHeaderDeclarationTests"
+      ]
+    },
+    {
+      "case": "SPEC-020",
+      "path": "endpoint/schemas/openapi.json",
+      "originalSha256": "20a2df1b5e3bcda830e2c9f56313a7413b68ea307e610b6d3c6c3cabca30c4cd",
+      "predecessorSha256": "0ee73c9cba15b1e2d179635484884362e33c82aab1f296ce705edcebce2a13bf",
+      "predecessorCase": "SPEC-019",
+      "sha256": "0ee73c9cba15b1e2d179635484884362e33c82aab1f296ce705edcebce2a13bf",
+      "bytes": 119517,
+      "file": "tests/Conformance/Corrections/SPEC-020/endpoint/schemas/openapi.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Core item shapes do not admit annotation fields: move Message header item documentation to the owning attribute while preserving the opaque declaration item and all constraints. Corrected compiled-model failure from SPEC-019; no Core language relaxation.",
+      "testIds": [
+        "MessageHeaderDeclarationTests"
+      ]
+    },
+    {
+      "case": "SPEC-020",
+      "path": "cloudevents/schemas/document-schema.json",
+      "originalSha256": "40520617547a5f22bc8fc0a6109d1ae5aab234c6b9a3204d88273d841478d798",
+      "predecessorSha256": "753303b295b867141517a0671f3f05c13937103b78379976c13604cdc0624513",
+      "predecessorCase": "SPEC-019",
+      "sha256": "7cd7ce8bb4894917406cafdab7fbad6207f17cb93a732d3926cb176e33449877",
+      "bytes": 51499,
+      "file": "tests/Conformance/Corrections/SPEC-020/cloudevents/schemas/document-schema.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Core item shapes do not admit annotation fields: move Message header item documentation to the owning attribute while preserving the opaque declaration item and all constraints. Corrected compiled-model failure from SPEC-019; no Core language relaxation.",
+      "testIds": [
+        "MessageHeaderDeclarationTests"
+      ]
+    },
+    {
+      "case": "SPEC-020",
+      "path": "cloudevents/schemas/document-schema.struct.json",
+      "originalSha256": "a15d7ad12b9b78d9d5dc7868592a56e2fe7c53328c892b87eccf403529d8f868",
+      "predecessorSha256": "1728de6a5ce76d698c8b67e1c5de05c81be3dab9d3eda55be55c981535af1888",
+      "predecessorCase": "SPEC-019",
+      "sha256": "1728de6a5ce76d698c8b67e1c5de05c81be3dab9d3eda55be55c981535af1888",
+      "bytes": 28974,
+      "file": "tests/Conformance/Corrections/SPEC-020/cloudevents/schemas/document-schema.struct.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Core item shapes do not admit annotation fields: move Message header item documentation to the owning attribute while preserving the opaque declaration item and all constraints. Corrected compiled-model failure from SPEC-019; no Core language relaxation.",
+      "testIds": [
+        "MessageHeaderDeclarationTests"
+      ]
+    },
+    {
+      "case": "SPEC-020",
+      "path": "cloudevents/schemas/document-schema.avsc",
+      "originalSha256": "fe956b12106f25e03cc2f8c27c41b7d062540a843de496bf22bdfd535d6d1a9a",
+      "predecessorSha256": "7dced4538ffcf19f5d5823622de11f3e5075b0dee8c053b17f95ef625b0bcb47",
+      "predecessorCase": "SPEC-019",
+      "sha256": "93551b13e3f02c9ae6fb44d41df8d670199e6b422daa45351ded642c34305549",
+      "bytes": 87281,
+      "file": "tests/Conformance/Corrections/SPEC-020/cloudevents/schemas/document-schema.avsc",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Core item shapes do not admit annotation fields: move Message header item documentation to the owning attribute while preserving the opaque declaration item and all constraints. Corrected compiled-model failure from SPEC-019; no Core language relaxation.",
+      "testIds": [
+        "MessageHeaderDeclarationTests"
+      ]
+    },
+    {
+      "case": "SPEC-020",
+      "path": "cloudevents/schemas/openapi.json",
+      "originalSha256": "84586d1e008e7c33290f2ce74169116b590b8d1d464384570e77d49236e5fc83",
+      "predecessorSha256": "f09c3b11c630865d6a22b42c4e05f45ad164bbbf3be67db907cb6993cf39ed14",
+      "predecessorCase": "SPEC-019",
+      "sha256": "f09c3b11c630865d6a22b42c4e05f45ad164bbbf3be67db907cb6993cf39ed14",
+      "bytes": 166615,
+      "file": "tests/Conformance/Corrections/SPEC-020/cloudevents/schemas/openapi.json",
+      "sourceCommitBeforeCorrections": "e0325126cc1d3d43c3d89323867f6b7d7e40761c",
+      "reason": "Core item shapes do not admit annotation fields: move Message header item documentation to the owning attribute while preserving the opaque declaration item and all constraints. Corrected compiled-model failure from SPEC-019; no Core language relaxation.",
+      "testIds": [
+        "MessageHeaderDeclarationTests"
+      ]
+    }
+  ]
+}

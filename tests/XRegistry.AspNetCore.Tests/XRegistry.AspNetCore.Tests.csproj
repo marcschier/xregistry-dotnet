@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="TUnit" />
+    <ProjectReference Include="..\..\src\XRegistry.AspNetCore\XRegistry.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\src\XRegistry.Models\XRegistry.Models.csproj" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <Compile Remove="NativeSmoke\**\*.cs" />
+  </ItemGroup>
+</Project>

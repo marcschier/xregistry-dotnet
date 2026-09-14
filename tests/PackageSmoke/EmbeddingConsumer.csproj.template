@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>@@FRAMEWORK@@</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <PublishAot>true</PublishAot>
+    <IsAotCompatible>true</IsAotCompatible>
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+    <EnableRequestDelegateGenerator>true</EnableRequestDelegateGenerator>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+    <IlcTreatWarningsAsErrors>true</IlcTreatWarningsAsErrors>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="XRegistry" Version="@@XRegistry@@" />
+    <PackageReference Include="XRegistry.Client" Version="@@XRegistry.Client@@" />
+    <PackageReference Include="XRegistry.Server" Version="@@XRegistry.Server@@" />
+    <PackageReference Include="XRegistry.AspNetCore" Version="@@XRegistry.AspNetCore@@" />
+    <PackageReference Include="XRegistry.Models" Version="@@XRegistry.Models@@" />
+    <PackageReference Include="XRegistry.Validation" Version="@@XRegistry.Validation@@" />
+    <PackageReference Include="XRegistry.Storage.File" Version="@@XRegistry.Storage.File@@" />
+    <PackageReference Include="XRegistry.Federation" Version="@@XRegistry.Federation@@" />
+    <PackageReference Include="XRegistry.Bindings.File" Version="@@XRegistry.Bindings.File@@" />
+    <PackageReference Include="XRegistry.Bindings.Git" Version="@@XRegistry.Bindings.Git@@" />
+    <PackageReference Include="XRegistry.Bindings.Oci" Version="@@XRegistry.Bindings.Oci@@" />
+  </ItemGroup>
+</Project>

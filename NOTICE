@@ -1,0 +1,12 @@
+xRegistry .NET
+
+Original implementation code is licensed under the MIT License.
+
+The pinned xRegistry specification, model, schema and example artifacts under
+tests/Conformance/Sources originate from the xRegistry specification project
+and the explicitly recorded working-tree baseline. Their Apache-2.0 license is
+retained in that directory. See eng/specification-lock.json for provenance.
+
+Use of xRegistry names does not imply certification, endorsement, or complete
+conformance. Current implementation and qualification status is explicit in
+docs/conformance.md and eng/packages.json.

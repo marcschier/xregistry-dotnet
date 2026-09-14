@@ -1,0 +1,161 @@
+name: pinned-peer-client-slice
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-client-to-peer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          global-json-file: global.json
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - name: Native compiler prerequisites
+        run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends clang zlib1g-dev
+      - name: Publish actual native client
+        run: dotnet publish interop/XRegistry.InteropProbe/XRegistry.InteropProbe.csproj -c Release -r linux-x64 -o artifacts/interop-client
+      - name: Qualify independent peer and run native client cases
+        shell: pwsh
+        run: ./eng/qualify-upstream.ps1 -NativeClient artifacts/interop-client/XRegistry.InteropProbe
+
+  native-git-to-reference:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        framework: [net8.0, net10.0]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          global-json-file: global.json
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - name: Native compiler prerequisites
+        run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends clang zlib1g-dev
+      - name: Verify fail-closed Git harness behavior
+        shell: pwsh
+        run: |
+          python -m unittest discover -s (Join-Path tests Tooling) -p 'test_git_interop*.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'Git interoperability harness checks failed.' }
+      - name: Native managed Git against controlled reference upload-pack
+        shell: pwsh
+        env:
+          PROBE_FRAMEWORK: ${{ matrix.framework }}
+        run: .\eng\test-git-interop.ps1 -RuntimeIdentifier linux-x64 -Framework $env:PROBE_FRAMEWORK
+      - name: Retain actual Git protocol evidence and tested native executable
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: managed-git-http-linux-x64-${{ matrix.framework }}
+          path: |
+            artifacts/git-interop/runs/**/evidence.json
+            artifacts/git-interop/native/linux-x64-${{ matrix.framework }}/XRegistry.Git.InteropProbe
+          if-no-files-found: error
+          retention-days: 14
+
+  pinned-xr-to-native-fileserver:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          global-json-file: global.json
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - name: Native compiler and isolated filesystem prerequisites
+        run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends clang zlib1g-dev e2fsprogs util-linux
+      - name: Verify reverse harness fail-closed behavior
+        run: python -m unittest discover -s tests/Tooling -p 'test_reverse_interop*.py' -v
+      - name: Build the immutable upstream CLI with isolated pinned Go
+        run: python eng/verify-upstream-to-dotnet-build.py --work artifacts/reverse-oracle --bootstrap-go
+      - name: Publish actual native durable FileServer
+        run: dotnet publish samples/XRegistry.FileServer/XRegistry.FileServer.csproj -c Release -f net10.0 -r linux-x64 -p:PublishAot=true --artifacts-path artifacts/reverse-native-build -o artifacts/reverse-native-server
+      - name: Prepare a private verified ext4 writer directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          mountpoint="$(mktemp -d "$RUNNER_TEMP/xregistry-reverse-ext4.XXXXXX")"
+          image="$mountpoint.img"
+          echo "REVERSE_EXT4_MOUNT=$mountpoint" >> "$GITHUB_ENV"
+          echo "REVERSE_EXT4_IMAGE=$image" >> "$GITHUB_ENV"
+          truncate -s 256M "$image"
+          mkfs.ext4 -F -q "$image"
+          sudo mount -o loop,nodev,nosuid "$image" "$mountpoint"
+          sudo chown "$(id -u):$(id -g)" "$mountpoint"
+          mkdir "$mountpoint/work"
+          test "$(findmnt --noheadings --output FSTYPE --target "$mountpoint/work")" = "ext4"
+          echo "REVERSE_DATA_ROOT=$mountpoint/work" >> "$GITHUB_ENV"
+      - name: Qualify real pinned xr against the native dotnet server
+        shell: bash
+        run: |
+          set -euo pipefail
+          python eng/verify-upstream-to-dotnet.py \
+            --server artifacts/reverse-native-server/XRegistry.Sample.FileServer \
+            --oracle-build artifacts/reverse-oracle/oracle-build.json \
+            --data-root "$REVERSE_DATA_ROOT" \
+            --output artifacts/reverse-results
+      - name: Release only the owned ext4 mount and backing file
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${REVERSE_EXT4_MOUNT:-}" ]; then
+            case "$REVERSE_EXT4_MOUNT" in
+              "$RUNNER_TEMP"/xregistry-reverse-ext4.*) ;;
+              *) echo "Unexpected cleanup scope"; exit 1 ;;
+            esac
+            if mountpoint -q "$REVERSE_EXT4_MOUNT"; then
+              sudo umount "$REVERSE_EXT4_MOUNT"
+            fi
+            rmdir "$REVERSE_EXT4_MOUNT"
+            test "${REVERSE_EXT4_IMAGE:-}" = "$REVERSE_EXT4_MOUNT.img"
+            rm -f -- "$REVERSE_EXT4_IMAGE"
+          fi
+      - name: Retain reverse protocol, native and oracle provenance evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: pinned-xr-to-native-fileserver-linux-x64
+          path: |
+            artifacts/reverse-oracle/oracle-build.json
+            artifacts/reverse-oracle/*.stdout
+            artifacts/reverse-oracle/*.stderr
+            artifacts/reverse-oracle/bin/xr
+            artifacts/reverse-results/**
+            artifacts/reverse-native-server/XRegistry.Sample.FileServer
+          if-no-files-found: error
+          retention-days: 14

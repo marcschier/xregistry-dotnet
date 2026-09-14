@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "repository": "https://github.com/marcschier/xregistry-dotnet",
+  "targetFrameworks": [
+    "net8.0",
+    "net10.0"
+  ],
+  "nativeRuntimeIdentifiers": [
+    "win-x64",
+    "win-arm64",
+    "linux-x64",
+    "linux-arm64"
+  ],
+  "packages": [
+    {
+      "id": "XRegistry",
+      "project": "src\\XRegistry\\XRegistry.csproj",
+      "status": "implemented"
+    },
+    {
+      "id": "XRegistry.Client",
+      "project": "src\\XRegistry.Client\\XRegistry.Client.csproj",
+      "status": "implemented"
+    },
+    {
+      "id": "XRegistry.Server",
+      "project": "src\\XRegistry.Server\\XRegistry.Server.csproj",
+      "status": "implemented"
+    },
+    {
+      "id": "XRegistry.AspNetCore",
+      "project": "src\\XRegistry.AspNetCore\\XRegistry.AspNetCore.csproj",
+      "status": "implemented"
+    },
+    {
+      "id": "XRegistry.Storage.File",
+      "project": "src\\XRegistry.Storage.File\\XRegistry.Storage.File.csproj",
+      "status": "implemented"
+    },
+    {
+      "id": "XRegistry.Models",
+      "project": "src\\XRegistry.Models\\XRegistry.Models.csproj",
+      "status": "implemented"
+    },
+    {
+      "id": "XRegistry.Validation",
+      "project": "src\\XRegistry.Validation\\XRegistry.Validation.csproj",
+      "status": "implemented"
+    },
+    {
+      "id": "XRegistry.Federation",
+      "project": "src\\XRegistry.Federation\\XRegistry.Federation.csproj",
+      "status": "implemented"
+    },
+    {
+      "id": "XRegistry.Bindings.File",
+      "project": "src\\XRegistry.Bindings.File\\XRegistry.Bindings.File.csproj",
+      "status": "implemented"
+    },
+    {
+      "id": "XRegistry.Bindings.Git",
+      "project": "src\\XRegistry.Bindings.Git\\XRegistry.Bindings.Git.csproj",
+      "status": "implemented"
+    },
+    {
+      "id": "XRegistry.Bindings.Oci",
+      "project": "src\\XRegistry.Bindings.Oci\\XRegistry.Bindings.Oci.csproj",
+      "status": "implemented"
+    }
+  ],
+  "samples": [
+    {
+      "name": "XRegistry.FederationBridge",
+      "project": "samples\\XRegistry.FederationBridge\\XRegistry.FederationBridge.csproj",
+      "targetFramework": "net10.0",
+      "status": "implemented"
+    },
+    {
+      "name": "XRegistry.FileServer",
+      "project": "samples\\XRegistry.FileServer\\XRegistry.FileServer.csproj",
+      "targetFramework": "net10.0",
+      "status": "implemented"
+    },
+    {
+      "name": "XRegistry.Client",
+      "project": "samples\\XRegistry.Client\\XRegistry.Client.csproj",
+      "targetFramework": "net10.0",
+      "status": "implemented"
+    }
+  ]
+}

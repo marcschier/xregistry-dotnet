@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>XRegistry.Server</PackageId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\XRegistry\XRegistry.csproj" />
+    <ProjectReference Include="..\XRegistry.Models\XRegistry.Models.csproj" />
+    <ProjectReference Include="..\XRegistry.Validation\XRegistry.Validation.csproj" />
+  </ItemGroup>
+</Project>
