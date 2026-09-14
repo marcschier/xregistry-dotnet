@@ -108,6 +108,18 @@ If a required security guarantee cannot be achieved, report the affected promise
 as blocked. Do not silently accept residual risk, introduce native/executable
 Git, or advertise a weakened implementation as complete.
 
+## Historical specification dependencies
+
+`tests/Conformance/Sources` is immutable, hash-verified specification evidence,
+not an installation source. Its captured `tools/requirements.txt` includes an
+old `aiohttp` version with known security advisories. Do not install that
+historical manifest or rewrite it merely to clear dependency alerts.
+
+The repository's oracle jobs install `eng/requirements-oracles.lock` with
+`--require-hashes`; this active lock does not include `aiohttp`. Dependency
+alerts against the captured manifest remain visible and must be distinguished
+from vulnerabilities in actively installed tooling or shipped NuGet packages.
+
 ## Release gate
 
 Release requires mapped, executed evidence for the applicable obligations and no

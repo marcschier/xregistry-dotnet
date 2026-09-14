@@ -46,7 +46,7 @@ class EmbeddingWorkRootTests(unittest.TestCase):
                 "Remove-EmbeddingWorkDirectory -Work $work; "
                 "@{parent=$parent;child=$child;exists=(Test-Path -LiteralPath $child)} | ConvertTo-Json -Compress"
             )
-            self.assertEqual(caller, Path(result["parent"]))
+            self.assertEqual(caller.resolve(strict=True), Path(result["parent"]).resolve(strict=True))
             self.assertFalse(result["exists"])
             self.assertEqual("caller-owned", (caller / "keep.txt").read_text(encoding="utf-8"))
             self.assertEqual(["keep.txt"], [path.name for path in caller.iterdir()])
@@ -81,7 +81,7 @@ class EmbeddingWorkRootTests(unittest.TestCase):
                 "$parent=$work.Root; Remove-EmbeddingWorkDirectory -Work $work; "
                 "@{root=$parent} | ConvertTo-Json -Compress"
             )
-            self.assertEqual(run / "work", Path(result["root"]))
+            self.assertEqual((run / "work").resolve(strict=True), Path(result["root"]).resolve(strict=True))
             self.assertEqual("retained", (run / "evidence.json").read_text(encoding="utf-8"))
 
     def test_missing_or_relative_caller_roots_are_rejected_without_creation(self) -> None:
