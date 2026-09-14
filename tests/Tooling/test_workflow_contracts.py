@@ -1,11 +1,16 @@
 from pathlib import Path
 import unittest
+import xml.etree.ElementTree as ET
 
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 class WorkflowContractTests(unittest.TestCase):
+    def test_parallel_builds_do_not_export_version_variables_to_shared_runner_environment(self):
+        project = ET.parse(ROOT / "Directory.Build.props")
+        self.assertEqual("false", project.findtext("./PropertyGroup/NBGV_SetCloudBuildVersionVars"))
+
     def test_shell_commands_with_colon_space_use_block_or_quoted_yaml(self):
         for path in (ROOT / ".github" / "workflows").glob("*.yml"):
             for number, line in enumerate(path.read_text().splitlines(), 1):

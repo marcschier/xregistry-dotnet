@@ -12,6 +12,12 @@ source version as eleven `.nupkg`/`.snupkg` pairs under `artifacts\ci-packages`.
 permission. PR artifacts cannot substitute for a qualified tagged release.
 No NuGet packages or release tags are created by an ordinary `main` push.
 
+Parallel MSBuild workers do not export NBGV version variables to the shared
+GitHub Actions environment file. `NBGV_SetCloudBuildVersionVars=false` prevents
+interleaved writes without disabling version calculation, assembly metadata or
+NuGet source provenance. Workflows consume the explicit artifact manifests
+instead of those implicit environment variables.
+
 ## Profile and version contract
 
 The release contract uses `tag_workflow: release.yml`, `promote: nuget-yml`
