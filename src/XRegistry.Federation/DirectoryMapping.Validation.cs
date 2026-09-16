@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Federation;
 
 /// <summary>Evidence from a complete traversal of a selected mapping's internal file references.</summary>

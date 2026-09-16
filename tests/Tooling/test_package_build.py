@@ -1,3 +1,6 @@
+# Copyright (c) 2026 xregistry-dotnet contributors.
+# SPDX-License-Identifier: MIT
+
 import importlib.util
 import json
 from pathlib import Path

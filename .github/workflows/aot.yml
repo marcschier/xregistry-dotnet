@@ -1,3 +1,6 @@
+# Copyright (c) 2026 xregistry-dotnet contributors.
+# SPDX-License-Identifier: MIT
+
 name: native-qualification
 
 on:
@@ -52,7 +55,7 @@ jobs:
           sudo mount -o loop,nosuid,nodev,noexec "$RUNNER_TEMP/xregistry-embedding.ext4" "$RUNNER_TEMP/xregistry-embedding-work"
           sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/xregistry-embedding-work"
       - name: Restore exact repository package graph
-        run: dotnet restore XRegistry.slnx --locked-mode
+        run: dotnet restore XRegistry.slnx
       - name: Pack and execute all eleven packages from a fresh feed/cache
         shell: pwsh
         run: |
@@ -110,7 +113,7 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends clang zlib1g-dev
       - name: Restore exact package graph
-        run: dotnet restore XRegistry.slnx --locked-mode
+        run: dotnet restore XRegistry.slnx
       - name: Publish and execute both model-package consumer TFMs natively
         shell: pwsh
         run: ./eng/test-model-packages.ps1 -RuntimeIdentifier '${{ matrix.rid }}'
@@ -155,7 +158,7 @@ jobs:
           sudo mount -o loop,nosuid,nodev,noexec "$RUNNER_TEMP/xregistry-native-data.ext4" "$RUNNER_TEMP/xregistry-native-data"
           sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/xregistry-native-data"
       - name: Restore exact package graph
-        run: dotnet restore XRegistry.slnx --locked-mode
+        run: dotnet restore XRegistry.slnx
       - name: Execute native behavior and killed-process recovery
         shell: pwsh
         run: |
@@ -223,7 +226,7 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends clang zlib1g-dev
       - name: Restore exact package graph
-        run: dotnet restore XRegistry.slnx --locked-mode
+        run: dotnet restore XRegistry.slnx
       - name: Execute actual native client over independent snapshots
         shell: pwsh
         run: ./eng/test-client-sample.ps1 -RuntimeIdentifier '${{ matrix.rid }}'
@@ -263,7 +266,7 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends clang zlib1g-dev
       - name: Restore exact package graph
-        run: dotnet restore XRegistry.slnx --locked-mode
+        run: dotnet restore XRegistry.slnx
       - name: Execute the native producer bridge and JIT negative control
         shell: pwsh
         run: ./eng/test-bridge-sample.ps1 -RuntimeIdentifier '${{ matrix.rid }}'

@@ -9,10 +9,11 @@ The source is the pinned OpenUSD working draft:
 `tests\Conformance\Sources\workingdrafts\models\openusd\spec.md`,
 SHA-256 `77b824ef148a8db8e16e2af5daa241c80c43604436370aaf03c4340416bd4e07`.
 The relevant clauses are lines 234-239, 458-475, 492-508, and 648-697.
-The identifier-only clarification below is also reflected in the authorized
-sibling draft's `workingdrafts\models\openusd\spec.md`, especially Sections
-1.3, 1.4, 4.1, 4.2, 5.1.1 and 5.4. That live amendment is not yet an immutable
-conformance-source capture; the pinned source above remains unchanged.
+The identifier-only clarification below is reflected in an authorized sibling
+draft, especially Sections 1.3, 1.4, 4.1, 4.2, 5.1.1 and 5.4, but is outside the
+immutable baseline and current corrected overlay. The pinned source above
+remains unchanged. Source capture and qualification are tracked in the
+[roadmap](roadmap.md#release-and-conformance-qualification).
 
 ## Identifier computation
 
@@ -330,15 +331,15 @@ reverse invariant checks neither require caller read access to private referring
 Groups nor expose their identity in errors. Traversal uses indexed collections
 with the engine's cumulative work, byte and cancellation limits.
 
-## Remaining boundaries
+## Current boundaries
 
 The focused collision assignment/resolution policy above is implemented and
-the related live prose is amended. Immutable source capture and conformance
-disposition remain with the parent; this is not a complete `OPENUSD-001` or
-domain/platform qualification claim.
+the related corrected source is captured through the specification workflow.
+This is not a complete `OPENUSD-001` or domain/platform qualification claim.
 SPEC-009 replaces the copied schema-plugin Resource definition with an actual
 Core import, so asset and plugin Groups share the declared type and can use
 one-hop cross-Group aliases. Specialized USD/MaterialX validators and authorized
-acquisition of verifiable external plugin
-content, and complete domain/platform qualification remain separate work.
+acquisition of verifiable external plugin content are not implemented.
 No native USD parser, renderer or code execution is hidden behind these rules.
+Any expansion of that scope and the outstanding qualification work are tracked
+in the [roadmap](roadmap.md#integration-work).

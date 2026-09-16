@@ -269,6 +269,6 @@ roundtrip, rollback, marker isolation, restart and unchanged Core controls are
 exercised by `tests\XRegistry.Server.Tests\EndpointAuthoredStorageTests.cs`:
 
 ```powershell
-dotnet test --project tests\XRegistry.Models.Tests\XRegistry.Models.Tests.csproj -c Release -f net8.0 --artifacts-path artifacts\endpoint-template-materialization -p:RestoreLockedMode=true --treenode-filter '/*/*/EndpointTemplateExamplesTests/*' --minimum-expected-tests 3 --zero-tests-policy strict --no-ansi
-dotnet test --project tests\XRegistry.Models.Tests\XRegistry.Models.Tests.csproj -c Release -f net10.0 --artifacts-path artifacts\endpoint-template-materialization -p:RestoreLockedMode=true --treenode-filter '/*/*/EndpointTemplateExamplesTests/*' --minimum-expected-tests 3 --zero-tests-policy strict --no-ansi
+dotnet test --project tests\XRegistry.Models.Tests\XRegistry.Models.Tests.csproj -c Release -f net8.0 --artifacts-path artifacts\endpoint-template-materialization --treenode-filter '/*/*/EndpointTemplateExamplesTests/*' --minimum-expected-tests 3 --zero-tests-policy strict --no-ansi
+dotnet test --project tests\XRegistry.Models.Tests\XRegistry.Models.Tests.csproj -c Release -f net10.0 --artifacts-path artifacts\endpoint-template-materialization --treenode-filter '/*/*/EndpointTemplateExamplesTests/*' --minimum-expected-tests 3 --zero-tests-policy strict --no-ansi
 ```

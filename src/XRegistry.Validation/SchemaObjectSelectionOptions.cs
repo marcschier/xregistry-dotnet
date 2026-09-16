@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Validation;
 
 /// <summary>Explicit Document identity, parser budgets and bounded selector policy.</summary>

@@ -285,9 +285,8 @@ A valid `excludeall` checks only its owner and need not enumerate children.
 Invalid query grammar still fails before source acquisition. Equivalent escaped
 collection targets retain the shared evaluator's ordered selection.
 
-No Core/Server implementation was modified or grammar/fact code copied into the
-bridge. The earlier extraction gap is resolved by the shared public Core module;
-the bridge does not construct a RegistryEngine or fake persistence.
+The bridge uses the shared public Core query module rather than copying
+grammar/fact code. It does not construct a RegistryEngine or fake persistence.
 
 ## Caller-bound frozen paging
 
@@ -368,11 +367,10 @@ runtime-info processes/output, keeps logs, removes its generated config and
 stops only its own processes.
 
 Linux/ARM64 execution, live Git/OCI aggregate deployments, full external-validator
-obligations and general federation catalog discovery remain unqualified.
-Linux execution remains blocked by the shared Docker storage failure observed
-during this work; no restart/prune/repair was attempted. Alias target-origin conflicts and
+obligations and general federation catalog discovery are not qualified. Alias target-origin conflicts and
 alias Version document views are explicit semantic incompatibilities rather
 than missing generic alias/view implementations. The sample does not complete the specification
 ledger or release/native matrices, configure remote infrastructure, or change
-package qualification status. The parent owns solution registration and any CI
-integration.
+package qualification status. Outstanding qualification and deployment work is
+tracked in the [roadmap](roadmap.md#integration-work). Local Linux execution is
+currently blocked by unusable Docker storage.

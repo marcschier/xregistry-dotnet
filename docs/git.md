@@ -4,7 +4,7 @@ The binding remains managed-only: no Git/helper process, checkout, hooks,
 filters, LFS/submodule acquisition, local repository configuration, alternates,
 replacement objects or grafts are consulted at runtime. See
 [Managed Git](managed-git.md), [the design decision](adr/0003-pure-managed-git.md)
-and [historical interoperability](git-interoperability.md).
+and [Git interoperability evidence](git-interoperability.md).
 
 ## Acquisition and immutable selection
 
@@ -57,15 +57,13 @@ self-contained pack. The later XID traversal is selective and does not open
 unrelated domain Documents. This module does **not** claim target-aware minimal
 network transfer, blob filtering or implicit lazy fetching; those are different
 acquisition features. The source-boundary clarification is recorded in the
-session's File/Git proposal for parent review, not silently imposed on the
-specification.
+current implementation scope and is not silently imposed on the specification.
 
 Current completion evidence is managed public-test execution on Windows.
 Native/provenance full gates, Linux/ARM execution, mapped-share coherency and
 permitted-origin TLS certificate experiments remain separate. No loopback TLS,
 certificate, network-address or credential policy was weakened to manufacture a
-platform/transport qualification result. The unavailable Docker environment is
-not repaired by this workstream.
+platform/transport qualification result.
 
 The Git package claims the native read-only resolver role, not a Git publication
 implementation. Producer duties in the specification are not labeled as

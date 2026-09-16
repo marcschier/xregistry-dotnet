@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry;
 
 /// <summary>Finite per-value JSON ingestion budgets. Limits are inclusive.</summary>

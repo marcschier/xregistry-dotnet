@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 xregistry-dotnet contributors.
+# SPDX-License-Identifier: MIT
+
 """Copy and verify the model resources from the already pinned source corpus."""
 
 from __future__ import annotations

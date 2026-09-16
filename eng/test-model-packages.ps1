@@ -1,3 +1,6 @@
+# Copyright (c) 2026 xregistry-dotnet contributors.
+# SPDX-License-Identifier: MIT
+
 [CmdletBinding()]
 param(
     [ValidateSet('win-x64', 'win-arm64', 'linux-x64', 'linux-arm64')]

@@ -1,3 +1,6 @@
+# Copyright (c) 2026 xregistry-dotnet contributors.
+# SPDX-License-Identifier: MIT
+
 root = true
 
 [*]
@@ -12,6 +15,7 @@ trim_trailing_whitespace = true
 indent_size = 2
 
 [*.cs]
+file_header_template = Copyright (c) 2026 xregistry-dotnet contributors.\nSPDX-License-Identifier: MIT
 csharp_style_namespace_declarations = file_scoped:warning
 csharp_using_directive_placement = outside_namespace:warning
 dotnet_sort_system_directives_first = true

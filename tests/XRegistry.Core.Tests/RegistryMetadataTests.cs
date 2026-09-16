@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 using System.Text.Json;
 using TUnit.Assertions;
 using TUnit.Core;

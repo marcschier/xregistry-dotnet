@@ -1,3 +1,6 @@
+# Copyright (c) 2026 xregistry-dotnet contributors.
+# SPDX-License-Identifier: MIT
+
 * text=auto
 *.cs text eol=lf
 *.csproj text eol=lf
@@ -8,7 +11,15 @@
 *.md text eol=lf
 *.py text eol=lf
 *.ps1 text eol=lf
+*.source text eol=lf
+*.template text eol=lf
+*.Dockerfile text eol=lf
+*.config text eol=lf
 *.yml text eol=lf
+.dockerignore text eol=lf
+.editorconfig text eol=lf
+.gitattributes text eol=lf
+.gitignore text eol=lf
 tests/Conformance/Sources/** -text
 tests/Conformance/Corrections/** -text
 src/XRegistry.Models/Resources/** -text

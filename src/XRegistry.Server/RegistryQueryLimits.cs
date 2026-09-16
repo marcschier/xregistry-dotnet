@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Server;
 
 /// <summary>Finite query evaluation, page preparation and retained-cursor budgets.</summary>

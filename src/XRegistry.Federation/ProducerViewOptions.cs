@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Federation;
 
 /// <summary>Core response representation options; filtering, sorting and paging require a separate shared query plan.</summary>

@@ -35,8 +35,8 @@ values. `--token-env` explicitly selects an environment variable. HTTP
 loopback/private-origin permissions are opt-in. Documents stream to stdout;
 redirected/external bytes are not fetched behind the caller's back.
 `pages` emits one compact JSON object per line without buffering the whole
-collection. A later failure exits nonzero; previously printed pages are partial
-output, not a complete-set guarantee. Discovery does not follow advertisements.
+collection. A later failure exits nonzero; pages emitted before that failure are
+partial output, not a complete-set guarantee. Discovery does not follow advertisements.
 `--decode-content` opts Registry HTTP requests into bounded, strictly framed
 gzip/deflate/Brotli response decoding. Native OCI uses exact-byte HTTPS and
 rejects this Registry-specific option or plaintext loopback options.

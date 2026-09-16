@@ -85,9 +85,9 @@ members fail before child reads. Original and resolved sources and `modelbase`
 remain distinct capture context. No mutable include is re-fetched, and
 unretained external include provenance is not claimed independently verified.
 
-The original reader tests remain unchanged, including the three original
-dot-alias regressions. Its previously executed Linux x64 Native AOT tests are
-reader evidence, not qualification of the new local publisher.
+The reader tests include the three dot-alias regressions. Their Linux x64
+Native AOT execution is reader evidence, not qualification of the local
+publisher.
 
 ## Explicit source dispatch
 
@@ -309,8 +309,8 @@ Only owned, still-temporary files are removed during cleanup.
 
 ## Qualification and bounded scope
 
-The new tests live only in `FileRegistrySourceTests.cs` and
-`FileOciLayoutPublicationTests.cs`; the original File test file is unchanged.
+The tests live in `FileRegistrySourceTests.cs` and
+`FileOciLayoutPublicationTests.cs`.
 Read tests use the independent frozen mapping and OCI corpora, not writer output
 as their sole oracle. Actual publication is inspected through `OciSnapshot`
 and the frozen `tools\oci_examples.py` subprocess for both linked and
@@ -328,7 +328,7 @@ offline-complete packages.
 | Exact input/output entrypoint bounds | `EntryPointDescriptorLimitPreservesAll256EntriesAndRejectsTheNextReference`, `ExistingEntryPointExactByteLimitIncludesWhitespace`, `OutputByteLimitIsCheckedAfterMergeAndBeforeAnyReferenceUpdate` |
 | Failure, cancellation and unknown acknowledgement | `InjectedFailuresRetainOldSelectionOrReportUnknownAcknowledgement`, `CancellationBeforeAndAfterReferenceReplacementHasDistinctOutcomes`, `ObservedControlChangesBeforeCommitCannotBeOverwritten`, `PrecancelledPublicationAndExpiredCheckpointCannotAcknowledgeAReference` |
 
-All builds are isolated from the parent's shared-core PDBs:
+Build outputs are isolated from shared project PDBs:
 
 The current full File suite passed **73/73 on Release net8.0, 73/73 on Release
 net10.0, and 73/73 in the net10.0 win-x64 Native AOT executable**, with zero
@@ -346,17 +346,17 @@ dotnet publish tests\XRegistry.File.Tests\XRegistry.File.Tests.csproj -c Release
 & .\artifacts\file-integration-build\native\win-x64\XRegistry.File.Tests.exe --no-ansi --results-directory artifacts\file-integration-build\results\native-win-x64
 ```
 
-This workstream executes Windows native tests and real NTFS barriers; it does
+The Windows native evidence executes real NTFS barriers; it does
 not claim physical power-loss testing, network/overlay durability, or executed
-Linux/ARM64 qualification of the new publisher. Destination-directory creation
+Linux/ARM64 qualification of the publisher. Destination-directory creation
 and complete sample composition remain host responsibilities.
 
-### Subsequent Linux execution
+### Linux x64 execution
 
 The current relocated File suite passed 75/75 cases on .NET 10 Linux x64
 Native AOT, including the actual local OCI publisher on an isolated ext4
 volume. The non-root container had a read-only root, no external network, and
 no installed .NET runtime. Its published output carries the unchanged mapping,
 OCI and Python-oracle fixtures instead of finding a sibling checkout.
-This supersedes the earlier Linux-unverified statement for these cases only;
-ARM64, mapped-share and physical power-loss qualification remain open.
+ARM64, mapped-share and physical power-loss qualification are not covered by
+this evidence; see the [roadmap](roadmap.md#durability-and-performance).

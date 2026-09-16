@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Storage.File;
 
 /// <summary>Finite per-store budgets. Limits are fixed for an open store instance.</summary>

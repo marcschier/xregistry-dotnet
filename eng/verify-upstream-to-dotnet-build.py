@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 xregistry-dotnet contributors.
+# SPDX-License-Identifier: MIT
+
 """Build the exact unmodified pinned xr oracle in an isolated task artifact directory."""
 
 from __future__ import annotations

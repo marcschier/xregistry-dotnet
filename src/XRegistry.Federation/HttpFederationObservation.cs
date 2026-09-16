@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Federation;
 
 /// <summary>Representation-scoped HTTP evidence, never a Registry-wide revision or credential.</summary>

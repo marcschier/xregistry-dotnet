@@ -1,12 +1,12 @@
 # Native OCI snapshots
 
-**Historical Linux platform evidence:** the original 185 OCI cases passed in a
+**Linux x64 source-specific evidence:** 185 OCI cases passed in a
 .NET 10 Linux x64 Native AOT executable, without an installed .NET runtime or
 external network access. This includes the independent Python producer oracle.
 The executable ran as a non-root user with a read-only container root and
-isolated writable test directories. The subsequent escaped-XID changes have
-Windows evidence below, not a new Linux qualification. ARM64 and live
-remote-registry qualification remain open.
+isolated writable test directories. This receipt predates the current escaped-XID
+source and is not source-matched Linux qualification for those changes. ARM64
+and live remote-registry qualification are not covered.
 
 `XRegistry.Bindings.Oci` implements the **unreleased version-1 native OCI
 snapshot profile** in the active SPEC-005 successor,
@@ -198,7 +198,7 @@ from the spelling. Effective Core defaults still take precedence over a missing
 or null value when the model defines a default. Actual document-capable
 Versions retain the detached-field and external-locator restrictions.
 This Core-aligned field-plane clarification is implemented; the OCI
-prose/oracle successor to SPEC-005 remains a parent-owned capture, separate from
+prose/oracle successor to SPEC-005 is a separately verified capture from
 Mapping's SPEC-014 correction.
 
 The `IFederationReadSource` adapter deliberately returns
@@ -348,29 +348,19 @@ match.
 
 ## Evidence and current boundaries
 
-The subsequent metadata-only field-plane fix passed **270/270 OCI tests on each
-managed TFM**. Its 18 additional cases cover ordinary object/string/URL-looking
+The current metadata-only field-plane suite passes **270/270 OCI tests on each
+managed TFM**. Its cases cover ordinary object/string/URL-looking
 values, nested and top-level nulls, missing/null default inputs, wrong types,
 actual document-field rejection, complete closure and producer/read round
-trips. It supersedes the 252-case managed totals below, not any native/platform
-qualification. Exact evidence and the parent source/oracle proposal are in
-session `files\oci-completion\field-plane-implementation`.
+trips, typed timestamp/number matching, defaults and conditional
+materialization, Group-default constraints, consistent document media,
+post-normalization native rules, bounded expanded metadata, unknown non-profile
+annotations, and explicit unsupported-view/root-absence outcomes. Independent
+original/SPEC-005 producer oracles and existing graph/publication/credential
+controls also run.
 
-The OCI-completion follow-up passed **252/252 public tests on net8.0 and
-252/252 on net10.0**, with zero failures/skips, using
-`artifacts\oci-completion` and D-drive scratch. The new public regressions
-cover typed timestamp/number matching, defaults and conditional materialization,
-Group-default constraints, consistent document media, post-normalization native
-rules, bounded expanded metadata, unknown non-profile annotations, and explicit
-unsupported-view/root-absence outcomes. Independent original/SPEC005 producer
-oracles and existing graph/publication/credential controls also ran.
-
-These are current managed results, not fresh native or feed qualification.
-The earlier native results below describe their original revisions. Both
-NativeAOT and trimming analyzers remain enabled; parent-owned full native/feed
-gates are separate. The session's `files\oci-completion` contains exact logs,
-input pins, functional red/green slices and a proposal for all 55 previously
-unreviewed OCI rows (52 reviewed, 3 informative); the ledger was not edited.
+These are managed results, not fresh source-matched Linux/ARM64 or feed
+qualification. NativeAOT and trimming analyzers remain enabled.
 
 The explicit project is `tests\XRegistry.Oci.Tests\XRegistry.Oci.Tests.csproj`,
 using CPM-pinned TUnit 1.66.27 and Microsoft.Testing.Platform. It links the
@@ -380,14 +370,11 @@ are independently re-addressed test data, not writer output used as its own
 oracle. The seven actual packaged models are also exercised through native
 snapshot construction and reads.
 
-The escaped-XID Release runs passed **226/226 cases on net8.0, 226/226 on
-net10.0, and 226/226 in the net10.0 win-x64 Native AOT executable**, with zero
-failures or skips. Existing File composition suites also passed **75/75** on
-each target and in a fresh Windows native executable. Both native executables
-ran with an empty `DOTNET_ROOT_X64`; a managed apphost control failed with
-`.NET location: Not found` under that same setting. Scoped whitespace
-verification passed for the affected OCI files. Exact logs and commands are
-under `artifacts\uri-binding-consistency`.
+The complete corrected URI/producer suite passes **230 cases** in Windows x64
+Native AOT executables on both TFMs, with zero IL warnings. Existing File
+composition suites pass **75/75** on each target and in a Windows native
+executable. Native executables run with an empty `DOTNET_ROOT_X64`; a managed
+apphost control fails under the same setting.
 
 The current package references
 Client and Federation; the parent's Client dependency brings SharpZipLib 1.4.2
@@ -442,36 +429,29 @@ durability/entrypoint merging; HTTP facades and write-through federation. These
 are not advertised as native resolver capabilities.
 
 **Qualification boundaries:** the Windows native executables are exercised,
-not merely published. The escaped-XID follow-up does not claim new Linux or
-ARM64 execution or live remote-registry interoperability. Arbitrary
+not merely published. They do not establish current-source Linux/ARM64
+execution or live remote-registry interoperability. Arbitrary
 noncanonical legacy graph annotations now require explicit migration.
-Linux requalification is blocked by the unavailable Docker engine after the shared read-only
-container filesystem; the earlier 185-case Linux evidence remains valid for
-that earlier revision. Test HTTP handlers execute exact Distribution protocol
-flows without remote mutation.
+The 185-case Linux receipt remains source-specific evidence for its recorded
+revision. Test HTTP handlers execute exact Distribution protocol flows without
+remote mutation. Outstanding platform and remote evidence is tracked in the
+[roadmap](roadmap.md#native-platforms-and-package-consumers).
 
 The frozen Python oracle continues to qualify original fixtures. The reviewed
 SPEC-005 successor also checks canonical graph annotations, decoded config
 identity and exact-byte bounds. All 394 affected independent mapping/OCI
-regressions passed after updating literal expected graph keys, without changing
-Document bytes. Recovered DirectoryMapping/File/Git tests now directly exercise
+regressions pass with the corrected literal graph keys and unchanged
+Document bytes. DirectoryMapping/File/Git tests directly exercise
 escaped entity, collection, alias and Document selection through the shared
 interpreter.
-
-The resumed OCI suite passed 228 cases per managed TFM and 228 cases in a
-fresh .NET 10 Windows x64 native executable, with zero IL warnings. These
-supersede the earlier 226-case URI run for the corrected contract, not the
-unexecuted platform cells.
 
 `IndependentCorrectedPythonOracleResolvesEscapedProducedDocument` now runs the
 retained SPEC-005 Python successor against sharded .NET producer output from
 both literal and escaped input identities. It checks full graph acceptance,
 the unchanged snapshot pin and requested selector, canonical resolved identity,
-and exact Document bytes. The original oracle still runs separately; its files
-are not replaced. All 22 writer-test executions passed across net8.0 and
-net10.0, including these four new executions. The subsequent complete
-230-case OCI suites passed in native Windows x64 executables on both TFMs,
-with zero IL warnings. These runs do not qualify Linux or ARM64.
+and exact Document bytes. The original oracle runs separately; its files are not
+replaced. All 22 writer-test executions pass across net8.0 and net10.0,
+including these four executions.
 
 ### Frozen provenance
 

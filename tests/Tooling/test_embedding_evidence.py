@@ -1,3 +1,6 @@
+# Copyright (c) 2026 xregistry-dotnet contributors.
+# SPDX-License-Identifier: MIT
+
 from __future__ import annotations
 
 import copy
@@ -277,16 +280,15 @@ class EmbeddingEvidenceTests(unittest.TestCase):
             (root / "eng").mkdir()
             (root / "eng" / "test-embedding-packages.ps1").write_text("fixture", encoding="utf-8")
             (root / "tests" / "PackageSmoke").mkdir(parents=True)
-            lock = root / "src" / "XRegistry" / "packages.lock.json"
-            lock.write_text('{"dependencies":"pinned"}', encoding="utf-8")
+            packages = root / "Directory.Packages.props"
             before = tool.source_manifest(root)["sha256"]
-            lock.write_text('{"dependencies":"changed"}', encoding="utf-8")
+            packages.write_text("changed", encoding="utf-8")
             self.assertNotEqual(before, tool.source_manifest(root)["sha256"])
-            lock.write_text('{"dependencies":"pinned"}', encoding="utf-8")
+            packages.write_text("fixture", encoding="utf-8")
             self.assertEqual(before, tool.source_manifest(root)["sha256"])
             (root / "src" / "XRegistry" / "obj").mkdir()
             (root / "src" / "XRegistry" / "obj" / "Generated.cs").write_text("generated", encoding="utf-8")
-            (root / "src" / "XRegistry" / "obj" / "native-win-x64.packages.lock.json").write_text("generated", encoding="utf-8")
+            (root / "src" / "XRegistry" / "obj" / "project.assets.json").write_text("generated", encoding="utf-8")
             self.assertEqual(before, tool.source_manifest(root)["sha256"])
             (root / "src" / "XRegistry" / "Source.cs").write_text("class Changed {}", encoding="utf-8")
             self.assertNotEqual(before, tool.source_manifest(root)["sha256"])

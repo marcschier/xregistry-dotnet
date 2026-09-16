@@ -246,9 +246,7 @@ if (!(Select-String -LiteralPath "$artifacts\native-publish.log" -SimpleMatch 'G
 if ($LASTEXITCODE -ne 0) { throw 'Native sample security tests failed.' }
 ```
 
-The principal sample projects, root dependency management, solution, CI and
-runtime-library source were not modified by this workstream. The standalone
-test project uses the existing TUnit central version and a Server project
+The standalone test project uses the centrally managed TUnit version and a Server project
 reference; its build outputs are isolated under `artifacts\sample-hosting-build`.
 Other operating systems and architectures were not native-qualified here.
 
@@ -257,4 +255,4 @@ sample roles, not OIDC/JWT, per-person accounts, revocation lists, token
 rotation overlap, rate limiting, tenancy isolation, audit retention, platform
 certificate provisioning or an internet deployment perimeter. Those remain
 explicit host/deployment responsibilities. Principal sample programs and
-project registration are handled separately.
+project registration remain separate host concerns.

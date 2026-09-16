@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Server;
 
 /// <summary>An opaque, independently owned metadata record and optional exact Document.</summary>

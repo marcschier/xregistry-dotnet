@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Client;
 
 /// <summary>Cumulative budgets for one complete collection traversal, in addition to per-response limits.</summary>

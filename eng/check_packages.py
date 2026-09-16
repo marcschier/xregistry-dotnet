@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 xregistry-dotnet contributors.
+# SPDX-License-Identifier: MIT
+
 """Validate the package inventory; this does not certify runtime conformance."""
 
 from __future__ import annotations

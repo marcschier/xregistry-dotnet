@@ -71,4 +71,5 @@ durable outbox, before a delivery sink observes them. Delivery retries and
 consumer deduplication do not authorize automatic mutation retries. This module
 does not define SSE, watch endpoints, transport-specific subscription APIs,
 cross-registry ordering or exactly-once delivery. End-to-end server/outbox
-integration remains a separate qualification requirement.
+integration is not currently qualified; the outstanding evidence work is
+tracked in the [roadmap](roadmap.md#integration-work).

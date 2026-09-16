@@ -111,7 +111,7 @@ attributes and the composed domain metadata. Definition-only inputs need not
 fabricate absent server-generated entity attributes; supplied Core fields do
 not use readonly-input discarding to bypass validation. A custom model must
 explicitly declare its extensions. The materializer reuses
-`RegistryDomainRules.CompleteMessageMetadata` for parent-owned typed-property
+`RegistryDomainRules.CompleteMessageMetadata` for domain typed-property
 rules and defaults after inheritance, not before an overlay.
 
 Property declarations are completed from raw owned JSON before they cross the

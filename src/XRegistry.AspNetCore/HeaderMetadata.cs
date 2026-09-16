@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 using Microsoft.AspNetCore.Http;
 using XRegistry.Http;
 using XRegistry.Server;

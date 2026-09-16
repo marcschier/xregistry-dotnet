@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 xregistry-dotnet contributors.
+# SPDX-License-Identifier: MIT
+
 """Fail-closed execution accounting for the pinned upstream xr checker."""
 
 from __future__ import annotations

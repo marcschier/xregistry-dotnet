@@ -1,3 +1,6 @@
+# Copyright (c) 2026 xregistry-dotnet contributors.
+# SPDX-License-Identifier: MIT
+
 from __future__ import annotations
 
 import copy
@@ -504,10 +507,7 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(properties["JsonSerializerIsReflectionEnabledByDefault"], "false")
         self.assertEqual([reference.attrib["Include"] for group in project.findall("ItemGroup") for reference in group],
                          ["..\\..\\src\\XRegistry.Bindings.Git\\XRegistry.Bindings.Git.csproj"])
-        lock = json.loads((directory / "packages.lock.json").read_bytes())
-        self.assertEqual(set(lock["dependencies"]), {
-            "net8.0", "net10.0", "net8.0/win-x64", "net10.0/win-x64", "net8.0/linux-x64", "net10.0/linux-x64",
-        })
+        self.assertFalse((directory / "packages.lock.json").exists())
 
     def test_ci_git_job_is_independent_native_linux_both_tfms_pinned_and_without_privilege_or_docker(self) -> None:
         text = (ROOT / ".github" / "workflows" / "interop.yml").read_text()
@@ -530,19 +530,14 @@ class ConfigurationTests(unittest.TestCase):
         for forbidden in ("docker", "continue-on-error", "id-token:", "secrets.", "pull_request_target"):
             self.assertNotIn(forbidden, job)
 
-    def test_probe_lock_is_checked_and_reference_restore_locks_are_redirected_only_for_the_lane(self) -> None:
-        path = ROOT / "tests" / "XRegistry.Git.InteropProbe" / "InteropRestore.props"
-        document = ET.fromstring(path.read_bytes())
-        properties = document.find("PropertyGroup")
-        self.assertEqual(properties.find("NuGetLockFilePath").text, "$(GitInteropLockRoot)\\$(MSBuildProjectName).lock.json")
-        locked = properties.find("RestoreLockedMode")
-        self.assertEqual(locked.text, "true")
-        self.assertIn("XRegistry.Git.InteropProbe", locked.attrib["Condition"])
+    def test_probe_uses_normal_restore_without_source_tree_lockfiles(self) -> None:
+        self.assertFalse((ROOT / "tests" / "XRegistry.Git.InteropProbe" / "InteropRestore.props").exists())
         script = (ROOT / "eng" / "test-git-interop.ps1").read_text()
-        self.assertIn("CustomBeforeMicrosoftCommonProps=$restoreProps", script)
-        self.assertIn("GitInteropLockRoot=$restoreRoot", script)
-        self.assertIn("Copy-Item -LiteralPath $probeLock", script)
-        self.assertIn("Remove-Item -LiteralPath $restoreRoot", script)
+        self.assertNotIn("RestoreLockedMode", script)
+        self.assertNotIn("NuGetLockFilePath", script)
+        self.assertNotIn("packages.lock.json", script)
+        self.assertIn("dotnet publish", script)
+        self.assertIn("-o $nativeOutput", script)
         self.assertNotIn("vcvars", script)
         self.assertNotIn("slnx", script)
 

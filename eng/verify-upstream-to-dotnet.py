@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 xregistry-dotnet contributors.
+# SPDX-License-Identifier: MIT
+
 """Qualify the real pinned xr CLI against an owned native durable .NET FileServer."""
 
 from __future__ import annotations

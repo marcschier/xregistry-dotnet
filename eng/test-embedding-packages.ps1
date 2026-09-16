@@ -1,3 +1,6 @@
+# Copyright (c) 2026 xregistry-dotnet contributors.
+# SPDX-License-Identifier: MIT
+
 [CmdletBinding()]
 param(
     [ValidateSet('win-x64', 'win-arm64', 'linux-x64', 'linux-arm64')]
@@ -112,7 +115,7 @@ try {
         $project = Join-Path $root "src\$id\$id.csproj"
         Invoke-Recorded -Program dotnet -ArgumentList @(
             'pack', $project, '-c', 'Release', '--artifacts-path', (Join-Path $run 'pack-build'),
-            "-p:RestorePackagesPath=$packCache", '-p:RestoreLockedMode=true', '-p:UseSharedCompilation=false',
+            "-p:RestorePackagesPath=$packCache", '-p:UseSharedCompilation=false',
             '--nologo', '-o', $feed, '-v', 'minimal'
         ) -Log (Join-Path $run ("pack-$id.log"))
     }

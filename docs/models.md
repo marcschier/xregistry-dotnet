@@ -65,12 +65,10 @@ Imported collection overlays are checked after their system definitions exist,
 so immutable collection URLs survive compilation and frozen-model restart
 without weakening their flags or duplicating imported Resource type identity.
 
-Flat models no longer rebuild the complete peer-name set for every attribute.
-The retained 256/512/1024-attribute allocation measurements fell from roughly
-2.7/8.7/27.0 MB to 1.1/2.1/4.2 MB. Expanded and effective JSON output now
+Flat-model peer-name processing retains measured allocations of roughly
+1.1/2.1/4.2 MB for 256/512/1024 attributes. Expanded and effective JSON output
 enforces committed-byte and output-capacity limits before retaining an
-oversized result. The serializer still needs bounded per-token scratch space;
-`MaxBytes` is not a promise that the entire compiler heap fits that size.
+oversized result.
 Exact-byte/+1, reentrant/independent-budget and owning-JSON regressions cover
 these distinctions. Elapsed samples on this shared host are not a latency SLO.
 
@@ -88,7 +86,7 @@ check model-specific contracts, unknown-kind errors and ownership. The
 package cache and package references (not project references), and publishes and
 runs real native consumers for both TFMs on the executing platform.
 
-## Domain behavior and remaining obligations
+## Domain behavior and current boundaries
 
 The actual Schema model supports mixed formats in an unconstrained Schema
 Group, optional per-Group format defaults/constraints, wildcard extension
@@ -127,4 +125,5 @@ Some reviewed obligations remain explicit application/source/policy or
 qualification duties. Non-identical non-Avro schema evolution remains
 unsupported rather than declared compatible; YAML and arbitrary schema dialects
 are not silently accepted. See the generated [conformance ledger](conformance.md);
-these boundaries are not hidden behind successful model compilation.
+these boundaries are not hidden behind successful model compilation. Related
+qualification work is centralized in the [roadmap](roadmap.md).

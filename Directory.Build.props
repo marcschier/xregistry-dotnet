@@ -1,3 +1,6 @@
+<!-- Copyright (c) 2026 xregistry-dotnet contributors. -->
+<!-- SPDX-License-Identifier: MIT -->
+
 <Project>
   <PropertyGroup>
     <_XRegistryClientSampleDirectory>$([MSBuild]::NormalizePath('$(MSBuildThisFileDirectory)', 'samples', 'XRegistry.Client'))</_XRegistryClientSampleDirectory>
@@ -14,7 +17,7 @@
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
-    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestorePackagesWithLockFile>false</RestorePackagesWithLockFile>
     <NuGetAudit>true</NuGetAudit>
     <NuGetAuditMode>all</NuGetAuditMode>
     <IsPackable>false</IsPackable>

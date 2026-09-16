@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Federation;
 
 /// <summary>Explicit capture policy for one bounded live HTTP source session.</summary>

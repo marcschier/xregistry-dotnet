@@ -1,3 +1,6 @@
+# Copyright (c) 2026 xregistry-dotnet contributors.
+# SPDX-License-Identifier: MIT
+
 from pathlib import Path
 import unittest
 import xml.etree.ElementTree as ET

@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 xregistry-dotnet contributors.
+# SPDX-License-Identifier: MIT
+
 """Fail-closed release assembly and exact-artifact NuGet promotion."""
 
 from __future__ import annotations

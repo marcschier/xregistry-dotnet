@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 xregistry-dotnet contributors.
+# SPDX-License-Identifier: MIT
+
 """Explicitly capture reviewed spec corrections without overwriting frozen source evidence."""
 
 from __future__ import annotations

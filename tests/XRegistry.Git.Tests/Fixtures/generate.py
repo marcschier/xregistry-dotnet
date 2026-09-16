@@ -1,3 +1,6 @@
+# Copyright (c) 2026 xregistry-dotnet contributors.
+# SPDX-License-Identifier: MIT
+
 """Explicit fixture-generation tool only. Tests and shipping code never execute it."""
 
 import hashlib

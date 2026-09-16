@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Bindings.Git.Protocol;
 
 /// <summary>The nonfatal sideband channels that can produce a message.</summary>

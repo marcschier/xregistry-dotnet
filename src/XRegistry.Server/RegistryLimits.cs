@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Server;
 
 /// <summary>Inclusive per-operation budgets. Exhaustion rejects the operation before publication.</summary>

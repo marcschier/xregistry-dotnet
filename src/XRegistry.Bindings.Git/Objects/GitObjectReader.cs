@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Bindings.Git.Objects;
 
 /// <summary>Bounded, synchronous binary ingestion without repository configuration, paths, or network acquisition.</summary>
