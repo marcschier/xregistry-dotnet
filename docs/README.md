@@ -7,6 +7,7 @@ specification-correction history is in the [changelog](changelog.md).
 
 ## Start here
 
+- [Developer getting started](getting-started.md)
 - [Project overview, samples, and build](../README.md)
 - [Architecture contract](architecture.md)
 - [Domain terminology](../CONTEXT.md)
@@ -14,6 +15,13 @@ specification-correction history is in the [changelog](changelog.md).
 - [Security reporting](../SECURITY.md)
 - [Roadmap](roadmap.md)
 - [Changelog](changelog.md)
+
+## Developer guides
+
+- [Getting started and choosing packages](getting-started.md)
+- [Using the HTTP client](client-guide.md)
+- [Integrating xRegistry into ASP.NET Core](aspnetcore-integration.md)
+- [Defining custom xRegistry models](custom-models.md)
 
 ## Samples and consumer integration
 

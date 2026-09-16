@@ -1,5 +1,9 @@
 # Consumer embedding and role-oriented migration
 
+For a new application, start with
+[Integrate xRegistry into ASP.NET Core](aspnetcore-integration.md). This
+document focuses on deeper role boundaries and migration decisions.
+
 This guide describes the current standalone interfaces and the executable,
 package-reference-only consumer. It is not a drop-in binary compatibility
 promise, an OPC UA migration layer, release qualification, or a claim of

@@ -7,6 +7,10 @@ Eleven runtime packages provide Core, client, server, storage, validation,
 federation, and File/Git/OCI binding surfaces. Three .NET 10 samples demonstrate
 the supported host and client profiles.
 
+Start with the [developer getting-started guide](docs/getting-started.md) to
+consume the NuGet packages, call a Registry, embed an ASP.NET Core endpoint, or
+define an application-specific model.
+
 ## 🧪 Samples
 
 | Sample | Purpose |

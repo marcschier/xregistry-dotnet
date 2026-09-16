@@ -1,5 +1,9 @@
 # FederationBridge
 
+Start with the [developer getting-started guide](../../docs/getting-started.md)
+for the client and single-Registry server paths. This sample covers the
+separate federation host profile.
+
 A real .NET 10 API host for an explicitly configured, read-only producer view and
 separate single-authority core-HTTP write-through mounts. It is not replication,
 a cross-registry transaction coordinator, or a complete federation-discovery

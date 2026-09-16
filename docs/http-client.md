@@ -1,5 +1,7 @@
 # HTTP client foundation
 
+For task-oriented examples, start with [Use the HTTP client](client-guide.md).
+
 `XRegistryHttpClient` sends one complete request to a configured Registry root.
 Paths remain model-defined, so a custom Registry does not need generated C#
 entity types. Ordered/repeated query values, null flags, empty query values,

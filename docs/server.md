@@ -1,5 +1,8 @@
 # Server engine and HTTP adapter
 
+For a minimal application composition, start with
+[Integrate xRegistry into ASP.NET Core](aspnetcore-integration.md).
+
 This is a working, bounded core integration, not a claim that the entire frozen
 specification/working-draft plan is complete. Both libraries target net8.0 and
 net10.0 with the repository's strict trimming/NativeAOT analyzers.

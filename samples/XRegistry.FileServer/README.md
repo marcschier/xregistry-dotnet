@@ -1,5 +1,10 @@
 # Durable xRegistry API server
 
+See [ASP.NET Core integration](../../docs/aspnetcore-integration.md) to embed the
+server packages in an application, or
+[custom models](../../docs/custom-models.md) to run this sample with an
+application-specific model.
+
 This .NET 10 ASP.NET Core host combines `RegistryEngine`,
 `LocalRegistryPersistence`, SQLite metadata and immutable Document files.
 The default `all` model contains Endpoint, Message, Schema, Registry-of-Registries
