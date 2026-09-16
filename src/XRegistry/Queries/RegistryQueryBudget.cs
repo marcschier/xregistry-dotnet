@@ -72,6 +72,7 @@ public sealed class RegistryQueryBudget : IDisposable
         catch (TimeoutException exception)
         {
             await _deadline.CancelAsync().ConfigureAwait(false);
+            _callerToken.ThrowIfCancellationRequested();
             throw new RegistryException(new("server_busy", "", "The query callback deadline is exhausted."), exception);
         }
         catch (OperationCanceledException exception) when (!_callerToken.IsCancellationRequested)
