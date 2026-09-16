@@ -93,8 +93,10 @@ Production has no implicit insecure fallback:
 - `CertificatePath` is an explicit PFX/PKCS#12 file. The file must have exactly
   one private key, at most sixteen certificates, and a currently valid
   non-CA server leaf. Declared EKU must permit server authentication; declared
-  key usage must permit digital signatures. Bundled intermediates are supplied
-  to Kestrel. An optional named password must resolve when configured.
+  key usage must permit digital signatures. The selected leaf is configured
+  separately; the remaining bundled certificates are used to construct the
+  server certificate context without duplicating the leaf. An optional named
+  password must resolve when configured.
 - Kestrel HTTPS support is registered explicitly, including for
   `CreateSlimBuilder`. The selected listener permits TLS 1.2/1.3 and HTTP/1.1
   or HTTP/2. TLS handshake and request-header deadlines are ten seconds.
@@ -222,7 +224,7 @@ Fixture tokens/certificates are generated locally and temporary files are
 removed when their hosts are disposed.
 
 The managed net10.0 executable and published **win-x64 Native AOT** executable
-each passed **92 tests, zero failures and zero skips**. Native publishing
+each passed **93 tests, zero failures and zero skips**. Native publishing
 executed ILC and passed an explicit zero-IL-warning log assertion; no warning
 suppression or blanket TLS callback was used. Commands run from the repository
 root:
@@ -230,7 +232,7 @@ root:
 ```powershell
 $project = '.\tests\XRegistry.SampleHosting.Tests\XRegistry.SampleHosting.Tests.csproj'
 $artifacts = '.\artifacts\sample-hosting-build'
-dotnet test --project $project --configuration Release --artifacts-path $artifacts --minimum-expected-tests 92 --zero-tests-policy strict --timeout 3m --no-ansi --results-directory "$artifacts\managed-results"
+dotnet test --project $project --configuration Release --artifacts-path $artifacts --minimum-expected-tests 93 --zero-tests-policy strict --timeout 3m --no-ansi --results-directory "$artifacts\managed-results"
 if ($LASTEXITCODE -ne 0) { throw 'Managed sample security tests failed.' }
 
 $env:PATH = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer;' + $env:PATH
@@ -242,7 +244,7 @@ if (Select-String -LiteralPath "$artifacts\native-publish.log" -Pattern '\bwarni
 if (!(Select-String -LiteralPath "$artifacts\native-publish.log" -SimpleMatch 'Generating native code' -Quiet)) {
     throw 'Inconclusive warning gate: ILC did not execute in this run.'
 }
-& "$artifacts\native\win-x64\XRegistry.SampleHosting.Tests.exe" --minimum-expected-tests 92 --zero-tests-policy strict --timeout 3m --no-ansi --results-directory "$artifacts\native-results"
+& "$artifacts\native\win-x64\XRegistry.SampleHosting.Tests.exe" --minimum-expected-tests 93 --zero-tests-policy strict --timeout 3m --no-ansi --results-directory "$artifacts\native-results"
 if ($LASTEXITCODE -ne 0) { throw 'Native sample security tests failed.' }
 ```
 

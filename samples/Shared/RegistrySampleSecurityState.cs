@@ -22,12 +22,14 @@ internal sealed class RegistrySampleSecurityState : IDisposable
     private int _disposed;
 
     private RegistrySampleSecurityState(RegistrySampleHostOptions options, IPAddress demoAddress,
-        X509Certificate2? certificate, X509Certificate2Collection certificates, byte[] adminTokenHash, byte[]? readTokenHash)
+        X509Certificate2? certificate, X509Certificate2Collection certificates,
+        X509Certificate2Collection serverCertificateChain, byte[] adminTokenHash, byte[]? readTokenHash)
     {
         Options = options;
         DemoAddress = demoAddress;
         Certificate = certificate;
         Certificates = certificates;
+        ServerCertificateChain = serverCertificateChain;
         AdminTokenHash = adminTokenHash;
         ReadTokenHash = readTokenHash;
     }
@@ -36,6 +38,7 @@ internal sealed class RegistrySampleSecurityState : IDisposable
     internal IPAddress DemoAddress { get; }
     internal X509Certificate2? Certificate { get; }
     internal X509Certificate2Collection Certificates { get; }
+    internal X509Certificate2Collection ServerCertificateChain { get; }
     internal byte[] AdminTokenHash { get; }
     internal byte[]? ReadTokenHash { get; }
     internal bool SecurityApplied => Volatile.Read(ref _securityApplied) != 0;
@@ -83,7 +86,7 @@ internal sealed class RegistrySampleSecurityState : IDisposable
                 throw new ArgumentException("Loopback demo cannot be combined with certificate or token configuration.", nameof(options));
             }
 
-            return new(options, address, null, [], [], null);
+            return new(options, address, null, [], [], [], null);
         }
 
         ArgumentException.ThrowIfNullOrWhiteSpace(options.CertificatePath);
@@ -134,7 +137,19 @@ internal sealed class RegistrySampleSecurityState : IDisposable
                 throw new ArgumentException("A currently valid server certificate with its private key is required.", nameof(options));
             }
 
-            var state = new RegistrySampleSecurityState(options, IPAddress.Loopback, certificate, certificates, administrator, reader);
+            X509Certificate2Collection serverCertificateChain = [];
+            foreach (var candidate in certificates)
+            {
+                if (candidate.RawDataMemory.Span.SequenceEqual(certificate.RawDataMemory.Span))
+                {
+                    continue;
+                }
+
+                serverCertificateChain.Add(candidate);
+            }
+
+            var state = new RegistrySampleSecurityState(
+                options, IPAddress.Loopback, certificate, certificates, serverCertificateChain, administrator, reader);
             transferred = true;
             return state;
         }

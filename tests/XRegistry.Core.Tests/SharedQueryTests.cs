@@ -89,6 +89,18 @@ public class SharedQueryTests
     }
 
     [Test]
+    public async Task CallerCancellationWinsWhenCallbackTimeoutAndCancellationRace()
+    {
+        using var cancellation = new CancellationTokenSource();
+        using var budget = new RegistryQueryBudget(cancellationToken: cancellation.Token);
+        await Assert.That(async () => await budget.RunAsync<int>(_ =>
+        {
+            cancellation.Cancel();
+            throw new TimeoutException();
+        })).Throws<OperationCanceledException>();
+    }
+
+    [Test]
     public async Task InfrastructureSourceFailuresPropagateInsteadOfInventingAnEmptySelection()
     {
         var source = new DetachedSource();

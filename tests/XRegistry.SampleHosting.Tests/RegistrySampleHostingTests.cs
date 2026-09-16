@@ -571,6 +571,21 @@ public class RegistrySampleHostingTests
     }
 
     [Test]
+    public async Task ServerCertificateChainDoesNotDuplicateTheLeaf()
+    {
+        await using var fixture = new SampleHostFixture("chain");
+        using var state = RegistrySampleSecurityState.Create(fixture.Options, fixture.GetSecret);
+        var leaf = state.Certificate ?? throw new InvalidOperationException("The fixture server certificate was not loaded.");
+
+        await Assert.That(state.ServerCertificateChain.Count).IsEqualTo(2);
+        await Assert.That(state.ServerCertificateChain.Any(candidate =>
+            candidate.RawDataMemory.Span.SequenceEqual(fixture.RootCertificate.RawDataMemory.Span))).IsTrue();
+        await Assert.That(state.ServerCertificateChain.All(static candidate => !candidate.HasPrivateKey)).IsTrue();
+        await Assert.That(state.ServerCertificateChain.Any(candidate =>
+            candidate.RawDataMemory.Span.SequenceEqual(leaf.RawDataMemory.Span))).IsFalse();
+    }
+
+    [Test]
     public async Task BundledIntermediateCertificatesArePresentedWithoutAmbientStores()
     {
         await using var fixture = new SampleHostFixture("chain");

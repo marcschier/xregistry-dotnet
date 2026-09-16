@@ -87,7 +87,7 @@ public static class RegistrySampleHosting
                         listener.UseHttps(https =>
                         {
                             https.ServerCertificate = state.Certificate;
-                            https.ServerCertificateChain = state.Certificates;
+                            https.ServerCertificateChain = state.ServerCertificateChain;
                             https.SslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13;
                             https.ClientCertificateMode = ClientCertificateMode.NoCertificate;
                             https.HandshakeTimeout = TimeSpan.FromSeconds(10);
