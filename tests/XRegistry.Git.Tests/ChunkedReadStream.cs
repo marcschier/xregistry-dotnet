@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Git.Tests;
 
 internal sealed class ChunkedReadStream(byte[] bytes, int chunkSize = 1, Action? afterRead = null) : Stream

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Models;
 
 /// <summary>Inclusive source, cumulative metadata, and probe limits for forward OpenUSD resolution.</summary>

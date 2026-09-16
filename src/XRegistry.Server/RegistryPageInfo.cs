@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Server;
 
 /// <summary>An opaque, trusted-root link to a page in one frozen record set.</summary>

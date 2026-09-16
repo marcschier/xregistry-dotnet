@@ -2,10 +2,10 @@
 
 **Build artifacts are available without publishing authority.** The source
 version is `1.0.0-rc4`. Packages and samples are implemented but not
-release-qualified; remaining native/conformance requirements must not be marked
+release-qualified; incomplete native/conformance requirements must not be marked
 qualified merely to unblock promotion.
 
-`packages.yml` runs locked builds and `eng\package_build.py`, producing the exact
+`packages.yml` runs ordinary restore/build and `eng\package_build.py`, producing the exact
 source version as eleven `.nupkg`/`.snupkg` pairs under `artifacts\ci-packages`.
 `package-build.json` records their hashes, source commit, ref and explicitly
 `releaseQualified: false`. The build job has no publishing token or OIDC
@@ -60,12 +60,12 @@ The build job has only `contents: read`, no publishing token and no OIDC access.
 1. Require all eleven libraries and three samples to be `qualified`, then run
    the existing `python eng\check_packages.py --release` and
    `python eng\specification\manage.py release` gates without changing them.
-2. Run `eng\build.ps1` (locked restore, warnings-as-errors build and project
+2. Run `eng\build.ps1` (normal restore, warnings-as-errors build and project
    evaluation), then `eng\test.ps1 -NoBuild` (tooling, source consistency and
    nonempty managed tests). A failure stops artifact creation.
 3. Pack each declared library with explicit `PackageVersion`, `Version`,
    `RepositoryCommit`, `RepositoryBranch`, `PublicRelease` and CI properties.
-   `--no-restore` preserves the locked dependency graph. `eng\pack.ps1` remains
+   `--no-restore` reuses the already verified build restore. `eng\pack.ps1` remains
    unchanged; the small release-specific pack loop is necessary because its
    existing interface has no explicit-version parameter.
 4. Recheck the clean checkout and the tagged bytes of the package inventory,
@@ -163,7 +163,7 @@ request no `packages: write` permission and claim no GitHub Packages remote
 setup. Adding another destination requires a separately approved integration
 that consumes this same verified payload.
 
-## Account-owner setup and remaining qualification
+## Account-owner setup and qualification prerequisites
 
 Before any real release, maintainers must separately authorize remote actions
 and complete the implementation, semantic review and genuine native evidence.
@@ -217,7 +217,8 @@ publication sequence.
 GitHub-hosted runners must provide current `gh` with the documented attestation
 policy flags, Git, PowerShell, Python 3.13 and the SDK from `global.json` plus the
 .NET 8 runtime/SDK. The pinned Node 24 actions require a sufficiently current
-runner. Locked dependencies, all real native Windows/Linux x64/ARM64 execution
+runner. Central package versions, NuGet audit/source mapping, all real native
+Windows/Linux x64/ARM64 execution
 infrastructure, artifact retention and access to GitHub/NuGet/Sigstore services
 remain integration requirements. Expired/deleted artifacts, unavailable
 attestations, multiple matching successful runs or missing metadata are hard

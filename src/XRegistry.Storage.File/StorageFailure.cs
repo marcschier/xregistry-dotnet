@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Storage.File;
 
 /// <summary>Identifies an explicit failure of the local storage contract.</summary>

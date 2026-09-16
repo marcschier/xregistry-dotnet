@@ -5,7 +5,7 @@ separate single-authority core-HTTP write-through mounts. It is not replication,
 a cross-registry transaction coordinator, or a complete federation-discovery
 implementation. Core aliases and requested document/inline/collections/binary
 views, shared Core filter/sort semantics and bounded frozen paging are supported.
-See [the contract and remaining limits](../../docs/federation-bridge.md).
+See [the current contract and limits](../../docs/federation-bridge.md).
 
 ## Explicit loopback demo
 

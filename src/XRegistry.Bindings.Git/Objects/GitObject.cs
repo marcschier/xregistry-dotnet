@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Bindings.Git.Objects;
 
 /// <summary>An immutable, owned canonical Git object with a recomputed identity.</summary>

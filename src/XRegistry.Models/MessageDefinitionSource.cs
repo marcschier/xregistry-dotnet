@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Models;
 
 /// <summary>A caller-controlled metadata acquisition seam. The callback must authorize each request before accessing its source.</summary>

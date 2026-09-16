@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Queries;
 
 /// <summary>Transport-independent effective query parameters over one logical target.</summary>

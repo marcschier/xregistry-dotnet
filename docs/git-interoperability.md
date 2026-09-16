@@ -31,15 +31,10 @@ Docker Desktop, use a container, modify Git configuration, or alter a remote.
 All Git commits, refs and annotated tags are confined to newly created temporary
 reference repositories, which are removed when the experiment exits.
 
-The checked probe lock covers both frameworks and Windows/Linux x64 compiler
-assets. `InteropRestore.props` is passed only to this lane through MSBuild's
-`CustomBeforeMicrosoftCommonProps` extension point. It checks the probe's full
-NuGet dependency closure in locked mode using a private copy of its lock.
-Referenced projects' runtime-specific restore locks are generated in the same
-per-run scratch directory rather than rewriting their source lock files. The
-wrapper removes only those generated files and that exact directory afterward.
-This avoids the existing library RID-lock inconsistencies without changing
-root properties, dependency manifests or the solution.
+The probe uses normal lockfile-free NuGet restore with central package versions,
+audit, and source mapping. Restore/build outputs and the package cache are
+isolated per run; the wrapper removes only its exact owned scratch directory.
+It does not change root properties, dependency manifests, or the solution.
 
 For a previously published probe, the driver can be invoked directly:
 
@@ -189,23 +184,24 @@ the CGI executable SHA-256 is
 These identify the actually used installed oracle, not a newly configured
 remote or a signed release provenance claim.
 
-## CI and remaining limits
+## CI and current limits
 
 The isolated `native-git-to-reference` job in `.github\workflows\interop.yml`
 runs Linux x64 for net8.0 and net10.0 with installed Git, clang and zlib.
 It uses the existing immutable checkout/setup/artifact pins, read-only contents
 permission, no persisted checkout credentials, no Docker and no dependency on
-the existing pinned xRegistry peer job. It uploads the real evidence and tested
-native executable even when a later check fails. The peer job is unchanged.
+the pinned xRegistry peer job. It uploads the real evidence and tested native
+executable even when a later check fails.
 
 **Linux execution has not been qualified locally or dispatched.** Linux x64 CI
-and both ARM64 RIDs remain outstanding. This fixture does not qualify TLS,
+and both ARM64 RIDs are not covered. This fixture does not qualify TLS,
 authentication, public Git hosts, forced protocol v1, large repositories or
 delta-stress behavior, SHA1DC/signatures/authorship, directory-mapping/federation
 capture, or xRegistry server behavior. It does not create specification-ledger
 native receipts or change package/sample qualification statuses. No production
 Git bug was found, so no production Git source change or unrelated 107-test
-suite rerun was needed.
+suite rerun was needed. Outstanding interoperability work is listed in the
+[roadmap](roadmap.md#interoperability).
 
 Official contracts used:
 

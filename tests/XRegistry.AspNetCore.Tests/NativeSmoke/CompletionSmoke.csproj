@@ -1,3 +1,6 @@
+<!-- Copyright (c) 2026 xregistry-dotnet contributors. -->
+<!-- SPDX-License-Identifier: MIT -->
+
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <PropertyGroup>
     <TargetFrameworks />
@@ -7,7 +10,6 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
-    <NuGetLockFilePath>CompletionSmoke.packages.lock.json</NuGetLockFilePath>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>

@@ -45,8 +45,8 @@ remain checked whenever `OpenDocument` is called. Ordinary store startup and
 The adapter distinguishes preserving, removing and replacing content.
 `StorageMutation.PutPreservingDocument` retains the committed immutable
 reference instead of opening one stream per mutation or restaging unchanged
-bytes. Metadata-only `StorageMutation.Put` still means no Document; its existing
-behavior was not changed. Every candidate rechecks its storage generation.
+bytes. Metadata-only `StorageMutation.Put` means no Document. Every candidate
+rechecks its storage generation.
 
 Engine model envelopes, outbox batches and permanent correlation reservations
 remain opaque records; the adapter never filters or rewrites them. Real
@@ -112,5 +112,6 @@ directories. The caller owns the data-root directory.
 Six Windows x64 .NET 10 Native AOT process-termination/restart cases have executed
 successfully locally. Filesystem fault injection, physical power-loss
 certification, larger performance profiles and the complete native platform
-matrix remain open. Process termination is not evidence of a real disk power
-failure or controller-cache durability.
+matrix are not covered by that evidence. Process termination is not evidence of
+a real disk power failure or controller-cache durability. Outstanding evidence
+is tracked in the [roadmap](roadmap.md#durability-and-performance).

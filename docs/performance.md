@@ -54,7 +54,7 @@ The largest case had wide confidence intervals and large-object collections.
 The host was shared with development work. These figures establish scale and
 reproducible commands, **not an SLO or proof of a runtime speedup**.
 
-## Regression policy and remaining coverage
+## Regression policy and current coverage
 
 A reproducible mean/p95 degradation greater than 10% against the same controlled
 hardware, source fixture, runtime, GC mode and storage durability settings is an
@@ -62,9 +62,10 @@ investigation trigger. Compare confidence intervals and repeat noisy results;
 do not turn hosted-runner noise into a reliable release gate. Allocations,
 bounded working set and exact result correctness are separate constraints.
 
-No final numerical release budgets have been qualified yet. Remaining workloads
-include durable commits/recovery, metadata filtering/sorting/paging, concurrent
-HTTP operations, bounded large-document streaming, federation fan-out, Git pack
-and delta work, OCI indexed lookup, and native startup/executable size. The
-current parser measurements do not cover these workloads. Do not disable
-durability or security checks to meet a performance target.
+No final numerical release budgets are qualified. The current parser
+measurements do not cover durable commits/recovery, metadata
+filtering/sorting/paging, concurrent HTTP operations, bounded large-Document
+streaming, federation fan-out, Git pack/delta work, OCI indexed lookup, or
+native startup/executable size. Do not disable durability or security checks to
+meet a performance target. The measurement work is tracked in the
+[roadmap](roadmap.md#durability-and-performance).

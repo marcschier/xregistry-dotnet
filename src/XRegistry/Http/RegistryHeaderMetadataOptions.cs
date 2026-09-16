@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Http;
 
 /// <summary>The direction of a Document's model-dependent HTTP metadata representation.</summary>

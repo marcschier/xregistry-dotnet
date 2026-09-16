@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 xregistry-dotnet contributors.
+# SPDX-License-Identifier: MIT
+
 """Kill one owned native writer process at a time and verify real restarted state."""
 
 from __future__ import annotations

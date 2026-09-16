@@ -23,7 +23,7 @@ metadata and an unknown-path rejection. It refuses JIT execution.
 The current probe is a first contract slice, not a complete client qualification
 or reverse-peer test.
 
-The initial client slice has also executed as a Linux x64 native binary in a
+The client slice has also executed as a Linux x64 native binary in a
 runtime-deps container, without a .NET SDK/runtime installation. The harness
 can accept `-NativeClientImage`; it pins the local image ID and shares only the
 disposable peer's network namespace, so the test endpoint remains loopback
@@ -44,7 +44,7 @@ version-ordering or working-draft feature. Its Go test setup starts its own
 server/database and cannot be retargeted merely through `XR_SERVER`.
 `xr conform` is not an exhaustive CRUD checker.
 
-## Evidence still required
+## Current evidence gaps
 
 The reverse `xr` client has executed native .NET import/get/default/empty/
 metadata/restart operations (17 checks). Its unmodified conformance checker
@@ -54,7 +54,8 @@ into a green result; see [reverse interoperability](reverse-interoperability.md)
 
 Current peer reruns require the unavailable local Docker Linux engine. The full
 native-platform and hosted CI execution matrix, broader bridge/authorization
-interop and clean-package peer qualification remain incomplete. No remote
+interop and clean-package peer qualification are not complete. They are tracked
+in the [roadmap](roadmap.md#interoperability). No remote
 repository creation, push, release or NuGet publication has been authorized or
 performed.
 

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Models;
 
 /// <summary>Pure Git advertisement syntax, independent of repository acquisition and caller access policy.</summary>

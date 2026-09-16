@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Storage.File;
 
 /// <summary>A requested opaque-key metadata change. Preparation copies the supplied JSON.</summary>

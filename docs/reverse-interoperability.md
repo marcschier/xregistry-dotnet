@@ -3,7 +3,7 @@
 **Current result: the real Windows mutation/read/restart slice passed 17 named
 checks; full reverse qualification remains blocked by the pinned upstream
 checker.** `xr conform` exited 2 with **30 pass, 10 fail, 0 warn, 0 skip**.
-The harness exits nonzero and records `qualified: false`. The new CI lane
+The harness exits nonzero and records `qualified: false`. The CI lane
 retains this failure rather than filtering capabilities, patching the peer,
 lowering totals or skipping suites.
 
@@ -38,8 +38,8 @@ cleanliness, embedded VCS revision and `vcs.modified=false` are checked.
 
 Go was absent on the local Windows host. After that actual missing-tool
 failure, the exact official Go archive was SHA-256/size checked and installed
-only inside a unique artifact directory. A second complete bootstrap through
-the new helper also passed. Global Git configuration/hooks and interactive
+only inside a unique artifact directory. A complete bootstrap through
+the helper passed. Global Git configuration/hooks and interactive
 credentials are disabled for the task checkout. GOROOT, GOPATH, module/build
 caches and CLI configuration are isolated; no user repository, global tool
 installation or .NET runtime dependency is involved.
@@ -138,13 +138,12 @@ reverse result has **not** been established. No 30-pass reduced success,
 missing suites, warning/skip allowance, response filter, modified CLI or
 specification change is used to manufacture it.
 
-A later read-only check of the upstream default branch (`master`) resolved to
-`4e29b6b32118059ada63a7b321e3984ec8783459`. Its `common/capabilities.go` still
-omits the top-level `mutable` field, and `common/utils.go` still calls
-`DisallowUnknownFields` in `Unmarshal`. Updating to that unmodified revision
-therefore does not remove this incompatibility. This is immutable source
-evidence, not a newly built/qualified peer; the existing interoperability pin
-was not changed.
+A read-only source observation records the upstream default branch (`master`) at
+`4e29b6b32118059ada63a7b321e3984ec8783459`. At that revision,
+`common/capabilities.go` omits the top-level `mutable` field and
+`common/utils.go` calls `DisallowUnknownFields` in `Unmarshal`, so the same
+incompatibility is present. This is source evidence, not a built or qualified
+peer, and it does not change the authoritative interoperability pin.
 
 ## Tools, evidence and commands
 
@@ -213,7 +212,7 @@ fake CLI substituted for interoperability.
 | Checker exit/totals/suites/warnings/skips or known blocker | `test_checker_requires_six_named_suites_exact_totals_zero_errors_and_zero_process_exit`, `test_known_mutable_capability_failure_is_classified_but_not_accepted` |
 | Source/toolchain/build-metadata/archive pin or traversal mismatch | `test_reverse_lock_must_agree_with_exact_existing_upstream_pin`, `test_binary_build_metadata_requires_unmodified_exact_vcs_commit`, `test_archive_hash_and_size_are_verified_before_extraction`, `test_archive_cannot_write_outside_its_owned_go_directory` |
 
-## CI lane and remaining claims
+## CI lane and current claim boundaries
 
 `.github\workflows\interop.yml` adds only
 `pinned-xr-to-native-fileserver`. Existing forward/Git workflow bytes were
@@ -226,9 +225,10 @@ Docker is not required. Evidence is retained even on failure.
 **The lane currently fails its strict conformance step on the known peer
 parser issue.** There is no `continue-on-error`, skip flag, reduced expected
 count or accepted-error path. YAML/job structure was validated locally; the
-Linux job itself was not executed or remotely dispatched during this task.
+Linux job has not been executed or remotely dispatched.
 
 No claim is made for full Core coverage, a clean six-suite reverse checker run,
 Linux execution, ARM64, native bridge behavior, live production TLS/auth,
 publisher signatures or general interoperability with arbitrary clients.
-No source/spec/server correction was made to appease this peer.
+No source/spec/server correction was made to appease this peer. Outstanding
+interop work is tracked in the [roadmap](roadmap.md#interoperability).

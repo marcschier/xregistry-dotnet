@@ -64,7 +64,7 @@ silently weakening the promise.
 The current tests cover both object formats, independent Git-generated packs,
 tag/tree reads, v2/legacy HTTP transcripts over real sockets, exact ref
 selection, fatal sideband, bad checksums, and required trusted-root matching.
-The recovered suites pass 129 cases per managed TFM and 129 in a .NET 10
+The suites pass 129 cases per managed TFM and 129 in a .NET 10
 Windows x64 native executable, including 20 EOF/wrong-kind/missing-path and
 lookalike regressions. The .NET 8 TUnit-host framework warning remains separate
 from the clean all-package consumer evidence. Retained reference upload-pack
@@ -72,8 +72,10 @@ interoperability covers 26 cases and 56 exchanges per Windows x64 TFM; see
 [Git interoperability](git-interoperability.md).
 
 The full all-RID native matrix, broader fuzz/performance evidence, and a general
-SHA1DC implementation remain separate qualification work. Buffered acquisition is explicitly capped at
-256 MiB; larger repositories require a future bounded on-disk acquisition path.
+SHA1DC implementation are not qualified. Buffered acquisition is explicitly
+capped at 256 MiB; larger repositories are unsupported without a bounded
+on-disk acquisition design. These items are tracked in the
+[roadmap](roadmap.md#native-platforms-and-package-consumers).
 
 The selected-profile validation review adds 95 focused cases in
 `GitAdvertisementValidationTests`: required revision shapes, full-ref/OID

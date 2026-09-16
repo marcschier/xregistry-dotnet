@@ -4,13 +4,13 @@ This is a working, bounded core integration, not a claim that the entire frozen
 specification/working-draft plan is complete. Both libraries target net8.0 and
 net10.0 with the repository's strict trimming/NativeAOT analyzers.
 
-The explicitly OpenUSD-compatible model now has bounded atomic publication
+The explicitly OpenUSD-compatible model has bounded atomic publication
 checks for authoritative identity, verbatim names, current roots, declared
 dependencies, local digests and plugin declarations. Opaque artifacts bypass
 format collaborators without fabricated validation flags. One-hop borrowed
 roots are checked in both mutation directions, with private referring Groups
-kept out of reverse-error details. See [OpenUSD contracts and remaining
-boundaries](openusd.md); collision-only identifiers and native USD format
+kept out of reverse-error details. See [OpenUSD current boundaries](openusd.md);
+collision-only identifiers and native USD format
 validation are not claimed complete.
 
 Catalog publication rules are shared with Federation and selected by explicit
@@ -165,7 +165,8 @@ absolute URL strings, for example:
 The braces shown for the list in the pinned HTTP discovery example contradict
 the Core definition. They are not an alternative wire format: neither JSON
 serialization nor parsing is relaxed to accept them. The specification example
-correction and its successor/regression artifacts remain parent-owned.
+correction and its successor/regression artifacts are verified through the
+[specification workflow](spec-feedback.md).
 
 Nested updates, implicit parents, retention/cascade deletion and all affected
 epochs are published in one expected-generation batch. Sibling ID uniqueness is
@@ -435,9 +436,9 @@ Retention, deleting the last Version, recreating a Resource in a later request
 and case-insensitive sibling conflicts continue to use the current candidate
 membership, not a stale snapshot list.
 
-A Group metadata write no longer schedules every Resource for full validation.
-Untouched Resources are scheduled when Group constraints change, or when a
-modeled `equals` dependency changes in the completed Group metadata. Explicit
+A Group metadata write schedules untouched Resources for full validation only
+when Group constraints change, or when a modeled `equals` dependency changes in
+the completed Group metadata. Explicit
 constraint changes conservatively recheck the Group's Resource collections;
 unchanged constraints with changed equals values select their affected types.
 Model updates still revalidate the model's affected data. Last-Version deletion
@@ -638,19 +639,16 @@ rechecks retained-read authorization and credential context without reopening
 sources on replay. Local engine cursor ownership and authorization semantics
 remain unchanged.
 
-The bridge owner reported 139 passing managed tests, 139 passing
+The current evidence records 139 passing managed tests, 139 passing
 Windows-native tests and six principal native HTTP cases, including
 `FilterAfterWholeResourceShadowNeverRecoversLowerPriorityVersions`,
 `MetaAndDefaultVersionFactsUseSharedCorePlanesAndExactNumericOrdering` and
-`PagesFreezeSelectedBytesAndDoNotReopenSources`. Those owner-reported runs include escaped-XID/shared-query integration,
+`PagesFreezeSelectedBytesAndDoNotReopenSources`. These runs include escaped-XID/shared-query integration,
 DefaultVersionId context, owner-before-members checks and alias Meta
-authorization and the stricter alias-target Meta identity guard. A fresh
-integrated 3,723-case managed run also passed before the subsequent native
-URI corrections; those later changes require renewed integration evidence.
-The owner's completed
+authorization and the stricter alias-target Meta identity guard. The
 principal-host evidence is
 `artifacts/bridge-build/host-smoke/95c081ce060246cf8727817bf1bb3350/evidence.json`.
-Linux bridge execution remains blocked by the shared Docker filesystem.
+Linux bridge execution is not included in this source-matched evidence.
 
 Core defaults, separate from retained-page quotas:
 
@@ -887,9 +885,9 @@ IDs for the Registry lifetime. These small records contain the correlation ID,
 are committed with the entity/outbox changes, and are not deleted when delivery
 is acknowledged or Groups are removed. Preserve them in backups and adapters.
 They consume storage quota; exhaustion fails explicitly rather than forgetting
-uniqueness. Registries populated by earlier code without reservations need their
-historic correlation IDs retained/backfilled before claiming lifetime uniqueness
-for that older history.
+uniqueness. Stores without lifetime correlation reservation records require
+their historic correlation IDs to be retained or backfilled before claiming
+lifetime uniqueness for existing history.
 The adapter must preserve these opaque records rather than translating them
 into exposed HTTP representations.
 
@@ -924,8 +922,7 @@ For the current LocalFileStore API, the important translations are:
 | Put / Preserve, with or without an existing Document | `StorageMutation.PutPreservingDocument(key, metadataUtf8)` |
 
 The metadata-only file-store Put removes content; it must not be used for a
-Preserve mutation. Native reference preservation supersedes the earlier
-stream-translation workaround and does not consume one open stream per preserved
+Preserve mutation. Native reference preservation does not consume one open stream per preserved
 Document. The adapter serializes opaque RegistryJson without reflection or
 numeric narrowing and never disposes engine-supplied replacement streams.
 The engine retains its original snapshot through preparation and commit; a
@@ -939,15 +936,14 @@ infrastructure errors, not empty snapshots or successful no-ops. CommitAsync wra
 the bounded synchronous file-store commit, retaining cancellation and unknown
 acknowledgement semantics. No mutation is automatically replayed.
 
-Durable engine integration is no longer pending. The parent-owned
 `tests\XRegistry.Storage.File.Tests\RegistryPersistenceTests.cs` covers native
 preservation, immutable generation indexes, retained leases, stale candidates,
 snapshot quotas, and exact-byte restart. In particular,
 `FileBackedEngineRestartsWithFrozenCustomModelExactBytesAndCommittedOutbox`
 checks a custom model after reopen, Document bytes, atomic outbox/correlation
 records, and nested-failure rollback without advancing the stored generation.
-The separate process-crash/recovery harness and principal hosts remain
-parent-owned; transient restart is not presented as crash-recovery evidence.
+The separate process-crash/recovery harness and principal hosts provide their
+own evidence; transient restart is not presented as crash-recovery evidence.
 
 ## Validation and event integration
 
@@ -991,7 +987,7 @@ boundaries. A timed-out non-cooperative validator cannot publish and continues
 occupying its external-work slot until it terminates.
 
 The opt-in `BuiltInRegistryResourceValidator(DocumentValidationOptions? options =
-null)` implements this interface using the parent-owned Validation package:
+null)` implements this interface using the Validation package:
 
 ```csharp
 var options = new RegistryEngineOptions
@@ -1098,7 +1094,8 @@ value equals Core's safely encoded `CorrelationHeaderValue`. Acknowledgement
 accepts either GUID case and removes only the outbox record, never its lifetime
 reservation. Lifecycle decisions, authorization, reservations, atomic publication
 and delivery remain Server responsibilities. No public engine, endpoint,
-persistence or event-delivery signatures changed for this integration.
+persistence or event-delivery signature extension is required by this
+integration.
 
 ## Standardized error contract
 
@@ -1209,7 +1206,7 @@ HTTP framing or request-line syntax) remain host-level responses. Host-specific
 extension families, alternate transports and the full clause-ledger review
 remain outside this closure.
 
-## Boundaries and remaining profile
+## Current boundaries and profile
 
 `RegistryLimits` bounds JSON bytes/depth/nodes/numeric work, each Document,
 prepared responses and headers, query length, entity work, aggregate loaded
@@ -1224,7 +1221,7 @@ After a successful commit, a lost response is not evidence of rollback.
 Known concurrency conflicts are 503 without publication. Unknown commit
 outcomes are explicit 503 problems with `xRegistry-commit-outcome: unknown`.
 Problem details are written explicitly, independently of the metadata codec,
-using the standardized contract and remaining qualifications above.
+using the standardized contract and qualification boundaries above.
 
 The following remain outside this implemented profile and are not advertised:
 host-wide well-known discovery and federation resolution. A Resource with a
@@ -1234,9 +1231,10 @@ explicit host URL policy. No normative `proxyurl` attribute or mandatory proxy
 fetch was identified, so no new proxy semantics or automatic network fetch
 is implemented. Ordinary domain/IRI metadata is not fetch authorization.
 The durable adapter and
-file-backed engine restart integration are implemented in Storage.File. The parent
-owns production authorization, principal-host/bridge composition, crash-recovery
-qualification, and the complete clause-ledger review. No cross-registry transaction, remote prepare,
+file-backed engine restart integration are implemented in Storage.File.
+Production authorization, principal-host/bridge composition, crash-recovery
+qualification, and complete clause-ledger review are separate integration and
+evidence responsibilities tracked in the [roadmap](roadmap.md). No cross-registry transaction, remote prepare,
 or automatic mutation replay is required or claimed.
 
 ## Reproducible verification

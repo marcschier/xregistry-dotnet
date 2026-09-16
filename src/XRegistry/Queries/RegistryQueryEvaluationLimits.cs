@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Queries;
 
 /// <summary>Inclusive, cumulative query limits, independent of transport and retained-page storage.</summary>

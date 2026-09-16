@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 using TUnit.Assertions;
 using TUnit.Core;
 using static XRegistry.Models.Tests.MessageMaterializationTraversalTests;

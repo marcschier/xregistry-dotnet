@@ -52,5 +52,5 @@ check. The host still owns authorization, entity lifecycle, correct ancestor
 selection and atomic publication.
 
 Managed tests run on both TFMs; the syntax/compatibility slice has also executed
-as an actual Windows x64 native binary. Complete all-platform and final
-package-consumer qualification remains required.
+as an actual Windows x64 native binary. All-platform and final package-consumer
+qualification are not complete; see the [roadmap](roadmap.md#native-platforms-and-package-consumers).

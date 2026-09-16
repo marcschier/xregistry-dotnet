@@ -1,3 +1,6 @@
+# Copyright (c) 2026 xregistry-dotnet contributors.
+# SPDX-License-Identifier: MIT
+
 ARG TOOLS_IMAGE=xregistry-native-tools:local
 ARG ORACLE_IMAGE=xregistry-oracle-runtime:local
 FROM ${TOOLS_IMAGE} AS build

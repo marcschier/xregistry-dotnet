@@ -60,8 +60,8 @@ not publish partial output. Binding modules reuse this factory instead of
 implementing another unbounded JSON staging buffer.
 
 Expose neither OPC UA-specific value types nor the informative UA branch's
-experimental envelope as a prerequisite. A future consumer supplies its own
-adapter rather than imposing native transport details on every caller.
+experimental envelope as a prerequisite. Consumers supply their own adapter
+rather than imposing native transport details on every caller.
 
 ## Local mutations
 

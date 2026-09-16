@@ -124,7 +124,7 @@ These are **best-effort live observations**, not a transaction across URLs.
 Default-selection checks catch an observed race but cannot eliminate ABA
 changes or prove a global snapshot. Shared caching, conditional revalidation,
 range assembly, independently authorized redirect acquisition and fallback to
-equivalent exports/inlining are not yet implemented. Unrequested `304`/`206`
+equivalent exports/inlining are unsupported. Unrequested `304`/`206`
 or redirected representations fail explicitly rather than being combined
 without the necessary cached bytes or validators.
 

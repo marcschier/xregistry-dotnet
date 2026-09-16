@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Encodings.Web;

@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 xregistry-dotnet contributors.
+# SPDX-License-Identifier: MIT
+
 """Bounded, validated native durable FileServer end-to-end performance workload."""
 
 from __future__ import annotations

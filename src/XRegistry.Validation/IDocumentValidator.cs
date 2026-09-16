@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Validation;
 
 /// <summary>Checks source-format documents, not xRegistry metadata or data instances.</summary>

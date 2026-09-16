@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry;
 
 /// <summary>A structured failure at an RFC 6901 JSON pointer (the empty string denotes the root).</summary>

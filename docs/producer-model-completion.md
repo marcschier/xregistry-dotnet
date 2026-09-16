@@ -139,4 +139,5 @@ All work uses the existing Core/Federation contracts and framework APIs, without
 a Server dependency, new NuGet packages, implicit schema validation, or changes
 to source models or Documents. Focused producer tests target .NET 8 and .NET 10;
 the checked-in Bridge test project targets .NET 10. Native and fresh-package
-qualification are separate parent-owned gates.
+qualification are separate gates tracked in the
+[roadmap](roadmap.md#native-platforms-and-package-consumers).

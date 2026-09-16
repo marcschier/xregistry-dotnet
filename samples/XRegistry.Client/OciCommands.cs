@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 using System.Net.Http.Headers;
 using System.Text.Json;
 using XRegistry.Bindings.File;

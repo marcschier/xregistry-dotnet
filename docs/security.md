@@ -108,7 +108,7 @@ If a required security guarantee cannot be achieved, report the affected promise
 as blocked. Do not silently accept residual risk, introduce native/executable
 Git, or advertise a weakened implementation as complete.
 
-## Historical specification dependencies
+## Captured specification dependencies
 
 `tests/Conformance/Sources` is immutable, hash-verified specification evidence,
 not an installation source. Its captured `tools/requirements.txt` includes an

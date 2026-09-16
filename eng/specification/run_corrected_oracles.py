@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 xregistry-dotnet contributors.
+# SPDX-License-Identifier: MIT
+
 """Run independent pytest oracles on an isolated frozen or active-corrected corpus."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Bindings.Git.Protocol;
 
 /// <summary>Packet kinds; combinations specify the kinds permitted by a decoding phase.</summary>

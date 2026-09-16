@@ -18,14 +18,19 @@ Package statuses and release gates must describe reality. Never mark a feature
 qualified because its project builds or its test runner returns success without
 executing the relevant cases.
 
-Source `packages.lock.json` files describe portable restores. RID-specific and
-Native AOT restores use `native-<rid>.packages.lock.json` (or `native-aot` without
-an explicit RID) under each project's evaluated `MSBuildProjectExtensionsPath`,
-including custom artifact roots. Do not copy native restore profiles over the
-source locks. Explicit caller-provided lock paths are preserved. After changing
-project references, regenerate the portable graph with the SDK and verify
-`dotnet restore XRegistry.slnx --locked-mode`; retained package versions/content
-hashes must not drift unexpectedly.
+NuGet dependency versions are centrally managed in `Directory.Packages.props`.
+Use normal restore and build commands:
+
+```powershell
+dotnet restore XRegistry.slnx
+dotnet build XRegistry.slnx -c Release --no-restore
+```
+
+Keep NuGet audit and package-source mapping enabled, and review unexpected
+dependency or source changes. NuGet restore is lockfile-free. The independent
+Python specification-oracle environment is governed separately by the
+hash-locked `eng\requirements-oracles.lock`; install it with `--require-hashes`
+as shown in the root README.
 
 Do not add secrets, dynamic runtime code generation, automatic mutation retries,
 native/executable Git fallbacks, permissive TLS validation, or silent fallback

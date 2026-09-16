@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry;
 
 /// <summary>A case-sensitive registry identifier, not a URI and never a native filesystem name.</summary>

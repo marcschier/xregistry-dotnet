@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Models;
 
 /// <summary>The caller-selected OpenUSD Group collection, never inferred from a name.</summary>

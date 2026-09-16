@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using System.Runtime;

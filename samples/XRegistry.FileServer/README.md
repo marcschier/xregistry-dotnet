@@ -97,7 +97,7 @@ Windows writes require fixed local NTFS; Linux writes require local ext4.
 Shared/network and overlay writer filesystems are not qualified. Failed or
 incomplete Registry initialization is not replaced by an empty success on restart.
 
-## Native execution and remaining qualification
+## Native execution and qualification status
 
 ```powershell
 pwsh -NoProfile -File eng\test-file-server.ps1 -RuntimeIdentifier win-x64 -DataRoot D:\NativeRegistryTests
@@ -112,5 +112,6 @@ and stable short-URL Document/details behavior across restart.
 
 These are actual HTTP/durability checks, not full specification qualification.
 Production TLS/authentication has separate real-Kestrel/native coverage in
-`XRegistry.SampleHosting.Tests`. Final complete-protocol, native-platform,
-independent-peer, security and performance gates remain open.
+`XRegistry.SampleHosting.Tests`. Complete-protocol, native-platform,
+independent-peer, security and performance qualification is not established;
+see the [roadmap](../../docs/roadmap.md).

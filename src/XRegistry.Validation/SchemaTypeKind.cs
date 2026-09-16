@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Validation;
 
 /// <summary>The kind of concrete declaration selected from a schema Document.</summary>

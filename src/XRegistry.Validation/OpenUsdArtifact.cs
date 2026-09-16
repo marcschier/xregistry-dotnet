@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Validation;
 
 /// <summary>Owned exact artifact bytes made available after a bounded integrity operation completes.</summary>

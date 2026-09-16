@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Models;
 
 /// <summary>Inclusive, finite budgets for pure Endpoint authoring validation and materialization.</summary>

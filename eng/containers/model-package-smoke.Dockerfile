@@ -1,8 +1,11 @@
+# Copyright (c) 2026 xregistry-dotnet contributors.
+# SPDX-License-Identifier: MIT
+
 ARG TOOLS_IMAGE=xregistry-native-tools:local
 FROM ${TOOLS_IMAGE} AS build
 WORKDIR /repo
 COPY . .
-RUN dotnet restore XRegistry.slnx --locked-mode \
+RUN dotnet restore XRegistry.slnx \
     && pwsh -NoProfile -File eng/test-model-packages.ps1 -RuntimeIdentifier linux-x64 \
     && mkdir /result \
     && cp -a artifacts/package-smoke/*/net8.0-linux-x64 /result/net8 \

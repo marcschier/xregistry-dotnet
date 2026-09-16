@@ -1,9 +1,7 @@
+<!-- Copyright (c) 2026 xregistry-dotnet contributors. -->
+<!-- SPDX-License-Identifier: MIT -->
+
 <Project>
-  <PropertyGroup Condition="'$(NuGetLockFilePath)' == '' and ('$(RuntimeIdentifier)' != '' or '$(PublishAot)' == 'true')">
-    <_XRegistryNativeLockProfile Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_XRegistryNativeLockProfile>
-    <_XRegistryNativeLockProfile Condition="'$(_XRegistryNativeLockProfile)' == ''">aot</_XRegistryNativeLockProfile>
-    <NuGetLockFilePath>$(MSBuildProjectExtensionsPath)native-$(_XRegistryNativeLockProfile).packages.lock.json</NuGetLockFilePath>
-  </PropertyGroup>
   <PropertyGroup Condition="'$(IsPackable)' == 'true'">
     <IsAotCompatible>true</IsAotCompatible>
     <IsTrimmable>true</IsTrimmable>

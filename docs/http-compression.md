@@ -130,8 +130,9 @@ to the highly compressible expansion cases.
 The Client references SharpZipLib 1.4.2 through central package management.
 Both target frameworks select its managed
 `lib\net6.0\ICSharpCode.SharpZipLib.dll` asset; there is no separate native
-SharpZipLib package. The Client and HTTP test lock files include this
-dependency. Brotli remains the framework-provided implementation.
+SharpZipLib package. Normal NuGet restore selects this centrally pinned
+dependency under the repository's audit and source-mapping policy. Brotli
+remains the framework-provided implementation.
 
 The bounded workstream was executed with SDK 10.0.401 on Windows x64:
 
@@ -176,19 +177,19 @@ explicit log gate and its executable passed all 315 cases.
 
 With `TrimmerSingleWarn=false`, the net8.0 diagnostics are IL2026 and IL3050,
 both from `Microsoft.AspNetCore.Http.Json.JsonOptions.CreateDefaultTypeResolver`.
-IL3053 was the earlier assembly-level summary. The native compiler was observed
-to exit **0 despite these warnings**, even with
+IL3053 is the corresponding assembly-level summary. The observed native
+compiler exit is **0 despite these warnings**, even with
 `IlcTreatWarningsAsErrors=true`. Qualification therefore checks the log, not
 just the exit code. It also requires ILC to have actually run; an incremental
 publish that merely reuses native output is not a fresh warning qualification.
 No decoder or SharpZipLib trimming/AOT warnings were observed.
 
-The navigation follow-up extended `EveryRequestSurfaceUsesMatchingContentNegotiation`
-to cover `GetLinkAsync`, including both identity and compression-opt-in modes,
+`EveryRequestSurfaceUsesMatchingContentNegotiation` covers `GetLinkAsync`,
+including both identity and compression-opt-in modes,
 the exact opaque request URI, unchanged error status/ETag, and decoded
 `CopyDocumentToAsync` bytes. Both managed TFMs and both win-x64 Native AOT
 executables passed the two selected cases with zero failures/skips. The
-follow-up used `--treenode-filter '/*/*/RegistryContentDecodingTests/EveryRequestSurfaceUsesMatchingContentNegotiation*'`,
+focused run uses `--treenode-filter '/*/*/RegistryContentDecodingTests/EveryRequestSurfaceUsesMatchingContentNegotiation*'`,
 `--minimum-expected-tests 2` and `--zero-tests-policy strict`; the net8.0
 framework publishing warnings above remain unchanged.
 
@@ -230,7 +231,8 @@ dependencies unchanged. No warning suppressions, reflection enabling,
 `DynamicDependency` roots, linker-substitution workaround or dependency
 downgrade was introduced. The full 315 HTTP cases were re-run on each managed
 TFM and each native executable: zero failures and zero skips. The net8.0
-warning qualification is an explicit remaining blocker, not a passing gate.
+warning qualification is a current blocker, not a passing gate; it is tracked
+in the [roadmap](roadmap.md#native-platforms-and-package-consumers).
 
 ### Separate package-consumer qualification
 
@@ -255,5 +257,5 @@ logs are retained under the session's
 `files\http-content-decoding\aot-warning-investigation` directory.
 
 Native execution on other operating systems or architectures has not been
-verified by this workstream. These results do not qualify the overall library
+verified by this evidence. These results do not qualify the overall library
 or the HTTP binding for release.

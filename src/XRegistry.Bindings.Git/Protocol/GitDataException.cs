@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Bindings.Git;
 
 /// <summary>Distinguishes failures of the managed Git binary readers.</summary>

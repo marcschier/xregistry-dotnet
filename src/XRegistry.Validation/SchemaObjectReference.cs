@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Validation;
 
 internal sealed record SchemaObjectReference(string DocumentReference, string Selector)

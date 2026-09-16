@@ -1,3 +1,6 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
 namespace XRegistry.Federation;
 
 /// <summary>Shared portable-path validation for native File and Git document-tree readers.</summary>

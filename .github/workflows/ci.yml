@@ -1,3 +1,6 @@
+# Copyright (c) 2026 xregistry-dotnet contributors.
+# SPDX-License-Identifier: MIT
+
 name: ci
 
 on:
@@ -58,7 +61,7 @@ jobs:
       - name: Install independently hashed oracle dependencies
         run: |
           python -m pip install --require-hashes --only-binary=:all: -r eng/requirements-oracles.lock
-      - name: Locked build and evaluated package contracts
+      - name: Build and evaluate package contracts
         shell: pwsh
         run: ./eng/build.ps1
       - name: Execute tests, rejecting empty suites

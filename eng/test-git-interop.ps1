@@ -1,3 +1,6 @@
+# Copyright (c) 2026 xregistry-dotnet contributors.
+# SPDX-License-Identifier: MIT
+
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
@@ -22,24 +25,15 @@ $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $project = Join-Path $repository 'tests\XRegistry.Git.InteropProbe\XRegistry.Git.InteropProbe.csproj'
 $output = [IO.Path]::GetFullPath($OutputDirectory)
 $nativeOutput = Join-Path $output "native\$RuntimeIdentifier-$Framework"
-$restoreRoot = Join-Path $output ('restore-' + [Guid]::NewGuid().ToString('N'))
-$restoreProps = Join-Path $repository 'tests\XRegistry.Git.InteropProbe\InteropRestore.props'
-$probeLock = Join-Path $repository 'tests\XRegistry.Git.InteropProbe\packages.lock.json'
-if (-not (Test-Path -LiteralPath $restoreProps -PathType Leaf)) {
-    throw 'The isolated Git interoperability restore settings are missing.'
-}
-New-Item -ItemType Directory -Path $restoreRoot | Out-Null
 $oldPath = $env:PATH
 Push-Location $repository
 try {
-    Copy-Item -LiteralPath $probeLock -Destination (Join-Path $restoreRoot 'XRegistry.Git.InteropProbe.lock.json')
     if ($IsWindows) {
         $env:PATH = (Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer') + ';' + $env:PATH
     }
     & dotnet publish $project -c Release -f $Framework -r $RuntimeIdentifier `
-        "-p:CustomBeforeMicrosoftCommonProps=$restoreProps" "-p:GitInteropLockRoot=$restoreRoot" `
         -o $nativeOutput --nologo -v minimal
-    if ($LASTEXITCODE -ne 0) { throw 'The native-only Git probe did not publish with the locked dependency graph.' }
+    if ($LASTEXITCODE -ne 0) { throw 'The native-only Git probe did not publish.' }
     $suffix = if ($IsWindows) { '.exe' } else { '' }
     $native = Join-Path $nativeOutput "XRegistry.Git.InteropProbe$suffix"
     $managedControl = Join-Path $repository "tests\XRegistry.Git.InteropProbe\bin\Release\$Framework\$RuntimeIdentifier\XRegistry.Git.InteropProbe.dll"
@@ -51,8 +45,4 @@ try {
 finally {
     Pop-Location
     $env:PATH = $oldPath
-    foreach ($file in Get-ChildItem -LiteralPath $restoreRoot -File) {
-        Remove-Item -LiteralPath $file.FullName
-    }
-    Remove-Item -LiteralPath $restoreRoot
 }

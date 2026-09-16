@@ -337,27 +337,14 @@ The focused regression suites are `RegistryHeaderMetadataTests` in Core and
 expectations, aggregate boundaries and adjacent failures, actual Kestrel
 `MapXRegistry` writes/reads and error contracts, and pre-dispatch/stream
 ownership checks. These are bounded surface tests, not a claim of complete
-binding conformance. The previously documented net8.0 TUnit/System.Text.Json
+binding conformance. The net8.0 TUnit/System.Text.Json
 10.x native-publish warning limitation remains separate from Client runtime
 AOT compatibility; see [HTTP compression](http-compression.md).
 
-The initial header slice's managed validation used SDK 10.0.401 and passed the complete
-affected projects on both frameworks, with zero failures or skipped tests:
-
-| Project | net8.0 | net10.0 |
-| --- | ---: | ---: |
-| XRegistry.Core.Tests | 427 | 427 |
-| XRegistry.Http.Tests | 373 | 373 |
-| XRegistry.AspNetCore.Tests | 92 | 92 |
-
-This includes 93 new Core cases, 58 new Http cases, and the existing 315-case
-Http / 92-case ASP.NET baselines. Build artifacts, copied existing dependency
-cache, temporary files and results were isolated under
-`D:\artifacts\client-header-build`; dependencies were restored from that cache
-with an empty local package source, not downloaded.
-
-For example, with those artifacts already built, the executed full-suite
-commands have this form (run once for each `net8.0` and `net10.0`):
+The managed verification uses SDK 10.0.401, isolated artifacts/cache, and the
+complete affected projects on both frameworks. With artifacts already built,
+the full-suite commands have this form (run once for each `net8.0` and
+`net10.0`):
 
 ```powershell
 $artifacts = 'D:\artifacts\client-header-build'
@@ -367,23 +354,18 @@ dotnet test --project tests\XRegistry.Http.Tests\XRegistry.Http.Tests.csproj -c 
 dotnet test --project tests\XRegistry.AspNetCore.Tests\XRegistry.AspNetCore.Tests.csproj -c Release -f $framework --no-build --no-restore --artifacts-path $artifacts --minimum-expected-tests 92 --zero-tests-policy strict --timeout 3m --no-ansi --results-directory "$artifacts\results\aspnetcore-$framework"
 ```
 
-The optional native publish/run was not performed for the initial slice after shared
-D-drive free space fell to approximately 8.8 GiB. Clean managed builds and
-analyzer results are not being substituted for native execution evidence.
+### Conditional-header verification
 
-### Conditional-header follow-up verification
-
-The follow-up adds **25 Core conditional cases and 13 Http conditional cases**
-to the same two test files. Focused checks cover 118 Core header cases and the
-13 new HTTP cases. Independently authored models/raw fields reproduced failures
-before the shared lookup changes: unordered conditional scalars, conditional
-map encoding in both directions, unsafe missing-discriminator wildcard fallback,
+The current suite includes **25 Core conditional cases and 13 Http conditional
+cases** in the same two test files. Focused checks cover 118 Core header cases
+and the 13 HTTP cases. Independently authored models/raw fields exercise
+unordered conditional scalars, conditional map encoding in both directions,
+unsafe missing-discriminator wildcard fallback,
 Content-Type context in the actual ASP.NET adapter, and omitted Content-Type's
-clearing semantics. Red and green logs are retained under
+clearing semantics. Evidence logs are retained under
 `D:\artifacts\client-header-build\conditional\logs`.
 
-After the changes, the complete affected projects passed with zero failures or
-skips:
+The complete affected projects pass with zero failures or skips:
 
 | Execution | net8.0 | net10.0 |
 | --- | ---: | ---: |
@@ -398,14 +380,7 @@ fresh native compilation and passed an explicit log gate rejecting every
 warnings were suppressed or downgraded, and no full binding-conformance claim
 follows from these executions.
 
-The native restore used only previously cached packages. Its build-scoped
-`conditional\native.props` imports the unchanged repository `Directory.Build.props`
-and redirects `NuGetLockFilePath` into `conditional\native-locks` using
-`$(MSBuildProjectName)`. Source lock-file hashes were checked unchanged. No
-dependency manifest, correction, parent event test, or Server event code was
-changed by this follow-up.
-
-The full managed test commands above were repeated with minimum counts
+The full managed test commands use minimum counts
 452 / 386 / 92 for Core / Http / ASP.NET respectively and results under
 `conditional\results`. Native commands used the isolated props/cache:
 
