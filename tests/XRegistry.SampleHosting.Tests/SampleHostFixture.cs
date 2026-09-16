@@ -43,8 +43,10 @@ internal sealed class SampleHostFixture : IAsyncDisposable
         _secrets.Add(ReadEnvironment, ReadToken);
         _secrets.Add(PasswordEnvironment, password);
 
+        var authoritySuffix = Guid.NewGuid().ToString("N");
         using var rootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-        var rootRequest = new CertificateRequest("CN=xRegistry fixture root", rootKey, HashAlgorithmName.SHA256);
+        var rootRequest = new CertificateRequest(
+            $"CN=xRegistry fixture root {authoritySuffix}", rootKey, HashAlgorithmName.SHA256);
         rootRequest.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, false, 0, true));
         rootRequest.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.KeyCertSign, true));
         rootRequest.CertificateExtensions.Add(new X509SubjectKeyIdentifierExtension(rootRequest.PublicKey, false));
@@ -63,13 +65,18 @@ internal sealed class SampleHostFixture : IAsyncDisposable
         leafRequest.CertificateExtensions.Add(names.Build());
         var expires = certificateKind == "expired" ? DateTimeOffset.UtcNow.AddDays(-1) : DateTimeOffset.UtcNow.AddDays(1);
         using var intermediateKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-        var intermediateRequest = new CertificateRequest("CN=xRegistry fixture intermediate", intermediateKey, HashAlgorithmName.SHA256);
+        var intermediateRequest = new CertificateRequest(
+            $"CN=xRegistry fixture intermediate {authoritySuffix}", intermediateKey, HashAlgorithmName.SHA256);
         intermediateRequest.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, true, 0, true));
         intermediateRequest.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.KeyCertSign, true));
         intermediateRequest.CertificateExtensions.Add(new X509SubjectKeyIdentifierExtension(intermediateRequest.PublicKey, false));
+        intermediateRequest.CertificateExtensions.Add(
+            X509AuthorityKeyIdentifierExtension.CreateFromCertificate(root, true, true));
         using var intermediateIssued = intermediateRequest.Create(root, DateTimeOffset.UtcNow.AddDays(-2),
             DateTimeOffset.UtcNow.AddDays(2), RandomNumberGenerator.GetBytes(16));
         using var intermediate = intermediateIssued.CopyWithPrivateKey(intermediateKey);
+        leafRequest.CertificateExtensions.Add(X509AuthorityKeyIdentifierExtension.CreateFromCertificate(
+            certificateKind == "chain" ? intermediateIssued : root, true, true));
         using var issued = leafRequest.Create(certificateKind == "chain" ? intermediate : root,
             DateTimeOffset.UtcNow.AddDays(certificateKind == "chain" ? -1 : -2), expires, RandomNumberGenerator.GetBytes(16));
         using var leaf = issued.CopyWithPrivateKey(leafKey);
