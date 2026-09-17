@@ -12,5 +12,8 @@
     <ProjectReference Include="..\..\src\XRegistry.Server\XRegistry.Server.csproj" />
     <ProjectReference Include="..\..\src\XRegistry.Models\XRegistry.Models.csproj" />
     <ProjectReference Include="..\..\src\XRegistry.Validation\XRegistry.Validation.csproj" />
+    <Content Include="..\..\samples\XRegistry.FileServer\models\xrproxy-model.json"
+             Link="Documentation\xrproxy-model.json"
+             CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

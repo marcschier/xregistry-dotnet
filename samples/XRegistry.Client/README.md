@@ -1,5 +1,9 @@
 # General client sample
 
+Application code should start with the
+[HTTP client guide](../../docs/client-guide.md); this sample is the executable
+command-line companion.
+
 This executable uses the reusable packages rather than implementing a second
 HTTP client or mapping parser. It currently supports generic HTTP reads,
 opaque collection paging, both discovery locations, model inspection,

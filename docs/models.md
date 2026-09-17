@@ -1,5 +1,8 @@
 # Built-in model sources
 
+For an application-specific worked example, start with
+[Define a custom xRegistry model](custom-models.md).
+
 `XRegistry.Models` embeds seven model sources from the pinned specification
 baseline and explicit [source corrections](spec-feedback.md): Core, Endpoint, Message, Schema, CloudEvents,
 Registry-of-Registries, and OpenUSD. Model-source loading does not require a

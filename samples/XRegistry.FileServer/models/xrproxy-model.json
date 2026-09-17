@@ -1,0 +1,51 @@
+{
+  "attributes": {
+    "environment": {
+      "type": "string"
+    }
+  },
+  "groups": {
+    "proxygroups": {
+      "singular": "proxygroup",
+      "attributes": {
+        "description": {
+          "type": "string"
+        }
+      },
+      "resources": {
+        "proxies": {
+          "singular": "proxy",
+          "attributes": {
+            "upstream": {
+              "type": "url",
+              "required": true
+            },
+            "protocol": {
+              "type": "string",
+              "enum": [
+                "http",
+                "https"
+              ]
+            },
+            "enabled": {
+              "type": "boolean"
+            }
+          }
+        },
+        "policies": {
+          "singular": "policy",
+          "hasdocument": false,
+          "attributes": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "allow",
+                "deny"
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}
