@@ -75,7 +75,7 @@ Console.WriteLine(registry.RootElement.GetProperty("registryid").GetString());
 Registry error statuses remain response values rather than being changed into
 successful results.
 
-## Next steps
+## Developer guides
 
 - [Use the HTTP client](client-guide.md) for authentication, metadata,
   Documents, discovery, and pagination.
