@@ -4,6 +4,7 @@
 import importlib.util
 import json
 from pathlib import Path
+import re
 import tempfile
 import unittest
 import zipfile
@@ -40,7 +41,7 @@ class PackageBuildTests(unittest.TestCase):
         files = tool.verify_packages(self.root, ("XRegistry",), "1.0.0-rc4", "1" * 40)
         self.assertEqual(len(files), 2)
         for record in files:
-            self.assertEqual(record["sha256"], tool.release.file_hash(self.root / record["name"]))
+            self.assertEqual(record["sha256"], tool.file_hash(self.root / record["name"]))
             self.assertEqual(record["bytes"], (self.root / record["name"]).stat().st_size)
 
     def test_missing_symbols_and_stale_extra_packages_fail(self):
@@ -73,8 +74,18 @@ class PackageBuildTests(unittest.TestCase):
         workflow = (ROOT / ".github" / "workflows" / "packages.yml").read_text()
         self.assertIn("eng/package_build.py", workflow)
         self.assertIn("contents: read", workflow)
-        for forbidden in ("id-token: write", "packages: write", "contents: write", "secrets.", "NuGet/login", "release.py push"):
-            self.assertNotIn(forbidden, workflow)
+        # Only the "packages" job (push/PR/tag validation, no publish authority) is
+        # checked here; the tag-only "publish-github" job's own contract is covered
+        # by tests/Tooling/test_release.py.
+        match = re.search(r"(?m)^  packages:\n((?:    .*\n|\n)+)", workflow)
+        assert match is not None
+        job = match.group(1)
+        self.assertIn("eng/package_build.py", job)
+        for forbidden in (
+            "id-token: write", "packages: write", "contents: write", "secrets.",
+            "NuGet/login", "dotnet nuget push",
+        ):
+            self.assertNotIn(forbidden, job)
 
 
 if __name__ == "__main__":
