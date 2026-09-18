@@ -14,6 +14,23 @@ release safeguards remain in their subject guides.
   [conformance](conformance.md) and [releasing](releasing.md).
 - Keep package and sample status unqualified until those gates pass; do not
   promote status from build success, test totals, or source-oracle success.
+- `eng/specification/native_receipt.py` converts one already-executed,
+  already-verified native TUnit TRX run plus an independently captured
+  `nativeAot`/`jitCompiledMethods` proof into the exact `schemaVersion: 1`
+  receipt shape `manage.py`'s `release_check` validates. It has been proven
+  end to end: `XRegistry.Models.Tests` (net10.0) publishes and runs natively
+  with `dotnet publish ... -p:PublishAot=true`, its opt-in
+  `NativeExecutionProofTests` reports genuine `nativeAot: true,
+  jitCompiledMethods: 0` (versus a JIT control's `nativeAot: false,
+  jitCompiledMethods: 7169`), and the resulting receipt passes every
+  structural/hash/native check in `release_check` up to the still-missing
+  seven remaining framework/RID cells. Remaining work: add the same opt-in
+  proof test to the other test projects, decide whether/how the existing
+  native CI matrix (or a new job) runs the full managed test suites natively
+  across all eight `net8.0`/`net10.0` × `win-x64`/`win-arm64`/`linux-x64`/
+  `linux-arm64` cells and uploads receipts, then map each reviewed
+  requirement's `testIds` to real method names and attach the resulting
+  evidence per requirement.
 
 ## Native platforms and package consumers
 
