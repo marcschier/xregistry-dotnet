@@ -62,6 +62,16 @@ jobs:
           done
           ls -l ./download
 
+      - name: Verify NUGET_USER
+        run: |
+          set -euo pipefail
+          if [ -z "${{ vars.NUGET_USER }}" ]; then
+            echo "::error::vars.NUGET_USER is empty. Set it with 'gh variable set NUGET_USER --body \"<nuget.org policy-creator username>\"' (repository-level, not --env release). See docs/releasing.md."
+            exit 1
+          fi
+          echo "Resolved NUGET_USER: ${{ vars.NUGET_USER }}"
+          echo "This must exactly match the nuget.org Trusted Publishing policy's creator account, not the GitHub owner/repo name."
+
       - name: NuGet login (OIDC trusted publishing)
         id: login
         uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0

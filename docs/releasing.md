@@ -82,18 +82,43 @@ Configure GitHub branch/tag protections for `main` and release tags, and
 prohibit tag rewrites/deletion. Configure the `release` environment with the
 required reviewer(s) and restrict deployment branches to `main`.
 
-Configure NuGet trusted publishing for repository owner `marcschier`,
+Configure NuGet trusted publishing for GitHub repository owner `marcschier`,
 repository `xregistry-dotnet`, workflow file **`nuget.yml`** (filename only),
 and environment **`release`**. Scope the policy to the eleven package IDs
-below and the intended NuGet owner, with permission to create first
-versions/IDs where needed. Configure the `release` environment variable
-`NUGET_USER` to the NuGet profile username, not an email. No long-lived NuGet
-API token is needed or accepted by the workflow.
+below, with permission to create first versions/IDs where needed. Trusted
+publishing policies are created under a NuGet.org **package owner** account,
+which is *not necessarily* the same name as the GitHub repository owner (for
+example the policy may be created under a personal nuget.org account like
+`mschier` even though the GitHub repo is owned by `marcschier`). The
+`NUGET_USER` value below must always be **the nuget.org policy-creator
+username shown on the Trusted Publishing policy page**, not the GitHub
+username — a mismatch here fails at runtime with `Token exchange failed
+(HTTP 401)` and `No matching trust policy owned by user '<name>' was found`.
 
-On nuget.org, sign into the `marcschier` profile, open the username menu and
-choose **Trusted Publishing**, then add the GitHub policy with the values
-above. Verify package ownership or first-publication rights before enabling
-the policy's scopes. The exact IDs are:
+Set `NUGET_USER` as a **repository-level** Actions variable, not an
+environment-level one:
+
+```powershell
+gh variable set NUGET_USER --body "<nuget.org policy-creator username>"
+```
+
+Do **not** also create an environment-scoped `NUGET_USER` (`--env release`)
+for the same name. GitHub Actions resolves `vars.NUGET_USER` from the
+environment first and silently falls back to the repository-level value only
+when no environment-level variable exists; a stale or incorrect
+environment-level value added later would silently shadow a correct
+repository-level one with no error until the next promotion run fails. Keep
+the single repository-level variable as the one source of truth. The
+`Verify NUGET_USER` step in `nuget.yml` prints the resolved (non-secret)
+username before login specifically so any future mismatch is visible in the
+run logs immediately, instead of surfacing only as an opaque 401. No
+long-lived NuGet API token is needed or accepted by the workflow.
+
+On nuget.org, sign into the account that owns (or will own) the eleven
+package IDs, open the username menu and choose **Trusted Publishing**, then
+add the GitHub policy with the values above. Verify package ownership or
+first-publication rights before enabling the policy's scopes. The exact IDs
+are:
 
 ```text
 XRegistry

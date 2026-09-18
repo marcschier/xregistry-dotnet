@@ -121,6 +121,21 @@ class NuGetWorkflowTests(unittest.TestCase):
         self.assertIn("https://api.nuget.org/v3/index.json", job)
         self.assertIn("--skip-duplicate", job)
 
+    def test_verifies_nuget_user_is_resolved_before_login_to_surface_misconfiguration_early(
+        self,
+    ) -> None:
+        # A NUGET_USER mismatch (e.g. an environment-scoped variable silently
+        # shadowing the repository-level one) previously only surfaced as an
+        # opaque 401 from nuget.org. Guard against regressing that: the
+        # workflow must fail fast with a clear message and print the resolved
+        # (non-secret) value before the login step ever runs.
+        job = job_text("nuget.yml", "publish")
+        verify_index = job.index("Verify NUGET_USER")
+        login_index = job.index("NuGet login (OIDC trusted publishing)")
+        self.assertLess(verify_index, login_index)
+        self.assertIn("vars.NUGET_USER is empty", job)
+        self.assertIn("Resolved NUGET_USER", job)
+
     def test_no_custom_python_release_orchestrator_remains(self) -> None:
         self.assertNotIn("release.py", self.text)
         self.assertNotIn("python", self.text)
