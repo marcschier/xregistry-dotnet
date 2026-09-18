@@ -154,6 +154,24 @@ class RestoreAndLicensePolicyTests(unittest.TestCase):
         self.assertTrue((ROOT / "eng" / "requirements-oracles.lock").is_file())
         self.assertTrue((ROOT / "eng" / "specification-lock.json").is_file())
 
+    def test_captured_specification_requirements_are_not_installed_by_repository_workflows(self) -> None:
+        captured = ROOT / "tests" / "Conformance" / "Sources" / "tools" / "requirements.txt"
+        active = ROOT / "eng" / "requirements-oracles.lock"
+        self.assertIn("aiohttp==3.11.12", captured.read_text(encoding="utf-8"))
+        self.assertNotIn("aiohttp", active.read_text(encoding="utf-8"))
+
+        workflow_text = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in (ROOT / ".github" / "workflows").glob("*.yml")
+        )
+        self.assertIn("eng/requirements-oracles.lock", workflow_text)
+        self.assertNotIn("tests/Conformance/Sources/tools/requirements.txt", workflow_text)
+        self.assertNotIn("tools/requirements.txt", workflow_text)
+
+        security = (ROOT / "docs" / "security.md").read_text(encoding="utf-8")
+        self.assertIn("not an installation source", security)
+        self.assertIn("active lock does not include `aiohttp`", security)
+
     def test_root_license_names_contributors_and_retains_mit_terms(self) -> None:
         license_text = (ROOT / "LICENSE").read_text(encoding="utf-8")
         self.assertIn("Copyright (c) 2026 xregistry-dotnet contributors", license_text)
