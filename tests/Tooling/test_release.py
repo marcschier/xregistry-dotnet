@@ -1058,6 +1058,50 @@ class BuildAndPushTests(SyntheticFixture):
             self.assertNotIn("shell", kwargs)
             self.assertEqual("--no-symbols" in arguments, name.endswith(".nupkg"))
 
+    def test_github_packages_submits_only_exact_verified_packages_from_the_tag_payload(self) -> None:
+        self.stage()
+        release_payload = self.root / "artifacts" / "release" / "payload"
+        release_payload.parent.mkdir(parents=True)
+        shutil.copytree(self.payload, release_payload)
+        submitted = []
+
+        def run(arguments, **kwargs):
+            path = Path(arguments[3])
+            submitted.append((path.name, path.read_bytes(), arguments, kwargs))
+            return subprocess.CompletedProcess(arguments, 0, b"", b"")
+
+        environment = {"GITHUB_TOKEN": "SYNTHETIC-NOT-A-CREDENTIAL"}
+        with mock.patch.object(tool, "build_identity", return_value=self.identity), \
+                mock.patch.object(tool.subprocess, "run", side_effect=run):
+            tool.push_github_packages(self.root, environment)
+        expected = {f"{package_id}.{self.identity['version']}.nupkg" for package_id in self.ids}
+        self.assertEqual(len(submitted), 11)
+        self.assertEqual({item[0] for item in submitted}, expected)
+        for name, raw, arguments, kwargs in submitted:
+            self.assertEqual(raw, (self.payload / name).read_bytes())
+            self.assertEqual(arguments[:3], ["dotnet", "nuget", "push"])
+            self.assertEqual(arguments[arguments.index("--source") + 1], "https://nuget.pkg.github.com/marcschier/index.json")
+            self.assertEqual(Path(arguments[arguments.index("--configfile") + 1]), ROOT / "eng" / "release" / "nuget.config")
+            self.assertIn("--no-symbols", arguments)
+            self.assertNotIn("--skip-duplicate", arguments)
+            self.assertNotIn("*", arguments[3])
+            self.assertNotIn("shell", kwargs)
+
+    def test_github_packages_requires_a_token_and_verifies_everything_before_pushing(self) -> None:
+        self.stage()
+        release_payload = self.root / "artifacts" / "release" / "payload"
+        release_payload.parent.mkdir(parents=True)
+        shutil.copytree(self.payload, release_payload)
+        with mock.patch.object(tool, "build_identity", return_value=self.identity), \
+                mock.patch.object(tool.subprocess, "run") as run, self.assertRaisesRegex(tool.ReleaseError, "token"):
+            tool.push_github_packages(self.root, {})
+        run.assert_not_called()
+        (release_payload / f"{self.ids[-1]}.{self.identity['version']}.nupkg").write_bytes(b"changed")
+        with mock.patch.object(tool, "build_identity", return_value=self.identity), \
+                mock.patch.object(tool.subprocess, "run") as run, self.assertRaisesRegex(tool.ReleaseError, "Changed release bytes"):
+            tool.push_github_packages(self.root, {"GITHUB_TOKEN": "SYNTHETIC-NOT-A-CREDENTIAL"})
+        run.assert_not_called()
+
     def test_changed_last_package_blocks_all_remote_writes_not_just_that_package(self) -> None:
         self.stage()
         selection = self.selection(self.archive())
@@ -1275,10 +1319,14 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("ref: ${{ github.sha }}", text)
         self.assertIn("persist-credentials: false", text)
         self.assertIn("python eng\\release\\release.py build", text)
+        self.assertIn("python eng\\release\\release.py github", text)
         build, attest = text.split("\n  attest:", 1)
         self.assertNotIn("id-token: write", build)
+        self.assertIn("packages: write", build)
+        self.assertIn("GITHUB_TOKEN: ${{ github.token }}", build)
         self.assertIn("needs: build", attest)
         self.assertNotIn("actions/checkout@", attest)
+        self.assertNotIn("packages: write", attest)
         self.assertIn("subject-digest: sha256:${{ needs.build.outputs.artifact-digest }}", attest)
         self.assertIn("if-no-files-found: error", build)
         self.assertIn("overwrite: false", build)
@@ -1322,9 +1370,13 @@ class WorkflowContractTests(unittest.TestCase):
                 self.assertEqual(pinned, expected[action])
             for forbidden in (
                 "pull_request", "workflow_run:", "continue-on-error", "--skip-duplicate",
-                "packages: write", "contents: write", "write-all", "secrets.NUGET", "latest-run",
+                "contents: write", "write-all", "secrets.NUGET", "latest-run",
             ):
                 self.assertNotIn(forbidden, text)
+            if name == "release.yml":
+                self.assertEqual(text.count("packages: write"), 1)
+            else:
+                self.assertNotIn("packages: write", text)
             self.assertIn("permissions: {}", text)
             self.assertIn("cancel-in-progress: false", text)
             self.assertNotRegex(text, r"run:.*\$\{\{\s*inputs\.version")

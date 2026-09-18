@@ -20,6 +20,7 @@ jobs:
     timeout-minutes: 90
     permissions:
       contents: read
+      packages: write
     outputs:
       artifact-name: ${{ steps.build.outputs.artifact-name }}
       artifact-digest: ${{ steps.upload.outputs.artifact-digest }}
@@ -56,6 +57,11 @@ jobs:
           compression-level: 0
           retention-days: 90
           overwrite: false
+      - name: Publish the verified packages to GitHub Packages
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python eng\release\release.py github
 
   attest:
     needs: build

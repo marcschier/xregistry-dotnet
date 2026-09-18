@@ -55,7 +55,7 @@ checkout, or a tag whose peeled commit differs from the checkout and GitHub
 event identity. Both lightweight and annotated tags are supported. The annotated
 tag object is recorded as well as its peeled commit.
 
-The build job has only `contents: read`, no publishing token and no OIDC access.
+The build job has `contents: read` and `packages: write`, but no OIDC access.
 `eng\release\release.py build` performs these steps in order:
 
 1. Require all eleven libraries and three samples to be `qualified`, then run
@@ -133,10 +133,17 @@ above.
 The payload is uploaded once under
 `xregistry-release-<version>-<commit>-<run-id>-<attempt>`, with overwrite disabled,
 missing files treated as errors, zero ZIP recompression, and 90-day retention
-(subject to repository policy). A separate job, with no checkout or execution of
+(subject to repository policy). After the upload, `eng\release\release.py github`
+rechecks the same clean tag identity and release payload, then submits the
+eleven verified `.nupkg` files to GitHub Packages at
+`https://nuget.pkg.github.com/marcschier/index.json` using the workflow's
+short-lived `GITHUB_TOKEN`. Symbol packages remain in the immutable release
+payload and are promoted to NuGet.org by the approval-separated workflow; GitHub
+Packages publication does not use wildcards, `--skip-duplicate`, a long-lived
+secret, or a repack. A separate job, with no checkout or execution of
 package code, uses OIDC and `attestations: write` to attest the **uploaded ZIP's
 SHA-256**. The run must succeed including that signing job. There is no GitHub
-Release creation or automatic NuGet promotion.
+Release creation or automatic NuGet.org promotion.
 
 The attestation establishes the artifact's build/workflow provenance. It is not
 an independent certification of protocol behavior or a replacement for human
@@ -205,10 +212,9 @@ checks and symbol indexing remain asynchronous and are not certified by push
 success. Repository-side NuGet signing may change subsequently downloaded bytes;
 the same-byte guarantee here is for the files submitted by promotion.
 
-GitHub Packages publication is deliberately **not implemented**. These workflows
-request no `packages: write` permission and claim no GitHub Packages remote
-setup. Adding another destination requires a separately approved integration
-that consumes this same verified payload.
+GitHub Packages publication is the first-stage package feed for the exact
+tagged payload. NuGet.org publication remains approval-separated and consumes
+the same attested release artifact.
 
 ## Account-owner setup and qualification prerequisites
 

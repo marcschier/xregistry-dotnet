@@ -847,6 +847,43 @@ def push_packages(payload: Path, selection: dict[str, Any], ids: tuple[str, ...]
             require(result.returncode == 0, f"NuGet push failed for {name} (exit {result.returncode}); remote publication may be partial. No duplicate/conflict was ignored.")
 
 
+def push_github_packages(root: Path, environment: dict[str, str]) -> None:
+    identity = build_identity(root, environment)
+    alpha = is_alpha_prerelease(identity["version"])
+    ids = package_ids(root / "eng" / "packages.json", root, qualified=not alpha)
+    source_hashes = {
+        name: file_hash(source_path(root, relative))
+        for name, relative in SOURCE_FILES.items()
+    }
+    payload = root / "artifacts" / "release" / "payload"
+    document = verify_payload(payload, identity, source_hashes, ids)
+    token = environment.get("GITHUB_TOKEN", "")
+    require(bool(token) and not any(char in token for char in "\r\n\x00"), "A GitHub Packages token is required.")
+    config = ROOT / "eng" / "release" / "nuget.config"
+    regular_file(config)
+    files = {entry["name"]: entry for entry in document["files"]}
+    for package_id in ids:
+        name = f"{package_id}.{identity['version']}.nupkg"
+        path = payload / name
+        require(file_hash(path) == files[name]["sha256"], "Package changed immediately before GitHub Packages push.")
+        arguments = [
+            "dotnet", "nuget", "push", str(path), "--source",
+            "https://nuget.pkg.github.com/marcschier/index.json",
+            "--api-key", token, "--timeout", "300", "--force-english-output",
+            "--configfile", str(config), "--no-symbols",
+        ]
+        try:
+            result = subprocess.run(arguments, check=False, timeout=360, capture_output=True)
+        except subprocess.TimeoutExpired as error:
+            raise ReleaseError(f"GitHub Packages push timed out for {name}; remote publication may be partial.") from error
+        require(
+            result.returncode == 0,
+            f"GitHub Packages push failed for {name} (exit {result.returncode}); "
+            "remote publication may be partial. No duplicate/conflict was ignored.",
+        )
+    print("Submitted the eleven verified packages to GitHub Packages; NuGet.org promotion uses the same verified release artifact.")
+
+
 def push(root: Path, environment: dict[str, str]) -> None:
     requested = promotion_context(root, environment)
     selection = pinned_selection(environment)
@@ -862,12 +899,14 @@ def push(root: Path, environment: dict[str, str]) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=("build", "resolve", "prepare", "push"))
+    parser.add_argument("operation", choices=("build", "github", "resolve", "prepare", "push"))
     args = parser.parse_args(argv)
     try:
         environment = dict(os.environ)
         if args.operation == "build":
             build(ROOT, environment)
+        elif args.operation == "github":
+            push_github_packages(ROOT, environment)
         elif args.operation in ("resolve", "prepare"):
             prepare(ROOT, environment, approved=args.operation == "prepare")
         else:
