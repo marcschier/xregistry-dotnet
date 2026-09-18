@@ -120,6 +120,10 @@ class NuGetWorkflowTests(unittest.TestCase):
         self.assertIn("--api-key ${{ steps.login.outputs.NUGET_API_KEY }}", job)
         self.assertIn("https://api.nuget.org/v3/index.json", job)
         self.assertIn("--skip-duplicate", job)
+        self.assertIn('ver=$(curl -fsSL -H "$auth" "$base/xregistry/index.json" | jq -r \'.versions | last\')', job)
+        self.assertIn('curl -fsSL -H "$auth" "$base/$lower/$ver/$lower.$ver.nupkg"', job)
+        self.assertIn('if [ "$count" -ne 11 ]; then', job)
+        self.assertIn("Invalid package version", job)
 
     def test_verifies_nuget_user_is_resolved_before_login_to_surface_misconfiguration_early(
         self,
@@ -133,6 +137,10 @@ class NuGetWorkflowTests(unittest.TestCase):
         verify_index = job.index("Verify NUGET_USER")
         login_index = job.index("NuGet login (OIDC trusted publishing)")
         self.assertLess(verify_index, login_index)
+        verify_step = job[verify_index:login_index]
+        self.assertIn("NUGET_USER: ${{ vars.NUGET_USER }}", verify_step)
+        self.assertNotIn('if [ -z "${{ vars.NUGET_USER }}" ]', verify_step)
+        self.assertNotIn('echo "Resolved NUGET_USER: ${{ vars.NUGET_USER }}"', verify_step)
         self.assertIn("vars.NUGET_USER is empty", job)
         self.assertIn("Resolved NUGET_USER", job)
 

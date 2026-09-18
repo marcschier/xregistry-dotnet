@@ -48,28 +48,40 @@ jobs:
             | jq -r '.resources[] | select(."@type"=="PackageBaseAddress/3.0.0") | ."@id"' \
             | head -n1)
           base=${base%/}
+          if [ -n "${VERSION}" ]; then
+            ver="${VERSION}"
+          else
+            ver=$(curl -fsSL -H "$auth" "$base/xregistry/index.json" | jq -r '.versions | last')
+          fi
+          if [[ ! "${ver}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Invalid package version '${ver}'."
+            exit 1
+          fi
+          echo "Promoting one complete package set at version ${ver}"
           mkdir -p ./download
           for id in XRegistry XRegistry.Client XRegistry.Server XRegistry.AspNetCore XRegistry.Storage.File XRegistry.Models XRegistry.Validation XRegistry.Federation XRegistry.Bindings.File XRegistry.Bindings.Git XRegistry.Bindings.Oci; do
             lower=$(echo "$id" | tr '[:upper:]' '[:lower:]')
-            if [ -n "${VERSION}" ]; then
-              ver="${VERSION}"
-            else
-              ver=$(curl -fsSL -H "$auth" "$base/$lower/index.json" | jq -r '.versions | last')
-            fi
-            echo "Promoting $id $ver"
+            echo "Downloading $id $ver"
             curl -fsSL -H "$auth" "$base/$lower/$ver/$lower.$ver.nupkg" \
               -o "./download/$lower.$ver.nupkg"
           done
+          count=$(find ./download -maxdepth 1 -type f -name '*.nupkg' | wc -l)
+          if [ "$count" -ne 11 ]; then
+            echo "::error::Expected 11 packages at version ${ver}, found ${count}."
+            exit 1
+          fi
           ls -l ./download
 
       - name: Verify NUGET_USER
+        env:
+          NUGET_USER: ${{ vars.NUGET_USER }}
         run: |
           set -euo pipefail
-          if [ -z "${{ vars.NUGET_USER }}" ]; then
+          if [ -z "$NUGET_USER" ]; then
             echo "::error::vars.NUGET_USER is empty. Set it with 'gh variable set NUGET_USER --body \"<nuget.org policy-creator username>\"' (repository-level, not --env release). See docs/releasing.md."
             exit 1
           fi
-          echo "Resolved NUGET_USER: ${{ vars.NUGET_USER }}"
+          echo "Resolved NUGET_USER: $NUGET_USER"
           echo "This must exactly match the nuget.org Trusted Publishing policy's creator account, not the GitHub owner/repo name."
 
       - name: NuGet login (OIDC trusted publishing)
