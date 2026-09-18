@@ -52,12 +52,13 @@ executes but rejects the specification-permitted capabilities `mutable` field:
 30 pass, 10 fail. This is retained as a peer compatibility blocker, not filtered
 into a green result; see [reverse interoperability](reverse-interoperability.md).
 
-Current peer reruns require the unavailable local Docker Linux engine. The full
-native-platform and hosted CI execution matrix, broader bridge/authorization
-interop and clean-package peer qualification are not complete. They are tracked
-in the [roadmap](roadmap.md#interoperability). No remote
-repository creation, push, release or NuGet publication has been authorized or
-performed.
+Hosted forward peer and managed-Git reference lanes have since run successfully,
+and `0.1.0-alpha` package publication to GitHub Packages and NuGet.org has been
+performed. That publication does not qualify interoperability by itself. The
+full broader bridge/authorization interop, reverse checker compatibility, and
+clean-package peer qualification are not complete; they are tracked in the
+[roadmap](roadmap.md#interoperability). Local Docker availability remains a
+local rerun constraint only, not the current hosted execution blocker.
 
 Runtime artifacts are retained under `artifacts/interop` per run. Cleanup targets
 only each explicitly created container/volume; no broad Docker pruning or shared

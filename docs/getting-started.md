@@ -24,10 +24,11 @@ For example:
 dotnet add package XRegistry.Client --version 0.1.0-alpha
 ```
 
-Use the package source selected by your organization. Repository CI package
-artifacts are not automatically published to NuGet.org; see the
-[release guide](releasing.md) for the current publication boundary. Contributors
-can instead clone this repository and use its project references and samples.
+Version `0.1.0-alpha` is published on NuGet.org and remains a prerelease:
+install it explicitly and do not treat it as a conformance-qualified stable
+release. Contributors can instead clone this repository and use its project
+references, CI package artifacts, and samples; see the [release guide](releasing.md)
+for the publication and qualification boundary.
 
 ## Run a local Registry
 

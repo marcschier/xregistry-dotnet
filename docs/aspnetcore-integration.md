@@ -18,8 +18,9 @@ An embedded transient server normally references:
 Add `XRegistry.Storage.File` for durable local persistence and
 `XRegistry.Validation` when the application calls the lower-level validation
 APIs directly. `XRegistry.Server` already carries the validation dependency
-used by `BuiltInRegistryResourceValidator`. Use the package source approved for
-your application; CI artifacts are not automatically promoted to NuGet.org.
+used by `BuiltInRegistryResourceValidator`. Version `0.1.0-alpha` is available
+from NuGet.org as a prerelease; contributors can also use source references or
+CI package artifacts when testing unreleased changes.
 
 ## Compose the engine and endpoint
 
