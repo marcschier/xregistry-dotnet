@@ -66,9 +66,10 @@ release safeguards remain in their subject guides.
   review and vectors.
 - Exercise production TLS/authentication deployment profiles and platform
   certificate handling beyond the current sample fixtures.
-- Configure and verify the account-owned branch/tag protections, release
-  environment approvals, and NuGet trusted publishing policy before any real
-  publication.
+- The account-owned branch/tag protections, release environment approvals, and
+  NuGet trusted publishing policy are configured and have been exercised by
+  the `0.1.0-alpha` publication. Re-verify them before each future stable or
+  prerelease promotion; feed publication does not itself satisfy qualification.
 
 ## Durability and performance
 
