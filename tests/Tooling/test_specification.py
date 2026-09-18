@@ -291,6 +291,28 @@ class ProvenanceAndReviewTests(unittest.TestCase):
         with self.assertRaises(tool.SpecificationError):
             tool.release_check(self.root, {**ledger, "requirements": []})
 
+    def test_accounting_summarizes_review_implementation_and_evidence_gaps(self) -> None:
+        ledger = tool.generate_ledger(self.root, self.lock)
+        row = ledger["requirements"][0]
+        row["review"] = {"status": "reviewed", "note": "Fixture reviewed.", "roles": ["client"]}
+        row["implementation"]["status"] = "implemented"
+        row["implementation"]["testIds"] = ["ReaderPreservesExactBytes"]
+
+        summary = tool.accounting(ledger, self.lock)
+
+        self.assertEqual(summary["pinnedFiles"], 2)
+        self.assertEqual(summary["normativeDocuments"], 1)
+        self.assertFalse(summary["semanticCoverageReviewed"])
+        self.assertEqual(summary["totals"]["requirements"], 1)
+        self.assertEqual(summary["totals"]["dispositioned"], 1)
+        self.assertEqual(summary["totals"]["reviewed"], 1)
+        self.assertEqual(summary["totals"]["implemented"], 1)
+        self.assertEqual(summary["totals"]["qualified"], 0)
+        self.assertEqual(summary["totals"]["testMapped"], 1)
+        self.assertEqual(summary["totals"]["nativeEvidenceMapped"], 0)
+        self.assertEqual(summary["totals"]["qualificationGaps"], 1)
+        self.assertEqual(summary["byOwner"]["core"]["qualificationGaps"], 1)
+
     def test_alpha_bypasses_semantic_coverage_and_per_requirement_qualification(self) -> None:
         ledger = tool.generate_ledger(self.root, self.lock)
         row = ledger["requirements"][0]
