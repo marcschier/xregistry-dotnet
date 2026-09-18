@@ -95,24 +95,22 @@ username shown on the Trusted Publishing policy page**, not the GitHub
 username — a mismatch here fails at runtime with `Token exchange failed
 (HTTP 401)` and `No matching trust policy owned by user '<name>' was found`.
 
-Set `NUGET_USER` as a **repository-level** Actions variable, not an
-environment-level one:
+Project convention: set `NUGET_USER` as a **repository-level** Actions
+configuration variable:
 
 ```powershell
 gh variable set NUGET_USER --body "<nuget.org policy-creator username>"
 ```
 
-Do **not** also create an environment-scoped `NUGET_USER` (`--env release`)
-for the same name. GitHub Actions resolves `vars.NUGET_USER` from the
-environment first and silently falls back to the repository-level value only
-when no environment-level variable exists; a stale or incorrect
-environment-level value added later would silently shadow a correct
-repository-level one with no error until the next promotion run fails. Keep
-the single repository-level variable as the one source of truth. The
-`Verify NUGET_USER` step in `nuget.yml` prints the resolved (non-secret)
-username before login specifically so any future mismatch is visible in the
-run logs immediately, instead of surfacing only as an opaque 401. No
-long-lived NuGet API token is needed or accepted by the workflow.
+Keep that repository-level value as the one source of truth, and avoid adding
+an environment-scoped variable (`--env release`) with the same name unless the
+workflow is deliberately changed to rely on it. GitHub Actions configuration
+variables have level-specific precedence and evaluation timing; do not infer
+the value from repository/environment settings alone. The `Verify NUGET_USER`
+step in `nuget.yml` prints the resolved (non-secret) username before login so
+any future mismatch is visible in the run logs immediately, instead of
+surfacing only as an opaque 401. No long-lived NuGet API token is needed or
+accepted by the workflow.
 
 On nuget.org, sign into the account that owns (or will own) the eleven
 package IDs, open the username menu and choose **Trusted Publishing**, then
