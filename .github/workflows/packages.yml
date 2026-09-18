@@ -72,6 +72,16 @@ jobs:
         with:
           global-json-file: global.json
           dotnet-version: '10.0.x'
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - name: Verify release qualification
+        shell: pwsh
+        run: |
+          python eng/check_packages.py --release
+          if ($LASTEXITCODE -ne 0) { throw 'Package release qualification is incomplete.' }
+          python eng/specification/manage.py release
+          if ($LASTEXITCODE -ne 0) { throw 'Specification release qualification is incomplete.' }
       - name: Pack
         run: |
           dotnet pack src/XRegistry/XRegistry.csproj -c Release -o artifacts/publish

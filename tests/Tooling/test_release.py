@@ -77,12 +77,14 @@ class PackagesWorkflowTests(unittest.TestCase):
         job = job_text("packages.yml", "publish-github")
         for package_id in PACKAGE_IDS:
             self.assertIn(f"src/{package_id}/{package_id}.csproj", job)
+        self.assertIn("python eng/check_packages.py --release", job)
+        self.assertIn("python eng/specification/manage.py release", job)
         self.assertIn('dotnet nuget push "artifacts/publish/*.nupkg"', job)
         self.assertIn("https://nuget.pkg.github.com/marcschier/index.json", job)
         self.assertIn("--api-key ${{ secrets.GITHUB_TOKEN }}", job)
         self.assertIn("--skip-duplicate", job)
         self.assertNotIn(".snupkg", job)
-        self.assertNotIn("python", job)
+        self.assertNotIn("release.py", job)
 
     def test_no_custom_python_release_orchestrator_remains(self) -> None:
         self.assertNotIn("release.py", self.text)
