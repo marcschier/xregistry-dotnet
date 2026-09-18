@@ -1,9 +1,12 @@
 // Copyright (c) 2026 xregistry-dotnet contributors.
 // SPDX-License-Identifier: MIT
 
+using System.ComponentModel;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Win32.SafeHandles;
 using TUnit.Assertions;
 using TUnit.Core;
 using XRegistry.Bindings.File;
@@ -270,7 +273,12 @@ internal static class FileIntegrationFixture
     internal const string Offline = "sha256:c937f902c54ca9c63e510bab3b4ec07ec3775ad338ac030ac93d916a736efba6";
     internal const string Linked = "sha256:dff871378d2678ee851fb7d97bae5a6b69b05c3d668f224a2f97127e8e8dee88";
 
-    internal static DirectoryInfo CreateDirectory() => Directory.CreateTempSubdirectory("xregistry-file-integration-");
+    internal static DirectoryInfo CreateDirectory(string prefix = "xregistry-file-integration-")
+    {
+        var directory = Directory.CreateTempSubdirectory(prefix);
+        return OperatingSystem.IsWindows() ? new DirectoryInfo(CanonicalWindowsDirectory(directory.FullName)) : directory;
+    }
+
     internal static Uri Uri(string path) => new(Path.TrimEndingDirectorySeparator(Path.GetFullPath(path)) + Path.DirectorySeparatorChar);
 
     internal static string Corpus => Path.Combine(AppContext.BaseDirectory, "Oracle");
@@ -318,6 +326,43 @@ internal static class FileIntegrationFixture
         finally { if (!process.HasExited) { process.Kill(entireProcessTree: true); } }
         await Assert.That(process.ExitCode).IsEqualTo(0);
     }
+
+    private static string CanonicalWindowsDirectory(string path)
+    {
+        using var handle = CreateFile(path, GenericRead, FileShareRead | FileShareWrite | FileShareDelete, IntPtr.Zero,
+            OpenExisting, FileFlagBackupSemantics, IntPtr.Zero);
+        if (handle.IsInvalid)
+        {
+            throw new Win32Exception(Marshal.GetLastPInvokeError(), "Could not open the temporary File test directory.");
+        }
+
+        var buffer = new char[16_384];
+        var length = GetFinalPathNameByHandle(handle, buffer, (uint)buffer.Length, 0);
+        if (length == 0)
+        {
+            throw new Win32Exception(Marshal.GetLastPInvokeError(), "Could not resolve the temporary File test directory.");
+        }
+
+        if (length >= buffer.Length) { throw new InvalidOperationException("The temporary File test path is too long."); }
+        var actual = new string(buffer, 0, (int)length);
+        if (actual.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase)) { actual = @"\\" + actual[8..]; }
+        else if (actual.StartsWith(@"\\?\", StringComparison.Ordinal)) { actual = actual[4..]; }
+        return Path.TrimEndingDirectorySeparator(actual);
+    }
+
+    private const uint GenericRead = 0x80000000;
+    private const uint FileShareRead = 0x00000001;
+    private const uint FileShareWrite = 0x00000002;
+    private const uint FileShareDelete = 0x00000004;
+    private const uint OpenExisting = 3;
+    private const uint FileFlagBackupSemantics = 0x02000000;
+
+    [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern SafeFileHandle CreateFile(string name, uint desiredAccess, uint shareMode,
+        IntPtr securityAttributes, uint creationDisposition, uint flagsAndAttributes, IntPtr templateFile);
+
+    [DllImport("kernel32.dll", EntryPoint = "GetFinalPathNameByHandleW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetFinalPathNameByHandle(SafeFileHandle handle, char[] path, uint count, uint flags);
 
     internal static async ValueTask<OciSnapshotPackage> Package(string reference = "offline", string? registryId = null)
     {

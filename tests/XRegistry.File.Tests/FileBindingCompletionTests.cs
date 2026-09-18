@@ -20,7 +20,7 @@ public class FileBindingCompletionTests
     [Arguments("broken%C0%AF")]
     public async Task OriginalMalformedEscapesCannotSelectAnExistingLiteralPercentDirectory(string name)
     {
-        var root = Directory.CreateTempSubdirectory("xregistry-file-completion-");
+        var root = FileIntegrationFixture.CreateDirectory("xregistry-file-completion-");
         try
         {
             var selected = Directory.CreateDirectory(Path.Combine(root.FullName, name));
@@ -40,7 +40,7 @@ public class FileBindingCompletionTests
     [Test]
     public async Task EscapedLiteralPercentNamesAreDecodedOnceWithoutTraversal()
     {
-        var root = Directory.CreateTempSubdirectory("xregistry-file-percent-");
+        var root = FileIntegrationFixture.CreateDirectory("xregistry-file-percent-");
         try
         {
             var selected = Directory.CreateDirectory(Path.Combine(root.FullName, "%2e%2e"));
@@ -62,7 +62,7 @@ public class FileBindingCompletionTests
     [Test]
     public async Task NativeUriConstructionCannotHideAnEncodedParentAlias()
     {
-        var root = Directory.CreateTempSubdirectory("xregistry-file-native-alias-");
+        var root = FileIntegrationFixture.CreateDirectory("xregistry-file-native-alias-");
         try
         {
             var locator = new Uri(Path.Combine(root.FullName, "%2e%2e") + Path.DirectorySeparatorChar);
@@ -111,7 +111,7 @@ public class FileBindingCompletionTests
     [Arguments("NUL.data", true)]
     public async Task WindowsReservedNameRulesDoNotRejectAdjacentOrdinaryNames(string name, bool reserved)
     {
-        var root = Directory.CreateTempSubdirectory("xregistry-file-device-boundary-");
+        var root = FileIntegrationFixture.CreateDirectory("xregistry-file-device-boundary-");
         try
         {
             var locator = new Uri(new Uri(root.FullName + Path.DirectorySeparatorChar).AbsoluteUri + Uri.EscapeDataString(name) + "/");
@@ -141,7 +141,7 @@ public class FileBindingCompletionTests
     [Arguments(FileRegistryLayout.OciLayout)]
     public async Task BothFileLayoutsKeepProducerOwnershipAndSeparateLocatorFromContentPin(FileRegistryLayout layout)
     {
-        var root = Directory.CreateTempSubdirectory("xregistry-file-producer-view-");
+        var root = FileIntegrationFixture.CreateDirectory("xregistry-file-producer-view-");
         try
         {
             FileIntegrationFixture.CopyFixture(root.FullName, layout);
@@ -179,7 +179,7 @@ public class FileBindingCompletionTests
     [Test]
     public async Task LocalOciPublicationPreservesUnknownStringAnnotationsIncludingEmptyKeys()
     {
-        var root = Directory.CreateTempSubdirectory("xregistry-file-oci-annotations-");
+        var root = FileIntegrationFixture.CreateDirectory("xregistry-file-oci-annotations-");
         try
         {
             var package = await FileIntegrationFixture.Package();

@@ -47,7 +47,7 @@ public class FileDocumentTreeReaderTests
     [Test]
     public async Task MissingFileEmptyFileAndDisposedReaderAreDistinct()
     {
-        var root = Directory.CreateTempSubdirectory("xregistry-file-reader-");
+        var root = FileIntegrationFixture.CreateDirectory("xregistry-file-reader-");
         try
         {
             System.IO.File.WriteAllBytes(Path.Combine(root.FullName, "empty.bin"), []);
@@ -78,7 +78,7 @@ public class FileDocumentTreeReaderTests
     [Test]
     public async Task OpenedFileSizeBudgetAcceptsBoundaryAndRejectsNextByte()
     {
-        var root = Directory.CreateTempSubdirectory("xregistry-file-budget-");
+        var root = FileIntegrationFixture.CreateDirectory("xregistry-file-budget-");
         try
         {
             System.IO.File.WriteAllBytes(Path.Combine(root.FullName, "exact.bin"), [1, 2, 3]);
@@ -97,8 +97,8 @@ public class FileDocumentTreeReaderTests
     [Test]
     public async Task DirectoryLinksAreRejectedAtTheRootAndAtEveryTraversalComponent()
     {
-        var root = Directory.CreateTempSubdirectory("xregistry-file-links-");
-        var outside = Directory.CreateTempSubdirectory("xregistry-file-outside-");
+        var root = FileIntegrationFixture.CreateDirectory("xregistry-file-links-");
+        var outside = FileIntegrationFixture.CreateDirectory("xregistry-file-outside-");
         var link = Path.Combine(root.FullName, "alias");
         try
         {
@@ -143,7 +143,7 @@ public class FileDocumentTreeReaderTests
     [Test]
     public async Task ActiveReadPreventsOrDetectsFileMutation()
     {
-        var root = Directory.CreateTempSubdirectory("xregistry-file-mutation-");
+        var root = FileIntegrationFixture.CreateDirectory("xregistry-file-mutation-");
         try
         {
             var file = Path.Combine(root.FullName, "value.bin");
@@ -173,7 +173,7 @@ public class FileDocumentTreeReaderTests
     [Arguments("./")]
     public async Task OriginalRootDotAliasesAreRejectedBeforeUriNormalizationCanHideThem(string suffix)
     {
-        var root = Directory.CreateTempSubdirectory("xregistry-file-root-");
+        var root = FileIntegrationFixture.CreateDirectory("xregistry-file-root-");
         try
         {
             var uri = new Uri(new Uri(root.FullName + Path.DirectorySeparatorChar).AbsoluteUri + suffix);

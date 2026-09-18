@@ -13,7 +13,7 @@ public class FilePathIdentityTests
     [Test]
     public async Task RootAndIntermediateDirectoryCaseAliasesCannotRedirectReads()
     {
-        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xregistry-case-" + Guid.NewGuid().ToString("N")));
+        var root = FileIntegrationFixture.CreateDirectory("xregistry-case-");
         try
         {
             var child = Directory.CreateDirectory(Path.Combine(root.FullName, "Canonical"));
@@ -46,7 +46,7 @@ public class FilePathIdentityTests
     [Test]
     public async Task InternalCaseAliasesNeverSelectADifferentCanonicalFileSpelling()
     {
-        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "xregistry-case-" + Guid.NewGuid().ToString("N")));
+        var root = FileIntegrationFixture.CreateDirectory("xregistry-case-");
         try
         {
             System.IO.File.WriteAllBytes(Path.Combine(root.FullName, "MixedCase.bin"), [7, 8, 9]);
