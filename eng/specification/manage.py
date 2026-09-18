@@ -35,6 +35,10 @@ REVIEW_KEYS = {"status", "note", "roles"}
 IMPLEMENTATION_KEYS = {"status", "testIds", "nativeEvidence"}
 FRAMEWORKS = ("net8.0", "net10.0")
 RIDS = ("win-x64", "win-arm64", "linux-x64", "linux-arm64")
+VERSION_FILE = Path("version.json")
+ALPHA_PRERELEASE = re.compile(
+    r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-alpha(?:\.[0-9a-z-]+)*"
+)
 
 
 class SpecificationError(ValueError):
@@ -636,8 +640,26 @@ def render_report(ledger: dict[str, Any], lock: dict[str, Any]) -> bytes:
     return "\n".join(lines).encode("utf-8")
 
 
-def release_check(root: Path, ledger: dict[str, Any]) -> None:
-    if ledger.get("semanticCoverageReviewed") is not True:
+def source_version_is_alpha(root: Path) -> bool:
+    """True only when root/version.json declares an explicit `-alpha`/`-alpha.N` prerelease.
+
+    This is the sole, narrowly-scoped, maintainer-approved exception to the
+    specification qualification gate (see docs/releasing.md). It fails closed:
+    a missing, oversized or malformed version file is never treated as alpha.
+    """
+    path = root / VERSION_FILE
+    try:
+        if not path.is_file():
+            return False
+        document = read_json(path)
+    except (OSError, UnicodeError, json.JSONDecodeError, SpecificationError):
+        return False
+    value = document.get("version") if isinstance(document, dict) else None
+    return isinstance(value, str) and ALPHA_PRERELEASE.fullmatch(value) is not None
+
+
+def release_check(root: Path, ledger: dict[str, Any], *, alpha: bool = False) -> None:
+    if ledger.get("semanticCoverageReviewed") is not True and not alpha:
         raise SpecificationError("Semantic coverage review is incomplete.")
     rows = ledger.get("requirements")
     if not isinstance(rows, list) or not rows:
@@ -645,6 +667,11 @@ def release_check(root: Path, ledger: dict[str, Any]) -> None:
     for row in rows:
         validate_review(row)
         if row["review"]["status"] == "informative":
+            continue
+        if alpha:
+            # Explicit maintainer-approved alpha prerelease exception (docs/releasing.md):
+            # requirement/review structure is still validated above, but the reviewed and
+            # qualified statuses plus native execution evidence are not required.
             continue
         if row["review"]["status"] != "reviewed" or row["implementation"]["status"] != "qualified":
             raise SpecificationError(f"Requirement is not qualified: {row['id']}")
@@ -690,7 +717,16 @@ def main(argv: list[str] | None = None) -> int:
             write_output(ROOT / LEDGER, encoded(ledger), check)
             write_output(ROOT / REPORT, render_report(ledger, lock), check)
             if args.operation == "release":
-                release_check(ROOT, ledger)
+                alpha = source_version_is_alpha(ROOT)
+                if alpha:
+                    print(
+                        "ALPHA PRERELEASE EXCEPTION: version.json declares an explicit "
+                        "-alpha prerelease; specification qualification and native-evidence "
+                        "enforcement are not required for this release. "
+                        "See docs/releasing.md#alpha-prerelease-exception.",
+                        file=sys.stderr,
+                    )
+                release_check(ROOT, ledger, alpha=alpha)
         print(
             f"Specification {args.operation}: {lock['fileCount']} pinned files verified. "
             "This is provenance consistency, not implemented conformance."

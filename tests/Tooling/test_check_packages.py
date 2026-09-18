@@ -215,12 +215,70 @@ class ManifestTests(unittest.TestCase):
 
     def test_cli_success_is_inventory_only_and_release_rejects_planned(self) -> None:
         self.load(manifest())
+        version_file = self.root / "version.json"
+        version_file.write_bytes(json.dumps({"version": "1.0.0-rc9"}).encode("utf-8"))
         stdout, stderr = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
             self.assertEqual(tool.main(["--manifest", str(self.path)]), 0)
-            self.assertEqual(tool.main(["--manifest", str(self.path), "--release"]), 1)
+            self.assertEqual(
+                tool.main(["--manifest", str(self.path), "--version-file", str(version_file), "--release"]), 1
+            )
         self.assertIn("not runtime or conformance qualification", stdout.getvalue())
         self.assertIn("not qualified", stderr.getvalue())
+
+    def test_cli_alpha_version_file_bypasses_qualified_status_with_an_explicit_notice(self) -> None:
+        self.load(manifest())
+        version_file = self.root / "version.json"
+        version_file.write_bytes(json.dumps({"version": "0.1.0-alpha"}).encode("utf-8"))
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr), \
+                mock.patch.object(tool, "check_project_inventory") as check_projects, \
+                mock.patch.object(tool, "check_evaluated_projects", return_value=0) as check_evaluated:
+            self.assertEqual(
+                tool.main(["--manifest", str(self.path), "--version-file", str(version_file), "--release"]), 0
+            )
+        self.assertIn("ALPHA PRERELEASE EXCEPTION", stderr.getvalue())
+        check_projects.assert_called_once()
+        check_evaluated.assert_called_once()
+
+    def test_cli_non_alpha_version_file_still_rejects_planned_statuses(self) -> None:
+        self.load(manifest())
+        version_file = self.root / "version.json"
+        for value in ("1.0.0-rc9", "0.1.0-beta", "0.1.0-alphabet"):
+            version_file.write_bytes(json.dumps({"version": value}).encode("utf-8"))
+            stderr = io.StringIO()
+            with self.subTest(value=value), contextlib.redirect_stderr(stderr), \
+                    mock.patch.object(tool, "check_project_inventory") as check_projects:
+                self.assertEqual(
+                    tool.main(["--manifest", str(self.path), "--version-file", str(version_file), "--release"]), 1
+                )
+            self.assertIn("not qualified", stderr.getvalue())
+            self.assertNotIn("ALPHA PRERELEASE EXCEPTION", stderr.getvalue())
+            check_projects.assert_not_called()
+
+    def test_missing_oversized_or_malformed_version_file_fails_closed_not_alpha(self) -> None:
+        for setup in (
+            lambda path: None,
+            lambda path: path.write_bytes(b"{not json"),
+            lambda path: path.write_bytes(b'{"version": 1}'),
+            lambda path: path.write_bytes(b'{"a":1,"a":2}'),
+        ):
+            with self.subTest(setup=setup):
+                version_file = self.root / "version.json"
+                if version_file.exists():
+                    version_file.unlink()
+                setup(version_file)
+                self.assertFalse(tool.source_version_is_alpha(version_file))
+
+    def test_source_version_is_alpha_grammar(self) -> None:
+        version_file = self.root / "version.json"
+        for value, expected in (
+            ("0.1.0-alpha", True), ("0.1.0-alpha.4", True),
+            ("0.1.0-alphabet", False), ("0.1.0-beta", False), ("1.0.0", False), ("0.1.0-ALPHA", False),
+        ):
+            version_file.write_bytes(json.dumps({"version": value}).encode("utf-8"))
+            with self.subTest(value=value):
+                self.assertEqual(tool.source_version_is_alpha(version_file), expected)
 
 
 class ProjectEvaluationTests(unittest.TestCase):
