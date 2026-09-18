@@ -1,6 +1,6 @@
 # xRegistry .NET
 
-Current source and CI package version: **1.0.0-rc4**.
+Current source and CI package version: **0.1.0-alpha**.
 
 A model-driven xRegistry client and ASP.NET Core server for .NET 8 and .NET 10.
 Eleven runtime packages provide Core, client, server, storage, validation,
@@ -63,7 +63,7 @@ For exact-version CI packages after a successful build, run
 `python eng\package_build.py` or pass an explicit `--version`. Commit version
 changes first: NBGV reads the committed version, and an explicit package
 version must agree with `version.json`. The `package-build` workflow uploads
-all eleven `1.0.0-rc4` package/symbol pairs and their source/hash inventory;
+all eleven `0.1.0-alpha` package/symbol pairs and their source/hash inventory;
 those artifacts are not automatically promoted. Publication is a separate,
 approval-gated operation described in the
 [release guide](docs/releasing.md).

@@ -10,8 +10,8 @@ An embedded transient server normally references:
 
 ```xml
 <ItemGroup>
-  <PackageReference Include="XRegistry.AspNetCore" Version="1.0.0-rc4" />
-  <PackageReference Include="XRegistry.Models" Version="1.0.0-rc4" />
+  <PackageReference Include="XRegistry.AspNetCore" Version="0.1.0-alpha" />
+  <PackageReference Include="XRegistry.Models" Version="0.1.0-alpha" />
 </ItemGroup>
 ```
 

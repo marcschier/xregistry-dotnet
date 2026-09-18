@@ -1,7 +1,7 @@
 # Releasing xRegistry .NET
 
 **Build artifacts are available without publishing authority.** The source
-version is `1.0.0-rc4`. Packages and samples are implemented but not
+version is `0.1.0-alpha`. Packages and samples are implemented but not
 release-qualified; incomplete native/conformance requirements must not be marked
 qualified merely to unblock promotion.
 
@@ -28,8 +28,8 @@ of assuming the old `alpha` channel; that repository is administered separately.
 
 `nuget.yml` accepts **one required `workflow_dispatch` string input named
 `version`**, with no default. Dispatch must select `main`. The conductor supplies
-an explicit NuGet version such as `1.0.0-rc4`, not `v1.0.0-rc4`.
-The exact source ref is then `refs/tags/v1.0.0-rc4`.
+an explicit NuGet version such as `0.1.0-alpha`, not `v0.1.0-alpha`.
+The exact source ref is then `refs/tags/v0.1.0-alpha`.
 
 Versions must be lowercase canonical SemVer, at most 64 ASCII characters, with
 three numeric components in the NuGet signed-32-bit range. Leading numeric

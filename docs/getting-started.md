@@ -21,7 +21,7 @@ Reference the packages your application uses directly:
 For example:
 
 ```powershell
-dotnet add package XRegistry.Client --version 1.0.0-rc4
+dotnet add package XRegistry.Client --version 0.1.0-alpha
 ```
 
 Use the package source selected by your organization. Repository CI package
