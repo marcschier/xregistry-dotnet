@@ -2,90 +2,75 @@
 # SPDX-License-Identifier: MIT
 
 name: nuget
-run-name: Promote NuGet ${{ inputs.version }}
+
+# Manually promotes the most recently published xRegistry packages from the repository's GitHub
+# Packages feed to nuget.org using NuGet trusted publishing (OIDC short-lived token, no stored API
+# key). Run this from the Actions tab once a version has been published to GitHub Packages by the
+# tag-triggered package-build publish-github job. Leave "version" blank to promote the latest
+# published version.
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Exact version without v (for example 1.0.0-rc4); no latest/default'
-        required: true
+        description: 'Version to promote (blank = latest published in the GitHub Packages feed)'
+        required: false
         type: string
+        default: ''
 
-permissions: {}
-
-concurrency:
-  group: nuget-promotion
-  cancel-in-progress: false
+permissions:
+  contents: read
 
 jobs:
-  resolve:
-    if: github.repository == 'marcschier/xregistry-dotnet' && github.ref == 'refs/heads/main'
-    runs-on: windows-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-      actions: read
-      attestations: read
-    outputs:
-      selection: ${{ steps.resolve.outputs.selection }}
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          python-version: '3.13'
-      - name: Resolve and verify the exact qualifying artifact before approval
-        id: resolve
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_VERSION: ${{ inputs.version }}
-        run: python eng\release\release.py resolve
-
   publish:
-    needs: resolve
-    runs-on: windows-latest
-    timeout-minutes: 30
+    name: Promote to nuget.org
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: release
     permissions:
+      id-token: write # Required for OIDC (NuGet trusted publishing)
       contents: read
-      actions: read
-      attestations: read
-      id-token: write
+      packages: read  # Read the packages from the GitHub Packages feed
     steps:
-      # Only trusted main workflow code is executed, never downloaded/tagged scripts.
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          python-version: '3.13'
       - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
-          global-json-file: global.json
           dotnet-version: '10.0.x'
-      - name: Verify real approval and recheck the pinned artifact after waiting
-        shell: pwsh
+
+      - name: Download packages from GitHub Packages
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_VERSION: ${{ inputs.version }}
-          EXPECTED_SELECTION: ${{ needs.resolve.outputs.selection }}
-          NUGET_USER: ${{ vars.NUGET_USER }}
-        run: python eng\release\release.py prepare
-      - name: Exchange GitHub OIDC for a short-lived NuGet key
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          index=https://nuget.pkg.github.com/marcschier/index.json
+          auth="Authorization: Bearer $GH_TOKEN"
+          base=$(curl -fsSL -H "$auth" "$index" \
+            | jq -r '.resources[] | select(."@type"=="PackageBaseAddress/3.0.0") | ."@id"' \
+            | head -n1)
+          base=${base%/}
+          mkdir -p ./download
+          for id in XRegistry XRegistry.Client XRegistry.Server XRegistry.AspNetCore XRegistry.Storage.File XRegistry.Models XRegistry.Validation XRegistry.Federation XRegistry.Bindings.File XRegistry.Bindings.Git XRegistry.Bindings.Oci; do
+            lower=$(echo "$id" | tr '[:upper:]' '[:lower:]')
+            if [ -n "${VERSION}" ]; then
+              ver="${VERSION}"
+            else
+              ver=$(curl -fsSL -H "$auth" "$base/$lower/index.json" | jq -r '.versions | last')
+            fi
+            echo "Promoting $id $ver"
+            curl -fsSL -H "$auth" "$base/$lower/$ver/$lower.$ver.nupkg" \
+              -o "./download/$lower.$ver.nupkg"
+          done
+          ls -l ./download
+
+      - name: NuGet login (OIDC trusted publishing)
         id: login
         uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
         with:
           user: ${{ vars.NUGET_USER }}
-      - name: Promote the same verified package and symbol bytes
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_VERSION: ${{ inputs.version }}
-          EXPECTED_SELECTION: ${{ needs.resolve.outputs.selection }}
-          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
-        run: python eng\release\release.py push
+
+      - name: Push to nuget.org
+        run: >
+          dotnet nuget push "./download/*.nupkg"
+          --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate

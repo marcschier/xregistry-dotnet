@@ -67,8 +67,8 @@ release safeguards remain in their subject guides.
 - Exercise production TLS/authentication deployment profiles and platform
   certificate handling beyond the current sample fixtures.
 - Configure and verify the account-owned branch/tag protections, release
-  environment approvals, trusted publishing policy, and artifact attestation
-  services before any real publication.
+  environment approvals, and NuGet trusted publishing policy before any real
+  publication.
 
 ## Durability and performance
 
