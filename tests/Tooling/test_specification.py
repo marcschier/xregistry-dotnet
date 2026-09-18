@@ -291,6 +291,37 @@ class ProvenanceAndReviewTests(unittest.TestCase):
         with self.assertRaises(tool.SpecificationError):
             tool.release_check(self.root, {**ledger, "requirements": []})
 
+    def test_alpha_bypasses_semantic_coverage_and_per_requirement_qualification(self) -> None:
+        ledger = tool.generate_ledger(self.root, self.lock)
+        row = ledger["requirements"][0]
+        row["review"] = {"status": "reviewed", "note": "Alpha fixture, not yet fully qualified.", "roles": ["client"]}
+        row["implementation"]["status"] = "implemented"
+        row["implementation"]["testIds"] = ["ActualTest"]
+        self.assertIs(ledger.get("semanticCoverageReviewed"), False)
+        with self.assertRaisesRegex(tool.SpecificationError, "Semantic"):
+            tool.release_check(self.root, ledger)
+        with self.assertRaisesRegex(tool.SpecificationError, "not qualified"):
+            tool.release_check(self.root, {**ledger, "semanticCoverageReviewed": True})
+        tool.release_check(self.root, ledger, alpha=True)
+
+    def test_alpha_does_not_relax_a_nonempty_requirement_inventory_or_row_structure(self) -> None:
+        ledger = tool.generate_ledger(self.root, self.lock)
+        with self.assertRaises(tool.SpecificationError):
+            tool.release_check(self.root, {**ledger, "requirements": []}, alpha=True)
+        row = ledger["requirements"][0]
+        row["review"]["status"] = "not-a-real-status"
+        with self.assertRaises(tool.SpecificationError):
+            tool.release_check(self.root, ledger, alpha=True)
+
+    def test_source_version_is_alpha_reads_the_given_root_and_fails_closed(self) -> None:
+        self.assertFalse(tool.source_version_is_alpha(self.root))
+        self.write_json(tool.VERSION_FILE, {"version": "0.1.0-alpha"})
+        self.assertTrue(tool.source_version_is_alpha(self.root))
+        self.write_json(tool.VERSION_FILE, {"version": "1.0.0-rc9"})
+        self.assertFalse(tool.source_version_is_alpha(self.root))
+        (self.root / tool.VERSION_FILE).write_bytes(b"{not json")
+        self.assertFalse(tool.source_version_is_alpha(self.root))
+
     def test_arbitrary_hashed_files_do_not_prove_native_execution(self) -> None:
         ledger = tool.generate_ledger(self.root, self.lock)
         ledger["semanticCoverageReviewed"] = True

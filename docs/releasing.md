@@ -1,9 +1,10 @@
 # Releasing xRegistry .NET
 
 **Build artifacts are available without publishing authority.** The source
-version is `1.0.0-rc4`. Packages and samples are implemented but not
+version is `0.1.0-alpha`. Packages and samples are implemented but not
 release-qualified; incomplete native/conformance requirements must not be marked
-qualified merely to unblock promotion.
+qualified merely to unblock promotion, except through the narrow, explicit
+[alpha prerelease exception](#alpha-prerelease-exception) below.
 
 `packages.yml` runs ordinary restore/build and `eng\package_build.py`, producing the exact
 source version as eleven `.nupkg`/`.snupkg` pairs under `artifacts\ci-packages`.
@@ -28,8 +29,8 @@ of assuming the old `alpha` channel; that repository is administered separately.
 
 `nuget.yml` accepts **one required `workflow_dispatch` string input named
 `version`**, with no default. Dispatch must select `main`. The conductor supplies
-an explicit NuGet version such as `1.0.0-rc4`, not `v1.0.0-rc4`.
-The exact source ref is then `refs/tags/v1.0.0-rc4`.
+an explicit NuGet version such as `0.1.0-alpha`, not `v0.1.0-alpha`.
+The exact source ref is then `refs/tags/v0.1.0-alpha`.
 
 Versions must be lowercase canonical SemVer, at most 64 ASCII characters, with
 three numeric components in the NuGet signed-32-bit range. Leading numeric
@@ -60,6 +61,7 @@ The build job has only `contents: read`, no publishing token and no OIDC access.
 1. Require all eleven libraries and three samples to be `qualified`, then run
    the existing `python eng\check_packages.py --release` and
    `python eng\specification\manage.py release` gates without changing them.
+   The sole exception is the version-scoped [alpha prerelease exception](#alpha-prerelease-exception).
 2. Run `eng\build.ps1` (normal restore, warnings-as-errors build and project
    evaluation), then `eng\test.ps1 -NoBuild` (tooling, source consistency and
    nonempty managed tests). A failure stops artifact creation.
@@ -77,11 +79,56 @@ The build job has only `contents: read`, no publishing token and no OIDC access.
    commands, byte lengths and SHA-256 of every payload file. The source
    inventories and unchanged native receipt bytes are included.
 
+## Alpha prerelease exception
+
+This is an explicit, maintainer-approved, version-scoped carve-out of the
+qualification requirement above. It exists because the repository's real
+package/specification qualification (native execution evidence across all
+eight `net8.0`/`net10.0` × `win-x64`/`win-arm64`/`linux-x64`/`linux-arm64` cells,
+for every applicable specification requirement) is a large, ongoing body of
+work, and an early `0.1.0-alpha` release is explicitly published **without**
+claiming that work is complete.
+
+**Scope.** The exception applies only when `version.json`'s `version` field is
+an explicit `alpha` prerelease: the first dot-separated prerelease identifier
+must be exactly `alpha` (for example `0.1.0-alpha` or `0.1.0-alpha.3`). It is
+determined purely by parsing that already-committed, hash-verified file/tag
+commit; there is no separate command-line switch, workflow input or environment
+variable that can turn it on. A stable version or any other prerelease channel
+(`rc`, `beta`, and so on) always uses the full strict gate with no exception.
+
+**What is relaxed.** `python eng\check_packages.py --release` does not require
+every package/sample `status` to be `qualified`. `python eng\specification\manage.py release`
+does not require `semanticCoverageReviewed: true`, and does not require every
+applicable requirement to be `reviewed`/`qualified` with eight-cell native
+execution evidence. Both commands print an explicit `ALPHA PRERELEASE EXCEPTION`
+notice (in the tag build's public GitHub Actions log) whenever this applies.
+
+**What is never relaxed.** The exception changes only the two commands above.
+Every other real-source-file, structural-validity, clean-checkout, build,
+test, hashing, nuspec, archive, attestation, environment-approval and NuGet
+promotion requirement in this document is unchanged and fully enforced,
+including for an alpha release: `eng\build.ps1` and `eng\test.ps1 -NoBuild` must
+still pass in full; every package/requirement row must still satisfy its basic
+JSON shape (`validate_review`); the SLSA attestation, the designated
+maintainer's environment approval, and the exact-byte NuGet push are unchanged.
+
+**Why this is safe.** A published `-alpha` package version is not itself a
+conformance claim: NuGet.org visibly marks it as a prerelease, and its version
+string cannot be reused by a later stable/`rc` release. No package or
+specification row's persisted `status` is edited to say `qualified` when it is
+not; the ledger and manifest continue to truthfully record `implemented` (or
+`pending`) statuses and the exact reviewed/native-evidence state that exists.
+
+## Native/specification qualification
+
 Every applicable requirement must remain reviewed and qualified, with exactly
 eight distinct framework/RID cells. The existing specification validator must
 accept each receipt's hash, native-executable flag and mapped executed test IDs,
 without failures or skips. Missing evidence is an error. The helper only copies
-and verifies existing receipts; it does not generate native pass lists.
+and verifies existing receipts; it does not generate native pass lists. This
+requirement is only relaxed by the [alpha prerelease exception](#alpha-prerelease-exception)
+above.
 
 The payload is uploaded once under
 `xregistry-release-<version>-<commit>-<run-id>-<attempt>`, with overwrite disabled,

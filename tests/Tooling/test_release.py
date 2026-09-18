@@ -30,7 +30,7 @@ ERRORS = (tool.ReleaseError, tool.inventory.InventoryError, tool.specification.S
 
 
 def synthetic_identity() -> dict:
-    return tool.identity_document("0.1.0-alpha.1", 7, "1" * 40, "2" * 40, 101, 1)
+    return tool.identity_document("1.0.0-rc9", 7, "1" * 40, "2" * 40, 101, 1)
 
 
 def synthetic_package(package_id: str, identity: dict, suffix: str, **changes) -> bytes:
@@ -1141,6 +1141,123 @@ class BuildAndPushTests(SyntheticFixture):
             with self.subTest(values=values), self.assertRaisesRegex(tool.ReleaseError, "Unsafe workflow output"):
                 tool.emit_outputs(values, {"GITHUB_OUTPUT": str(path)})
         self.assertEqual(path.read_bytes(), b"")
+
+    def test_alpha_identity_bypasses_package_status_blocker_but_still_runs_gates(self) -> None:
+        alpha_identity = tool.identity_document(
+            "0.1.0-alpha", 7, self.identity["commit"], self.identity["tagObject"],
+            self.identity["runId"], self.identity["runAttempt"],
+        )
+        source = copy.deepcopy(self.source)
+        source["packages"][0]["status"] = "planned"
+        (self.root / "eng" / "packages.json").write_bytes(tool.encoded(source))
+
+        def command(arguments, *args, **kwargs):
+            if arguments[:2] == ["git", "show"]:
+                return tool.source_path(self.root, arguments[2].split(":", 1)[1]).read_bytes()
+            return b""
+
+        stdout = io.StringIO()
+        with mock.patch.object(tool, "build_identity", return_value=alpha_identity), \
+                mock.patch.object(tool, "clean_source"), mock.patch.object(tool, "checked", side_effect=command) as run, \
+                mock.patch.object(tool, "stage_payload") as stage, mock.patch.object(tool, "emit_outputs"), \
+                contextlib.redirect_stdout(stdout):
+            tool.build(self.root, {})
+        self.assertIn("ALPHA PRERELEASE EXCEPTION", stdout.getvalue())
+        commands = [call.args[0] for call in run.call_args_list]
+        self.assertEqual(commands[0], ["python", str(self.root / "eng" / "check_packages.py"), "--release"])
+        self.assertEqual(commands[1], ["python", str(self.root / "eng" / "specification" / "manage.py"), "release"])
+        stage.assert_called_once()
+
+
+class AlphaPrereleaseExceptionTests(unittest.TestCase):
+    """Proves the version-scoped alpha exception (docs/releasing.md) without weakening
+    the strict gate for every other version channel. See ``is_alpha_prerelease``,
+    ``release_check`` and every ``qualified=`` call site in eng/release/release.py."""
+
+    def setUp(self) -> None:
+        directory = tempfile.TemporaryDirectory(prefix="xregistry-alpha-test-")
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+
+    def unqualified_ledger(self) -> dict:
+        return {
+            "schemaVersion": 1, "semanticCoverageReviewed": True,
+            "baselineManifestSha256": "a" * 64,
+            "correctionsSha256": tool.sha256(b'{"fixture":"synthetic, not a specification correction"}\n'),
+            "requirements": [{
+                "id": "SYNTHETIC-NOT-RELEASE-EVIDENCE",
+                "review": {"status": "reviewed", "note": "Alpha fixture, not yet fully qualified.", "roles": ["client"]},
+                "implementation": {"status": "implemented", "testIds": ["Synthetic.NotReleaseEvidence"], "nativeEvidence": []},
+            }],
+        }
+
+    def build_fixture(self, root: Path, version: str, *, package_status: str) -> tuple[dict, tuple[str, ...], Path, Path, dict[str, str]]:
+        identity = tool.identity_document(version, 7, "1" * 40, "2" * 40, 101, 1)
+        source = json.loads((ROOT / "eng" / "packages.json").read_bytes())
+        for entry in source["packages"] + source["samples"]:
+            entry["status"] = package_status
+        ids = tuple(sorted(entry["id"] for entry in source["packages"]))
+        packages = root / "package-output"
+        packages.mkdir()
+        for package_id in ids:
+            for suffix in ("nupkg", "snupkg"):
+                (packages / f"{package_id}.{identity['version']}.{suffix}").write_bytes(
+                    synthetic_package(package_id, identity, suffix)
+                )
+        source_data = {
+            "source-packages.json": tool.encoded(source),
+            "source-specification-lock.json": tool.encoded({"baselineManifestSha256": "a" * 64}),
+            "source-corrections.json": b'{"fixture":"synthetic, not a specification correction"}\n',
+            "source-requirements.json": tool.encoded(self.unqualified_ledger()),
+        }
+        hashes = {}
+        for name, raw in source_data.items():
+            path = tool.source_path(root, tool.SOURCE_FILES[name])
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(raw)
+            hashes[name] = tool.sha256(raw)
+        payload = root / "payload"
+        return identity, ids, packages, payload, hashes
+
+    def test_alpha_version_bypasses_unqualified_packages_and_ledger(self) -> None:
+        identity, ids, packages, payload, hashes = self.build_fixture(self.root, "0.1.0-alpha", package_status="implemented")
+        tool.stage_payload(self.root, packages, payload, identity)
+        document = tool.verify_payload(payload, identity, hashes, ids)
+        self.assertEqual(document["identity"], identity)
+        self.assertEqual(document["qualification"], tool.GATES)
+
+    def test_alpha_dotted_prerelease_also_bypasses_unqualified_packages_and_ledger(self) -> None:
+        identity, ids, packages, payload, hashes = self.build_fixture(self.root, "0.1.0-alpha.3", package_status="implemented")
+        tool.stage_payload(self.root, packages, payload, identity)
+        tool.verify_payload(payload, identity, hashes, ids)
+
+    def test_non_alpha_prerelease_still_requires_full_qualification(self) -> None:
+        for version in ("1.0.0-rc9", "0.1.0-beta"):
+            with self.subTest(version=version):
+                root = Path(tempfile.mkdtemp(prefix="xregistry-alpha-negative-"))
+                self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+                identity, ids, packages, payload, hashes = self.build_fixture(root, version, package_status="implemented")
+                with self.assertRaisesRegex(tool.ReleaseError, "not qualified"):
+                    tool.stage_payload(root, packages, payload, identity)
+
+    def test_alpha_grammar_requires_the_literal_alpha_identifier_as_first_component(self) -> None:
+        for version, expected in (
+            ("0.1.0-alpha", True), ("0.1.0-alpha.1", True), ("0.1.0-alpha.rc1", True),
+            ("0.1.0-alphabet", False), ("0.1.0-beta", False), ("1.0.0", False),
+            ("0.1.0-rc.alpha", False),
+        ):
+            with self.subTest(version=version):
+                self.assertEqual(tool.is_alpha_prerelease(version), expected)
+
+    def test_alpha_grammar_rejects_a_non_canonical_version_rather_than_silently_answering_false(self) -> None:
+        with self.assertRaises(tool.ReleaseError):
+            tool.is_alpha_prerelease("0.1.0-ALPHA")
+
+    def test_alpha_exception_does_not_relax_malformed_review_structure(self) -> None:
+        ledger = self.unqualified_ledger()
+        ledger["requirements"][0]["review"]["status"] = "not-a-real-status"
+        with self.assertRaises(tool.specification.SpecificationError):
+            tool.specification.release_check(self.root, ledger, alpha=True)
 
 
 class WorkflowContractTests(unittest.TestCase):

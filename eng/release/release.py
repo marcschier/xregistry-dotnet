@@ -113,6 +113,20 @@ def version(value: Any) -> str:
     return value
 
 
+def is_alpha_prerelease(value: str) -> bool:
+    """True only for an explicit `-alpha`/`-alpha.N` prerelease identifier.
+
+    This is the sole, narrowly-scoped, maintainer-approved exception to the
+    package/specification qualification gate (see docs/releasing.md). It never
+    applies to a stable version or any other prerelease channel (`rc`, `beta`,
+    and so on), and it does not relax build, test, hashing, attestation or
+    approval requirements.
+    """
+    match = VERSION.fullmatch(version(value))
+    prerelease = match[4]
+    return prerelease is not None and prerelease.split(".")[0] == "alpha"
+
+
 def json_bytes(raw: bytes) -> Any:
     require(len(raw) <= MAX_JSON, "JSON byte limit exceeded.")
     return json.loads(
@@ -360,10 +374,11 @@ def verify_package(path: Path, package_id: str, identity: dict[str, Any]) -> Non
                     pass
 
 
-def report_references(ledger: Any) -> dict[str, str]:
+def report_references(ledger: Any, *, alpha: bool = False) -> dict[str, str]:
     require(
         isinstance(ledger, dict) and type(ledger.get("schemaVersion")) is int
-        and ledger["schemaVersion"] == 1 and ledger.get("semanticCoverageReviewed") is True,
+        and ledger["schemaVersion"] == 1
+        and (ledger.get("semanticCoverageReviewed") is True or alpha),
         "Semantic coverage review is incomplete.",
     )
     rows = ledger.get("requirements")
@@ -380,9 +395,15 @@ def report_references(ledger: Any) -> dict[str, str]:
         if row["review"]["status"] == "informative":
             continue
         applicable += 1
-        require(row["review"]["status"] == "reviewed" and row["implementation"]["status"] == "qualified", "Requirement is not qualified.")
-        evidence = row["implementation"]["nativeEvidence"]
-        require(len(evidence) == 8, "Each applicable requirement needs exactly eight native cells.")
+        if alpha:
+            # Explicit maintainer-approved alpha prerelease exception (docs/releasing.md):
+            # requirement structure is still validated above, but reviewed/qualified status
+            # and the exact eight-cell native evidence requirement are not enforced.
+            evidence = row["implementation"]["nativeEvidence"]
+        else:
+            require(row["review"]["status"] == "reviewed" and row["implementation"]["status"] == "qualified", "Requirement is not qualified.")
+            evidence = row["implementation"]["nativeEvidence"]
+            require(len(evidence) == 8, "Each applicable requirement needs exactly eight native cells.")
         cells: set[tuple[str, str]] = set()
         for item in evidence:
             cell = (item["framework"], item["rid"])
@@ -399,9 +420,9 @@ def report_references(ledger: Any) -> dict[str, str]:
     return reports
 
 
-def verify_evidence(payload: Path) -> set[str]:
+def verify_evidence(payload: Path, alpha: bool) -> set[str]:
     ledger = json_bytes(read_bytes(payload / "source-requirements.json", MAX_JSON))
-    reports = report_references(ledger)
+    reports = report_references(ledger, alpha=alpha)
     lock = json_bytes(read_bytes(payload / "source-specification-lock.json", MAX_JSON))
     digest(ledger.get("baselineManifestSha256"), "specification baseline hash")
     require(
@@ -418,7 +439,7 @@ def verify_evidence(payload: Path) -> set[str]:
             target.parent.mkdir(parents=True, exist_ok=True)
             with target.open("xb") as stream:
                 stream.write(raw)
-        specification.release_check(root, ledger)
+        specification.release_check(root, ledger, alpha=alpha)
     return {f"native-{hashed}.json" for hashed in reports.values()}
 
 
@@ -462,9 +483,10 @@ def verify_payload(
     for name, hashed in source_hashes.items():
         digest(hashed, "source hash")
         require(name in files and files[name]["sha256"] == hashed, f"Source file is not from the exact tag commit: {name}")
-    ids = package_ids(payload / "source-packages.json", payload, qualified=True)
+    alpha = is_alpha_prerelease(identity["version"])
+    ids = package_ids(payload / "source-packages.json", payload, qualified=not alpha)
     require(ids == expected_ids, "Tagged package IDs differ from the trusted promotion inventory.")
-    expected = set(SOURCE_FILES) | package_names(ids, identity["version"]) | verify_evidence(payload)
+    expected = set(SOURCE_FILES) | package_names(ids, identity["version"]) | verify_evidence(payload, alpha)
     require(set(files) == expected, "Incomplete or unexpected package/evidence inventory.")
     for package_id in ids:
         for suffix in ("nupkg", "snupkg"):
@@ -473,7 +495,8 @@ def verify_payload(
 
 
 def stage_payload(root: Path, packages: Path, destination: Path, identity: dict[str, Any]) -> None:
-    ids = package_ids(root / "eng" / "packages.json", root, qualified=True)
+    alpha = is_alpha_prerelease(identity["version"])
+    ids = package_ids(root / "eng" / "packages.json", root, qualified=not alpha)
     require({path.name for path in packages.iterdir()} == package_names(ids, identity["version"]), "Missing, extra or duplicate package output.")
     require(not destination.exists(), "Release payload destination already exists.")
     no_link(destination)
@@ -487,7 +510,7 @@ def stage_payload(root: Path, packages: Path, destination: Path, identity: dict[
             (payload / name).write_bytes(raw)
             hashes[name] = sha256(raw)
         ledger = json_bytes(read_bytes(payload / "source-requirements.json", MAX_JSON))
-        for relative, hashed in report_references(ledger).items():
+        for relative, hashed in report_references(ledger, alpha=alpha).items():
             raw = read_bytes(source_path(root, relative), MAX_JSON)
             require(sha256(raw) == hashed, "Native report is missing or changed.")
             (payload / f"native-{hashed}.json").write_bytes(raw)
@@ -710,7 +733,16 @@ def emit_outputs(values: dict[str, str], environment: dict[str, str]) -> None:
 
 def build(root: Path, environment: dict[str, str]) -> None:
     identity = build_identity(root, environment)
-    package_ids(root / "eng" / "packages.json", root, qualified=True)
+    alpha = is_alpha_prerelease(identity["version"])
+    if alpha:
+        print(
+            "ALPHA PRERELEASE EXCEPTION: version "
+            f"{identity['version']!r} is an explicit -alpha prerelease. Package/specification "
+            "qualification and native-evidence enforcement are not required for this release; "
+            "see docs/releasing.md#alpha-prerelease-exception. Build, test, hashing, attestation "
+            "and approval requirements are unchanged.",
+        )
+    package_ids(root / "eng" / "packages.json", root, qualified=not alpha)
     checked(["python", str(root / "eng" / "check_packages.py"), "--release"], root, timeout=600)
     checked(["python", str(root / "eng" / "specification" / "manage.py"), "release"], root, timeout=600)
     checked(["pwsh", "-NoProfile", "-File", str(root / "eng" / "build.ps1")], root, timeout=1800)

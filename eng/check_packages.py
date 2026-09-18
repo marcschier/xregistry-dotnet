@@ -28,6 +28,9 @@ MAX_MANIFEST_BYTES = 1024 * 1024
 MAX_PROJECTS = 256
 ID_PATTERN = re.compile(r"XRegistry(?:[.-][A-Za-z0-9]+)*")
 RESERVED_NAME = re.compile(r"(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)", re.I)
+ALPHA_PRERELEASE = re.compile(
+    r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-alpha(?:\.[0-9a-z-]+)*"
+)
 PROPERTIES = (
     "PackageId",
     "TargetFramework",
@@ -187,6 +190,29 @@ def load_inventory(path: Path, root: Path = ROOT) -> tuple[Project, ...]:
     return tuple(projects)
 
 
+def source_version_is_alpha(path: Path) -> bool:
+    """True only when `path` (version.json) declares an explicit `-alpha`/`-alpha.N` prerelease.
+
+    This is the sole, narrowly-scoped, maintainer-approved exception to the release
+    inventory's qualified-status requirement (see docs/releasing.md). It fails closed:
+    a missing, oversized or malformed version file is never treated as alpha.
+    """
+    try:
+        if not path.is_file():
+            return False
+        with path.open("rb") as stream:
+            raw = stream.read(MAX_MANIFEST_BYTES + 1)
+        if len(raw) > MAX_MANIFEST_BYTES:
+            return False
+        document = json.loads(
+            raw.decode("utf-8"), object_pairs_hook=unique_object, parse_constant=invalid_constant
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError, InventoryError):
+        return False
+    value = document.get("version") if isinstance(document, dict) else None
+    return isinstance(value, str) and ALPHA_PRERELEASE.fullmatch(value) is not None
+
+
 def check_project_inventory(projects: tuple[Project, ...], root: Path = ROOT) -> None:
     declared = {str(project.path.resolve()).casefold() for project in projects}
     for project in projects:
@@ -276,6 +302,7 @@ def check_evaluated_projects(projects: tuple[Project, ...], root: Path = ROOT) -
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, default=ROOT / "eng" / "packages.json")
+    parser.add_argument("--version-file", type=Path, default=ROOT / "version.json")
     parser.add_argument(
         "--check-projects", action="store_true", help="Check source/sample project coverage."
     )
@@ -291,9 +318,18 @@ def main(argv: list[str] | None = None) -> int:
     try:
         projects = load_inventory(args.manifest)
         if args.release:
+            alpha = source_version_is_alpha(args.version_file)
             unfinished = [project.name for project in projects if project.status != "qualified"]
             if unfinished:
-                raise InventoryError(f"Release inventory is not qualified: {', '.join(unfinished)}")
+                if alpha:
+                    print(
+                        "ALPHA PRERELEASE EXCEPTION: the version file declares an explicit "
+                        "-alpha prerelease; the qualified-status requirement is not enforced "
+                        f"for: {', '.join(unfinished)}. See docs/releasing.md#alpha-prerelease-exception.",
+                        file=sys.stderr,
+                    )
+                else:
+                    raise InventoryError(f"Release inventory is not qualified: {', '.join(unfinished)}")
         if args.check_projects or args.evaluate or args.release:
             check_project_inventory(projects)
         cells = check_evaluated_projects(projects) if args.evaluate or args.release else 0
