@@ -3,6 +3,7 @@
 
 using System.Net;
 using System.Net.Http.Headers;
+using System.Text;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -77,6 +78,78 @@ public class XRegistryHttpClientTests
         await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.ServiceUnavailable);
         await Assert.That(requests).IsEqualTo(1);
         await Assert.That(length).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task InjectedHttpClientPreservesCallerOwnedCredentialPipelineAndLifetime()
+    {
+        var handler = new CallbackHandler(request =>
+        {
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"value":42}""", Encoding.UTF8, "application/json"),
+                RequestMessage = new HttpRequestMessage(HttpMethod.Get, request.RequestUri)
+            };
+        });
+        using var suppliedClient = new HttpClient(handler);
+        var registryClient = XRegistryHttpClient.Create(
+            new Uri("https://registry.example/registry/"), suppliedClient);
+
+        using var response = await registryClient.SendAsync(HttpMethod.Get, "item");
+        using var metadata = await response.ReadMetadataAsync();
+        registryClient.Dispose();
+
+        await Assert.That(metadata.RootElement.GetProperty("value").GetInt32()).IsEqualTo(42);
+        await Assert.That(handler.RequestCount).IsEqualTo(1);
+        await Assert.That(handler.RequestUris[0].AbsolutePath).IsEqualTo("/registry/item");
+        await Assert.That(handler.IsDisposed).IsFalse();
+        using var stillOwned = await suppliedClient.GetAsync("https://registry.example/still-owned");
+        await Assert.That(handler.RequestCount).IsEqualTo(2);
+        await Assert.That(handler.RequestUris[1].AbsolutePath).IsEqualTo("/still-owned");
+    }
+
+    [Test]
+    public async Task InjectedHttpClientFactoryDoesNotBreakTheExistingOptionsOverload()
+    {
+        using var client = new XRegistryHttpClient(
+            new Uri("https://registry.example/registry/"), (XRegistryHttpClientOptions?)null);
+        await Assert.That(client.Root.AbsoluteUri).IsEqualTo("https://registry.example/registry/");
+    }
+
+    [Test]
+    public async Task InjectedHttpClientRedirectIsRejectedAndItsResponseIsDisposed()
+    {
+        var handler = new CallbackHandler(request => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("""{"value":42}""", Encoding.UTF8, "application/json"),
+            RequestMessage = new HttpRequestMessage(HttpMethod.Get, "https://foreign.example/registry/item")
+        });
+        using var suppliedClient = new HttpClient(handler);
+        using var registryClient = XRegistryHttpClient.Create(
+            new Uri("https://registry.example/registry/"), suppliedClient);
+
+        await Assert.That(async () =>
+        {
+            using var response = await registryClient.SendAsync(HttpMethod.Put, "item",
+                ReadOnlyMemory<byte>.Empty, "application/json");
+        }).Throws<InvalidDataException>();
+
+        await Assert.That(handler.RequestCount).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task InjectedHttpClientRejectsDefaultRegistryHeadersBeforeDispatch()
+    {
+        foreach (string header in new[] { "Host", "xRegistry-epoch", "If-Match" })
+        {
+            using var handler = new CallbackHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
+            using var suppliedClient = new HttpClient(handler);
+            suppliedClient.DefaultRequestHeaders.TryAddWithoutValidation(header, "injected");
+
+            await Assert.That(() => XRegistryHttpClient.Create(
+                new Uri("https://registry.example/registry/"), suppliedClient)).Throws<ArgumentException>();
+            await Assert.That(handler.RequestCount).IsZero();
+        }
     }
 
     [Test]
@@ -318,6 +391,28 @@ public class XRegistryHttpClientTests
             {
                 await app.DisposeAsync();
             }
+        }
+    }
+
+    private sealed class CallbackHandler(Func<HttpRequestMessage, HttpResponseMessage> callback) : HttpMessageHandler
+    {
+        internal int RequestCount { get; private set; }
+        internal bool IsDisposed { get; private set; }
+        internal List<Uri> RequestUris { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            RequestCount++;
+            RequestUris.Add(request.RequestUri!);
+            return Task.FromResult(callback(request));
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            IsDisposed = true;
+            base.Dispose(disposing);
         }
     }
 

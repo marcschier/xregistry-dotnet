@@ -13,6 +13,7 @@ public sealed partial class XRegistryHttpClient : IDisposable
     private readonly RegistryHttpConnectionPolicy _policy;
     private readonly Uri _root;
     private readonly XRegistryHttpClientOptions _options;
+    private readonly bool _ownsClient;
     private bool _disposed;
 
     /// <summary>Constructs an owned, origin-isolated Registry HTTP client.</summary>
@@ -27,7 +28,36 @@ public sealed partial class XRegistryHttpClient : IDisposable
             registryRoot, _options.AllowLoopbackHttp, _options.AllowPrivateOrigin);
         _root = new Uri(registryRoot.AbsoluteUri.TrimEnd('/') + "/", UriKind.Absolute);
         _client = _policy.CreateClient(_options.RequestTimeout);
+        _ownsClient = true;
         RegistryHttpContentDecoding.ConfigureAcceptEncoding(_client.DefaultRequestHeaders, _options);
+    }
+
+    /// <summary>Creates a client over a caller-owned HTTP pipeline for application-specific credentials and transport.</summary>
+    /// <param name="registryRoot">The configured Registry API root, still subject to the same origin policy.</param>
+    /// <param name="client">The caller-owned HTTP client. This instance is never disposed by the Registry client.</param>
+    /// <param name="options">Finite budgets and explicit loopback/private-origin permissions.</param>
+    /// <remarks>
+    /// The supplied pipeline must disable redirects, automatic retries, cookie handling and challenge-driven replay.
+    /// Responses that expose a changed final request URI are rejected, but a pipeline may already have dispatched a
+    /// mutation before that check; the caller is responsible for pipeline configuration.
+    /// </remarks>
+    public static XRegistryHttpClient Create(
+        Uri registryRoot, HttpClient client, XRegistryHttpClientOptions? options = null) =>
+        new(registryRoot, client, options, ownsClient: false);
+
+    private XRegistryHttpClient(
+        Uri registryRoot, HttpClient client, XRegistryHttpClientOptions? options, bool ownsClient)
+    {
+        ArgumentNullException.ThrowIfNull(registryRoot);
+        ArgumentNullException.ThrowIfNull(client);
+        _options = options ?? new XRegistryHttpClientOptions();
+        _options.Validate();
+        _policy = new RegistryHttpConnectionPolicy(
+            registryRoot, _options.AllowLoopbackHttp, _options.AllowPrivateOrigin);
+        _root = new Uri(registryRoot.AbsoluteUri.TrimEnd('/') + "/", UriKind.Absolute);
+        _client = client;
+        _ownsClient = ownsClient;
+        ValidateDefaultHeaders();
     }
 
     /// <summary>Gets the configured, normalized Registry root; upstream links do not change it.</summary>
@@ -57,6 +87,7 @@ public sealed partial class XRegistryHttpClient : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(method);
         var uri = BuildUri(path, query);
+        EnsureOrigin(uri);
         if (body is { Length: var length } && length > _options.MaxMetadataBytes)
         {
             throw new ArgumentException("Buffered request bytes exceed the configured limit.", nameof(body));
@@ -95,7 +126,9 @@ public sealed partial class XRegistryHttpClient : IDisposable
             throw new ArgumentException("The Document stream must be readable.", nameof(document));
         }
 
-        using var request = new HttpRequestMessage(method, BuildUri(path, query));
+        var uri = BuildUri(path, query);
+        EnsureOrigin(uri);
+        using var request = new HttpRequestMessage(method, uri);
         request.Content = new SingleUseDocumentContent(document, _options.MaxDocumentBytes);
         request.Content.Headers.ContentType = MediaTypeHeaderValue.Parse(contentType);
         return await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
@@ -109,6 +142,7 @@ public sealed partial class XRegistryHttpClient : IDisposable
         var transferred = false;
         try
         {
+            ValidateDefaultHeaders();
             if (_options.AuthorizationProvider is not null)
             {
                 request.Headers.Authorization =
@@ -117,6 +151,12 @@ public sealed partial class XRegistryHttpClient : IDisposable
 
             var response = await _client.SendAsync(
                 request, HttpCompletionOption.ResponseHeadersRead, deadline.Token).ConfigureAwait(false);
+            if (response.RequestMessage?.RequestUri is { } finalUri && request.RequestUri != finalUri)
+            {
+                response.Dispose();
+                throw new InvalidDataException(
+                    "The injected HTTP client followed a redirect. Disable automatic redirects and mutation retries.");
+            }
             transferred = true;
             return new XRegistryHttpResponse(response, deadline, _options);
         }
@@ -138,7 +178,38 @@ public sealed partial class XRegistryHttpClient : IDisposable
         }
 
         _disposed = true;
-        _client.Dispose();
+        if (_ownsClient)
+        {
+            _client.Dispose();
+        }
+    }
+
+    private void EnsureOrigin(Uri uri)
+    {
+        if (!_policy.IsOriginAllowed(uri))
+        {
+            throw new ArgumentException("The request destination is outside the configured Registry origin.", nameof(uri));
+        }
+    }
+
+    private void ValidateDefaultHeaders()
+    {
+        if (_client.DefaultRequestHeaders.Host is not null)
+        {
+            throw new ArgumentException("An xRegistry HTTP client cannot override the configured Host header.");
+        }
+        foreach (var header in _client.DefaultRequestHeaders)
+        {
+            if (header.Key.StartsWith("xRegistry-", StringComparison.OrdinalIgnoreCase) ||
+                header.Key.Equals("If-Match", StringComparison.OrdinalIgnoreCase) ||
+                header.Key.Equals("If-None-Match", StringComparison.OrdinalIgnoreCase) ||
+                header.Key.Equals("If-Modified-Since", StringComparison.OrdinalIgnoreCase) ||
+                header.Key.Equals("If-Unmodified-Since", StringComparison.OrdinalIgnoreCase) ||
+                header.Key.Equals("If-Range", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException("Default Registry attributes or validators change request semantics.");
+            }
+        }
     }
 
     private Uri BuildUri(string path, IReadOnlyList<KeyValuePair<string, string?>>? query)
