@@ -13,7 +13,8 @@ internal sealed class PreparedResponse(int statusCode, Dictionary<string, string
 {
     internal int StatusCode => statusCode;
 
-    internal static async ValueTask<PreparedResponse> CreateAsync(RegistryResult result, RegistryEngine engine, CancellationToken cancellationToken)
+    internal static async ValueTask<PreparedResponse> CreateAsync(RegistryResult result, IRegistryHostBackend engine,
+        CancellationToken cancellationToken)
     {
         var headers = RootHeaders(engine.PublicRoot);
         var status = result.Kind switch

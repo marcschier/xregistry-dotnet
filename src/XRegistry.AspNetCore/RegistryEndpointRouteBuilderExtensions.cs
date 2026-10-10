@@ -21,6 +21,20 @@ public static class RegistryEndpointRouteBuilderExtensions
     {
         ArgumentNullException.ThrowIfNull(endpoints);
         ArgumentNullException.ThrowIfNull(engine);
+        return MapXRegistry(endpoints, (IRegistryHostBackend)engine, options);
+    }
+
+    /// <summary>Maps every model-defined route below the explicit local mount using an application-owned backend.</summary>
+    /// <remarks>
+    /// The backend is responsible for trusted caller authorization, model-aware route description, operation semantics,
+    /// atomic mutation publication and response preparation. The host owns HTTP parsing, bounded transport handling
+    /// and response encoding.
+    /// </remarks>
+    public static IEndpointConventionBuilder MapXRegistry(this IEndpointRouteBuilder endpoints, IRegistryHostBackend backend,
+        RegistryHttpOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(endpoints);
+        ArgumentNullException.ThrowIfNull(backend);
         options ??= new();
         ArgumentOutOfRangeException.ThrowIfLessThan(options.MaxErrorBytes, 1024);
         if (options.RequestTimeout <= TimeSpan.Zero || options.RequestTimeout > TimeSpan.FromMinutes(10))
@@ -43,10 +57,10 @@ public static class RegistryEndpointRouteBuilderExtensions
             throw new ArgumentException("MountPath must be an unescaped absolute path prefix without a trailing slash or route parameters.", nameof(options));
         }
 
-        return endpoints.Map(mount + "/{**xregistryPath}", new Handler(engine, options).InvokeAsync);
+        return endpoints.Map(mount + "/{**xregistryPath}", new Handler(backend, options).InvokeAsync);
     }
 
-    private sealed class Handler(RegistryEngine engine, RegistryHttpOptions options)
+    private sealed class Handler(IRegistryHostBackend backend, RegistryHttpOptions options)
     {
         private static readonly Action<ILogger, Exception?> s_infrastructureFailure = LoggerMessage.Define(
             LogLevel.Error, new EventId(1, "RegistryInfrastructureFailure"), "The registry request failed at the persistence boundary.");
@@ -88,18 +102,18 @@ public static class RegistryEndpointRouteBuilderExtensions
                 var context = new RegistryOperationContext(caller)
                 {
                     PrepareResponseAsync = async (result, ct) =>
-                        prepared = await PreparedResponse.CreateAsync(result, engine, ct).ConfigureAwait(false)
+                        prepared = await PreparedResponse.CreateAsync(result, backend, ct).ConfigureAwait(false)
                 };
                 if (requestPath.Split('/') is { Length: > 2 } segments &&
                     segments[1] is "model" or "modelsource" or "capabilities" or "capabilitiesoffered" or "export" or ".xregistry")
                 {
-                    await engine.AuthorizeRequestAsync(RegistryAction.Read, RegistryPath.Parse("/"), context, cancellationToken).ConfigureAwait(false);
+                    await backend.AuthorizeRequestAsync(RegistryAction.Read, RegistryPath.Parse("/"), context, cancellationToken).ConfigureAwait(false);
                     throw Error("api_not_found", requestPath, "The administrative API path is not supported.");
                 }
 
                 try
                 {
-                    path = await engine.ResolvePathAsync(action, requestPath, context, cancellationToken).ConfigureAwait(false);
+                    path = await backend.ResolvePathAsync(action, requestPath, context, cancellationToken).ConfigureAwait(false);
                 }
                 catch (RegistryException exception) when (exception.Diagnostic.Code is "malformed_path" or "malformed_id" or "bad_details")
                 {
@@ -114,7 +128,7 @@ public static class RegistryEndpointRouteBuilderExtensions
                             }
                             catch (RegistryException)
                             {
-                                throw Error("malformed_id", engine.PublicRoot.AbsoluteUri.TrimEnd('/') + requestPath,
+                                throw Error("malformed_id", backend.PublicRoot.AbsoluteUri.TrimEnd('/') + requestPath,
                                     "The identifier does not satisfy the Core ID grammar.", ("id", parts[index]));
                             }
                         }
@@ -124,9 +138,9 @@ public static class RegistryEndpointRouteBuilderExtensions
                         exception.Diagnostic.Message);
                 }
 
-                CheckHeaders(http.Request.Headers, engine.Limits.MaxHeaderBytes, requestPath);
-                var parameters = ParseQuery(queryAt < 0 ? "" : raw[(queryAt + 1)..], engine.Limits.MaxQueryCharacters, requestPath);
-                route = await engine.DescribeAsync(action, path, context, parameters, cancellationToken).ConfigureAwait(false);
+                CheckHeaders(http.Request.Headers, backend.Limits.MaxHeaderBytes, requestPath);
+                var parameters = ParseQuery(queryAt < 0 ? "" : raw[(queryAt + 1)..], backend.Limits.MaxQueryCharacters, requestPath);
+                route = await backend.DescribeAsync(action, path, context, parameters, cancellationToken).ConfigureAwait(false);
                 if (!knownAction || !route.AllowedActions.Contains(action))
                 {
                     var detailsRequired = action == RegistryAction.Patch && route.ResourceDefinition?.HasDocument == true &&
@@ -143,12 +157,12 @@ public static class RegistryEndpointRouteBuilderExtensions
                     route.ResourceDefinition!.HasDocument && !path.IsDetails;
                 if (documentInput)
                 {
-                    if (http.Request.ContentLength > engine.Limits.MaxDocumentBytes)
+                    if (http.Request.ContentLength > backend.Limits.MaxDocumentBytes)
                     {
                         throw Error("request_too_large", requestPath, "The request Document exceeds its byte budget.");
                     }
 
-                    metadata = HeaderMetadata.Decode(http.Request.Headers, route.ResourceDefinition!, engine.Limits, requestPath);
+                    metadata = HeaderMetadata.Decode(http.Request.Headers, route.ResourceDefinition!, backend.Limits, requestPath);
                     document = http.Request.Body;
                 }
                 else if (write || action == RegistryAction.Delete)
@@ -159,12 +173,12 @@ public static class RegistryEndpointRouteBuilderExtensions
                         throw Error("extra_xregistry_header", requestPath, "Metadata-body requests must not contain xRegistry headers.", ("name", extra.Key));
                     }
 
-                    if (http.Request.ContentLength > engine.Limits.Json.MaxBytes)
+                    if (http.Request.ContentLength > backend.Limits.Json.MaxBytes)
                     {
                         throw Error("request_too_large", requestPath, "The metadata body exceeds its byte budget.");
                     }
 
-                    var bytes = await ReadBodyAsync(http.Request.Body, engine.Limits.Json.MaxBytes, cancellationToken).ConfigureAwait(false);
+                    var bytes = await ReadBodyAsync(http.Request.Body, backend.Limits.Json.MaxBytes, cancellationToken).ConfigureAwait(false);
                     if (bytes.Length == 0)
                     {
                         if (write)
@@ -176,7 +190,7 @@ public static class RegistryEndpointRouteBuilderExtensions
                     {
                         try
                         {
-                            metadata = RegistryJson.Parse(bytes, engine.Limits.Json);
+                            metadata = RegistryJson.Parse(bytes, backend.Limits.Json);
                         }
                         catch (RegistryException exception)
                         {
@@ -186,7 +200,7 @@ public static class RegistryEndpointRouteBuilderExtensions
                     }
                 }
 
-                await engine.ExecuteAsync(new(action, path)
+                await backend.ExecuteAsync(new(action, path)
                 {
                     Metadata = metadata,
                     Document = document,
@@ -298,14 +312,14 @@ public static class RegistryEndpointRouteBuilderExtensions
                 {
                     requestPath = http.Request.PathBase.Add(http.Request.Path).ToUriComponent();
                 }
-                response = PreparedResponse.Problem(diagnostic, engine.PublicRoot, options.MaxErrorBytes, route, arguments,
+                response = PreparedResponse.Problem(diagnostic, backend.PublicRoot, options.MaxErrorBytes, route, arguments,
                     http.Request.Method, requestPath);
             }
             catch (InvalidOperationException exception)
             {
                 var logger = http.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("XRegistry.AspNetCore");
                 s_infrastructureFailure(logger, exception);
-                response = PreparedResponse.ErrorContractFailure(engine.PublicRoot, options.MaxErrorBytes);
+                response = PreparedResponse.ErrorContractFailure(backend.PublicRoot, options.MaxErrorBytes);
             }
             if (response.StatusCode == StatusCodes.Status401Unauthorized && options.AuthenticationChallenge is { } challenge)
             {
