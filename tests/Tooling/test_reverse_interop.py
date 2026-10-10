@@ -32,6 +32,26 @@ VALID_CHECKER = (
     "+- PASS: TestResources\n"
     "Pass: 101   Fail: 0   Warn: 0   Skip: 0\n"
 )
+KNOWN_CAPABILITY_LIMITATION = (
+    "FAIL: http://127.0.0.1:12345/registry\n"
+    "├─ PASS: TestSniff\n"
+    "├─ PASS: TestModel\n"
+    "├─ FAIL: TestCapabilities\n"
+    "│  ├─ FAIL: Parsing capabilities MUST work\n"
+    "│  │  └─ Unexpected error: Unknown capability specified: mutable.\n"
+    "│  └─ FAIL: Parsing Capabilities MUST work\n"
+    "│     └─ Unexpected error: Unknown capability specified: mutable.\n"
+    "├─ FAIL: TestRegistryRoot\n"
+    "│  ├─ FAIL: TestCapabilities (cached)\n"
+    "│  └─ Dependency \"TestCapabilities\" failed, leaving\n"
+    "├─ FAIL: TestGroups\n"
+    "│  ├─ FAIL: TestCapabilities (cached)\n"
+    "│  └─ Dependency \"TestCapabilities\" failed, leaving\n"
+    "└─ FAIL: TestResources\n"
+    "   ├─ FAIL: TestGroups (cached)\n"
+    "   └─ Dependency \"TestGroups\" failed, leaving\n"
+    "Pass: 30   Fail: 10   Warn: 0   Skip: 0\n"
+)
 
 
 def completed(stdout: bytes, code: int = 0, stderr: bytes = b"") -> subprocess.CompletedProcess:
@@ -98,16 +118,28 @@ class ReverseAccountingTests(unittest.TestCase):
         with self.assertRaises(tool.ReverseInteropError):
             tool.validate_checker(completed(VALID_CHECKER.encode(), stderr=b"failure"), 101)
 
-    def test_known_mutable_capability_failure_is_classified_but_not_accepted(self) -> None:
-        text = (
-            "FAIL: root\n+- FAIL: TestCapabilities\n"
-            "Unknown capability specified: mutable.\n"
-            "Pass: 30   Fail: 10   Warn: 0   Skip: 0\n"
-        )
-        self.assertEqual(tool.classify_checker_failure(text), ["XR-CAPABILITIES-MUTABLE"])
-        self.assertEqual(tool.observed_checker_totals(text), {"passes": 30, "failures": 10, "warnings": 0, "skips": 0})
-        with self.assertRaises(tool.ReverseInteropError):
-            tool.validate_checker(completed(text.encode(), 2), 101)
+    def test_known_mutable_capability_failure_is_successfully_recorded_without_conformance_credit(self) -> None:
+        result = tool.validate_known_peer_limitation(completed(KNOWN_CAPABILITY_LIMITATION.encode(), 2), 101)
+        self.assertEqual(result, {
+            "id": "XR-CAPABILITIES-MUTABLE",
+            "exitCode": 2,
+            "observed": {"passes": 30, "failures": 10, "warnings": 0, "skips": 0},
+            "failedSuites": ["TestCapabilities", "TestGroups", "TestRegistryRoot", "TestResources"],
+            "qualified": False,
+        })
+        for output, code, stderr in (
+            (KNOWN_CAPABILITY_LIMITATION.replace("TestSniff", "TestOther"), 2, b""),
+            (KNOWN_CAPABILITY_LIMITATION.replace("Fail: 10", "Fail: 11"), 2, b""),
+            (KNOWN_CAPABILITY_LIMITATION.replace("TestGroups", "TestCapabilities"), 2, b""),
+            (KNOWN_CAPABILITY_LIMITATION.replace(
+                "Pass: 30   Fail: 10", "├─ FAIL: TestUnexpected\nPass: 30   Fail: 10"), 2, b""),
+            (KNOWN_CAPABILITY_LIMITATION + "FAIL: unrelated\n", 2, b""),
+            (KNOWN_CAPABILITY_LIMITATION, 0, b""),
+            (KNOWN_CAPABILITY_LIMITATION, 2, b"checker warning"),
+        ):
+            with self.subTest(output=output[-60:], code=code, stderr=stderr), \
+                    self.assertRaises(tool.ReverseInteropError):
+                tool.validate_known_peer_limitation(completed(output.encode(), code, stderr), 101)
         self.assertEqual(tool.classify_checker_failure("unrelated error"), [])
 
     def test_empty_or_changed_fixtures_are_rejected_before_a_server_can_start(self) -> None:
