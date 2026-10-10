@@ -153,6 +153,25 @@ public class HttpTests
     }
 
     [Test]
+    public async Task CustomBackendDoesNotPublishWhenResponsePreparationFails()
+    {
+        var backend = new TestRegistryHostBackend
+        {
+            AllowedActions = [RegistryAction.Replace],
+            Limits = new() { MaxResponseBytes = 1 },
+            ResponseMetadata = RegistryJson.Parse("""{"response":"exceeds budget"}""")
+        };
+        await using var host = await TestHost.StartAsync(hostBackend: backend);
+        using var response = await host.Client.PutAsync("/custom", Json("{}"));
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.NotAcceptable);
+        await Assert.That(RegistryJson.Parse(await response.Content.ReadAsByteArrayAsync()).RootElement
+            .GetProperty("code").GetString()).IsEqualTo("too_large");
+        await Assert.That(backend.ExecutionCount).IsEqualTo(1);
+        await Assert.That(backend.ResponsePreparationCount).IsZero();
+        await Assert.That(backend.Published).IsFalse();
+    }
+
+    [Test]
     [Arguments("GET", "/", 200)]
     [Arguments("HEAD", "/", 200)]
     [Arguments("GET", "/.xregistry", 200)]
@@ -498,8 +517,11 @@ public class HttpTests
         internal int DescriptionCount { get; private set; }
         internal int ExecutionCount { get; private set; }
         internal int ResponsePreparationCount { get; private set; }
+        internal bool Published { get; private set; }
         public Uri PublicRoot { get; } = new("https://public.example/registry");
-        public RegistryLimits Limits { get; } = new();
+        public RegistryLimits Limits { get; init; } = new();
+        internal IReadOnlyList<RegistryAction> AllowedActions { get; init; } = [RegistryAction.Read];
+        internal RegistryJson ResponseMetadata { get; init; } = RegistryJson.Parse("""{"backend":true}""");
 
         public ValueTask AuthorizeRequestAsync(RegistryAction action, RegistryPath path, RegistryOperationContext context,
             CancellationToken cancellationToken = default)
@@ -518,7 +540,7 @@ public class HttpTests
         {
             DescriptionCount++;
             await AuthorizeRequestAsync(action, path, context, cancellationToken);
-            return new RegistryRouteDescription(path, "custom", null, [RegistryAction.Read]);
+            return new RegistryRouteDescription(path, "custom", null, AllowedActions);
         }
 
         public async ValueTask<RegistryResult> ExecuteAsync(RegistryOperation operation, RegistryOperationContext context,
@@ -526,14 +548,14 @@ public class HttpTests
         {
             ExecutionCount++;
             await AuthorizeRequestAsync(operation.Action, operation.Path, context, cancellationToken);
-            var result = new RegistryResult(RegistryResultKind.Success, operation.Path,
-                RegistryJson.Parse("""{"backend":true}"""));
+            var result = new RegistryResult(RegistryResultKind.Success, operation.Path, ResponseMetadata);
             if (context.PrepareResponseAsync is { } prepare)
             {
                 await prepare(result, cancellationToken);
                 ResponsePreparationCount++;
             }
 
+            Published = true;
             return result;
         }
     }
