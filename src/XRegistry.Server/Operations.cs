@@ -85,7 +85,14 @@ public sealed record RegistryOperation
     public string? ExpectedModelRevision { get; init; }
 }
 
-/// <summary>Per-request caller identity and an optional pre-publication response preparation hook.</summary>
+/// <summary>A request-scoped lifetime shared across host authorization, route description, execution and cleanup.</summary>
+public interface IRegistryRequestScope : IAsyncDisposable
+{
+    /// <summary>Gets the trusted caller bound to this request lifetime.</summary>
+    ClaimsPrincipal Caller { get; }
+}
+
+/// <summary>Per-request caller identity, host scope and response preparation hook.</summary>
 public sealed class RegistryOperationContext
 {
     /// <summary>Creates a context from the host's authenticated principal or a trusted mapper.</summary>
@@ -97,6 +104,8 @@ public sealed class RegistryOperationContext
 
     /// <summary>Gets the trusted caller. Hosts must not mutate it while the operation is in flight.</summary>
     public ClaimsPrincipal Caller { get; }
+    /// <summary>Gets the optional host-owned scope retained through the complete request operation.</summary>
+    public IRegistryRequestScope? RequestScope { get; init; }
     /// <summary>
     /// Gets a hook invoked after full response/lifecycle preparation but before persistence preparation
     /// or publication. Throwing rejects a mutation. HTTP uses it for bounded serialization and headers.
