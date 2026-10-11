@@ -218,6 +218,48 @@ public class HttpTests
     }
 
     [Test]
+    public async Task RequestScopeIsDisposedWhenBackendAuthorizationRejectsTheRequest()
+    {
+        var backend = new TestRegistryHostBackend
+        {
+            AuthorizationFailure = new UnauthorizedAccessException()
+        };
+        var scope = new TestRequestScope(new ClaimsPrincipal(new ClaimsIdentity("test")));
+        await using var host = await TestHost.StartAsync(hostBackend: backend, httpOptions: new RegistryHttpOptions
+        {
+            RequestScopeFactory = (_, _) => ValueTask.FromResult<IRegistryRequestScope>(scope)
+        });
+
+        using var response = await host.Client.GetAsync("/");
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.InternalServerError);
+        var problem = RegistryJson.Parse(await response.Content.ReadAsByteArrayAsync()).RootElement;
+        await Assert.That(problem.GetProperty("code").GetString()).IsEqualTo("server_error");
+        await Assert.That(problem.GetProperty("detail").GetString())
+            .DoesNotContain("acquire this Registry request scope");
+        await Assert.That(backend.ExecutionCount).IsZero();
+        await Assert.That(scope.DisposeCount).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task RequestScopeDisposalFailureDoesNotSuppressPreparedResponseOrDisposeTwice()
+    {
+        var backend = new TestRegistryHostBackend();
+        var scope = new TestRequestScope(new ClaimsPrincipal(new ClaimsIdentity("test")),
+            new TimeoutException("Injected cleanup failure."));
+        await using var host = await TestHost.StartAsync(hostBackend: backend, httpOptions: new RegistryHttpOptions
+        {
+            RequestScopeFactory = (_, _) => ValueTask.FromResult<IRegistryRequestScope>(scope)
+        });
+
+        using var response = await host.Client.GetAsync("/");
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        await Assert.That(backend.ResponsePreparationCount).IsEqualTo(1);
+        await Assert.That(scope.DisposeCount).IsEqualTo(1);
+    }
+
+    [Test]
     [Arguments("GET", "/", 200)]
     [Arguments("HEAD", "/", 200)]
     [Arguments("GET", "/.xregistry", 200)]
@@ -564,6 +606,7 @@ public class HttpTests
         internal int ExecutionCount { get; private set; }
         internal int ResponsePreparationCount { get; private set; }
         internal bool Published { get; private set; }
+        internal UnauthorizedAccessException? AuthorizationFailure { get; init; }
         internal List<IRegistryRequestScope?> RequestScopes { get; } = [];
         public Uri PublicRoot { get; } = new("https://public.example/registry");
         public RegistryLimits Limits { get; init; } = new();
@@ -574,6 +617,10 @@ public class HttpTests
             CancellationToken cancellationToken = default)
         {
             AuthorizationCount++;
+            if (AuthorizationFailure is { } failure)
+            {
+                return ValueTask.FromException(failure);
+            }
             return ValueTask.CompletedTask;
         }
 
@@ -609,7 +656,7 @@ public class HttpTests
         }
     }
 
-    private sealed class TestRequestScope(ClaimsPrincipal caller) : IRegistryRequestScope
+    private sealed class TestRequestScope(ClaimsPrincipal caller, Exception? disposalFailure = null) : IRegistryRequestScope
     {
         public ClaimsPrincipal Caller { get; } = caller;
         public int DisposeCount { get; private set; }
@@ -617,7 +664,9 @@ public class HttpTests
         public ValueTask DisposeAsync()
         {
             DisposeCount++;
-            return ValueTask.CompletedTask;
+            return disposalFailure is null
+                ? ValueTask.CompletedTask
+                : ValueTask.FromException(disposalFailure);
         }
     }
 

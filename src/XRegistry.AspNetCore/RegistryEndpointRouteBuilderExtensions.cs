@@ -103,9 +103,20 @@ public static class RegistryEndpointRouteBuilderExtensions
                 requestPath = relative.Length == 0 ? "/" : relative;
 
                 var knownAction = TryAction(http.Request.Method, out var action);
-                requestScope = options.RequestScopeFactory is { } scopeFactory
-                    ? await scopeFactory(http, cancellationToken).ConfigureAwait(false)
-                    : null;
+                if (options.RequestScopeFactory is { } scopeFactory)
+                {
+                    try
+                    {
+                        requestScope = await scopeFactory(http, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (UnauthorizedAccessException)
+                    {
+                        await WriteProblemAsync(http, new("unauthorized", requestPath,
+                            "The caller is not authorized to acquire this Registry request scope."), route)
+                            .ConfigureAwait(false);
+                        return;
+                    }
+                }
                 if (options.RequestScopeFactory is not null && requestScope is null)
                 {
                     throw new InvalidOperationException("The request-scope factory returned no scope.");
@@ -258,10 +269,18 @@ public static class RegistryEndpointRouteBuilderExtensions
                 await WriteProblemAsync(http, new("commit_outcome_unknown", path?.EscapedPath ?? "/",
                     "The commit outcome is unknown. Do not automatically retry this mutation."), route).ConfigureAwait(false);
             }
-            catch (UnauthorizedAccessException)
+            catch (UnauthorizedAccessException exception)
             {
-                await WriteProblemAsync(http, new("unauthorized", path?.EscapedPath ?? "/",
-                    "The caller is not authorized to acquire this Registry request scope."), route).ConfigureAwait(false);
+                LogFailure(http, exception);
+                if (executed || http.Response.HasStarted)
+                {
+                    http.Abort();
+                }
+                else
+                {
+                    await WriteProblemAsync(http, new("server_error", path?.EscapedPath ?? "/",
+                        "An infrastructure contract could not be satisfied."), route).ConfigureAwait(false);
+                }
             }
             catch (OperationCanceledException) when (http.RequestAborted.IsCancellationRequested)
             {
@@ -332,8 +351,7 @@ public static class RegistryEndpointRouteBuilderExtensions
             {
                 await requestScope.DisposeAsync().ConfigureAwait(false);
             }
-            catch (Exception exception) when (exception is IOException or InvalidOperationException or
-                OperationCanceledException or UnauthorizedAccessException)
+            catch (Exception exception)
             {
                 var logger = http.RequestServices.GetRequiredService<ILoggerFactory>()
                     .CreateLogger("XRegistry.AspNetCore");
@@ -378,7 +396,7 @@ public static class RegistryEndpointRouteBuilderExtensions
             await response.WriteAsync(http, HttpMethods.IsHead(http.Request.Method), http.RequestAborted).ConfigureAwait(false);
         }
 
-        private static void LogFailure(HttpContext http, IOException exception)
+        private static void LogFailure(HttpContext http, Exception exception)
         {
             var logger = http.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("XRegistry.AspNetCore");
             s_infrastructureFailure(logger, exception);
