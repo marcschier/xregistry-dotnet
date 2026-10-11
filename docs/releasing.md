@@ -1,6 +1,6 @@
 # Releasing xRegistry .NET
 
-The source version is `0.1.0-alpha.1`. Packages and samples are implemented but
+The source version is `0.1.0-alpha.2`. Packages and samples are implemented but
 not release-qualified; incomplete native/conformance requirements are not
 marked qualified merely to publish an early alpha, and publishing does not by
 itself certify runtime/specification qualification. Publishing this alpha does
@@ -50,6 +50,12 @@ symbol packages, so only the `.nupkg` files are pushed; this matches this
 account's other repositories and is a GitHub platform limitation, not an
 omission. `--skip-duplicate` allows a rerun of a partially-failed publish
 without erroring on packages that already made it through.
+
+`version.json` sets `nugetPackageVersion.semVer` to `2` so numbered alpha
+versions retain their dotted suffix (`alpha.2`) rather than being converted
+to a SemVer 1 suffix (`alpha-0002`). The exact-version package inventory rejects
+such a conversion before publication. The `v0.1.0-alpha.1` attempt failed that
+check and published no packages; its tag is retained and must not be rewritten.
 
 ## Promoting a published version to nuget.org
 
