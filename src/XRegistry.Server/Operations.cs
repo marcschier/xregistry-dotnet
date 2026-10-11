@@ -123,6 +123,10 @@ public sealed class RegistryDocument
 {
     private readonly byte[] _bytes;
     internal RegistryDocument(byte[] bytes) => _bytes = bytes;
+
+    /// <summary>Creates an owned Document from exact content bytes.</summary>
+    public RegistryDocument(ReadOnlyMemory<byte> bytes) => _bytes = bytes.ToArray();
+
     /// <summary>Gets the exact byte count, including zero for a present empty Document.</summary>
     public int Length => _bytes.Length;
     /// <summary>Opens a caller-owned read-only stream; it is independent of persistence snapshot lifetimes.</summary>
@@ -133,11 +137,42 @@ public sealed class RegistryDocument
 /// <summary>A fully prepared result. A mutation result is returned only after its atomic commit succeeds.</summary>
 public sealed class RegistryResult
 {
-    internal RegistryResult(RegistryResultKind kind, RegistryPath path, RegistryJson? metadata = null)
+    /// <summary>Creates a fully prepared result for a custom host backend.</summary>
+    /// <param name="kind">The semantic operation outcome.</param>
+    /// <param name="path">The actual represented Registry path.</param>
+    /// <param name="metadata">The owned metadata representation, when present.</param>
+    /// <param name="document">The exact owned Document, when present.</param>
+    /// <param name="isDocument">Whether metadata is represented in HTTP headers.</param>
+    /// <param name="contentType">The Document media type, when declared.</param>
+    /// <param name="location">The creation or external Document URL, when applicable.</param>
+    /// <param name="contentLocation">The affected Version's representation URL, when applicable.</param>
+    /// <param name="allowedActions">The supported actions for OPTIONS or method discovery.</param>
+    /// <param name="resourceDefinition">The compiled Resource definition for model-aware representation encoding.</param>
+    /// <param name="correlationId">The interaction ID shared by committed change events.</param>
+    /// <param name="page">The frozen collection pagination metadata, when applicable.</param>
+    public RegistryResult(RegistryResultKind kind, RegistryPath path, RegistryJson? metadata = null,
+        RegistryDocument? document = null, bool isDocument = false, string? contentType = null, Uri? location = null,
+        Uri? contentLocation = null, IReadOnlyList<RegistryAction>? allowedActions = null,
+        RegistryResourceDefinition? resourceDefinition = null, string? correlationId = null, RegistryPageInfo? page = null)
     {
+        if (!Enum.IsDefined(kind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(kind));
+        }
+
+        ArgumentNullException.ThrowIfNull(path);
         Kind = kind;
         Path = path;
         Metadata = metadata;
+        Document = document;
+        IsDocument = isDocument;
+        ContentType = contentType;
+        Location = location;
+        ContentLocation = contentLocation;
+        AllowedActions = allowedActions is null ? [] : Array.AsReadOnly(allowedActions.ToArray());
+        ResourceDefinition = resourceDefinition;
+        CorrelationId = correlationId;
+        Page = page;
     }
 
     /// <summary>Gets the semantic outcome.</summary>

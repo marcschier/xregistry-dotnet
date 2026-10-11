@@ -138,6 +138,40 @@ public class HttpTests
     }
 
     [Test]
+    public async Task KestrelHostsAnApplicationOwnedRegistryBackend()
+    {
+        var backend = new TestRegistryHostBackend();
+        await using var host = await TestHost.StartAsync(hostBackend: backend);
+        using var response = await host.Client.GetAsync("/");
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        await Assert.That(RegistryJson.Parse(await response.Content.ReadAsByteArrayAsync()).RootElement
+            .GetProperty("backend").GetBoolean()).IsTrue();
+        await Assert.That(backend.AuthorizationCount).IsEqualTo(2);
+        await Assert.That(backend.DescriptionCount).IsEqualTo(1);
+        await Assert.That(backend.ExecutionCount).IsEqualTo(1);
+        await Assert.That(backend.ResponsePreparationCount).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task CustomBackendDoesNotPublishWhenResponsePreparationFails()
+    {
+        var backend = new TestRegistryHostBackend
+        {
+            AllowedActions = [RegistryAction.Replace],
+            Limits = new() { MaxResponseBytes = 1 },
+            ResponseMetadata = RegistryJson.Parse("""{"response":"exceeds budget"}""")
+        };
+        await using var host = await TestHost.StartAsync(hostBackend: backend);
+        using var response = await host.Client.PutAsync("/custom", Json("{}"));
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.NotAcceptable);
+        await Assert.That(RegistryJson.Parse(await response.Content.ReadAsByteArrayAsync()).RootElement
+            .GetProperty("code").GetString()).IsEqualTo("too_large");
+        await Assert.That(backend.ExecutionCount).IsEqualTo(1);
+        await Assert.That(backend.ResponsePreparationCount).IsZero();
+        await Assert.That(backend.Published).IsFalse();
+    }
+
+    [Test]
     [Arguments("GET", "/", 200)]
     [Arguments("HEAD", "/", 200)]
     [Arguments("GET", "/.xregistry", 200)]
@@ -402,7 +436,7 @@ public class HttpTests
             RegistryLimits? limits = null, IRegistryPersistence? persistence = null, RegistryHttpOptions? httpOptions = null,
             Action<HttpContext>? completed = null, RegistryModel? model = null, IRegistryResourceValidator? resourceValidator = null,
             bool allowCapabilityUpdates = false, IRegistryDocumentReferencePolicy? documentReferencePolicy = null,
-            string pathBase = "")
+            string pathBase = "", IRegistryHostBackend? hostBackend = null)
         {
             var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { EnvironmentName = "Development", Args = [] });
             builder.Logging.ClearProviders();
@@ -450,7 +484,7 @@ public class HttpTests
                 ResourceValidator = resourceValidator,
                 Limits = limits ?? new()
             }, persistence ?? new InMemoryRegistryPersistence(), policy ?? new PermitPolicy());
-            application.MapXRegistry(engine, httpOptions);
+            application.MapXRegistry(hostBackend ?? engine, httpOptions);
             await application.StartAsync();
             var addresses = application.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!;
             return new(application, new HttpClient { BaseAddress = new Uri(addresses.Addresses.Single()) });
@@ -475,6 +509,55 @@ public class HttpTests
         public ValueTask<bool> AuthorizeAsync(ClaimsPrincipal caller, RegistryAccess access, RegistryPath path,
             CancellationToken cancellationToken = default) => ValueTask.FromResult(access != RegistryAccess.UpdateModel &&
                 !(path.Kind == RegistryPathKind.Group && path.GroupId?.Value == "blocked"));
+    }
+
+    private sealed class TestRegistryHostBackend : IRegistryHostBackend
+    {
+        internal int AuthorizationCount { get; private set; }
+        internal int DescriptionCount { get; private set; }
+        internal int ExecutionCount { get; private set; }
+        internal int ResponsePreparationCount { get; private set; }
+        internal bool Published { get; private set; }
+        public Uri PublicRoot { get; } = new("https://public.example/registry");
+        public RegistryLimits Limits { get; init; } = new();
+        internal IReadOnlyList<RegistryAction> AllowedActions { get; init; } = [RegistryAction.Read];
+        internal RegistryJson ResponseMetadata { get; init; } = RegistryJson.Parse("""{"backend":true}""");
+
+        public ValueTask AuthorizeRequestAsync(RegistryAction action, RegistryPath path, RegistryOperationContext context,
+            CancellationToken cancellationToken = default)
+        {
+            AuthorizationCount++;
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask<RegistryPath> ResolvePathAsync(RegistryAction action, string escapedPath,
+            RegistryOperationContext context, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(RegistryPath.Parse(escapedPath));
+
+        public async ValueTask<RegistryRouteDescription> DescribeAsync(RegistryAction action, RegistryPath path,
+            RegistryOperationContext context, IReadOnlyList<KeyValuePair<string, string?>> parameters,
+            CancellationToken cancellationToken = default)
+        {
+            DescriptionCount++;
+            await AuthorizeRequestAsync(action, path, context, cancellationToken);
+            return new RegistryRouteDescription(path, "custom", null, AllowedActions);
+        }
+
+        public async ValueTask<RegistryResult> ExecuteAsync(RegistryOperation operation, RegistryOperationContext context,
+            CancellationToken cancellationToken = default)
+        {
+            ExecutionCount++;
+            await AuthorizeRequestAsync(operation.Action, operation.Path, context, cancellationToken);
+            var result = new RegistryResult(RegistryResultKind.Success, operation.Path, ResponseMetadata);
+            if (context.PrepareResponseAsync is { } prepare)
+            {
+                await prepare(result, cancellationToken);
+                ResponsePreparationCount++;
+            }
+
+            Published = true;
+            return result;
+        }
     }
 
     private sealed class UnknownCommitPersistence : IRegistryPersistence

@@ -9,11 +9,16 @@ public sealed record RegistryPageLink(string Relation, Uri Target);
 /// <summary>Collection pagination metadata, independent of entity epochs and storage generations.</summary>
 public sealed class RegistryPageInfo
 {
-    internal RegistryPageInfo(ulong totalCount, DateTimeOffset? expiresAt, IReadOnlyList<RegistryPageLink> links)
+    /// <summary>Creates pagination metadata for a frozen collection result.</summary>
+    /// <param name="totalCount">The exact filtered, initially authorized record count across the complete set.</param>
+    /// <param name="expiresAt">The fixed expiry of retained links, or null when no continuation state is retained.</param>
+    /// <param name="links">The opaque next/prev/first/last links.</param>
+    public RegistryPageInfo(ulong totalCount, DateTimeOffset? expiresAt, IReadOnlyList<RegistryPageLink> links)
     {
+        ArgumentNullException.ThrowIfNull(links);
         TotalCount = totalCount;
         ExpiresAt = expiresAt;
-        Links = links;
+        Links = Array.AsReadOnly(links.ToArray());
     }
 
     /// <summary>Gets the exact filtered, initially authorized record count across the complete set.</summary>

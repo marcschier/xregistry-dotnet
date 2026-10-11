@@ -15,6 +15,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import subprocess
 import sys
 import tempfile
@@ -53,6 +54,10 @@ free_port = server_helper.free_port
 
 class ReverseInteropError(RuntimeError):
     """A reverse qualification obligation was not satisfied."""
+
+
+class ReverseCaseResult(dict):
+    """A non-failing case result that explicitly does not establish conformance."""
 
 
 def require(condition: bool, message: str) -> None:
@@ -127,6 +132,68 @@ def observed_checker_totals(text: str) -> dict | None:
     if len(summaries) != 1:
         return None
     return dict(zip(("passes", "failures", "warnings", "skips"), map(int, summaries[0].groups())))
+
+
+def validate_known_peer_limitation(result: subprocess.CompletedProcess, expected_passes: int) -> dict:
+    require(expected_passes == 101, "The known peer limitation is qualified only for the frozen 101-case fixture.")
+    require(result.returncode == 2 and not result.stderr,
+            "The pinned checker did not return the known capability-parser failure.")
+    require(len(result.stdout) <= MAX_OUTPUT_BYTES, "Checker evidence exceeds its byte bound.")
+    try:
+        text = result.stdout.decode("utf-8")
+    except UnicodeError as error:
+        raise ReverseInteropError("The known checker limitation is not UTF-8.") from error
+
+    limitation = "XR-CAPABILITIES-MUTABLE"
+    lines = text.splitlines()
+    totals = observed_checker_totals(text)
+    summary_lines = [line for line in lines if accounting.SUMMARY.fullmatch(line)]
+    require(classify_checker_failure(text) == [limitation] and
+            text.count("Unknown capability specified: mutable.") == 2,
+            "The pinned checker reported a failure other than the known mutable-capability parser limitation.")
+    require(len(summary_lines) == 1 and lines[-1] == summary_lines[0],
+            "The pinned checker did not end with one complete summary.")
+    require(totals == {"passes": 30, "failures": 10, "warnings": 0, "skips": 0},
+            "The pinned checker totals differ from the recorded mutable-capability limitation.")
+    suite_results = {
+        match[2]: match[1]
+        for line in lines
+        if (match := re.fullmatch(r"\W*(PASS|FAIL): (Test\w+)", line))
+    }
+    require(suite_results == {
+        "TestSniff": "PASS",
+        "TestModel": "PASS",
+        "TestCapabilities": "FAIL",
+        "TestRegistryRoot": "FAIL",
+        "TestGroups": "FAIL",
+        "TestResources": "FAIL",
+    }, "The pinned checker failure tree differs from the recorded capability-parser cascade.")
+    require(sum(re.fullmatch(r"FAIL: http://127\.0\.0\.1:\d+/registry", line) is not None for line in lines) == 1,
+            "The pinned checker reported an unexpected root failure.")
+    failed_nodes = sorted(
+        match[1]
+        for line in lines
+        if (match := re.fullmatch(r"\W*FAIL: (.+)", line)) and
+        not re.fullmatch(r"http://127\.0\.0\.1:\d+/registry", match[1])
+    )
+    require(failed_nodes == sorted([
+        "TestCapabilities",
+        "Parsing capabilities MUST work",
+        "Parsing Capabilities MUST work",
+        "TestRegistryRoot",
+        "TestGroups",
+        "TestResources",
+        "TestCapabilities (cached)",
+        "TestCapabilities (cached)",
+        "TestGroups (cached)",
+    ]), "The pinned checker has an unexpected failing assertion.")
+    return {
+        "id": limitation,
+        "exitCode": result.returncode,
+        "observed": totals,
+        "failedSuites": sorted(name for name, status in suite_results.items() if status == "FAIL"),
+        "qualified": False,
+    }
 
 
 def validate_fixture(fixture: dict) -> None:
@@ -306,7 +373,10 @@ def qualify(args: argparse.Namespace, report: dict) -> None:
         except (ReverseInteropError, OSError, RuntimeError, ValueError, KeyError) as error:
             report["cases"].append({"name": name, "status": "failed", "error": str(error)})
             raise
-        report["cases"].append({"name": name, "status": "passed"})
+        if isinstance(value, ReverseCaseResult):
+            report["cases"].append({"name": name, "status": "known-limitation", **value})
+        else:
+            report["cases"].append({"name": name, "status": "passed"})
         write_json(output / "evidence.json", report)
         return value
 
@@ -396,17 +466,29 @@ def qualify(args: argparse.Namespace, report: dict) -> None:
             case("xr-restart-meta", lambda: verify_meta(xr_json(server, "xr-restart-meta", ["get", resource + "/meta"]), server.root))
             def conform():
                 result = command("xr-conform", ["--server", server.root, "conform", "--logs", "--warns", "--skips", "--depth", "0", "--nowrap"])
-                report["knownLimitations"] = classify_checker_failure(result.stdout.decode("utf-8", errors="replace"))
-                report["checker"] = {"status": "failed", "exitCode": result.returncode,
-                                     "expectedPasses": fixture["checker"]["expectedPasses"],
-                                     "observed": observed_checker_totals(result.stdout.decode("utf-8", errors="replace"))}
-                parsed = validate_checker(result, fixture["checker"]["expectedPasses"])
+                try:
+                    parsed = validate_checker(result, fixture["checker"]["expectedPasses"])
+                except ReverseInteropError:
+                    known = validate_known_peer_limitation(result, fixture["checker"]["expectedPasses"])
+                    report["knownLimitations"] = [known["id"]]
+                    report["checker"] = {
+                        "status": "known-peer-limitation",
+                        "expectedPasses": fixture["checker"]["expectedPasses"],
+                        **known,
+                    }
+                    return ReverseCaseResult(limitation=known["id"], qualified=False)
                 report["checker"] = {"status": "passed", **parsed, "exitCode": 0}
             case("xr-conform", conform)
-    require([item["name"] for item in report["cases"]] == list(REQUIRED_CASES), "Reverse qualification did not execute the complete named case set.")
-    require(all(item["status"] == "passed" for item in report["cases"]), "A required reverse case failed.")
+    require([item["name"] for item in report["cases"]] == list(REQUIRED_CASES),
+            "Reverse qualification did not execute the complete named case set.")
+    known = [item for item in report["cases"] if item["status"] == "known-limitation"]
+    require(all(item["status"] == "passed" for item in report["cases"] if item not in known),
+            "A required reverse case failed.")
+    require(not known or (len(known) == 1 and known[0]["name"] == "xr-conform" and
+                          known[0]["limitation"] == "XR-CAPABILITIES-MUTABLE"),
+            "Only the exact pinned-peer capability limitation may be non-blocking.")
     require(hashlib.sha256(executable.read_bytes()).hexdigest() == report["serverSha256"], "The native executable changed during qualification.")
-    report.update(status="passed", qualified=True)
+    report.update(status="passed-with-known-limitation" if known else "passed", qualified=not known)
 
 
 def main(argv: list[str] | None = None) -> int:

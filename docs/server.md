@@ -86,14 +86,46 @@ public ValueTask<RegistryResult> ExecuteAsync(RegistryOperation operation,
 public static IEndpointConventionBuilder MapXRegistry(
     this IEndpointRouteBuilder endpoints, RegistryEngine engine,
     RegistryHttpOptions? options = null);
+
+public static IEndpointConventionBuilder MapXRegistry(
+    this IEndpointRouteBuilder endpoints, IRegistryHostBackend backend,
+    RegistryHttpOptions? options = null);
 ```
 
-`MapXRegistry` takes the concrete local `RegistryEngine`, not a federation
-resolver or an arbitrary `IRegistryEngine`. It maps an explicit RequestDelegate;
-it does not start Kestrel or own host, authentication, persistence, or shutdown.
-The FileServer host supplies those lifetimes. Federation selection, origin
-retention and bridge-specific read/write composition remain in the parent's
-bridge layer; this module has no Federation project dependency.
+`RegistryEngine` implements `IRegistryHostBackend`, which extends
+`IRegistryEngine` with the trusted root, finite host limits, canonical path
+resolution, pre-body route description and request authorization needed by the
+HTTP adapter. `MapXRegistry` retains the concrete-engine overload and also
+accepts this backend contract. A custom backend owns its authorization,
+model-aware descriptions, operation semantics and publication guarantees; it
+must authorize before consuming request bodies, execute each operation once,
+and invoke `PrepareResponseAsync` before publishing a mutation. Implementing
+the interface does not adapt another store automatically or confer the
+engine's persistence atomicity. The HTTP adapter owns bounded transport
+parsing and representation encoding only.
+
+`MapXRegistry` maps an explicit RequestDelegate; it does not start Kestrel or
+own host, authentication, persistence, or shutdown. The FileServer host
+supplies those lifetimes. Federation selection, origin retention and
+bridge-specific read/write composition remain in the parent's bridge layer;
+this module has no Federation project dependency.
+
+```csharp
+public interface IRegistryHostBackend : IRegistryEngine
+{
+    Uri PublicRoot { get; }
+    RegistryLimits Limits { get; }
+    ValueTask AuthorizeRequestAsync(RegistryAction action, RegistryPath path,
+        RegistryOperationContext context, CancellationToken cancellationToken = default);
+    ValueTask<RegistryPath> ResolvePathAsync(RegistryAction action, string escapedPath,
+        RegistryOperationContext context, CancellationToken cancellationToken = default);
+    ValueTask<RegistryRouteDescription> DescribeAsync(RegistryAction action, RegistryPath path,
+        RegistryOperationContext context, IReadOnlyList<KeyValuePair<string, string?>> parameters,
+        CancellationToken cancellationToken = default);
+}
+
+app.MapXRegistry(applicationOwnedBackend);
+```
 
 `RegistryEngineOptions` requires RegistryId, PublicRoot and Model.
 `AllowAnonymousReads` and `AllowCapabilityUpdates` default to false. Optional hooks are ResourceValidator,
