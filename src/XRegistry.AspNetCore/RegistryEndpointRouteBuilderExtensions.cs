@@ -47,6 +47,12 @@ public static class RegistryEndpointRouteBuilderExtensions
             throw new ArgumentException("AuthenticationChallenge must be a printable ASCII HTTP field value.", nameof(options));
         }
 
+        if (options.RequestScopeFactory is not null && options.CallerMapper is not null)
+        {
+            throw new ArgumentException("Configure either a request-scope factory or a CallerMapper, not both.",
+                nameof(options));
+        }
+
         var mount = options.MountPath;
         if (mount.Length != 0 && (!mount.StartsWith('/') || mount.EndsWith('/') ||
             mount.Contains('{', StringComparison.Ordinal) || mount.Contains('}', StringComparison.Ordinal) ||
@@ -75,6 +81,7 @@ public static class RegistryEndpointRouteBuilderExtensions
             PreparedResponse? prepared = null;
             var executed = false;
             var requestPath = "/";
+            IRegistryRequestScope? requestScope = null;
             try
             {
                 var raw = http.Features.Get<IHttpRequestFeature>()?.RawTarget ?? http.Request.Path.Value ?? "/";
@@ -96,11 +103,19 @@ public static class RegistryEndpointRouteBuilderExtensions
                 requestPath = relative.Length == 0 ? "/" : relative;
 
                 var knownAction = TryAction(http.Request.Method, out var action);
-                var caller = options.CallerMapper is { } mapper
+                requestScope = options.RequestScopeFactory is { } scopeFactory
+                    ? await scopeFactory(http, cancellationToken).ConfigureAwait(false)
+                    : null;
+                if (options.RequestScopeFactory is not null && requestScope is null)
+                {
+                    throw new InvalidOperationException("The request-scope factory returned no scope.");
+                }
+                var caller = requestScope?.Caller ?? (options.CallerMapper is { } mapper
                     ? mapper(http) ?? throw new InvalidOperationException("The trusted caller mapper returned no principal.")
-                    : http.User;
+                    : http.User);
                 var context = new RegistryOperationContext(caller)
                 {
+                    RequestScope = requestScope,
                     PrepareResponseAsync = async (result, ct) =>
                         prepared = await PreparedResponse.CreateAsync(result, backend, ct).ConfigureAwait(false)
                 };
@@ -214,6 +229,8 @@ public static class RegistryEndpointRouteBuilderExtensions
                     throw new InvalidOperationException("The engine did not prepare a response.");
                 }
 
+                await DisposeRequestScopeAsync(http, requestScope).ConfigureAwait(false);
+                requestScope = null;
                 await prepared.WriteAsync(http, action == RegistryAction.Head, cancellationToken).ConfigureAwait(false);
             }
             catch (RegistryException exception)
@@ -240,6 +257,11 @@ public static class RegistryEndpointRouteBuilderExtensions
                 http.Response.Headers["xRegistry-commit-outcome"] = "unknown";
                 await WriteProblemAsync(http, new("commit_outcome_unknown", path?.EscapedPath ?? "/",
                     "The commit outcome is unknown. Do not automatically retry this mutation."), route).ConfigureAwait(false);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                await WriteProblemAsync(http, new("unauthorized", path?.EscapedPath ?? "/",
+                    "The caller is not authorized to acquire this Registry request scope."), route).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (http.RequestAborted.IsCancellationRequested)
             {
@@ -289,6 +311,33 @@ public static class RegistryEndpointRouteBuilderExtensions
                     await WriteProblemAsync(http, new("server_error", path?.EscapedPath ?? "/",
                         "An infrastructure contract could not be satisfied."), route).ConfigureAwait(false);
                 }
+            }
+            finally
+            {
+                if (requestScope is not null)
+                {
+                    await DisposeRequestScopeAsync(http, requestScope).ConfigureAwait(false);
+                }
+            }
+        }
+
+        private static async ValueTask DisposeRequestScopeAsync(
+            HttpContext http, IRegistryRequestScope? requestScope)
+        {
+            if (requestScope is null)
+            {
+                return;
+            }
+            try
+            {
+                await requestScope.DisposeAsync().ConfigureAwait(false);
+            }
+            catch (Exception exception) when (exception is IOException or InvalidOperationException or
+                OperationCanceledException or UnauthorizedAccessException)
+            {
+                var logger = http.RequestServices.GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("XRegistry.AspNetCore");
+                s_infrastructureFailure(logger, exception);
             }
         }
 

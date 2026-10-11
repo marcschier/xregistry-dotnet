@@ -172,6 +172,52 @@ public class HttpTests
     }
 
     [Test]
+    public async Task RequestScopeIsSharedAcrossBackendPhasesAndDisposedAfterResponsePreparation()
+    {
+        var backend = new TestRegistryHostBackend();
+        var scope = new TestRequestScope(new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "scoped-caller")], "test")));
+        var factoryCalls = 0;
+        await using var host = await TestHost.StartAsync(hostBackend: backend, httpOptions: new RegistryHttpOptions
+        {
+            RequestScopeFactory = (_, cancellationToken) =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                factoryCalls++;
+                return ValueTask.FromResult<IRegistryRequestScope>(scope);
+            }
+        });
+
+        using var response = await host.Client.GetAsync("/");
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        await Assert.That(factoryCalls).IsEqualTo(1);
+        await Assert.That(scope.DisposeCount).IsEqualTo(1);
+        await Assert.That(backend.RequestScopes).IsNotEmpty();
+        await Assert.That(backend.RequestScopes.All(observed => ReferenceEquals(observed, scope))).IsTrue();
+        await Assert.That(scope.Caller.FindFirst(ClaimTypes.NameIdentifier)!.Value).IsEqualTo("scoped-caller");
+    }
+
+    [Test]
+    public async Task RequestScopeAuthorizationFailureIsAnUnauthorizedProblem()
+    {
+        var backend = new TestRegistryHostBackend();
+        await using var host = await TestHost.StartAsync(hostBackend: backend, httpOptions: new RegistryHttpOptions
+        {
+            RequestScopeFactory = (_, _) =>
+                ValueTask.FromException<IRegistryRequestScope>(new UnauthorizedAccessException())
+        });
+
+        using var response = await host.Client.GetAsync("/");
+        var problem = RegistryJson.Parse(await response.Content.ReadAsByteArrayAsync()).RootElement;
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.Unauthorized);
+        await Assert.That(problem.GetProperty("code").GetString()).IsEqualTo("unauthorized");
+        await Assert.That(backend.DescriptionCount).IsZero();
+        await Assert.That(backend.ExecutionCount).IsZero();
+    }
+
+    [Test]
     [Arguments("GET", "/", 200)]
     [Arguments("HEAD", "/", 200)]
     [Arguments("GET", "/.xregistry", 200)]
@@ -518,6 +564,7 @@ public class HttpTests
         internal int ExecutionCount { get; private set; }
         internal int ResponsePreparationCount { get; private set; }
         internal bool Published { get; private set; }
+        internal List<IRegistryRequestScope?> RequestScopes { get; } = [];
         public Uri PublicRoot { get; } = new("https://public.example/registry");
         public RegistryLimits Limits { get; init; } = new();
         internal IReadOnlyList<RegistryAction> AllowedActions { get; init; } = [RegistryAction.Read];
@@ -539,6 +586,7 @@ public class HttpTests
             CancellationToken cancellationToken = default)
         {
             DescriptionCount++;
+            RequestScopes.Add(context.RequestScope);
             await AuthorizeRequestAsync(action, path, context, cancellationToken);
             return new RegistryRouteDescription(path, "custom", null, AllowedActions);
         }
@@ -547,6 +595,7 @@ public class HttpTests
             CancellationToken cancellationToken = default)
         {
             ExecutionCount++;
+            RequestScopes.Add(context.RequestScope);
             await AuthorizeRequestAsync(operation.Action, operation.Path, context, cancellationToken);
             var result = new RegistryResult(RegistryResultKind.Success, operation.Path, ResponseMetadata);
             if (context.PrepareResponseAsync is { } prepare)
@@ -557,6 +606,18 @@ public class HttpTests
 
             Published = true;
             return result;
+        }
+    }
+
+    private sealed class TestRequestScope(ClaimsPrincipal caller) : IRegistryRequestScope
+    {
+        public ClaimsPrincipal Caller { get; } = caller;
+        public int DisposeCount { get; private set; }
+
+        public ValueTask DisposeAsync()
+        {
+            DisposeCount++;
+            return ValueTask.CompletedTask;
         }
     }
 

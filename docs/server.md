@@ -127,12 +127,31 @@ public interface IRegistryHostBackend : IRegistryEngine
 app.MapXRegistry(applicationOwnedBackend);
 ```
 
+Applications that select a caller-bound upstream/session for each HTTP request
+can set `RegistryHttpOptions.RequestScopeFactory`. It is asynchronous and creates
+one `IRegistryRequestScope` before path resolution; the host passes that same
+scope and its `Caller` through route description, request authorization,
+response preflight and execution. The scope is disposed after response
+preparation, including requests rejected before execution. Configure
+`RequestScopeFactory` instead of `CallerMapper` when the scope owns caller
+selection; configuring both is rejected. A prepared operation must retain any
+resources it still uses until commit/abort, and scope disposal should itself
+bound any late cleanup it observes.
+
+```csharp
+public interface IRegistryRequestScope : IAsyncDisposable
+{
+    ClaimsPrincipal Caller { get; }
+}
+```
+
 `RegistryEngineOptions` requires RegistryId, PublicRoot and Model.
 `AllowAnonymousReads` and `AllowCapabilityUpdates` default to false. Optional hooks are ResourceValidator,
 DocumentReferencePolicy and ObligationValidator; clock, limits, model compilation
 and discovery configuration are also explicit. `RegistryHttpOptions` contains
 MountPath (default empty), CallerMapper (default null, meaning HttpContext.User),
-AuthenticationChallenge, MaxErrorBytes (32768), and RequestTimeout (30 seconds).
+RequestScopeFactory, AuthenticationChallenge, MaxErrorBytes (32768), and
+RequestTimeout (30 seconds).
 MountPath is local routing; PublicRoot alone controls advertised URLs.
 
 ```csharp

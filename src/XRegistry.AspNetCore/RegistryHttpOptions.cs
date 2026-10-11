@@ -3,6 +3,7 @@
 
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
+using XRegistry.Server;
 
 namespace XRegistry.AspNetCore;
 
@@ -13,6 +14,11 @@ public sealed record RegistryHttpOptions
     public string MountPath { get; init; } = "";
     /// <summary>Gets an optional trusted mapper. By default HttpContext.User is used; no identity headers are recognized.</summary>
     public Func<HttpContext, ClaimsPrincipal>? CallerMapper { get; init; }
+    /// <summary>
+    /// Gets an optional asynchronous request-scope factory. The returned scope is shared across route resolution,
+    /// description, execution and response preflight, then disposed after the operation stops using it.
+    /// </summary>
+    public Func<HttpContext, CancellationToken, ValueTask<IRegistryRequestScope>>? RequestScopeFactory { get; init; }
     /// <summary>Gets the optional challenge field for 401 responses; configure it to match the host authentication middleware.</summary>
     public string? AuthenticationChallenge { get; init; }
     /// <summary>Gets the separate bounded problem-details response budget, at least 1024 bytes.</summary>
