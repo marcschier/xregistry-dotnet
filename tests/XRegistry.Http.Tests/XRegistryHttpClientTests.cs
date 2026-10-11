@@ -81,6 +81,82 @@ public class XRegistryHttpClientTests
     }
 
     [Test]
+    public async Task ModelDerivedRegistryHeadersAreSentForMetadataAndDocumentRequests()
+    {
+        var received = new List<string>();
+        await using var app = await StartAsync(app => app.MapPut("/registry/item", (HttpContext context) =>
+        {
+            received.Add(context.Request.Headers["xRegistry-display-name"].ToString());
+            received.Add(context.Request.Headers["xRegistry-enabled"].ToString());
+            return Results.StatusCode(StatusCodes.Status204NoContent);
+        }));
+        using var client = new XRegistryHttpClient(
+            new Uri(new Uri(app.Urls.Single()), "/registry/"), new XRegistryHttpClientOptions
+            {
+                AllowLoopbackHttp = true,
+                MaxHeaderBytes = 128,
+                MaxHeaderCount = 4
+            });
+        var headers = new[]
+        {
+            new KeyValuePair<string, string>("xRegistry-display-name", "line%20one"),
+            new KeyValuePair<string, string>("xRegistry-enabled", "true")
+        };
+
+        using (var metadata = await client.SendAsync(
+            HttpMethod.Put, "item", Encoding.UTF8.GetBytes("{}"), "application/json",
+            query: null, registryHeaders: headers))
+        {
+            await Assert.That(metadata.StatusCode).IsEqualTo(HttpStatusCode.NoContent);
+        }
+
+        using (var source = new MemoryStream([0, 255, 13]))
+        using (var document = await client.SendDocumentAsync(
+            HttpMethod.Put, "item", source, "application/octet-stream", query: null, registryHeaders: headers))
+        {
+            await Assert.That(document.StatusCode).IsEqualTo(HttpStatusCode.NoContent);
+        }
+
+        await Assert.That(received).Count().IsEqualTo(4);
+        await Assert.That(received[0]).IsEqualTo("line%20one");
+        await Assert.That(received[1]).IsEqualTo("true");
+        await Assert.That(received[2]).IsEqualTo("line%20one");
+        await Assert.That(received[3]).IsEqualTo("true");
+    }
+
+    [Test]
+    public async Task RegistryHeadersRejectNonAttributeFieldsDuplicatesAndOverBudgetValuesBeforeDispatch()
+    {
+        using var handler = new CallbackHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
+        using var suppliedClient = new HttpClient(handler);
+        using var client = XRegistryHttpClient.Create(
+            new Uri("https://registry.example/registry/"), suppliedClient,
+            new XRegistryHttpClientOptions { MaxHeaderBytes = 32, MaxHeaderCount = 2 });
+
+        foreach (var headers in new[]
+        {
+            new[] { new KeyValuePair<string, string>("Content-Type", "application/json") },
+            new[]
+            {
+                new KeyValuePair<string, string>("xRegistry-epoch", "1"),
+                new KeyValuePair<string, string>("XREGISTRY-EPOCH", "2")
+            },
+            new[] { new KeyValuePair<string, string>("xRegistry-long", new string('x', 64)) },
+            new[] { new KeyValuePair<string, string>("xRegistry-value", "line\r\nbreak") }
+        })
+        {
+            await Assert.That(async () =>
+            {
+                using var response = await client.SendAsync(
+                    HttpMethod.Put, "item", ReadOnlyMemory<byte>.Empty,
+                    "application/json", query: null, registryHeaders: headers);
+            }).Throws<ArgumentException>();
+        }
+
+        await Assert.That(handler.RequestCount).IsZero();
+    }
+
+    [Test]
     public async Task InjectedHttpClientPreservesCallerOwnedCredentialPipelineAndLifetime()
     {
         var handler = new CallbackHandler(request =>

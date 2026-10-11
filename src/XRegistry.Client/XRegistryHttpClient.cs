@@ -82,7 +82,35 @@ public sealed partial class XRegistryHttpClient : IDisposable
         ReadOnlyMemory<byte>? body = null,
         string? contentType = null,
         IReadOnlyList<KeyValuePair<string, string?>>? query = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        await SendCoreAsync(method, path, body, contentType, query, null, cancellationToken).ConfigureAwait(false);
+
+    /// <summary>Sends a buffered request with explicit model-derived xRegistry attribute headers.</summary>
+    /// <param name="method">The binding's HTTP method.</param>
+    /// <param name="path">An escaped Registry-relative path.</param>
+    /// <param name="body">Optional bounded request bytes.</param>
+    /// <param name="contentType">The Content-Type when a body is present.</param>
+    /// <param name="query">Ordered query values.</param>
+    /// <param name="registryHeaders">Unique, bounded xRegistry attribute headers.</param>
+    /// <param name="cancellationToken">Cancellation covering dispatch and response consumption.</param>
+    public ValueTask<XRegistryHttpResponse> SendAsync(
+        HttpMethod method,
+        string path,
+        ReadOnlyMemory<byte>? body,
+        string? contentType,
+        IReadOnlyList<KeyValuePair<string, string?>>? query,
+        IReadOnlyList<KeyValuePair<string, string>> registryHeaders,
+        CancellationToken cancellationToken = default) =>
+        SendCoreAsync(method, path, body, contentType, query, registryHeaders, cancellationToken);
+
+    private async ValueTask<XRegistryHttpResponse> SendCoreAsync(
+        HttpMethod method,
+        string path,
+        ReadOnlyMemory<byte>? body,
+        string? contentType,
+        IReadOnlyList<KeyValuePair<string, string?>>? query,
+        IReadOnlyList<KeyValuePair<string, string>>? registryHeaders,
+        CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(method);
@@ -108,14 +136,44 @@ public sealed partial class XRegistryHttpClient : IDisposable
             }
         }
 
+        AddRegistryHeaders(request, registryHeaders);
         return await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Streams one caller-owned Document body once, enforcing actual bytes and the complete request deadline.</summary>
+    /// <param name="method">The HTTP method required by the binding for the addressed representation.</param>
+    /// <param name="path">An escaped Registry-relative path.</param>
+    /// <param name="document">The caller-owned exact Document stream.</param>
+    /// <param name="contentType">The Document media type.</param>
+    /// <param name="query">Ordered query values, preserving repeated, empty and valueless parameters.</param>
+    /// <param name="cancellationToken">Cancellation covering dispatch and response consumption.</param>
     /// <remarks>The stream is not disposed. A failed upload can have an unknown remote outcome; it is never retried by this client.</remarks>
     public async ValueTask<XRegistryHttpResponse> SendDocumentAsync(
         HttpMethod method, string path, Stream document, string contentType,
-        IReadOnlyList<KeyValuePair<string, string?>>? query = null, CancellationToken cancellationToken = default)
+        IReadOnlyList<KeyValuePair<string, string?>>? query = null, CancellationToken cancellationToken = default) =>
+        await SendDocumentCoreAsync(method, path, document, contentType, query, null, cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <summary>Streams one Document with explicit model-derived xRegistry attribute headers.</summary>
+    /// <param name="method">The binding's HTTP method.</param>
+    /// <param name="path">An escaped Registry-relative path.</param>
+    /// <param name="document">The caller-owned exact Document stream.</param>
+    /// <param name="contentType">The Document media type.</param>
+    /// <param name="query">Ordered query values.</param>
+    /// <param name="registryHeaders">Unique, bounded xRegistry attribute headers.</param>
+    /// <param name="cancellationToken">Cancellation covering dispatch and response consumption.</param>
+    public ValueTask<XRegistryHttpResponse> SendDocumentAsync(
+        HttpMethod method, string path, Stream document, string contentType,
+        IReadOnlyList<KeyValuePair<string, string?>>? query,
+        IReadOnlyList<KeyValuePair<string, string>> registryHeaders,
+        CancellationToken cancellationToken = default) =>
+        SendDocumentCoreAsync(method, path, document, contentType, query, registryHeaders, cancellationToken);
+
+    private async ValueTask<XRegistryHttpResponse> SendDocumentCoreAsync(
+        HttpMethod method, string path, Stream document, string contentType,
+        IReadOnlyList<KeyValuePair<string, string?>>? query,
+        IReadOnlyList<KeyValuePair<string, string>>? registryHeaders,
+        CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(method);
@@ -131,8 +189,57 @@ public sealed partial class XRegistryHttpClient : IDisposable
         using var request = new HttpRequestMessage(method, uri);
         request.Content = new SingleUseDocumentContent(document, _options.MaxDocumentBytes);
         request.Content.Headers.ContentType = MediaTypeHeaderValue.Parse(contentType);
+        AddRegistryHeaders(request, registryHeaders);
         return await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
     }
+
+    private void AddRegistryHeaders(
+        HttpRequestMessage request, IReadOnlyList<KeyValuePair<string, string>>? headers)
+    {
+        if (headers is null)
+        {
+            return;
+        }
+
+        if (headers.Count > _options.MaxHeaderCount)
+        {
+            throw new ArgumentException("Registry request headers exceed the configured field-count limit.", nameof(headers));
+        }
+
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        long bytes = 0;
+        foreach (var header in headers)
+        {
+            if (string.IsNullOrEmpty(header.Key) || header.Value is null ||
+                !header.Key.StartsWith("xRegistry-", StringComparison.OrdinalIgnoreCase) ||
+                header.Key.Length == "xRegistry-".Length ||
+                header.Key.Any(static character => !IsHeaderNameCharacter(character)) ||
+                header.Value.Any(static character => character is < ' ' or > '~') ||
+                !names.Add(header.Key))
+            {
+                throw new ArgumentException("Only unique, printable xRegistry request attribute headers are accepted.",
+                    nameof(headers));
+            }
+
+            bytes += (long)header.Key.Length + header.Value.Length + 4;
+            if (bytes > _options.MaxHeaderBytes)
+            {
+                throw new ArgumentException("Registry request headers exceed the configured byte limit.", nameof(headers));
+            }
+        }
+
+        foreach (var header in headers)
+        {
+            if (!request.Headers.TryAddWithoutValidation(header.Key, header.Value))
+            {
+                throw new ArgumentException("An xRegistry request header cannot be represented by HTTP.", nameof(headers));
+            }
+        }
+    }
+
+    private static bool IsHeaderNameCharacter(char character) =>
+        character is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or >= '0' and <= '9' or
+        '!' or '#' or '$' or '%' or '&' or '\'' or '*' or '+' or '-' or '.' or '^' or '_' or '`' or '|' or '~';
 
     private async ValueTask<XRegistryHttpResponse> SendRequestAsync(
         HttpRequestMessage request, CancellationToken cancellationToken)
