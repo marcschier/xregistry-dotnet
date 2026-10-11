@@ -1,6 +1,6 @@
 # Releasing xRegistry .NET
 
-The source version is `0.1.0-alpha`. Packages and samples are implemented but
+The source version is `0.1.0-alpha.1`. Packages and samples are implemented but
 not release-qualified; incomplete native/conformance requirements are not
 marked qualified merely to publish an early alpha, and publishing does not by
 itself certify runtime/specification qualification. Publishing this alpha does
