@@ -24,7 +24,7 @@ publisher tag `20261011-10d3ce1`, and the image digest in
 `interop\upstream-lock.json`. The checker now has seven named suites
 (including `TestFilter`) and a `TestRegistry` wrapper. Forward qualification
 requires all 117 clean passes. The 17-check reverse functional slice retains
-the exact `mutable`-capability limitation: 31 passes, 13 failures, no warnings
+the exact `mutable`-capability limitation: exit code 1, 31 passes, 13 failures, no warnings
 or skips, and `qualified: false`. Every recorded passing/failing identity is
 required; a green accounting job is not successful reverse conformance.
 The [reverse interoperability report](reverse-interoperability.md) enumerates

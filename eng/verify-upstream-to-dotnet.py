@@ -136,7 +136,7 @@ def observed_checker_totals(text: str) -> dict | None:
 
 def validate_known_peer_limitation(result: subprocess.CompletedProcess, expected_passes: int) -> dict:
     require(expected_passes == 117, "The known peer limitation is accounted for only for the pinned 117-case fixture.")
-    require(result.returncode == 2 and not result.stderr,
+    require(result.returncode == 1 and not result.stderr,
             "The pinned checker did not return the known capability-parser failure.")
     require(len(result.stdout) <= MAX_OUTPUT_BYTES, "Checker evidence exceeds its byte bound.")
     try:

@@ -7,7 +7,9 @@ The current upgrade candidate pins upstream commit
 Its first hosted run executed all 17 mutation/read/restart checks successfully.
 The forward peer fixture produced 117 clean passes. The reverse checker still
 rejects `mutable`, now reporting 31 passes, 13 failures, zero warnings and zero
-skips. The user authorized peer-version-specific accounting expectations;
+skips and exit code 1. The pinned peer's `runConform` now returns 1 for
+any failed server, rather than the previous checker's exit code 2.
+The user authorized peer-version-specific accounting expectations;
 document bytes, model, identities, restart checks and production behavior are
 unchanged. Neither publication nor a green known-limitation accounting job
 makes this reverse result qualified.

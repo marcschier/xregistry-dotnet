@@ -154,23 +154,23 @@ class ReverseAccountingTests(unittest.TestCase):
             tool.validate_checker(completed(VALID_CHECKER.encode(), stderr=b"failure"), 117)
 
     def test_known_mutable_capability_failure_is_successfully_recorded_without_conformance_credit(self) -> None:
-        result = tool.validate_known_peer_limitation(completed(KNOWN_CAPABILITY_LIMITATION.encode(), 2), 117)
+        result = tool.validate_known_peer_limitation(completed(KNOWN_CAPABILITY_LIMITATION.encode(), 1), 117)
         self.assertEqual(result, {
             "id": "XR-CAPABILITIES-MUTABLE",
-            "exitCode": 2,
+            "exitCode": 1,
             "observed": {"passes": 31, "failures": 13, "warnings": 0, "skips": 0},
             "failedSuites": ["TestCapabilities", "TestFilter", "TestGroups", "TestRegistry", "TestRegistryRoot", "TestResources"],
             "qualified": False,
         })
         for output, code, stderr in (
-            (KNOWN_CAPABILITY_LIMITATION.replace("TestSniff", "TestOther"), 2, b""),
-            (KNOWN_CAPABILITY_LIMITATION.replace("Fail: 13", "Fail: 14"), 2, b""),
-            (KNOWN_CAPABILITY_LIMITATION.replace("TestGroups", "TestCapabilities"), 2, b""),
+            (KNOWN_CAPABILITY_LIMITATION.replace("TestSniff", "TestOther"), 1, b""),
+            (KNOWN_CAPABILITY_LIMITATION.replace("Fail: 13", "Fail: 14"), 1, b""),
+            (KNOWN_CAPABILITY_LIMITATION.replace("TestGroups", "TestCapabilities"), 1, b""),
             (KNOWN_CAPABILITY_LIMITATION.replace(
-                "Pass: 31   Fail: 13", "├─ FAIL: TestUnexpected\nPass: 31   Fail: 13"), 2, b""),
-            (KNOWN_CAPABILITY_LIMITATION + "FAIL: unrelated\n", 2, b""),
+                "Pass: 31   Fail: 13", "├─ FAIL: TestUnexpected\nPass: 31   Fail: 13"), 1, b""),
+            (KNOWN_CAPABILITY_LIMITATION + "FAIL: unrelated\n", 1, b""),
             (KNOWN_CAPABILITY_LIMITATION, 0, b""),
-            (KNOWN_CAPABILITY_LIMITATION, 2, b"checker warning"),
+            (KNOWN_CAPABILITY_LIMITATION, 1, b"checker warning"),
         ):
             with self.subTest(output=output[-60:], code=code, stderr=stderr), \
                     self.assertRaises(tool.ReverseInteropError):
