@@ -135,7 +135,7 @@ def observed_checker_totals(text: str) -> dict | None:
 
 
 def validate_known_peer_limitation(result: subprocess.CompletedProcess, expected_passes: int) -> dict:
-    require(expected_passes == 101, "The known peer limitation is qualified only for the frozen 101-case fixture.")
+    require(expected_passes == 117, "The known peer limitation is accounted for only for the pinned 117-case fixture.")
     require(result.returncode == 2 and not result.stderr,
             "The pinned checker did not return the known capability-parser failure.")
     require(len(result.stdout) <= MAX_OUTPUT_BYTES, "Checker evidence exceeds its byte bound.")
@@ -153,19 +153,23 @@ def validate_known_peer_limitation(result: subprocess.CompletedProcess, expected
             "The pinned checker reported a failure other than the known mutable-capability parser limitation.")
     require(len(summary_lines) == 1 and lines[-1] == summary_lines[0],
             "The pinned checker did not end with one complete summary.")
-    require(totals == {"passes": 30, "failures": 10, "warnings": 0, "skips": 0},
+    require(totals == {"passes": 31, "failures": 13, "warnings": 0, "skips": 0},
             "The pinned checker totals differ from the recorded mutable-capability limitation.")
+    require(not any(re.match(r"\W*(?:WARN|SKIP):", line) for line in lines),
+            "The pinned checker contains an unexpected warning or skipped assertion.")
     suite_results = {
         match[2]: match[1]
         for line in lines
         if (match := re.fullmatch(r"\W*(PASS|FAIL): (Test\w+)", line))
     }
     require(suite_results == {
+        "TestRegistry": "FAIL",
         "TestSniff": "PASS",
         "TestModel": "PASS",
         "TestCapabilities": "FAIL",
         "TestRegistryRoot": "FAIL",
         "TestGroups": "FAIL",
+        "TestFilter": "FAIL",
         "TestResources": "FAIL",
     }, "The pinned checker failure tree differs from the recorded capability-parser cascade.")
     require(sum(re.fullmatch(r"FAIL: http://127\.0\.0\.1:\d+/registry", line) is not None for line in lines) == 1,
@@ -177,16 +181,57 @@ def validate_known_peer_limitation(result: subprocess.CompletedProcess, expected
         not re.fullmatch(r"http://127\.0\.0\.1:\d+/registry", match[1])
     )
     require(failed_nodes == sorted([
+        "TestRegistry",
         "TestCapabilities",
         "Parsing capabilities MUST work",
         "Parsing Capabilities MUST work",
         "TestRegistryRoot",
         "TestGroups",
+        "TestFilter",
         "TestResources",
+        "TestCapabilities (cached)",
         "TestCapabilities (cached)",
         "TestCapabilities (cached)",
         "TestGroups (cached)",
     ]), "The pinned checker has an unexpected failing assertion.")
+    passed_nodes = sorted(
+        match[1]
+        for line in lines
+        if (match := re.fullmatch(r"\W*PASS: (.+)", line))
+    )
+    require(passed_nodes == sorted([
+        "TestSniff",
+        "'GET /' MUST return 200",
+        "'GET /' MUST return a non-empty body",
+        "'GET /' MUST return a JSON body",
+        "TestModel",
+        "TestSniff (cached)",
+        "'GET /model' MUST return 200",
+        "'GET /model' MUST return a non-empty body",
+        "'GET /model' MUST return a JSON body",
+        "Parsing model MUST work",
+        "Verifying model MUST work",
+        "Retrieving capabilities",
+        'capabilities.available MUST include "capabilities"',
+        'capabilities.available MUST include "entities"',
+        'capabilities.available MUST include "model"',
+        'capabilities.available.entities MUST NOT be "mutable"',
+        "'GET /capabilities' MUST return 200",
+        "'GET /capabilities' MUST return a non-empty body",
+        "'GET /capabilities' MUST return a JSON body",
+        "'GET /' MUST return 200",
+        "'GET /' MUST return a non-empty body",
+        "'GET /' MUST return a JSON body",
+        "'GET /' MUST NOT include 'capabilities' attribute",
+        "Testing ?inline=capabilities",
+        "'GET /?inline=capabilities' MUST return 200",
+        "'GET /?inline=capabilities' MUST return a non-empty body",
+        "'GET /?inline=capabilities' MUST return a JSON body",
+        '"capabilities" MUST be present',
+        "/capabilities MUST = ?inline=capabilities",
+        "TestModel (cached)",
+        "TestModel (cached)",
+    ]), "The pinned checker replaced or omitted a recorded passing assertion.")
     return {
         "id": limitation,
         "exitCode": result.returncode,
@@ -224,9 +269,9 @@ def validate_fixture(fixture: dict) -> None:
                 and expected["defaultVersion"] == "v1" and expected["versionIds"] == ["v1", "v2"]
                 and expected["resourceXid"] == "/dirs/team/files/item" and expected["groupXid"] == "/dirs/team",
                 "The imported and independently expected fixture identities/documents disagree.")
-        require(type(fixture["checker"]["expectedPasses"]) is int and fixture["checker"]["expectedPasses"] == 101
+        require(type(fixture["checker"]["expectedPasses"]) is int and fixture["checker"]["expectedPasses"] == 117
                 and set(fixture["checker"]["expectedSuites"]) == accounting.SUITES,
-                "Reverse checker coverage must retain its exact seeded six-suite obligations.")
+                "Reverse checker coverage must retain its exact seeded seven-suite and TestRegistry wrapper obligations.")
     except (KeyError, TypeError, ValueError) as error:
         raise ReverseInteropError("Incomplete or malformed reverse fixture.") from error
 

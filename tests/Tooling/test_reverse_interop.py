@@ -24,33 +24,68 @@ SPEC.loader.exec_module(tool)
 
 VALID_CHECKER = (
     "PASS: http://127.0.0.1:12345/registry\n"
+    "+- PASS: TestRegistry\n"
     "+- PASS: TestSniff\n"
     "+- PASS: TestModel\n"
     "+- PASS: TestCapabilities\n"
     "+- PASS: TestRegistryRoot\n"
     "+- PASS: TestGroups\n"
+    "+- PASS: TestFilter\n"
     "+- PASS: TestResources\n"
-    "Pass: 101   Fail: 0   Warn: 0   Skip: 0\n"
+    "Pass: 117   Fail: 0   Warn: 0   Skip: 0\n"
 )
 KNOWN_CAPABILITY_LIMITATION = (
     "FAIL: http://127.0.0.1:12345/registry\n"
+    "├─ FAIL: TestRegistry\n"
     "├─ PASS: TestSniff\n"
+    "│  ├─ PASS: 'GET /' MUST return 200\n"
+    "│  ├─ PASS: 'GET /' MUST return a non-empty body\n"
+    "│  └─ PASS: 'GET /' MUST return a JSON body\n"
     "├─ PASS: TestModel\n"
+    "│  ├─ PASS: TestSniff (cached)\n"
+    "│  ├─ PASS: 'GET /model' MUST return 200\n"
+    "│  ├─ PASS: 'GET /model' MUST return a non-empty body\n"
+    "│  ├─ PASS: 'GET /model' MUST return a JSON body\n"
+    "│  ├─ PASS: Parsing model MUST work\n"
+    "│  └─ PASS: Verifying model MUST work\n"
     "├─ FAIL: TestCapabilities\n"
+    "│  ├─ PASS: Retrieving capabilities\n"
+    "│  ├─ PASS: capabilities.available MUST include \"capabilities\"\n"
+    "│  ├─ PASS: capabilities.available MUST include \"entities\"\n"
+    "│  ├─ PASS: capabilities.available MUST include \"model\"\n"
+    "│  ├─ PASS: capabilities.available.entities MUST NOT be \"mutable\"\n"
+    "│  ├─ PASS: 'GET /capabilities' MUST return 200\n"
+    "│  ├─ PASS: 'GET /capabilities' MUST return a non-empty body\n"
+    "│  ├─ PASS: 'GET /capabilities' MUST return a JSON body\n"
     "│  ├─ FAIL: Parsing capabilities MUST work\n"
     "│  │  └─ Unexpected error: Unknown capability specified: mutable.\n"
+    "│  ├─ PASS: 'GET /' MUST return 200\n"
+    "│  ├─ PASS: 'GET /' MUST return a non-empty body\n"
+    "│  ├─ PASS: 'GET /' MUST return a JSON body\n"
+    "│  ├─ PASS: 'GET /' MUST NOT include 'capabilities' attribute\n"
+    "│  ├─ PASS: Testing ?inline=capabilities\n"
+    "│  │  ├─ PASS: 'GET /?inline=capabilities' MUST return 200\n"
+    "│  │  ├─ PASS: 'GET /?inline=capabilities' MUST return a non-empty body\n"
+    "│  │  ├─ PASS: 'GET /?inline=capabilities' MUST return a JSON body\n"
+    "│  │  ├─ PASS: \"capabilities\" MUST be present\n"
+    "│  │  └─ PASS: /capabilities MUST = ?inline=capabilities\n"
     "│  └─ FAIL: Parsing Capabilities MUST work\n"
     "│     └─ Unexpected error: Unknown capability specified: mutable.\n"
     "├─ FAIL: TestRegistryRoot\n"
+    "│  ├─ PASS: TestModel (cached)\n"
     "│  ├─ FAIL: TestCapabilities (cached)\n"
     "│  └─ Dependency \"TestCapabilities\" failed, leaving\n"
     "├─ FAIL: TestGroups\n"
+    "│  ├─ PASS: TestModel (cached)\n"
+    "│  ├─ FAIL: TestCapabilities (cached)\n"
+    "│  └─ Dependency \"TestCapabilities\" failed, leaving\n"
+    "├─ FAIL: TestFilter\n"
     "│  ├─ FAIL: TestCapabilities (cached)\n"
     "│  └─ Dependency \"TestCapabilities\" failed, leaving\n"
     "└─ FAIL: TestResources\n"
     "   ├─ FAIL: TestGroups (cached)\n"
     "   └─ Dependency \"TestGroups\" failed, leaving\n"
-    "Pass: 30   Fail: 10   Warn: 0   Skip: 0\n"
+    "Pass: 31   Fail: 13   Warn: 0   Skip: 0\n"
 )
 
 
@@ -104,42 +139,42 @@ class ReverseAccountingTests(unittest.TestCase):
             with self.subTest(result=result), self.assertRaises(tool.ReverseInteropError):
                 tool.validate_cli_version(result, "Version: 5854af0130db")
 
-    def test_checker_requires_six_named_suites_exact_totals_zero_errors_and_zero_process_exit(self) -> None:
-        self.assertEqual(tool.validate_checker(completed(VALID_CHECKER.encode()), 101)["passes"], 101)
+    def test_checker_requires_seven_named_suites_and_wrapper_exact_totals_zero_errors_and_zero_process_exit(self) -> None:
+        self.assertEqual(tool.validate_checker(completed(VALID_CHECKER.encode()), 117)["passes"], 117)
         for old, new in (
-            ("Pass: 101", "Pass: 30"), ("Fail: 0", "Fail: 10"),
+            ("Pass: 117", "Pass: 31"), ("Fail: 0", "Fail: 13"),
             ("Warn: 0", "Warn: 1"), ("Skip: 0", "Skip: 1"),
             ("+- PASS: TestResources\n", ""), ("TestResources", "TestTDAllPass"),
         ):
             with self.subTest(new=new), self.assertRaises(tool.ReverseInteropError):
-                tool.validate_checker(completed(VALID_CHECKER.replace(old, new).encode()), 101)
+                tool.validate_checker(completed(VALID_CHECKER.replace(old, new).encode()), 117)
         with self.assertRaises(tool.ReverseInteropError):
-            tool.validate_checker(completed(VALID_CHECKER.encode(), 2), 101)
+            tool.validate_checker(completed(VALID_CHECKER.encode(), 2), 117)
         with self.assertRaises(tool.ReverseInteropError):
-            tool.validate_checker(completed(VALID_CHECKER.encode(), stderr=b"failure"), 101)
+            tool.validate_checker(completed(VALID_CHECKER.encode(), stderr=b"failure"), 117)
 
     def test_known_mutable_capability_failure_is_successfully_recorded_without_conformance_credit(self) -> None:
-        result = tool.validate_known_peer_limitation(completed(KNOWN_CAPABILITY_LIMITATION.encode(), 2), 101)
+        result = tool.validate_known_peer_limitation(completed(KNOWN_CAPABILITY_LIMITATION.encode(), 2), 117)
         self.assertEqual(result, {
             "id": "XR-CAPABILITIES-MUTABLE",
             "exitCode": 2,
-            "observed": {"passes": 30, "failures": 10, "warnings": 0, "skips": 0},
-            "failedSuites": ["TestCapabilities", "TestGroups", "TestRegistryRoot", "TestResources"],
+            "observed": {"passes": 31, "failures": 13, "warnings": 0, "skips": 0},
+            "failedSuites": ["TestCapabilities", "TestFilter", "TestGroups", "TestRegistry", "TestRegistryRoot", "TestResources"],
             "qualified": False,
         })
         for output, code, stderr in (
             (KNOWN_CAPABILITY_LIMITATION.replace("TestSniff", "TestOther"), 2, b""),
-            (KNOWN_CAPABILITY_LIMITATION.replace("Fail: 10", "Fail: 11"), 2, b""),
+            (KNOWN_CAPABILITY_LIMITATION.replace("Fail: 13", "Fail: 14"), 2, b""),
             (KNOWN_CAPABILITY_LIMITATION.replace("TestGroups", "TestCapabilities"), 2, b""),
             (KNOWN_CAPABILITY_LIMITATION.replace(
-                "Pass: 30   Fail: 10", "├─ FAIL: TestUnexpected\nPass: 30   Fail: 10"), 2, b""),
+                "Pass: 31   Fail: 13", "├─ FAIL: TestUnexpected\nPass: 31   Fail: 13"), 2, b""),
             (KNOWN_CAPABILITY_LIMITATION + "FAIL: unrelated\n", 2, b""),
             (KNOWN_CAPABILITY_LIMITATION, 0, b""),
             (KNOWN_CAPABILITY_LIMITATION, 2, b"checker warning"),
         ):
             with self.subTest(output=output[-60:], code=code, stderr=stderr), \
                     self.assertRaises(tool.ReverseInteropError):
-                tool.validate_known_peer_limitation(completed(output.encode(), code, stderr), 101)
+                tool.validate_known_peer_limitation(completed(output.encode(), code, stderr), 117)
         self.assertEqual(tool.classify_checker_failure("unrelated error"), [])
 
     def test_empty_or_changed_fixtures_are_rejected_before_a_server_can_start(self) -> None:

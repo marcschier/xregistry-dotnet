@@ -14,7 +14,7 @@ import sys
 
 
 SUITES = frozenset(
-    ("TestSniff", "TestModel", "TestCapabilities", "TestRegistryRoot", "TestGroups", "TestResources")
+    ("TestRegistry", "TestSniff", "TestModel", "TestCapabilities", "TestRegistryRoot", "TestGroups", "TestFilter", "TestResources")
 )
 SUMMARY = re.compile(r"^Pass: (\d+)\s+Fail: (\d+)\s+Warn: (\d+)\s+Skip: (\d+)\s*$")
 SUITE = re.compile(r"^\W*PASS: (Test\w+)\s*$")
@@ -41,7 +41,7 @@ def check_output(text: str, expected_passes: int) -> dict:
         )
     actual = [match[1] for line in lines if (match := SUITE.fullmatch(line))]
     if len(actual) != len(SUITES) or set(actual) != SUITES:
-        raise CheckerError("The checker did not execute exactly the six expected top-level suites.")
+        raise CheckerError("The checker did not execute exactly the seven expected suites and their TestRegistry wrapper.")
     if any(BAD_RESULT.match(line) for line in lines):
         raise CheckerError("Unexpected failing, warning, or skipped result in the checker tree.")
     return {"passes": passes, "failures": 0, "warnings": 0, "skips": 0, "suites": sorted(actual)}

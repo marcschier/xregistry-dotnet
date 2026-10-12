@@ -6,7 +6,8 @@ starts a new loopback-only fixture with fresh database storage, checks API
 readiness and identity, installs a deterministic model, verifies exact binary
 bytes and Version metadata, and invokes the independent `xr` checker.
 
-The checked fixture must execute exactly its six named suites with 101 passes
+The checked fixture must execute exactly its seven named suites and
+`TestRegistry` wrapper with 117 passes
 and zero failures, warnings or skips. `eng/check_upstream_output.py` rejects
 truncated/multiple summaries, missing/duplicate suites, mismatching counts and
 hidden failed results. Checker accounting is not full specification coverage.
@@ -50,7 +51,9 @@ server/database and cannot be retargeted merely through `XR_SERVER`.
 The reverse `xr` client has executed native .NET import/get/default/empty/
 metadata/restart operations (17 checks). Its unmodified conformance checker
 executes but rejects the specification-permitted capabilities `mutable` field:
-30 pass, 10 fail. This is retained as a peer compatibility blocker, not filtered
+31 pass, 13 fail at peer `10d3ce1f2280`, including the new `TestFilter`
+dependency failure. All exact passing/failing identities are checked and the
+reverse report retains `qualified: false`. This is a peer compatibility blocker, not filtered
 into a green result; see [reverse interoperability](reverse-interoperability.md).
 
 Hosted forward peer and managed-Git reference lanes have since run successfully,

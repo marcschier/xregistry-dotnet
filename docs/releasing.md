@@ -18,6 +18,18 @@ contract tests passed before the upgrade; replacing workflow pins without
 updating those identities produced 10 failures. Their behavioral, structural,
 security, permissions and qualification assertions remain unchanged.
 
+The user separately authorized peer-version-specific accounting/fixture
+expectation updates for source `10d3ce1f2280874930326aa02d11eb79152ae8cc`,
+publisher tag `20261011-10d3ce1`, and the image digest in
+`interop\upstream-lock.json`. The checker now has seven named suites
+(including `TestFilter`) and a `TestRegistry` wrapper. Forward qualification
+requires all 117 clean passes. The 17-check reverse functional slice retains
+the exact `mutable`-capability limitation: 31 passes, 13 failures, no warnings
+or skips, and `qualified: false`. Every recorded passing/failing identity is
+required; a green accounting job is not successful reverse conformance.
+The [reverse interoperability report](reverse-interoperability.md) enumerates
+all failures, including the new filter dependency failure.
+
 The pipeline structure mirrors this account's other .NET repositories
 (for example `marcschier/crdt`): a tag push builds and publishes packages to
 the repository's own GitHub Packages feed, and a separate, manually dispatched

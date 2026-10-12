@@ -35,6 +35,14 @@ jobs:
       - name: Qualify independent peer and run native client cases
         shell: pwsh
         run: ./eng/qualify-upstream.ps1 -NativeClient artifacts/interop-client/XRegistry.InteropProbe
+      - name: Retain exact forward peer and native-client evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pinned-native-client-to-peer-linux-x64
+          path: artifacts/interop/**
+          if-no-files-found: error
+          retention-days: 14
 
   native-git-to-reference:
     runs-on: ubuntu-latest

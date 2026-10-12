@@ -8,7 +8,7 @@
   "publisherTag": "20261011-10d3ce1",
   "executableVersion": "Version: 10d3ce1f2280",
   "specVersion": "1.0-rc4",
-  "environmentFixtureCheckerPasses": 101,
+  "environmentFixtureCheckerPasses": 117,
   "signedSourceAttestationEstablished": false,
   "qualification": {
     "embeddedVersions": "pending",
