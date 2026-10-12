@@ -363,7 +363,7 @@ These are managed results, not fresh source-matched Linux/ARM64 or feed
 qualification. NativeAOT and trimming analyzers remain enabled.
 
 The explicit project is `tests\XRegistry.Oci.Tests\XRegistry.Oci.Tests.csproj`,
-using CPM-pinned TUnit 1.66.27 and Microsoft.Testing.Platform. It links the
+using CPM-pinned TUnit 1.74.0 and Microsoft.Testing.Platform. It links the
 unchanged independently expected fixtures, and copies the frozen Python oracle
 and Apache-2.0 license into test output only. Authored malformed graph fixtures
 are independently re-addressed test data, not writer output used as its own

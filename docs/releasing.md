@@ -1,11 +1,22 @@
 # Releasing xRegistry .NET
 
-The source version is `0.1.0-alpha.3`. Packages and samples are implemented but
+The source version is `0.1.1-alpha.3`. This patch release refreshes build,
+test and independent-oracle dependencies without changing the public API or
+supported target frameworks. The existing `alpha.3` prerelease identifier is
+retained exactly; the numeric patch version advances from `0.1.0`.
+Packages and samples are implemented but
 not release-qualified; incomplete native/conformance requirements are not
 marked qualified merely to publish an early alpha, and publishing does not by
 itself certify runtime/specification qualification. Publishing this alpha does
 not itself claim conformance: NuGet.org visibly marks a prerelease version, and
 that exact version string can never be reused by a later stable/`rc` release.
+
+For the dependency refresh, the user authorized a narrowly scoped exception
+to the no-test-change requirement: only immutable Action SHA expectation
+values in the tooling tests may change. The original 35 release/CI/Git
+contract tests passed before the upgrade; replacing workflow pins without
+updating those identities produced 10 failures. Their behavioral, structural,
+security, permissions and qualification assertions remain unchanged.
 
 The pipeline structure mirrors this account's other .NET repositories
 (for example `marcschier/crdt`): a tag push builds and publishes packages to

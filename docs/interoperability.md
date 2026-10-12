@@ -31,13 +31,14 @@ instead of weakening the production client's HTTP origin policy.
 
 ## Recorded peer limitations
 
-The pinned Go server returns **405** for HEAD on a known document Version.
+The previously pinned Go server (`5854af0130db`) returned **405** for HEAD on a known document Version.
 The baseline HTTP-binding text does not define a HEAD operation, so this is
 recorded as a peer applicability limitation rather than an established spec
 violation. The probe executes the request and asserts the exact pinned outcome;
 it does not silently skip it or award HEAD conformance. See
 `interop/peer-features.json`. Independently test the intended .NET host's HEAD
-behavior; a changed peer outcome needs review.
+behavior; a changed peer outcome needs review. The current `10d3ce1f2280`
+upgrade candidate must pass the same probe without rewriting these outcomes.
 
 The peer does not provide an interchangeable oracle for every pagination,
 version-ordering or working-draft feature. Its Go test setup starts its own

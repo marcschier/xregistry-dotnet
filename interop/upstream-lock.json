@@ -2,19 +2,19 @@
   "schemaVersion": 1,
   "repository": "https://github.com/xregistry/server",
   "branch": "master",
-  "commit": "5854af0130db7723bad489f16ba66536126b823a",
-  "image": "ghcr.io/xregistry/xrserver-all@sha256:f22068a09279de14b95cd7e05bb989ab6d7cc5b1c543c30f1fb2ca90fd20a186",
+  "commit": "10d3ce1f2280874930326aa02d11eb79152ae8cc",
+  "image": "ghcr.io/xregistry/xrserver-all@sha256:329686aa0d53df9162616261e0b84a6a984d24c80d3c28372597f68364979e77",
   "platform": "linux/amd64",
-  "publisherTag": "20260910-5854af0",
-  "executableVersion": "Version: 5854af0130db",
+  "publisherTag": "20261011-10d3ce1",
+  "executableVersion": "Version: 10d3ce1f2280",
   "specVersion": "1.0-rc4",
   "environmentFixtureCheckerPasses": 101,
   "signedSourceAttestationEstablished": false,
   "qualification": {
-    "embeddedVersions": "verified-locally",
-    "coldStart": "verified-locally",
+    "embeddedVersions": "pending",
+    "coldStart": "pending",
     "clientToPeer": "pending",
     "peerToNativeServer": "pending",
-    "note": "Source inspection and embedded-version checks do not establish bidirectional interoperability."
+    "note": "Updated source/image pins require new execution evidence; historical peer receipts do not establish this pin's interoperability."
   }
 }

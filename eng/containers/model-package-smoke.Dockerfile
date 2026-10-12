@@ -11,7 +11,7 @@ RUN dotnet restore XRegistry.slnx \
     && cp -a artifacts/package-smoke/*/net8.0-linux-x64 /result/net8 \
     && cp -a artifacts/package-smoke/*/net10.0-linux-x64 /result/net10
 
-FROM mcr.microsoft.com/dotnet/runtime-deps@sha256:9c2883a67963933e3c4b8d0f732b72c172b48f8f606b6f5dcb95f09e84fcc797
+FROM mcr.microsoft.com/dotnet/runtime-deps@sha256:12dd273c196e92aa91542749b8df0996f497f812811abba9e6613b484f681dd0
 WORKDIR /native
 COPY --from=build /result .
 USER $APP_UID

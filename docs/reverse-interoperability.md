@@ -1,6 +1,14 @@
 # Pinned upstream CLI to native .NET interoperability
 
-**Current result: the real Windows mutation/read/restart slice passed 17 named
+The current upgrade candidate pins upstream commit
+`10d3ce1f2280874930326aa02d11eb79152ae8cc` and Go `go1.27.2` in
+`interop\upstream-lock.json` and `interop\reverse-toolchain.json`. Its peer image is
+`ghcr.io/xregistry/xrserver-all@sha256:329686aa0d53df9162616261e0b84a6a984d24c80d3c28372597f68364979e77`.
+It requires fresh hosted execution with the unchanged fixture and checker
+expectations. The receipts below describe the previous pin, not qualification
+of the upgrade candidate.
+
+**Historical result: the real Windows mutation/read/restart slice passed 17 named
 checks; full reverse qualification remains blocked by the pinned upstream
 checker.** `xr conform` exits 2 with **30 pass, 10 fail, 0 warn, 0 skip**
 because its parser rejects the optional, spec-defined top-level `mutable`

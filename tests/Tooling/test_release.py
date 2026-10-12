@@ -23,10 +23,10 @@ PACKAGE_IDS = (
     "XRegistry.Bindings.Oci",
 )
 PINNED_ACTIONS = {
-    "actions/checkout": "fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
-    "actions/setup-python": "ece7cb06caefa5fff74198d8649806c4678c61a1",
-    "actions/setup-dotnet": "26b0ec14cb23fa6904739307f278c14f94c95bf1",
-    "actions/upload-artifact": "b7c566a772e6b6bfb58ed0dc250532a479d7789f",
+    "actions/checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1",
+    "actions/setup-python": "5fda3b95a4ea91299a34e894583c3862153e4b97",
+    "actions/setup-dotnet": "a98b56852c35b8e3190ac28c8c2271da59106c68",
+    "actions/upload-artifact": "cf430e030ddbb5b0abf93d22962f4752f3646cd9",
     "NuGet/login": "8d196754b4036150537f80ac539e15c2f1028841",
 }
 

@@ -21,7 +21,7 @@ class ManagedCiWorkflowTests(unittest.TestCase):
     def test_managed_test_diagnostics_are_uploaded_even_after_failure(self) -> None:
         self.assertIn("name: Upload managed test diagnostics", WORKFLOW)
         self.assertIn("if: always()", WORKFLOW)
-        self.assertIn("uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f", WORKFLOW)
+        self.assertIn("uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9", WORKFLOW)
         self.assertIn("TestResults/**", WORKFLOW)
         self.assertIn("if-no-files-found: ignore", WORKFLOW)
 
