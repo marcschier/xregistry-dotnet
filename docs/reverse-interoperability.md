@@ -1,6 +1,45 @@
 # Pinned upstream CLI to native .NET interoperability
 
-**Current result: the real Windows mutation/read/restart slice passed 17 named
+The current upgrade candidate pins upstream commit
+`10d3ce1f2280874930326aa02d11eb79152ae8cc` and Go `go1.27.2` in
+`interop\upstream-lock.json` and `interop\reverse-toolchain.json`. Its peer image is
+`ghcr.io/xregistry/xrserver-all@sha256:329686aa0d53df9162616261e0b84a6a984d24c80d3c28372597f68364979e77`.
+Its first hosted run executed all 17 mutation/read/restart checks successfully.
+The forward peer fixture produced 117 clean passes. The reverse checker still
+rejects `mutable`, now reporting 31 passes, 13 failures, zero warnings and zero
+skips and exit code 1. The pinned peer's `runConform` now returns 1 for
+any failed server, rather than the previous checker's exit code 2.
+The user authorized peer-version-specific accounting expectations;
+document bytes, model, identities, restart checks and production behavior are
+unchanged. Neither publication nor a green known-limitation accounting job
+makes this reverse result qualified.
+
+The current checker includes seven named suites (`TestSniff`, `TestModel`,
+`TestCapabilities`, `TestRegistryRoot`, `TestGroups`, `TestFilter`,
+`TestResources`) and the `TestRegistry` wrapper. Clean conformance requires
+117 passes and no failures, warnings or skips. The exact known limitation
+checks all 31 passing identities and the following 13 failing identities,
+including repeated cached dependencies. Any unknown/replaced/extra result
+remains fatal, and the report retains `qualified: false`.
+
+| Failure identity | Count | Cause |
+| --- | --- | --- |
+| Actual loopback `/registry` URL | 1 | Aggregate checker failure |
+| `TestRegistry` | 1 | Aggregate suite failure |
+| `TestCapabilities` | 1 | `mutable` parser rejection |
+| `Parsing capabilities MUST work` | 1 | `Unknown capability specified: mutable.` |
+| `Parsing Capabilities MUST work` | 1 | Same rejection in the inline capabilities response |
+| `TestRegistryRoot` | 1 | Failed capability dependency |
+| `TestGroups` | 1 | Failed capability dependency |
+| `TestFilter` | 1 | Failed capability dependency; filter assertions are not qualified |
+| `TestResources` | 1 | Failed group dependency |
+| `TestCapabilities (cached)` | 3 | Registry root, groups and filter dependency failures |
+| `TestGroups (cached)` | 1 | Resource dependency failure |
+
+The receipts below describe the previous pin and remain historical rather
+than being reassigned to the upgrade candidate.
+
+**Historical result: the real Windows mutation/read/restart slice passed 17 named
 checks; full reverse qualification remains blocked by the pinned upstream
 checker.** `xr conform` exits 2 with **30 pass, 10 fail, 0 warn, 0 skip**
 because its parser rejects the optional, spec-defined top-level `mutable`

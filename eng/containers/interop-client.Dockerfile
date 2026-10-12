@@ -8,7 +8,7 @@ COPY . .
 RUN dotnet publish interop/XRegistry.InteropProbe/XRegistry.InteropProbe.csproj \
     -c Release -r linux-x64 -o /native --nologo -v minimal
 
-FROM mcr.microsoft.com/dotnet/runtime-deps@sha256:9c2883a67963933e3c4b8d0f732b72c172b48f8f606b6f5dcb95f09e84fcc797
+FROM mcr.microsoft.com/dotnet/runtime-deps@sha256:12dd273c196e92aa91542749b8df0996f497f812811abba9e6613b484f681dd0
 WORKDIR /native
 COPY --from=build /native .
 USER $APP_UID

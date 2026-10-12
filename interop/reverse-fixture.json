@@ -50,8 +50,8 @@
     "emptyVersion": "v2"
   },
   "checker": {
-    "expectedPasses": 101,
-    "expectedSuites": ["TestCapabilities", "TestGroups", "TestModel", "TestRegistryRoot", "TestResources", "TestSniff"],
+    "expectedPasses": 117,
+    "expectedSuites": ["TestCapabilities", "TestFilter", "TestGroups", "TestModel", "TestRegistry", "TestRegistryRoot", "TestResources", "TestSniff"],
     "derivation": "Pinned checker fixture shape: one Group type with one instance, one Resource type with one instance, inline enabled. Same exercised branch count as upstream-lock environmentFixtureCheckerPasses; no reduced-count or skipped-suite success is accepted.",
     "cleanReverseRunEstablished": false
   }

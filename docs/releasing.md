@@ -1,11 +1,34 @@
 # Releasing xRegistry .NET
 
-The source version is `0.1.0-alpha.3`. Packages and samples are implemented but
+The source version is `0.1.1-alpha.3`. This patch release refreshes build,
+test and independent-oracle dependencies without changing the public API or
+supported target frameworks. The existing `alpha.3` prerelease identifier is
+retained exactly; the numeric patch version advances from `0.1.0`.
+Packages and samples are implemented but
 not release-qualified; incomplete native/conformance requirements are not
 marked qualified merely to publish an early alpha, and publishing does not by
 itself certify runtime/specification qualification. Publishing this alpha does
 not itself claim conformance: NuGet.org visibly marks a prerelease version, and
 that exact version string can never be reused by a later stable/`rc` release.
+
+For the dependency refresh, the user authorized a narrowly scoped exception
+to the no-test-change requirement: only immutable Action SHA expectation
+values in the tooling tests may change. The original 35 release/CI/Git
+contract tests passed before the upgrade; replacing workflow pins without
+updating those identities produced 10 failures. Their behavioral, structural,
+security, permissions and qualification assertions remain unchanged.
+
+The user separately authorized peer-version-specific accounting/fixture
+expectation updates for source `10d3ce1f2280874930326aa02d11eb79152ae8cc`,
+publisher tag `20261011-10d3ce1`, and the image digest in
+`interop\upstream-lock.json`. The checker now has seven named suites
+(including `TestFilter`) and a `TestRegistry` wrapper. Forward qualification
+requires all 117 clean passes. The 17-check reverse functional slice retains
+the exact `mutable`-capability limitation: exit code 1, 31 passes, 13 failures, no warnings
+or skips, and `qualified: false`. Every recorded passing/failing identity is
+required; a green accounting job is not successful reverse conformance.
+The [reverse interoperability report](reverse-interoperability.md) enumerates
+all failures, including the new filter dependency failure.
 
 The pipeline structure mirrors this account's other .NET repositories
 (for example `marcschier/crdt`): a tag push builds and publishes packages to

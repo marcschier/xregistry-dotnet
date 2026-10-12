@@ -523,7 +523,7 @@ class ConfigurationTests(unittest.TestCase):
         self.assertIn("-RuntimeIdentifier linux-x64 -Framework $env:PROBE_FRAMEWORK", job)
         self.assertIn("if-no-files-found: error", job)
         self.assertIn("test_git_interop*.py", job)
-        self.assertIn("actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f", job)
+        self.assertIn("actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9", job)
         permissions = re.search(r"(?m)^    permissions:\n((?:      [^\n]*\n)+)", job)
         self.assertIsNotNone(permissions)
         self.assertEqual(permissions.group(1).strip(), "contents: read")

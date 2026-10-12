@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "upstreamCommit": "5854af0130db7723bad489f16ba66536126b823a",
+  "upstreamCommit": "10d3ce1f2280874930326aa02d11eb79152ae8cc",
   "entries": [
     {
       "id": "XR-CAPABILITIES-MUTABLE",
@@ -11,8 +11,9 @@
       "nativeResponseFragment": {"mutable": []},
       "specification": "tests/Conformance/Sources/core/spec.md:1848-1886 includes mutable and extension capabilities and requires supported capabilities to be serialized even when empty.",
       "upstreamSource": "common/capabilities.go:ParseCapabilities; cmds/xr/ct_registry.go:TestCapabilities",
-      "initialObservedTotals": {"pass": 30, "fail": 10, "warn": 0, "skip": 0},
-      "gatePolicy": "The CI lane may pass only when the full functional slice succeeds and the pinned checker's exact known failure tree, 30/10/0/0 totals, exit code, and failed suites are recorded. The reverse report remains qualified=false; no conformance credit, reduced totals, omitted suites, response filtering, or peer patch is accepted.",
+      "initialObservedTotals": {"pass": 31, "fail": 13, "warn": 0, "skip": 0},
+      "expectedExitCode": 1,
+      "gatePolicy": "The CI lane may pass only when the full 17-check functional slice succeeds and the pinned checker's exact known failure tree, all 31 passing and 13 failing assertion identities, 31/13/0/0 totals, exit code, seven suites and TestRegistry wrapper are recorded. TestFilter retains its actual capability-dependency failure. The reverse report remains qualified=false; no conformance credit, reduced totals, replaced checks, omitted suites, response filtering, or peer patch is accepted.",
       "removalCondition": "An explicitly reviewed new immutable peer pin supports the frozen capability contract, or a specification-backed correction is established separately."
     }
   ]
