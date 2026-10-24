@@ -2,14 +2,14 @@
 
 <!-- words: allowprerelease bytewise contentdigest gitattributes hashlib hexdigest iterdir minversion pathlib prereleases py submodel typelinks versionorigin workingdrafts wotid -->
 
-These canonical fixtures exercise [Section 1.3](https://github.com/marcschier/xregistry-spec-wotver/blob/wot-versioned-references/workingdrafts/models/wot/spec.md#13-versioning) and [Section 5.4](https://github.com/marcschier/xregistry-spec-wotver/blob/wot-versioned-references/workingdrafts/models/wot/spec.md#54-versioned-reference-resolution) of the xRegistry WoT Registry draft. Each numbered JSON file is one independent case. Fixtures contain fake, syntactically valid `sha256:` digests followed by 64 lowercase hexadecimal characters; they identify fixture bytes symbolically and are not computed from a WoT document. `MANIFEST.sha256`, in contrast, hashes the actual committed bytes of every file in this directory except itself, including this README, the schema and the checker.
+These canonical fixtures exercise [specification Section 1.3](../../spec.md#13-versioning) and [Section 5.4](../../spec.md#54-versioned-reference-resolution). Each numbered JSON file is one independent case. Fixtures contain fake, syntactically valid `sha256:` digests followed by 64 lowercase hexadecimal characters; they identify fixture bytes symbolically and are not computed from a WoT document. `MANIFEST.sha256`, in contrast, hashes the actual committed bytes of every file in this directory except itself, including this README, the schema and the checker.
 
 ## Running the checker
 
 From the repository root:
 
 ```sh
-python tests/XRegistry.Core.Tests/Wot/Resolution/vectors/check_vectors.py
+python workingdrafts/models/wot/tests/resolution/check_vectors.py
 ```
 
 The checker verifies manifest coverage and hashes, requires LF and a final newline for every file, validates the schema and all vectors if `jsonschema` is installed, and executes the reference implementation against every expectation. Without `jsonschema` it explicitly reports the skipped shape check; semantic execution and manifest verification still run. Any failed check returns nonzero. The implementation uses only the Python standard library otherwise, and does not fetch schemas or documents.
@@ -33,7 +33,7 @@ A Version in `registry[].versions` has `versionid`, `versionorigin` (`authored` 
 
 The dotted field name `version.model` is a literal JSON key in these normalized fixtures, corresponding to the nested WoT document member `version.model`. The fixture's `minVersion` is the normalized spelling of authored `tm:minVersion`. For `ref`, `target` is the document identifier after URI resolution and removal of the fragment; fragment traversal is outside these version-selection cases. No fixture transformation changes a stored document.
 
-For a `type` reference, `document.typeLinks` lists all TD type links, and the request MUST project exactly one link by `target`, including its explicit `minVersion` if any. The list does not enumerate other link relations. A single link uses the greater of its explicit floor and `document["version.model"]` when both are present. When a TD has several type links, every link requires its own explicit floor; an omitted floor is `ambiguous-floor`, whether or not `version.model` is present. Multiple Resource matches are disambiguated by registry and Group before this fixture interface; a `wotid` occurs at most once in `registry`.
+For a `type` reference, `document.typeLinks` lists all TD type links, and the request MUST project exactly one link by `target`, including its explicit `minVersion` if any. The list does not enumerate other link relations. A single link uses the greater of its explicit floor and `document["version.model"]` when both are present. When a TD has several type links and `version.model`, every link requires its own explicit floor; an omitted floor is `ambiguous-floor`. If all links have explicit floors, each link uses the greater of its own floor and `version.model` by SemVer precedence. Without `version.model`, each link uses only its own explicit floor if present, and otherwise has no floor; missing floors are not an error. Multiple Resource matches are disambiguated by registry and Group before this fixture interface; a `wotid` occurs at most once in `registry`.
 
 A successful resolution expects exactly:
 
@@ -75,12 +75,10 @@ After an intentional edit, regenerate the manifest from the repository root, the
 from hashlib import sha256
 from pathlib import Path
 
-folder = Path("tests/XRegistry.Core.Tests/Wot/Resolution/vectors")
+folder = Path("workingdrafts/models/wot/tests/resolution")
 files = sorted((p for p in folder.iterdir() if p.is_file() and p.name != "MANIFEST.sha256"), key=lambda p: p.name)
 text = "".join(f"{sha256(p.read_bytes()).hexdigest()}  {p.name}\n" for p in files)
 (folder / "MANIFEST.sha256").write_text(text, encoding="ascii", newline="\n")
 ```
 
 A semantic mutation test changes an expectation to another schema-valid value, regenerates the manifest so the semantic check is reached, and requires the checker to fail. Both the vector and manifest MUST then be restored byte-for-byte and the checker rerun. A separate byte mutation without rehashing MUST fail manifest verification.
-
-Canonical source: `xregistry/spec` `workingdrafts/models/wot/tests/resolution`.

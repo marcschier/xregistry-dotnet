@@ -165,7 +165,7 @@ public static class WotVersionResolver
                 throw new ArgumentException("A type reference must project exactly one matching TD type link.", nameof(reference));
             }
 
-            if (document.TypeLinks.Count > 1 && document.TypeLinks.Any(link => link.MinimumVersion is null))
+            if (document.ModelVersion is not null && document.TypeLinks.Count > 1 && document.TypeLinks.Any(link => link.MinimumVersion is null))
             {
                 throw new WotVersionException("ambiguous-floor");
             }
@@ -183,7 +183,7 @@ public static class WotVersionResolver
                 _ = ParseFloor(floor);
             }
 
-            if (document.TypeLinks.Count == 1 && document.ModelVersion is not null)
+            if (document.ModelVersion is not null)
             {
                 var implicitFloor = ParseFloor(document.ModelVersion);
                 var explicitFloor = floor is null ? null : ParseFloor(floor);
