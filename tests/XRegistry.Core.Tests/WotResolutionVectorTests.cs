@@ -62,14 +62,16 @@ public class WotResolutionVectorTests
             {
                 var operation = WotVersionResolver.AssignPublishedVersion(resources,
                     publish.GetProperty("target").GetString()!,
-                    OptionalString(publish, "versionid"), OptionalString(publish, "version.model"));
+                    OptionalString(publish, "versionid"), OptionalString(publish, "version.model"),
+                    OptionalString(publish, "targetKind") ?? "tm", OptionalString(publish, "version.instance"));
                 assignment = operation;
             }
             else
             {
                 var referenceJson = root.GetProperty("reference");
                 var reference = new WotReferenceRequest(referenceJson.GetProperty("kind").GetString()!,
-                    referenceJson.GetProperty("target").GetString()!, OptionalString(referenceJson, "minVersion"));
+                    referenceJson.GetProperty("target").GetString()!, OptionalString(referenceJson, "minVersion"),
+                    OptionalString(referenceJson, "floorTerm"));
                 var context = root.TryGetProperty("document", out var documentVersion)
                     ? new WotDocumentVersionContext(OptionalString(documentVersion, "version.model"),
                         documentVersion.GetProperty("typeLinks").EnumerateArray().Select(link =>
@@ -143,13 +145,68 @@ public class WotResolutionVectorTests
         await Assert.That(WotSemanticVersion.TryParse(value, out _)).IsFalse();
     }
 
+    [Test]
+    [Arguments("td-extends")]
+    [Arguments("td-subthing")]
+    [Arguments("td-ref")]
+    public async Task TdCaretExcludesNextMajorPrereleaseEvenWithOptIn(string kind)
+    {
+        WotResourceSnapshot[] resources = [new("thing", false, "2.0.0-rc.1",
+            [new("1.2.0", "authored", "in-range"), new("2.0.0-rc.1", "authored", "next-major")])];
+        var reference = new WotReferenceRequest(kind, "thing", "1.2.0");
+        var selected = WotVersionResolver.Resolve(resources, reference, Origin, allowPrerelease: true);
+        await Assert.That(selected.VersionId).IsEqualTo("1.2.0");
+        await Assert.That(selected.ContentDigest).IsEqualTo("in-range");
+        resources[0] = resources[0] with { DefaultVersionSticky = true, DefaultVersionId = "1.2.0" };
+        foreach (var pin in new[] { new WotVersionPin(VersionId: "2.0.0-rc.1"), new WotVersionPin(Digest: "next-major") })
+        {
+            var pinned = WotVersionResolver.Resolve(resources, reference, Origin, pin: pin);
+            await Assert.That(pinned.VersionId).IsEqualTo("2.0.0-rc.1");
+            await Assert.That(pinned.ContentDigest).IsEqualTo("next-major");
+        }
+    }
+
+    [Test]
+    [Arguments("td-extends")]
+    [Arguments("td-subthing")]
+    [Arguments("td-ref")]
+    public async Task TdReferencesDoNotDeriveImplicitModelFloors(string kind)
+    {
+        WotResourceSnapshot[] resources = [new("thing", false, "2.1.0", [new("2.1.0", "authored", "selected")])];
+        var context = new WotDocumentVersionContext("not-semver", [new("model-a"), new("model-b")]);
+        var selected = WotVersionResolver.Resolve(resources, new(kind, "thing"), Origin, context);
+        await Assert.That(selected).IsEqualTo(new WotResolutionResult("thing", "2.1.0", "selected", Origin));
+    }
+
+    [Test]
+    [Arguments("1.2.0", "authored", "1.2.0")]
+    [Arguments("legacy", "generated", "0.0.0-2")]
+    [Arguments(null, "generated", "0.0.0-2")]
+    public async Task TdPublicationUsesInstanceVersionAndIgnoresModelVersion(string? instance, string expectedOrigin, string expectedId)
+    {
+        WotResourceSnapshot[] resources = [new("thing", false, "0.0.0-1", [new("0.0.0-1", "authored", "existing")])];
+        var assignment = WotVersionResolver.AssignPublishedVersion(resources, "thing", modelVersion: "9.0.0+build",
+            targetKind: "td", instanceVersion: instance);
+        await Assert.That(assignment).IsEqualTo(new WotPublicationAssignment(expectedId, expectedOrigin, expectedId));
+    }
+
+    [Test]
+    public async Task TmPublicationIgnoresInstanceVersion()
+    {
+        WotResourceSnapshot[] resources = [new("model", false, null, [])];
+        var assignment = WotVersionResolver.AssignPublishedVersion(resources, "model", modelVersion: "1.2.0",
+            instanceVersion: "9.0.0+build");
+        await Assert.That(assignment).IsEqualTo(new WotPublicationAssignment("1.2.0", "authored", "1.2.0"));
+    }
+
     private static bool IsVectorFile(string name) => name.Length > 4 && name[3] == '-' && char.IsAsciiDigit(name[0]) && char.IsAsciiDigit(name[1]) && char.IsAsciiDigit(name[2]);
 
     private static WotResourceSnapshot ParseResource(JsonElement resource)
     {
         var versions = resource.GetProperty("versions").EnumerateArray().Select(version => new WotVersionSnapshot(
             version.GetProperty("versionid").GetString()!, version.GetProperty("versionorigin").GetString()!,
-            version.GetProperty("contentdigest").GetString()!, OptionalString(version, "version.model"))).ToArray();
+            version.GetProperty("contentdigest").GetString()!, OptionalString(version, "version.model"),
+            OptionalString(version, "version.instance"))).ToArray();
         return new(resource.GetProperty("wotid").GetString()!, resource.GetProperty("defaultversionsticky").GetBoolean(),
             resource.GetProperty("defaultversionid").ValueKind == JsonValueKind.Null ? null : resource.GetProperty("defaultversionid").GetString(), versions);
     }

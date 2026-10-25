@@ -3,15 +3,15 @@
 
 namespace XRegistry.Wot;
 
-/// <summary>A registry-independent snapshot of a Thing Model Version.</summary>
-public sealed record WotVersionSnapshot(string VersionId, string VersionOrigin, string ContentDigest, string? ModelVersion = null);
+/// <summary>A registry-independent snapshot of a Thing Model or Thing Description Version.</summary>
+public sealed record WotVersionSnapshot(string VersionId, string VersionOrigin, string ContentDigest, string? ModelVersion = null, string? InstanceVersion = null);
 
 /// <summary>A registry-independent snapshot of a WoT Resource and its Versions.</summary>
 public sealed record WotResourceSnapshot(string WotId, bool DefaultVersionSticky, string? DefaultVersionId,
     IReadOnlyList<WotVersionSnapshot> Versions);
 
 /// <summary>A normalized WoT reference and its optional minimum version.</summary>
-public sealed record WotReferenceRequest(string Kind, string Target, string? MinimumVersion = null);
+public sealed record WotReferenceRequest(string Kind, string Target, string? MinimumVersion = null, string? FloorTerm = null);
 
 /// <summary>A normalized TD type link.</summary>
 public sealed record WotTypeLink(string Target, string? MinimumVersion = null);
@@ -25,7 +25,7 @@ public sealed record WotVersionPin(string? Digest = null, string? VersionId = nu
 /// <summary>The exact Version selected for a WoT reference.</summary>
 public sealed record WotResolutionResult(string WotId, string VersionId, string ContentDigest, string Origin);
 
-/// <summary>The version assignment and resulting Core default for a Thing Model publication.</summary>
+/// <summary>The version assignment and resulting Core default for a WoT publication.</summary>
 public sealed record WotPublicationAssignment(string VersionId, string VersionOrigin, string? DefaultVersionId);
 
 /// <summary>A domain error produced by WoT version resolution or publication assignment.</summary>
@@ -35,7 +35,7 @@ public sealed class WotVersionException(string code) : Exception($"WoT version o
     public string Code { get; } = code;
 }
 
-/// <summary>Resolves WoT references and Thing Model publication versions over caller-supplied Resource snapshots.</summary>
+/// <summary>Resolves WoT references and publication versions over caller-supplied Resource snapshots.</summary>
 /// <remarks>This component has no dependency on registry storage, transport or document acquisition.</remarks>
 public static class WotVersionResolver
 {
@@ -68,6 +68,7 @@ public static class WotVersionResolver
         else
         {
             var floor = GetFloor(reference, document);
+            var capped = IsTdReference(reference.Kind) && floor is not null;
             if (resource.DefaultVersionSticky)
             {
                 selected = resource.Versions.FirstOrDefault(version => string.Equals(version.VersionId, resource.DefaultVersionId, StringComparison.Ordinal))
@@ -78,7 +79,8 @@ public static class WotVersionResolver
                 var eligible = resource.Versions.Where(version =>
                 {
                     var parsed = ParseStoredVersion(version.VersionId);
-                    return !parsed.IsPrerelease || allowPrerelease || floor?.IsPrerelease == true;
+                    return (!parsed.IsPrerelease || allowPrerelease || floor?.IsPrerelease == true) &&
+                        IsInRange(parsed, floor, capped);
                 }).ToList();
                 if (eligible.Count == 0)
                 {
@@ -88,7 +90,7 @@ public static class WotVersionResolver
                 selected = Highest(eligible);
             }
 
-            if (floor is not null && ParseStoredVersion(selected.VersionId).CompareTo(floor) < 0)
+            if (!IsInRange(ParseStoredVersion(selected.VersionId), floor, capped))
             {
                 throw new WotVersionException("unsatisfied");
             }
@@ -97,11 +99,18 @@ public static class WotVersionResolver
         return new(resource.WotId, selected.VersionId, selected.ContentDigest, origin);
     }
 
-    /// <summary>Assigns the version identifier and post-publication default for a Thing Model write.</summary>
+    /// <summary>Assigns the version identifier and post-publication default for a Thing Model or Thing Description write.</summary>
     public static WotPublicationAssignment AssignPublishedVersion(IEnumerable<WotResourceSnapshot> resources,
-        string target, string? suppliedVersionId = null, string? modelVersion = null)
+        string target, string? suppliedVersionId = null, string? modelVersion = null,
+        string targetKind = "tm", string? instanceVersion = null)
     {
         ArgumentNullException.ThrowIfNull(resources);
+        if (targetKind is not ("tm" or "td"))
+        {
+            throw new ArgumentException("The publication target kind must be tm or td.", nameof(targetKind));
+        }
+
+        var documentVersion = targetKind == "td" ? instanceVersion : modelVersion;
         var resource = FindResource(resources, target);
         if (suppliedVersionId is not null && !IsCoreVersionId(suppliedVersionId))
         {
@@ -110,19 +119,19 @@ public static class WotVersionResolver
 
         string assigned;
         string origin;
-        if (modelVersion is not null && WotSemanticVersion.HasValidBuildMetadata(modelVersion))
+        if (documentVersion is not null && WotSemanticVersion.HasValidBuildMetadata(documentVersion))
         {
             throw new WotVersionException("invalid-version");
         }
 
-        if (modelVersion is not null && WotSemanticVersion.TryParse(modelVersion, out _))
+        if (documentVersion is not null && WotSemanticVersion.TryParse(documentVersion, out _))
         {
-            assigned = modelVersion;
+            assigned = documentVersion;
             origin = "authored";
         }
         else
         {
-            if (modelVersion is not null && WotSemanticVersion.IsSemVerSyntax(modelVersion))
+            if (documentVersion is not null && WotSemanticVersion.IsSemVerSyntax(documentVersion))
             {
                 throw new WotVersionException("invalid-version");
             }
@@ -155,6 +164,13 @@ public static class WotVersionResolver
 
     private static WotSemanticVersion? GetFloor(WotReferenceRequest reference, WotDocumentVersionContext? document)
     {
+        var expectedTerm = IsTdReference(reference.Kind) ? "td:minVersion" : "tm:minVersion";
+        if (reference.FloorTerm is not null &&
+            (reference.MinimumVersion is null || !string.Equals(reference.FloorTerm, expectedTerm, StringComparison.Ordinal)))
+        {
+            throw new WotVersionException("invalid-floor");
+        }
+
         string? floor = reference.MinimumVersion;
         if (reference.Kind == "type" && document is not null)
         {
@@ -196,6 +212,11 @@ public static class WotVersionResolver
 
         return floor is null ? null : ParseFloor(floor);
     }
+
+    private static bool IsTdReference(string kind) => kind is "td-extends" or "td-subthing" or "td-ref";
+
+    private static bool IsInRange(WotSemanticVersion candidate, WotSemanticVersion? floor, bool capped) =>
+        floor is null || candidate >= floor && (!capped || candidate.HasSameMajor(floor));
 
     private static WotSemanticVersion ParseFloor(string text)
     {

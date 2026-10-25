@@ -44,6 +44,7 @@ specification-correction history is in the [changelog](changelog.md).
 - [Message definition materialization](message-materialization.md)
 - [Endpoint templates and consumer materialization](endpoint-templates.md)
 - [OpenUSD identifier and integrity helpers](openusd.md)
+- [WoT publication identity and versioned references](wot-versioning.md)
 
 ## Clients and bindings
 

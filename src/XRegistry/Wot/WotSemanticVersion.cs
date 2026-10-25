@@ -129,6 +129,8 @@ public sealed class WotSemanticVersion : IComparable<WotSemanticVersion>, IEquat
 
     /// <summary>Tests whether the left version has higher or equal SemVer precedence.</summary>
     public static bool operator >=(WotSemanticVersion left, WotSemanticVersion right) => left.CompareTo(right) >= 0;
+    internal bool HasSameMajor(WotSemanticVersion other) => _major == other._major;
+
     internal static bool IsSemVerSyntax(string? value) => TryParse(value, enforceLength: false, out _);
 
     internal static bool HasValidBuildMetadata(string? value)
