@@ -467,6 +467,7 @@ public class HttpTests
     [Test]
     public async Task DisconnectedPartialBodyCancelsWithoutCreatingParents()
     {
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         await using var host = await TestHost.StartAsync(completed: context =>
         {
@@ -474,15 +475,22 @@ public class HttpTests
             {
                 completed.TrySetResult();
             }
+        }, started: context =>
+        {
+            if (context.Request.Method == "PUT")
+            {
+                started.TrySetResult();
+            }
         });
         using (var socket = new TcpClient())
         {
             await socket.ConnectAsync(IPAddress.Loopback, host.Client.BaseAddress!.Port);
             await socket.GetStream().WriteAsync(Encoding.ASCII.GetBytes(
                 "PUT /teams/g/files/f HTTP/1.1\r\nHost: localhost\r\nContent-Length: 10\r\nConnection: close\r\n\r\nx"));
-            socket.Client.Shutdown(SocketShutdown.Send);
-            await completed.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            socket.Client.LingerState = new LingerOption(true, 0);
         }
+        await completed.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
         using var root = await host.Client.GetAsync("/");
         await Assert.That(RegistryJson.Parse(await root.Content.ReadAsByteArrayAsync()).RootElement.GetProperty("teamscount").GetInt32()).IsEqualTo(0);
@@ -524,7 +532,7 @@ public class HttpTests
             RegistryLimits? limits = null, IRegistryPersistence? persistence = null, RegistryHttpOptions? httpOptions = null,
             Action<HttpContext>? completed = null, RegistryModel? model = null, IRegistryResourceValidator? resourceValidator = null,
             bool allowCapabilityUpdates = false, IRegistryDocumentReferencePolicy? documentReferencePolicy = null,
-            string pathBase = "", IRegistryHostBackend? hostBackend = null)
+            string pathBase = "", IRegistryHostBackend? hostBackend = null, Action<HttpContext>? started = null)
         {
             var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { EnvironmentName = "Development", Args = [] });
             builder.Logging.ClearProviders();
@@ -534,17 +542,18 @@ public class HttpTests
             {
                 application.UsePathBase(pathBase);
             }
-            if (completed is not null)
+            if (completed is not null || started is not null)
             {
                 application.Use(async (context, next) =>
                 {
                     try
                     {
+                        started?.Invoke(context);
                         await next(context);
                     }
                     finally
                     {
-                        completed(context);
+                        completed?.Invoke(context);
                     }
                 });
             }

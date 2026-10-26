@@ -44,6 +44,7 @@ specification-correction history is in the [changelog](changelog.md).
 - [Message definition materialization](message-materialization.md)
 - [Endpoint templates and consumer materialization](endpoint-templates.md)
 - [OpenUSD identifier and integrity helpers](openusd.md)
+- [WoT publication identity and versioned references](wot-versioning.md)
 
 ## Clients and bindings
 
@@ -70,6 +71,7 @@ specification-correction history is in the [changelog](changelog.md).
 ## Evidence and performance
 
 - [Conformance evidence](conformance.md)
+- [Canonical WoT version-resolution vectors](../tests/XRegistry.Core.Tests/Wot/Resolution/vectors/README.md)
 - [Specification provenance and verification](spec-feedback.md)
 - [Specification tooling](../eng/specification/README.md)
 - [Forward interoperability evidence](interoperability.md)
