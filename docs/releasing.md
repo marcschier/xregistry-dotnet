@@ -1,9 +1,11 @@
 # Releasing xRegistry .NET
 
-The source version is `0.1.1-alpha.3`. This patch release refreshes build,
-test and independent-oracle dependencies without changing the public API or
-supported target frameworks. The existing `alpha.3` prerelease identifier is
-retained exactly; the numeric patch version advances from `0.1.0`.
+The source version is `0.1.2-alpha.3`. This patch release refreshes the .NET
+SDK (`10.0.401` to `10.0.403`), TUnit (`1.74.0` to `1.76.28`), and
+`Microsoft.Data.Sqlite` (`10.0.12` to `10.0.14`) without changing the public
+API or supported target frameworks. The existing `alpha.3` prerelease
+identifier is retained exactly; the numeric patch version advances from
+`0.1.1`.
 Packages and samples are implemented but
 not release-qualified; incomplete native/conformance requirements are not
 marked qualified merely to publish an early alpha, and publishing does not by
