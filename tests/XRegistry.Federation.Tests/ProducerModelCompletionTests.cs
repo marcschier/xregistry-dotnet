@@ -326,6 +326,82 @@ public class ProducerModelCompletionTests
         await Assert.That(source.Reads[0]).IsEqualTo("Entity:/");
         await Assert.That(result.Origins[0].Name).IsEqualTo("origin");
     }
+
+    [Test]
+    [Arguments("OpenAPI/3.1", "openapi/3.1")]
+    [Arguments("OpenAPI/3.1", "OpenAPI/3.1")]
+    public async Task ApiVersionFormatsCaseOnlyDifferencesAreAcceptedInCompleteSet(
+        string firstFormat, string secondFormat)
+    {
+        var model = RegistryModel.Compile(RegistryJson.Parse(ApiModel));
+        var source = new ApiProducerModelDataSource("selected", model);
+        source.AddGroup();
+        source.AddResource(firstFormat, secondFormat);
+        var later = new ApiProducerModelDataSource("later", model);
+        await using var view = new ProducerRegistryView(model, new("https://view.test/registry"), "view",
+            [source.Registration(), later.Registration()]);
+
+        var result = await view.ReadAsync(RegistryPath.Parse(ApiItem + "$details"));
+
+        await Assert.That(result.Metadata.GetProperty("format").GetString()).IsEqualTo(firstFormat);
+        await Assert.That(result.Metadata.GetProperty("versionscount").GetInt32()).IsEqualTo(2);
+        await Assert.That(result.SelectedXid).IsEqualTo(ApiItem);
+        await Assert.That(source.Reads.Any(request =>
+            request.Operation == FederationOperation.Collection && request.Target == ApiItem + "/versions")).IsTrue();
+        await Assert.That(later.Opens).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.1", "OpenAPI/3.0")]
+    [Arguments("OpenAPI/3.1", "AsyncAPI/3.1")]
+    public async Task DistinctApiVersionFormatsAreRejectedInCompleteSet(string firstFormat, string secondFormat)
+    {
+        var model = RegistryModel.Compile(RegistryJson.Parse(ApiModel));
+        var source = new ApiProducerModelDataSource("selected", model);
+        source.AddGroup();
+        source.AddResource(firstFormat, secondFormat);
+        var later = new ApiProducerModelDataSource("later", model);
+        await using var view = new ProducerRegistryView(model, new("https://view.test/registry"), "view",
+            [source.Registration(), later.Registration()]);
+
+        var error = await Assert.That(async () =>
+        {
+            await view.ReadAsync(RegistryPath.Parse(ApiItem + "$details"));
+        }).Throws<FederationException>();
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(error.Diagnostic).IsEqualTo("api_format_mismatch");
+        await Assert.That(error.Message).IsEqualTo(
+            "The selected API Resource's Versions do not use one case-insensitively equal format identifier.");
+        await Assert.That(source.Reads.Any(request =>
+            request.Operation == FederationOperation.Collection && request.Target == ApiItem + "/versions")).IsTrue();
+        await Assert.That(later.Opens).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task SingleApiVersionFormatIsAcceptedInCompleteSet()
+    {
+        var model = RegistryModel.Compile(RegistryJson.Parse(ApiModel));
+        var source = new ApiProducerModelDataSource("selected", model);
+        source.AddGroup();
+        source.AddResource("OpenAPI/3.1", singleton: true);
+        await using var view = new ProducerRegistryView(model, new("https://view.test/registry"), "view",
+            [source.Registration()]);
+
+        var result = await view.ReadAsync(RegistryPath.Parse(ApiItem + "$details"));
+
+        await Assert.That(result.Metadata.GetProperty("format").GetString()).IsEqualTo("OpenAPI/3.1");
+        await Assert.That(result.Metadata.GetProperty("versionscount").GetInt32()).IsEqualTo(1);
+        await Assert.That(source.Reads.Any(request =>
+            request.Operation == FederationOperation.Collection && request.Target == ApiItem + "/versions")).IsTrue();
+    }
+
+    private const string ApiItem = "/gs/g/apis/item";
+    private const string ApiModel = """
+        {"groups":{"gs":{"singular":"group","resources":{"apis":{"singular":"api","attributes":{
+          "format":{"type":"string","required":true}
+        }}}}}}
+        """;
 }
 
 internal sealed class ProducerModelTestSource(RegistryModel model) : IFederationReadSource
@@ -363,4 +439,129 @@ internal sealed class ProducerModelTestSource(RegistryModel model) : IFederation
         }
         return ValueTask.FromResult(FederationReadResult.FromMetadata("/", Context, RegistryJson.Parse(root.ToJsonString()).RootElement));
     }
+}
+
+internal sealed class ApiProducerModelDataSource(string name, RegistryModel model) : IFederationReadSource
+{
+    private const string ApiItem = "/gs/g/apis/item";
+    private readonly Dictionary<string, JsonObject> entities = new(StringComparer.Ordinal);
+    public RegistryModel Model { get; } = model;
+    public NativeRegistryContext Context { get; } = new("http", "https://" + name + ".test/registry");
+    public JsonElement Capabilities => RegistryJson.Parse("{}").RootElement;
+    internal List<FederationReadRequest> Reads { get; } = [];
+    internal int Opens { get; private set; }
+
+    internal FederationSourceRegistration Registration() => new(name, FederationRepresentation.ApiView, (_, _) =>
+    {
+        Opens++;
+        return ValueTask.FromResult(new FederationSourceLease(this, static () => ValueTask.CompletedTask));
+    });
+
+    internal void AddGroup()
+    {
+        var root = Common("/", "registryid", name);
+        root["specversion"] = "1.0-rc4";
+        root["gsurl"] = Context.Source + "/gs";
+        root["gscount"] = 1;
+        entities.Add("/", root);
+
+        var path = "/gs/g";
+        var group = Common(path, "groupid", "g");
+        group["apisurl"] = Context.Source + path + "/apis";
+        group["apiscount"] = 0;
+        entities.Add(path, group);
+    }
+
+    internal void AddResource(string firstFormat, string? secondFormat = null, bool singleton = false)
+    {
+        var owner = ApiItem;
+        var resource = new JsonObject
+        {
+            ["apiid"] = "item",
+            ["xid"] = owner,
+            ["self"] = Context.Source + owner + "$details",
+            ["metaurl"] = Context.Source + owner + "/meta",
+            ["versionsurl"] = Context.Source + owner + "/versions",
+            ["versionscount"] = singleton ? 1 : 2,
+        };
+        entities.Add(owner, resource);
+        var meta = Common(owner + "/meta", "apiid", "item");
+        meta["readonly"] = false;
+        meta["defaultversionsticky"] = false;
+        meta["defaultversionid"] = "v1";
+        meta["defaultversionurl"] = Context.Source + owner + "/versions/v1$details";
+        entities.Add(owner + "/meta", meta);
+        AddVersion("v1", firstFormat, isDefault: true);
+        if (!singleton) { AddVersion("v2", secondFormat!, isDefault: false); }
+        entities["/gs/g"]["apiscount"] = 1;
+    }
+
+    public ValueTask<FederationReadResult> ReadAsync(
+        FederationReadRequest request, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Reads.Add(request);
+        if (request.Operation == FederationOperation.Collection)
+        {
+            var children = new JsonObject();
+            var depth = request.Target.Count(character => character == '/') + 1;
+            foreach (var pair in entities.Where(pair => pair.Key.StartsWith(request.Target + "/", StringComparison.Ordinal) &&
+                pair.Key.Count(character => character == '/') == depth))
+            {
+                children[pair.Key[(pair.Key.LastIndexOf('/') + 1)..]] = pair.Value.DeepClone();
+            }
+            return ValueTask.FromResult(Metadata(request.Target, new JsonObject
+            {
+                ["complete"] = true,
+                ["entities"] = children,
+                ["xid"] = request.Target,
+            }));
+        }
+
+        if (!entities.TryGetValue(request.Target, out var stored))
+        {
+            throw new FederationException(FederationErrorCode.NotFound, "No exact API fixture entity exists.");
+        }
+        var entity = stored.DeepClone().AsObject();
+        if (request.Target == "/")
+        {
+            entity["registryid"] = name;
+            entity["specversion"] = "1.0-rc4";
+            entity["gsurl"] = Context.Source + "/gs";
+            entity["gscount"] = 1;
+        }
+        else if (request.Target == ApiItem)
+        {
+            var selected = entities[ApiItem + "/versions/v1"];
+            foreach (var property in selected)
+            {
+                if (property.Key is not ("self" or "xid")) { entity[property.Key] = property.Value?.DeepClone(); }
+            }
+        }
+        return ValueTask.FromResult(Metadata(request.Target, new JsonObject { ["entity"] = entity }));
+    }
+
+    private void AddVersion(string id, string format, bool isDefault)
+    {
+        var path = ApiItem + "/versions/" + id;
+        var version = Common(path, "apiid", "item");
+        version["versionid"] = id;
+        version["ancestorid"] = "v1";
+        version["isdefault"] = isDefault;
+        version["format"] = format;
+        entities.Add(path, version);
+    }
+
+    private JsonObject Common(string path, string idName, string id) => new()
+    {
+        ["xid"] = path,
+        [idName] = id,
+        ["self"] = Context.Source + path,
+        ["epoch"] = 1,
+        ["createdat"] = "2026-09-14T00:00:00Z",
+        ["modifiedat"] = "2026-09-14T00:00:00Z",
+    };
+
+    private FederationReadResult Metadata(string target, JsonObject value) =>
+        FederationReadResult.FromMetadata(target, Context, RegistryJson.Parse(value.ToJsonString()).RootElement);
 }

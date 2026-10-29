@@ -4,8 +4,11 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Sockets;
+using System.Numerics;
+using System.Security.Cryptography;
 using System.Security.Claims;
 using System.Text;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -16,12 +19,137 @@ using Microsoft.Extensions.Logging;
 using TUnit.Assertions;
 using TUnit.Core;
 using XRegistry.Models;
+using XRegistry.Publication;
 using XRegistry.Server;
 
 namespace XRegistry.AspNetCore.Tests;
 
 public class HttpTests
 {
+    [Test]
+    public async Task PublicationProjectionRequiresReadOnlyBackendAndEnforcesItsResponseBudget()
+    {
+        var snapshot = await CreateOpenedSnapshot();
+        var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { Args = [] });
+        await using var application = builder.Build();
+        var writableBackend = new TestRegistryHostBackend { ReadOnly = false };
+        var writable = await Assert.That(() =>
+                application.MapPublicationSnapshot(writableBackend, snapshot))
+            .Throws<ArgumentException>() ?? throw new InvalidOperationException("Expected writable backend rejection.");
+        await Assert.That(writable.ParamName).IsEqualTo("backend");
+
+        var limitedBackend = new TestRegistryHostBackend
+        {
+            ReadOnly = true,
+            Limits = new() { MaxResponseBytes = snapshot.OpenRecord.GetExactBytes().Length - 1 }
+        };
+        var overBudget = await Assert.That(() =>
+                application.MapPublicationSnapshot(limitedBackend, snapshot))
+            .Throws<ArgumentOutOfRangeException>() ?? throw new InvalidOperationException("Expected context budget rejection.");
+        await Assert.That(overBudget.ParamName).IsEqualTo("snapshot");
+    }
+
+    [Test]
+    public async Task PublicationContextGetReturnsExactOpenedRecordBytes()
+    {
+        var snapshot = await CreateOpenedSnapshot();
+        var backend = new TestRegistryHostBackend
+        {
+            ReadOnly = true,
+            Limits = new() { MaxResponseBytes = snapshot.OpenRecord.GetExactBytes().Length }
+        };
+        await using var host = await TestHost.StartAsync(hostBackend: backend, publicationSnapshot: snapshot);
+
+        using var response = await host.Client.GetAsync(PublicationEndpointRouteBuilderExtensions.ContextPath);
+        var bytes = await response.Content.ReadAsByteArrayAsync();
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        await Assert.That(response.Content.Headers.ContentType!.MediaType).IsEqualTo("application/json");
+        await Assert.That(bytes.SequenceEqual(snapshot.OpenRecord.GetExactBytes())).IsTrue();
+        await Assert.That(backend.AuthorizationCount).IsEqualTo(1);
+        await Assert.That(backend.ExecutionCount).IsZero();
+    }
+
+    [Test]
+    public async Task PublicationContextHeadRetainsContentLengthAndHasNoBody()
+    {
+        var snapshot = await CreateOpenedSnapshot();
+        await using var host = await TestHost.StartAsync(hostBackend: new TestRegistryHostBackend { ReadOnly = true },
+            publicationSnapshot: snapshot);
+        using var request = new HttpRequestMessage(HttpMethod.Head, PublicationEndpointRouteBuilderExtensions.ContextPath);
+
+        using var response = await host.Client.SendAsync(request);
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        await Assert.That(response.Content.Headers.ContentLength).IsEqualTo(snapshot.OpenRecord.GetExactBytes().Length);
+        await Assert.That(await response.Content.ReadAsByteArrayAsync()).IsEmpty();
+    }
+
+    [Test]
+    public async Task PublicationContextRejectsUnsupportedMethodsWith405()
+    {
+        var snapshot = await CreateOpenedSnapshot();
+        await using var host = await TestHost.StartAsync(hostBackend: new TestRegistryHostBackend { ReadOnly = true },
+            publicationSnapshot: snapshot);
+        using var response = await host.Client.PostAsync(PublicationEndpointRouteBuilderExtensions.ContextPath, Json("{}"));
+        var problem = RegistryJson.Parse(await response.Content.ReadAsByteArrayAsync()).RootElement;
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.MethodNotAllowed);
+        await Assert.That(problem.GetProperty("code").GetString()).IsEqualTo("action_not_supported");
+    }
+
+    [Test]
+    public async Task PublicationContextRouteRequiresReadAuthorization()
+    {
+        var snapshot = await CreateOpenedSnapshot();
+        var backend = new TestRegistryHostBackend { ReadOnly = true, DenyAuthorization = true };
+        await using var host = await TestHost.StartAsync(hostBackend: backend, publicationSnapshot: snapshot);
+        using var response = await host.Client.GetAsync(PublicationEndpointRouteBuilderExtensions.ContextPath);
+        var problem = RegistryJson.Parse(await response.Content.ReadAsByteArrayAsync()).RootElement;
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.Forbidden);
+        await Assert.That(problem.GetProperty("code").GetString()).IsEqualTo("forbidden");
+        await Assert.That(backend.AuthorizationCount).IsEqualTo(1);
+        await Assert.That(backend.ExecutionCount).IsZero();
+
+        using var headRequest = new HttpRequestMessage(HttpMethod.Head,
+            PublicationEndpointRouteBuilderExtensions.ContextPath);
+        using var headResponse = await host.Client.SendAsync(headRequest);
+        await Assert.That(headResponse.StatusCode).IsEqualTo(HttpStatusCode.Forbidden);
+        await Assert.That(backend.AuthorizationCount).IsEqualTo(2);
+        await Assert.That(backend.ExecutionCount).IsZero();
+    }
+
+    [Test]
+    public async Task PublicationSnapshotRootLinkRelationTargetsTheContextUrl()
+    {
+        var snapshot = await CreateOpenedSnapshot();
+        await using var host = await TestHost.StartAsync(hostBackend: new TestRegistryHostBackend { ReadOnly = true },
+            publicationSnapshot: snapshot);
+
+        using var response = await host.Client.GetAsync("/");
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        await Assert.That(response.Headers.GetValues("Link").Single()).IsEqualTo(
+            "<https://public.example/registry>;rel=xregistry-root, " +
+            "<https://public.example/registry" + PublicationEndpointRouteBuilderExtensions.ContextPath +
+            ">;rel=\"https://xregistry.io/workingdrafts/publication/context\"");
+    }
+
+    [Test]
+    public async Task PublicationProjectionLeavesOrdinaryNonRootLinkHeaderUnchanged()
+    {
+        var snapshot = await CreateOpenedSnapshot();
+        await using var host = await TestHost.StartAsync(hostBackend: new TestRegistryHostBackend { ReadOnly = true },
+            publicationSnapshot: snapshot);
+
+        using var response = await host.Client.GetAsync("/teams");
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        await Assert.That(response.Headers.GetValues("Link").Single())
+            .IsEqualTo("<https://public.example/registry>;rel=xregistry-root");
+    }
+
     [Test]
     public async Task KestrelRejectsConcreteAvroIncompatibilityWithoutPublishingTheDocument()
     {
@@ -468,7 +596,16 @@ public class HttpTests
     public async Task DisconnectedPartialBodyCancelsWithoutCreatingParents()
     {
         var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        await using var host = await TestHost.StartAsync(completed: context =>
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var aborted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var host = await TestHost.StartAsync(started: context =>
+        {
+            if (context.Request.Method == "PUT")
+            {
+                started.TrySetResult();
+                context.RequestAborted.Register(() => aborted.TrySetResult());
+            }
+        }, completed: context =>
         {
             if (context.Request.Method == "PUT")
             {
@@ -480,7 +617,9 @@ public class HttpTests
             await socket.ConnectAsync(IPAddress.Loopback, host.Client.BaseAddress!.Port);
             await socket.GetStream().WriteAsync(Encoding.ASCII.GetBytes(
                 "PUT /teams/g/files/f HTTP/1.1\r\nHost: localhost\r\nContent-Length: 10\r\nConnection: close\r\n\r\nx"));
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
             socket.Client.Shutdown(SocketShutdown.Send);
+            await aborted.Task.WaitAsync(TimeSpan.FromSeconds(5));
             await completed.Task.WaitAsync(TimeSpan.FromSeconds(10));
         }
 
@@ -514,6 +653,78 @@ public class HttpTests
         await Assert.That(RegistryJson.Parse(await root.Content.ReadAsByteArrayAsync()).RootElement.GetProperty("teamscount").GetInt32()).IsEqualTo(0);
     }
 
+    private static async Task<PublicationOpenedSnapshot> CreateOpenedSnapshot()
+    {
+        var access = new PublicationRegistryAccess("http", "https://publisher.example.test",
+            new Dictionary<string, string>(StringComparer.Ordinal));
+        var registryBytes = Encoding.UTF8.GetBytes("""{"registryid":"captured"}""");
+        var registryDescriptor = CreateDescriptor(access,
+            "/publications/team/objects/registry/versions/content", registryBytes);
+        var manifest = new JsonObject
+        {
+            ["format"] = "xregistry-publication/1",
+            ["scope"] = "urn:example:http-projection",
+            ["capture"] = "assembled",
+            ["completeness"] = "offline-complete",
+            ["registry"] = DescriptorJson(registryDescriptor),
+            ["documents"] = new JsonArray()
+        };
+        var manifestBytes = Encoding.UTF8.GetBytes(manifest.ToJsonString());
+        var snapshotId = Convert.ToHexString(SHA256.HashData(manifestBytes)).ToLowerInvariant();
+        var snapshotDescriptor = CreateDescriptor(access,
+            $"/publications/team/snapshots/{snapshotId}/versions/manifest", manifestBytes);
+        var channelMetadata = new PublicationChannelMetadata("urn:example:http-projection", snapshotDescriptor,
+            new BigInteger(3));
+        var binding = new ProjectionPublicationBinding(access, channelMetadata, new Dictionary<string, byte[]>
+        {
+            [snapshotDescriptor.Reference.Version] = manifestBytes,
+            [registryDescriptor.Reference.Version] = registryBytes
+        });
+        var client = new PublicationReadClient((_, _) =>
+            ValueTask.FromResult<IPublicationReadBinding>(binding));
+        return await client.OpenChannelAsync(access, "/publications/team/channels/stable");
+    }
+
+    private static PublicationByteDescriptor CreateDescriptor(PublicationRegistryAccess access, string version, byte[] bytes) =>
+        new(new PublicationVersionReference(access, version),
+            "sha256:" + Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(), bytes.Length);
+
+    private static JsonObject DescriptorJson(PublicationByteDescriptor descriptor) => new()
+    {
+        ["reference"] = new JsonObject
+        {
+            ["registry"] = new JsonObject
+            {
+                ["binding"] = descriptor.Reference.Registry.Binding,
+                ["endpoint"] = descriptor.Reference.Registry.Endpoint
+            },
+            ["version"] = descriptor.Reference.Version
+        },
+        ["digest"] = descriptor.Digest,
+        ["size"] = (long)descriptor.Size
+    };
+
+    private sealed class ProjectionPublicationBinding(PublicationRegistryAccess access,
+        PublicationChannelMetadata metadata, IReadOnlyDictionary<string, byte[]> objects) : IPublicationReadBinding
+    {
+        public PublicationRegistryAccess Access { get; } = access;
+
+        public ValueTask<PublicationChannelMetadata> ReadChannelMetadataAsync(string channelResource,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult(metadata);
+        }
+
+        public ValueTask<Stream> OpenVersionDocumentAsync(string version, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult<Stream>(new MemoryStream(objects[version], writable: false));
+        }
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
     private static StringContent Json(string value) => new(value, Encoding.UTF8, "application/json");
 
     internal sealed class TestHost(WebApplication application, HttpClient client) : IAsyncDisposable
@@ -524,7 +735,8 @@ public class HttpTests
             RegistryLimits? limits = null, IRegistryPersistence? persistence = null, RegistryHttpOptions? httpOptions = null,
             Action<HttpContext>? completed = null, RegistryModel? model = null, IRegistryResourceValidator? resourceValidator = null,
             bool allowCapabilityUpdates = false, IRegistryDocumentReferencePolicy? documentReferencePolicy = null,
-            string pathBase = "", IRegistryHostBackend? hostBackend = null)
+            string pathBase = "", IRegistryHostBackend? hostBackend = null, Action<HttpContext>? started = null,
+            PublicationOpenedSnapshot? publicationSnapshot = null)
         {
             var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { EnvironmentName = "Development", Args = [] });
             builder.Logging.ClearProviders();
@@ -533,6 +745,14 @@ public class HttpTests
             if (pathBase.Length != 0)
             {
                 application.UsePathBase(pathBase);
+            }
+            if (started is not null)
+            {
+                application.Use(async (context, next) =>
+                {
+                    started(context);
+                    await next(context);
+                });
             }
             if (completed is not null)
             {
@@ -572,7 +792,19 @@ public class HttpTests
                 ResourceValidator = resourceValidator,
                 Limits = limits ?? new()
             }, persistence ?? new InMemoryRegistryPersistence(), policy ?? new PermitPolicy());
-            application.MapXRegistry(hostBackend ?? engine, httpOptions);
+            if (publicationSnapshot is not null)
+            {
+                if (hostBackend is not IReadOnlyRegistryHostBackend readOnlyBackend)
+                {
+                    throw new ArgumentException("The selected projection test backend must expose read-only state.",
+                        nameof(hostBackend));
+                }
+                application.MapPublicationSnapshot(readOnlyBackend, publicationSnapshot, httpOptions);
+            }
+            else
+            {
+                application.MapXRegistry(hostBackend ?? engine, httpOptions);
+            }
             await application.StartAsync();
             var addresses = application.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!;
             return new(application, new HttpClient { BaseAddress = new Uri(addresses.Addresses.Single()) });
@@ -599,7 +831,7 @@ public class HttpTests
                 !(path.Kind == RegistryPathKind.Group && path.GroupId?.Value == "blocked"));
     }
 
-    private sealed class TestRegistryHostBackend : IRegistryHostBackend
+    private sealed class TestRegistryHostBackend : IReadOnlyRegistryHostBackend
     {
         internal int AuthorizationCount { get; private set; }
         internal int DescriptionCount { get; private set; }
@@ -607,6 +839,9 @@ public class HttpTests
         internal int ResponsePreparationCount { get; private set; }
         internal bool Published { get; private set; }
         internal UnauthorizedAccessException? AuthorizationFailure { get; init; }
+        internal bool DenyAuthorization { get; init; }
+        internal bool ReadOnly { get; init; }
+        public bool IsReadOnly => ReadOnly;
         internal List<IRegistryRequestScope?> RequestScopes { get; } = [];
         public Uri PublicRoot { get; } = new("https://public.example/registry");
         public RegistryLimits Limits { get; init; } = new();
@@ -620,6 +855,11 @@ public class HttpTests
             if (AuthorizationFailure is { } failure)
             {
                 return ValueTask.FromException(failure);
+            }
+            if (DenyAuthorization)
+            {
+                return ValueTask.FromException(new RegistryException(new("forbidden", path.EscapedPath,
+                    "The caller is not authorized to read this registry.")));
             }
             return ValueTask.CompletedTask;
         }

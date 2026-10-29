@@ -13,6 +13,7 @@ public class DirectoryMappingVersionStateTests
 {
     private const string Item = "/documents/main/assets/item";
     private const string Version = Item + "/versions/v1";
+    private static readonly string[] CollectionReferenceFields = ["collections", "entries"];
 
     [Test]
     [Arguments(false)]
@@ -265,4 +266,112 @@ public class DirectoryMappingVersionStateTests
         await Assert.That(tree.Reads.Any(path => path.StartsWith("documents/", StringComparison.Ordinal))).IsFalse();
         await Assert.That(tree.DisposedStreams).IsEqualTo(tree.Reads.Count);
     }
+
+    [Test]
+    [Arguments("OpenAPI/3.1", "openapi/3.1")]
+    [Arguments("OpenAPI/3.1", "OpenAPI/3.1")]
+    public async Task ApiVersionFormatsCaseOnlyDifferencesAreAcceptedAcrossCompleteVersionSet(
+        string firstFormat, string secondFormat)
+    {
+        var tree = ApiVersions(firstFormat, secondFormat);
+        await using var mapping = await DirectoryMapping.OpenAsync(tree);
+
+        var result = await mapping.ReadAsync(new(FederationOperation.Collection, ApiItem + "/versions"));
+        var versions = result.Metadata.GetProperty("entities");
+
+        await Assert.That(versions.EnumerateObject().Count()).IsEqualTo(2);
+        await Assert.That(versions.GetProperty("v1").GetProperty("format").GetString()).IsEqualTo(firstFormat);
+        await Assert.That(versions.GetProperty("v2").GetProperty("format").GetString()).IsEqualTo(secondFormat);
+        await NoDocuments(tree);
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.1", "OpenAPI/3.0")]
+    [Arguments("OpenAPI/3.1", "AsyncAPI/3.1")]
+    public async Task DistinctApiVersionFormatsAreRejectedAcrossCompleteVersionSet(
+        string firstFormat, string secondFormat)
+    {
+        var tree = ApiVersions(firstFormat, secondFormat);
+        await using var mapping = await DirectoryMapping.OpenAsync(tree);
+
+        var error = await Check.Error(
+            () => mapping.ReadAsync(new(FederationOperation.Collection, ApiItem + "/versions")).AsTask(),
+            FederationErrorCode.InvalidPackage);
+
+        await Assert.That(error.Message).IsEqualTo(
+            "Captured API Versions do not use one case-insensitively equal format identifier.");
+        await NoDocuments(tree);
+    }
+
+    [Test]
+    public async Task SingleApiVersionFormatIsAcceptedInCompleteVersionSet()
+    {
+        var tree = ApiVersions("OpenAPI/3.1", "OpenAPI/3.1", singleton: true);
+        await using var mapping = await DirectoryMapping.OpenAsync(tree);
+
+        var result = await mapping.ReadAsync(new(FederationOperation.Collection, ApiItem + "/versions"));
+        var versions = result.Metadata.GetProperty("entities");
+
+        await Assert.That(versions.EnumerateObject().Count()).IsEqualTo(1);
+        await Assert.That(versions.GetProperty("v1").GetProperty("format").GetString()).IsEqualTo("OpenAPI/3.1");
+        await NoDocuments(tree);
+    }
+
+    private const string ApiItem = "/documents/main/assets/item";
+
+    private static MemoryTreeReader ApiVersions(string firstFormat, string secondFormat, bool singleton = false) =>
+        Tree(MappingUriFixture.Rewrite(MemoryTreeReader.Load().Files, record =>
+        {
+            if (record["entity"] is JsonObject entity)
+            {
+                var originalXid = entity["xid"]?.GetValue<string>();
+                if (originalXid is not null) { entity["xid"] = ToApiXid(originalXid); }
+                if (entity["assetid"] is JsonNode assetId)
+                {
+                    entity["apiid"] = assetId.DeepClone();
+                    entity.Remove("assetid");
+                }
+
+                if (originalXid == "/")
+                {
+                    var resources = entity["modelsource"]!["groups"]!["documents"]!["resources"]!.AsObject();
+                    var api = resources["assets"]!.AsObject();
+                    api["singular"] = "api";
+                    api["attributes"]!["format"] = new JsonObject { ["type"] = "string", ["required"] = true };
+                }
+                else if (originalXid is not null && ToApiXid(originalXid) == ApiItem + "/versions/v1")
+                {
+                    entity["format"] = firstFormat;
+                }
+                else if (originalXid is not null && ToApiXid(originalXid) == ApiItem + "/versions/v2")
+                {
+                    entity["format"] = secondFormat;
+                }
+            }
+
+            if (record["xid"] is JsonValue xid) { record["xid"] = ToApiXid(xid.GetValue<string>()); }
+            if (record["meta"] is JsonObject meta && meta["xid"] is JsonValue metaXid)
+            {
+                meta["xid"] = ToApiXid(metaXid.GetValue<string>());
+            }
+            foreach (var field in CollectionReferenceFields)
+            {
+                if (record[field] is not JsonArray references) { continue; }
+                foreach (var reference in references)
+                {
+                    var referenceXid = reference?["xid"]?.GetValue<string>();
+                    if (referenceXid is not null) { reference!["xid"] = ToApiXid(referenceXid); }
+                }
+                record[field] = new JsonArray(references.OrderBy(reference => reference!["xid"]!.GetValue<string>(),
+                    StringComparer.Ordinal).Select(reference => reference!.DeepClone()).ToArray());
+            }
+            if (singleton && record["xid"]?.GetValue<string>() == ApiItem + "/versions" &&
+                record["entries"] is JsonArray entries)
+            {
+                record["entries"] = new JsonArray(entries[0]!.DeepClone());
+                record["count"] = 1;
+            }
+        }));
+
+    private static string ToApiXid(string xid) => xid;
 }

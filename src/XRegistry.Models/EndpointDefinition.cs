@@ -102,6 +102,15 @@ public sealed class EndpointDefinition
         ValidateAuthoredElement(authored.RootElement, options, cancellationToken);
     }
 
+    /// <summary>Checks an Endpoint explicitly used as a Media Endpoint, including the shared HTTP selector.</summary>
+    public static void ValidateMediaAuthored(RegistryJson authored, EndpointTemplateOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(authored);
+        ValidateAuthored(authored, options, cancellationToken);
+        MediaEndpointSemantics.Validate(authored.RootElement, resolved: false, cancellationToken);
+    }
+
     internal static void ValidateAuthoredElement(JsonElement authored, EndpointTemplateOptions? options,
         CancellationToken cancellationToken)
     {
@@ -145,6 +154,16 @@ public sealed class EndpointDefinition
         cancellationToken.ThrowIfCancellationRequested();
         var definition = new EndpointDefinition(owned, resolved, subscriptionFilter, evaluation);
         cancellationToken.ThrowIfCancellationRequested();
+        return definition;
+    }
+
+    /// <summary>Validates and materializes an Endpoint under the Media Endpoints working-draft rules.</summary>
+    public static EndpointDefinition MaterializeMedia(RegistryJson authored, RegistryJson? arguments = null,
+        EndpointTemplateOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        ValidateMediaAuthored(authored, options, cancellationToken);
+        var definition = Materialize(authored, arguments, options, cancellationToken);
+        MediaEndpointSemantics.Validate(definition.Resolved.RootElement, resolved: true, cancellationToken);
         return definition;
     }
 }

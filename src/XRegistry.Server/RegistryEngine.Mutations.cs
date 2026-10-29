@@ -42,6 +42,19 @@ public sealed partial class RegistryEngine
             if (documentMode)
             {
                 body["contenttype"] = _operation.ContentType;
+                var definition = ResourceDefinition(path);
+                if (IsWotResource(definition))
+                {
+                    if (body.ContainsKey(definition.Singular + "url"))
+                    {
+                        throw ServerErrors.With("invalid_attribute", key,
+                            "WoT Versions require the complete Document to be stored by the Registry.",
+                            ("name", definition.Singular + "url"));
+                    }
+
+                    _wotDocumentInput = await BoundedContent.ReadAsync(_operation.Document ?? Stream.Null,
+                        _engine.Limits.MaxDocumentBytes, _ct, requestBody: true).ConfigureAwait(false);
+                }
             }
 
             switch (path.Kind)
@@ -62,9 +75,9 @@ public sealed partial class RegistryEngine
                     {
                         var resource = EnsureResource(path);
                         var specifiedVersion = Identifier(body, "versionid", key);
-                        var versionId = specifiedVersion ?? GenerateVersionId(resource, ResourceDefinition(path));
-                        var version = ApplyVersion(resource, versionId, VersionInput(body, ResourceDefinition(path)),
-                            documentMode, documentMode, generated: specifiedVersion is null);
+                        var version = ApplyAssignedVersion(resource, specifiedVersion,
+                            VersionInput(body, ResourceDefinition(path)), documentMode, documentMode,
+                            generated: specifiedVersion is null);
                         _responsePath = RegistryPath.Parse(version.Key + (path.IsDetails ? "$details" : ""));
                     }
                     else
@@ -88,8 +101,8 @@ public sealed partial class RegistryEngine
 
                     break;
                 case RegistryPathKind.Version:
-                    ApplyVersion(EnsureResource(path), path.VersionId!.Value, VersionInput(body, ResourceDefinition(path)),
-                        patch || documentMode, documentMode);
+                    ApplyAssignedVersion(EnsureResource(path), path.VersionId!.Value,
+                        VersionInput(body, ResourceDefinition(path)), patch || documentMode, documentMode, generated: false);
                     break;
                 case RegistryPathKind.ModelSource:
                     await ApplyModelAsync(ServerJson.Own(body, _engine.Limits.Json)).ConfigureAwait(false);
@@ -253,7 +266,8 @@ public sealed partial class RegistryEngine
                         ApplyResource(childPath, body, patch, false);
                         break;
                     case RegistryPathKind.VersionCollection:
-                        ApplyVersion(EnsureResource(childPath), id.Value, VersionInput(body, ResourceDefinition(childPath)), patch, false);
+                        ApplyAssignedVersion(EnsureResource(childPath), id.Value,
+                            VersionInput(body, ResourceDefinition(childPath)), patch, false, generated: false);
                         break;
                     default:
                         throw new InvalidOperationException("The staged collection has an unsupported shape.");
@@ -284,7 +298,8 @@ public sealed partial class RegistryEngine
                 foreach (var version in versions.OrderBy(static item => item.Key, StringComparer.OrdinalIgnoreCase))
                 {
                     _ = ParseId(version.Key);
-                    ApplyVersion(resource, version.Key, VersionInput(Map(version.Value, resource.Key), definition), patch, false);
+                    ApplyAssignedVersion(resource, version.Key,
+                        VersionInput(Map(version.Value, resource.Key), definition), patch, false, generated: false);
                 }
             }
 
@@ -313,8 +328,7 @@ public sealed partial class RegistryEngine
                 }
 
                 var generated = chosen is null;
-                chosen ??= GenerateVersionId(resource, definition);
-                ApplyVersion(resource, chosen, versionInput, patch || documentMode, documentMode, generated);
+                ApplyAssignedVersion(resource, chosen, versionInput, patch || documentMode, documentMode, generated);
             }
 
             if (metaInput is not null)
@@ -455,7 +469,9 @@ public sealed partial class RegistryEngine
             if (documentMode)
             {
                 var stream = _operation.Document ?? Stream.Null;
-                entity.DocumentInput = ct => BoundedContent.ReadAsync(stream, _engine.Limits.MaxDocumentBytes, ct, requestBody: true);
+                entity.DocumentInput = ct => _wotDocumentInput is { } wotDocument
+                    ? ValueTask.FromResult(wotDocument)
+                    : BoundedContent.ReadAsync(stream, _engine.Limits.MaxDocumentBytes, ct, requestBody: true);
             }
             else if (submitted.Length != 0)
             {

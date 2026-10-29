@@ -59,15 +59,15 @@ jobs:
           fi
           echo "Promoting one complete package set at version ${ver}"
           mkdir -p ./download
-          for id in XRegistry XRegistry.Client XRegistry.Server XRegistry.AspNetCore XRegistry.Storage.File XRegistry.Models XRegistry.Validation XRegistry.Federation XRegistry.Bindings.File XRegistry.Bindings.Git XRegistry.Bindings.Oci; do
+          for id in XRegistry XRegistry.Client XRegistry.Server XRegistry.AspNetCore XRegistry.Storage.File XRegistry.Models XRegistry.Validation XRegistry.Federation XRegistry.Bindings.File XRegistry.Bindings.Git XRegistry.Bindings.Oci XRegistry.Publication XRegistry.Publication.Server; do
             lower=$(echo "$id" | tr '[:upper:]' '[:lower:]')
             echo "Downloading $id $ver"
             curl -fsSL -H "$auth" "$base/$lower/$ver/$lower.$ver.nupkg" \
               -o "./download/$lower.$ver.nupkg"
           done
           count=$(find ./download -maxdepth 1 -type f -name '*.nupkg' | wc -l)
-          if [ "$count" -ne 11 ]; then
-            echo "::error::Expected 11 packages at version ${ver}, found ${count}."
+          if [ "$count" -ne 13 ]; then
+            echo "::error::Expected 13 packages at version ${ver}, found ${count}."
             exit 1
           fi
           ls -l ./download

@@ -1,0 +1,13 @@
+<!-- Copyright (c) 2026 xregistry-dotnet contributors. -->
+<!-- SPDX-License-Identifier: MIT -->
+
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>XRegistry.Bindings.OpcUa</PackageId>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="OPCFoundation.NetStandard.Opc.Ua.Client" />
+    <ProjectReference Include="..\XRegistry.Federation\XRegistry.Federation.csproj" />
+  </ItemGroup>
+</Project>

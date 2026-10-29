@@ -21,11 +21,39 @@ behavior, not just its public method declarations.
 | Built-in models | Scoped model documents and domain metadata conveniences | Broker, renderer or application-protocol runtime |
 | Validation | Declared format and compatibility outcomes | Runtime plugin discovery or a fabricated compatible result |
 | Federation | Deterministic source selection and read resolution | Cross-registry mutations or source synchronization |
+| Publication | Exact manifest-byte validation, descriptor integrity, binding-backed snapshot reads and offline package replay | Channel mutation, retained storage or HTTP hosting |
+| Publication server adapter | Immutable snapshot retention, epoch-conditional channel heads and exact offline replay | Binding acquisition or snapshot-specific HTTP projection |
 | File/Git/OCI | Binding-native acquisition and consistent exact-byte reads | Conversion through a fake HTTP server |
+| OPC UA binding | Advertisement validation, caller-policy endpoint selection and portable root mapping | OPC UA dependencies in Core or generic Federation |
 
 `eng/packages.json` is the package, target-framework and sample inventory.
 Package implementation status is explicit; inventory membership does not prove
 that a package is ready to publish.
+
+`XRegistry.Publication` parses and validates manifests and open records,
+verifies descriptor byte size and digest, reads channel metadata and exact
+Version documents through explicitly selected bindings, and opens immutable
+snapshots. It also replays local packages without network access, checking
+resolved path containment, byte limits and object descriptors. The reader
+retains `sources` as pinned provenance and consumes the materialized Registry
+snapshot; it does not fetch or reconstruct constituent sources. A manifest
+that requires extension semantics the reader cannot interpret is rejected
+before its captured Registry document is read.
+
+`XRegistry.Publication.Server` composes those contracts with
+`IRegistryPersistence`. It stores exact manifest and supplied object bytes,
+rejects a changed descriptor at an existing reference, and commits new objects
+with an epoch-checked channel head in one batch. Channel scope cannot change
+after creation. Offline replay verifies and returns the manifest and all
+referenced objects for an `offline-complete` publication. Durability follows
+the supplied persistence provider. Binding-backed reads belong to
+`XRegistry.Publication`, not the channel store.
+
+`XRegistry.AspNetCore` maps a `PublicationOpenedSnapshot` to a read-only Core
+HTTP view. The caller must build its backend from the snapshot's captured
+Registry bytes and matching model; the mapper cannot verify that provenance.
+It enforces the open-record response-size budget and serves the open context
+at `/.well-known/xregistry-open`.
 
 ## Public seams
 

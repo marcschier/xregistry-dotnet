@@ -140,12 +140,16 @@ internal static class ModelWriter
         if (attribute.Name.Length > 0)
         {
             OptionalString(writer, "description", attribute.Description);
-            writer.WriteBoolean("strict", attribute.Strict);
+        }
+
+        writer.WriteBoolean("strict", attribute.Strict);
+        WriteEnum(writer, attribute.EnumValues);
+        if (attribute.Name.Length > 0)
+        {
             writer.WriteBoolean("required", attribute.Required);
             writer.WriteBoolean("readonly", attribute.ReadOnly);
             writer.WriteBoolean("immutable", attribute.Immutable);
             writer.WriteBoolean("matchversions", attribute.MatchVersions);
-            WriteEnum(writer, attribute.EnumValues);
             WriteValue(writer, "default", attribute.DefaultValue);
             if (attribute.IfValues.Count > 0)
             {

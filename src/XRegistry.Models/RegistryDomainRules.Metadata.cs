@@ -8,6 +8,9 @@ namespace XRegistry.Models;
 
 public static partial class RegistryDomainRules
 {
+    /// <summary>The model-compatible-with identity of the Web of Things Registry draft.</summary>
+    public const string WotModelUri = "https://xregistry.io/xreg/domains/wot/specs/model.json";
+
     /// <summary>Checks the common selectors of completed Message Group metadata.</summary>
     public static void ValidateMessageGroupMetadata(JsonElement group, CancellationToken cancellationToken = default)
     {
@@ -23,6 +26,19 @@ public static partial class RegistryDomainRules
         try
         {
             EndpointDefinition.ValidateAuthoredElement(endpoint, null, cancellationToken);
+        }
+        catch (RegistryException exception) when (exception.Diagnostic.Code != "invalid_attribute")
+        {
+            throw new RegistryException(exception.Diagnostic with { Code = "invalid_attribute" }, exception);
+        }
+    }
+
+    /// <summary>Checks an Endpoint explicitly used for media, including protocol-specific direction and input rules.</summary>
+    public static void ValidateMediaEndpointMetadata(JsonElement endpoint, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            EndpointDefinition.ValidateMediaAuthored(RegistryJson.FromElement(endpoint), cancellationToken: cancellationToken);
         }
         catch (RegistryException exception) when (exception.Diagnostic.Code != "invalid_attribute")
         {

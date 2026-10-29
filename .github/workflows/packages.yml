@@ -95,6 +95,8 @@ jobs:
           dotnet pack src/XRegistry.Bindings.File/XRegistry.Bindings.File.csproj -c Release -o artifacts/publish
           dotnet pack src/XRegistry.Bindings.Git/XRegistry.Bindings.Git.csproj -c Release -o artifacts/publish
           dotnet pack src/XRegistry.Bindings.Oci/XRegistry.Bindings.Oci.csproj -c Release -o artifacts/publish
+          dotnet pack src/XRegistry.Publication/XRegistry.Publication.csproj -c Release -o artifacts/publish
+          dotnet pack src/XRegistry.Publication.Server/XRegistry.Publication.Server.csproj -c Release -o artifacts/publish
       - name: List packages
         run: ls -l artifacts/publish
       - name: Push to GitHub Packages

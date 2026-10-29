@@ -13,7 +13,7 @@ public class CompositeModelTests
     {
         var model = BuiltInRegistryModels.CompileAll();
         await Assert.That(string.Join(',', model.Groups.Keys.Order(StringComparer.Ordinal)))
-            .IsEqualTo("categories,endpoints,messagegroups,schemagroups,usdassetgroups,usdschemaplugingroups");
+            .IsEqualTo("apigroups,categories,endpoints,messagegroups,publications,schemagroups,thingdescriptiongroups,thingmodelgroups,usdassetgroups,usdschemaplugingroups");
         await Assert.That(model.Groups["categories"].Resources["registries"].HasDocument).IsFalse();
         await Assert.That(model.Groups["schemagroups"].Resources["schemas"].HasDocument).IsTrue();
         await Assert.That(model.Groups["endpoints"].Attributes["usage"].Required).IsTrue();

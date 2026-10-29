@@ -61,7 +61,7 @@ public class RegistryModelTests
     public async Task UsesNormativeNameLengthsRatherThanDerivedSchemaLengths()
     {
         var group = new string('g', 57);
-        var singular = new string('s', 63);
+        var singular = new string('s', 61);
         var model = RegistryModel.Compile(RegistryJson.Parse(
             $$$$"""{"groups":{"{{{{group}}}}":{"singular":"{{{{singular}}}}"}}}"""));
         await Assert.That(model.Groups[group].Singular).IsEqualTo(singular);
@@ -69,15 +69,85 @@ public class RegistryModelTests
             $$$$"""{"groups":{"{{{{new string('g', 58)}}}}":{"singular":"g"}}}"""))).Path)
             .IsEqualTo("/groups/" + new string('g', 58) + "/plural");
         await Assert.That(TestErrors.Capture(() => RegistryModel.Compile(RegistryJson.Parse(
-            $$$$"""{"groups":{"g":{"singular":"{{{{new string('s', 64)}}}}"}}}"""))).Path)
+            $$$$"""{"groups":{"g":{"singular":"{{{{new string('s', 62)}}}}"}}}"""))).Path)
             .IsEqualTo("/groups/g/singular");
-        var resource = CompileResource($$""""{"singular":"{{new string('s', 57)}}"}"""");
-        await Assert.That(resource.Singular.Length).IsEqualTo(57);
+        var resourceSingular = new string('s', 57);
+        var resource = CompileResource($$""""{"singular":"{{resourceSingular}}"}"""");
+        await Assert.That(resource.Singular).IsEqualTo(resourceSingular);
         await Assert.That(TestErrors.Capture(() => CompileResource(
             $$""""{"singular":"{{new string('s', 58)}}"}"""")).Path)
             .IsEqualTo("/groups/dirs/resources/files/singular");
         await Assert.That(RegistryModel.Compile(RegistryJson.Parse("""{"attributes":{"_extension":"string"}}"""))
             .Attributes["_extension"].Type).IsEqualTo(RegistryValueType.String);
+    }
+
+    [Test]
+    public async Task CollectionItemEnumsAndStrictRoundTripThroughTheEffectiveModel()
+    {
+        var model = CompileCollectionItemModel();
+        var labels = model.Attributes["customstrings"].Item!;
+        var scores = model.Attributes["customints"].Item!;
+
+        await Assert.That(labels.Strict).IsTrue();
+        await Assert.That(labels.EnumValues.Count).IsEqualTo(2);
+        await Assert.That(labels.EnumValues[0].GetString()).IsEqualTo("red");
+        await Assert.That(labels.EnumValues[1].GetString()).IsEqualTo("blue");
+        await Assert.That(scores.Strict).IsFalse();
+        await Assert.That(scores.EnumValues.Count).IsEqualTo(2);
+        await Assert.That(scores.EnumValues[0].GetInt32()).IsEqualTo(1);
+        await Assert.That(scores.EnumValues[1].GetInt32()).IsEqualTo(2);
+
+        var effective = model.EffectiveModel.RootElement.GetProperty("attributes");
+        var labelsItem = effective.GetProperty("customstrings").GetProperty("item");
+        var scoresItem = effective.GetProperty("customints").GetProperty("item");
+        await Assert.That(labelsItem.GetProperty("strict").GetBoolean()).IsTrue();
+        await Assert.That(labelsItem.GetProperty("enum").GetRawText()).IsEqualTo("""["red","blue"]""");
+        await Assert.That(scoresItem.GetProperty("strict").GetBoolean()).IsFalse();
+        await Assert.That(scoresItem.GetProperty("enum").GetRawText()).IsEqualTo("[1,2]");
+
+        var roundTripped = RegistryModel.Compile(RegistryJson.Parse(model.EffectiveModel.RootElement.GetRawText()));
+        var roundTrippedLabels = roundTripped.Attributes["customstrings"].Item!;
+        await Assert.That(roundTrippedLabels.EnumValues.Count).IsEqualTo(2);
+        await Assert.That(roundTrippedLabels.EnumValues[0].GetString()).IsEqualTo("red");
+        await Assert.That(roundTrippedLabels.EnumValues[1].GetString()).IsEqualTo("blue");
+        await Assert.That(roundTrippedLabels.Strict).IsTrue();
+        var roundTrippedScores = roundTripped.Attributes["customints"].Item!;
+        await Assert.That(roundTrippedScores.EnumValues.Count).IsEqualTo(2);
+        await Assert.That(roundTrippedScores.EnumValues[0].GetInt32()).IsEqualTo(1);
+        await Assert.That(roundTrippedScores.EnumValues[1].GetInt32()).IsEqualTo(2);
+        await Assert.That(roundTrippedScores.Strict).IsFalse();
+    }
+
+    [Test]
+    public async Task StrictCollectionItemEnumsRejectDisallowedValuesAtTheItemPath()
+    {
+        var model = CompileCollectionItemModel();
+        var options = new RegistryMetadataValidationOptions { Mode = RegistryMetadataMode.ClientInput };
+        var accepted = RegistryMetadataValidator.Validate(
+            RegistryJson.Parse("""{"customstrings":["red","blue"]}"""), model.Attributes, options);
+        await Assert.That(accepted.Metadata.RootElement.GetProperty("customstrings").GetRawText())
+            .IsEqualTo("""["red","blue"]""");
+
+        var rejected = TestErrors.Capture(() => RegistryMetadataValidator.Validate(
+            RegistryJson.Parse("""{"customstrings":["red","green"]}"""), model.Attributes, options));
+        await Assert.That(rejected.Code).IsEqualTo("invalid_attribute");
+        await Assert.That(rejected.Path).IsEqualTo("/customstrings/1");
+    }
+
+    [Test]
+    public async Task NonStrictCollectionItemEnumsAreAdvisoryButKeepTheirScalarType()
+    {
+        var model = CompileCollectionItemModel();
+        var options = new RegistryMetadataValidationOptions { Mode = RegistryMetadataMode.ClientInput };
+        var accepted = RegistryMetadataValidator.Validate(
+            RegistryJson.Parse("""{"customints":{"high":3}}"""), model.Attributes, options);
+        await Assert.That(accepted.Metadata.RootElement.GetProperty("customints").GetProperty("high").GetInt32())
+            .IsEqualTo(3);
+
+        var rejected = TestErrors.Capture(() => RegistryMetadataValidator.Validate(
+            RegistryJson.Parse("""{"customints":{"high":"3"}}"""), model.Attributes, options));
+        await Assert.That(rejected.Code).IsEqualTo("invalid_attribute");
+        await Assert.That(rejected.Path).IsEqualTo("/customints/high");
     }
 
     [Test]
@@ -211,4 +281,12 @@ public class RegistryModelTests
     private static RegistryResourceDefinition CompileResource(string resource) =>
         RegistryModel.Compile(RegistryJson.Parse(
             """{"groups":{"dirs":{"singular":"dir","resources":{"files":""" + resource + "}}}}")).Groups["dirs"].Resources["files"];
+
+    private static RegistryModel CompileCollectionItemModel() =>
+        RegistryModel.Compile(RegistryJson.Parse("""
+            {"attributes":{
+              "customstrings":{"type":"array","item":{"type":"string","enum":["red","blue"],"strict":true}},
+              "customints":{"type":"map","item":{"type":"integer","enum":[1,2],"strict":false}}
+            }}
+            """));
 }

@@ -29,5 +29,7 @@
     <PackageReference Include="XRegistry.Bindings.File" Version="@@XRegistry.Bindings.File@@" />
     <PackageReference Include="XRegistry.Bindings.Git" Version="@@XRegistry.Bindings.Git@@" />
     <PackageReference Include="XRegistry.Bindings.Oci" Version="@@XRegistry.Bindings.Oci@@" />
+    <PackageReference Include="XRegistry.Publication" Version="@@XRegistry.Publication@@" />
+    <PackageReference Include="XRegistry.Publication.Server" Version="@@XRegistry.Publication.Server@@" />
   </ItemGroup>
 </Project>

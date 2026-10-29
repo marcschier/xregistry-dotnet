@@ -43,6 +43,16 @@
       "status": "implemented"
     },
     {
+      "id": "XRegistry.Publication",
+      "project": "src\\XRegistry.Publication\\XRegistry.Publication.csproj",
+      "status": "planned"
+    },
+    {
+      "id": "XRegistry.Publication.Server",
+      "project": "src\\XRegistry.Publication.Server\\XRegistry.Publication.Server.csproj",
+      "status": "planned"
+    },
+    {
       "id": "XRegistry.Validation",
       "project": "src\\XRegistry.Validation\\XRegistry.Validation.csproj",
       "status": "implemented"
@@ -65,6 +75,11 @@
     {
       "id": "XRegistry.Bindings.Oci",
       "project": "src\\XRegistry.Bindings.Oci\\XRegistry.Bindings.Oci.csproj",
+      "status": "implemented"
+    },
+    {
+      "id": "XRegistry.Bindings.OpcUa",
+      "project": "src\\XRegistry.Bindings.OpcUa\\XRegistry.Bindings.OpcUa.csproj",
       "status": "implemented"
     }
   ],

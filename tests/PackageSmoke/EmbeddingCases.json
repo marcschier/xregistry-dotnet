@@ -22,6 +22,8 @@
   "oci-offline-frozen-closure",
   "oci-linked-frozen-closure",
   "federation-live-http-source",
+  "publication-manifest-integrity",
   "native-dependencies-no-git-backend",
-  "federation-escaped-identities"
+  "federation-escaped-identities",
+  "publication-channel-retained-replay"
 ]

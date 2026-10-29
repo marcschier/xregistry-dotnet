@@ -46,8 +46,18 @@ internal static partial class EndpointDefinitionSemantics
         {
             return value;
         }
-        return Protocol(endpoint) is { } protocol && Defaults.RootElement.TryGetProperty(protocol, out var defaults) &&
-            defaults.TryGetProperty(name, out value) ? value : default;
+        if (Protocol(endpoint) is not { } protocol)
+        {
+            return default;
+        }
+        if (MediaEndpointSemantics.IsDraftMediaProtocol(protocol))
+        {
+            return MediaEndpointSemantics.IsProducer(endpoint)
+                ? MediaEndpointSemantics.GetDefaultOption(protocol, name)
+                : default;
+        }
+        return Defaults.RootElement.TryGetProperty(protocol, out var protocolDefaults) &&
+            protocolDefaults.TryGetProperty(name, out value) ? value : default;
     }
 
     internal static void Validate(JsonElement endpoint, RegistryJsonLimits limits, CancellationToken cancellationToken)
@@ -132,6 +142,7 @@ internal static partial class EndpointDefinitionSemantics
                 Strings(options, ["subject", "subjectfilter", "queuegroup"], cancellationToken);
                 break;
         }
+        MediaEndpointSemantics.ValidateIfDraftMediaProtocol(endpoint, resolved, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
     }
 

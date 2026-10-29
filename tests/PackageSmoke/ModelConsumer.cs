@@ -22,7 +22,10 @@ if (RuntimeFeature.IsDynamicCodeSupported || RuntimeFeature.IsDynamicCodeCompile
     (RegistryModelKind.Schema, "b2e7efd1a89512c6a0a9731c6e868ce1785ec1923d0348527667d8e191e484f7"),
     (RegistryModelKind.CloudEvents, "8000babf16b868ff97144b534b0639a68d408285c9ced823e5d5c3414eff08f7"),
     (RegistryModelKind.Registry, "afec5aeb7c2a3d435bdbdf7244f3e97bdb5ddb5c4679b6c418a6f7c643c22210"),
-    (RegistryModelKind.OpenUsd, "bd2209ff833d3016809eb699330c5ebf798f610925a583796998427eff7a242d")
+    (RegistryModelKind.OpenUsd, "bd2209ff833d3016809eb699330c5ebf798f610925a583796998427eff7a242d"),
+    (RegistryModelKind.Api, "c3d333b91a8b5b926ba3c41a88c6a55a141697c6f514dc53d820da1608e4250f"),
+    (RegistryModelKind.Publication, "f287f3c0972e5fda9a8e3c5e8a727ecc43c536f254795cf6a6433a4d69e6d134"),
+    (RegistryModelKind.Wot, "5a1cd2f60e8b54dd7151d6be25d033701a251780c14468711227b2e69a86d832")
 ];
 
 foreach (var model in models)
@@ -56,6 +59,6 @@ if (catalog.RootElement.GetProperty("groups").GetProperty("categories")
 
 Console.WriteLine(
     $"Native package-model consumer passed: {RuntimeInformation.FrameworkDescription}; "
-    + $"{RuntimeInformation.ProcessArchitecture}; 7 exact model sources. "
+    + $"{RuntimeInformation.ProcessArchitecture}; {models.Length} exact model sources. "
     + "This is not full xRegistry conformance.");
 return 0;

@@ -11,6 +11,7 @@
     <PackageReference Include="TUnit" />
     <ProjectReference Include="..\..\src\XRegistry.AspNetCore\XRegistry.AspNetCore.csproj" />
     <ProjectReference Include="..\..\src\XRegistry.Models\XRegistry.Models.csproj" />
+    <ProjectReference Include="..\..\src\XRegistry.Publication\XRegistry.Publication.csproj" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <Compile Remove="NativeSmoke\**\*.cs" />
   </ItemGroup>

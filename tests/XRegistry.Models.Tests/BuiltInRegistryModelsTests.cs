@@ -18,6 +18,9 @@ public class BuiltInRegistryModelsTests
     [Arguments(RegistryModelKind.CloudEvents, "schemagroups")]
     [Arguments(RegistryModelKind.Registry, "categories")]
     [Arguments(RegistryModelKind.OpenUsd, "usdassetgroups")]
+    [Arguments(RegistryModelKind.Api, "apigroups")]
+    [Arguments(RegistryModelKind.Publication, "publications")]
+    [Arguments(RegistryModelKind.Wot, "thingmodelgroups")]
     public async Task EveryPackagedModelCompilesWithOnlyExplicitPackagedDependencies(
         RegistryModelKind kind, string expectedGroup)
     {
@@ -43,6 +46,9 @@ public class BuiltInRegistryModelsTests
     [Arguments(RegistryModelKind.CloudEvents, "8000babf16b868ff97144b534b0639a68d408285c9ced823e5d5c3414eff08f7")]
     [Arguments(RegistryModelKind.Registry, "afec5aeb7c2a3d435bdbdf7244f3e97bdb5ddb5c4679b6c418a6f7c643c22210")]
     [Arguments(RegistryModelKind.OpenUsd, "bd2209ff833d3016809eb699330c5ebf798f610925a583796998427eff7a242d")]
+    [Arguments(RegistryModelKind.Api, "c3d333b91a8b5b926ba3c41a88c6a55a141697c6f514dc53d820da1608e4250f")]
+    [Arguments(RegistryModelKind.Publication, "f287f3c0972e5fda9a8e3c5e8a727ecc43c536f254795cf6a6433a4d69e6d134")]
+    [Arguments(RegistryModelKind.Wot, "5a1cd2f60e8b54dd7151d6be25d033701a251780c14468711227b2e69a86d832")]
     public async Task SourceBytesMatchIndependentBaselineOrCorrectionDigest(RegistryModelKind kind, string expected)
     {
         using var source = BuiltInRegistryModels.OpenSource(kind);
@@ -75,6 +81,41 @@ public class BuiltInRegistryModelsTests
     }
 
     [Test]
+    public async Task ApiRegistryModelDefinesVersionedApiDocuments()
+    {
+        var apiResource = BuiltInRegistryModels.Compile(RegistryModelKind.Api).Groups["apigroups"].Resources["apis"];
+
+        await Assert.That(apiResource.MaxVersions).IsEqualTo(System.Numerics.BigInteger.Zero);
+        await Assert.That(apiResource.SetVersionId).IsTrue();
+        await Assert.That(apiResource.ValidateFormat).IsTrue();
+        await Assert.That(apiResource.Attributes["format"].Required).IsTrue();
+    }
+
+    [Test]
+    public async Task PublicationModelDefinesChannelsObjectsAndJsonSnapshots()
+    {
+        var resources = BuiltInRegistryModels.Compile(RegistryModelKind.Publication).Groups["publications"].Resources;
+
+        await Assert.That(resources["channels"].HasDocument).IsFalse();
+        await Assert.That(resources["channels"].MaxVersions).IsEqualTo(System.Numerics.BigInteger.One);
+        await Assert.That(resources["objects"].SetVersionId).IsTrue();
+        await Assert.That(resources["snapshots"].SetVersionId).IsTrue();
+        await Assert.That(resources["snapshots"].Attributes["contenttype"].Required).IsTrue();
+    }
+
+    [Test]
+    public async Task WotModelDefinesVersionedThingModelsAndThingDescriptions()
+    {
+        var groups = BuiltInRegistryModels.Compile(RegistryModelKind.Wot).Groups;
+
+        await Assert.That(groups["thingmodelgroups"].Resources["thingmodels"].HasDocument).IsTrue();
+        await Assert.That(groups["thingmodelgroups"].Resources["thingmodels"].VersionMode).IsEqualTo("semver");
+        await Assert.That(groups["thingmodelgroups"].Resources["thingmodels"].Attributes["versionorigin"].Required).IsTrue();
+        await Assert.That(groups["thingdescriptiongroups"].Resources["thingdescriptions"].HasDocument).IsTrue();
+        await Assert.That(groups["thingdescriptiongroups"].Resources["thingdescriptions"].SingleVersionRoot).IsTrue();
+    }
+
+    [Test]
     public async Task SourceLoadingPreservesUnexpandedCloudEventsIncludes()
     {
         using var source = BuiltInRegistryModels.LoadSource(RegistryModelKind.CloudEvents);
@@ -101,7 +142,7 @@ public class BuiltInRegistryModelsTests
 
     [Test]
     [Arguments(-1)]
-    [Arguments(7)]
+    [Arguments(10)]
     [Arguments(int.MaxValue)]
     public async Task UnknownModelKindIsRejected(int value)
     {

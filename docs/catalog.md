@@ -80,8 +80,72 @@ Unknown profile names and relationship types retain their exact spelling.
 Unknown parameters can remain catalog data, including in built-in profiles;
 they do not waive known required parameters. Selecting a built-in profile with
 unknown parameters still reports `unsupported_operation`, without stripping
-parameters or trying a fallback. OPC UA remains opaque and unsupported by this
-implementation; no native OPC UA semantics are validated.
+parameters or trying a fallback. `XRegistry.Bindings.OpcUa` validates a
+selected OPC UA advertisement, maps its portable Registry root into a supplied
+`NamespaceTable`, and selects one discovered endpoint only when caller policy
+permits it. `CatalogDescription.Parse` does not apply those binding-specific
+checks before selection.
+
+`OpcUaRegistryReader` applies the protocol rules over an abstract Session: it
+rejects a root that is not a Registry, pages Browse to completion and releases
+continuation points on failure, and reads FileType objects with Open, Read until
+an empty chunk, and an always-attempted Close. It checks `SpecVersion` before
+interpreting Registry contents and parses the `Capabilities` and `Model` files
+as JSON. `OpcUaSessionConnection` discovers endpoints and opens a Session only
+after caller policy selects one; it maps the advertised root through the
+Session's `NamespaceArray` and verifies the root and Core version.
+`OpcUaSessionAdapter` maps read and write operations onto an `ISessionClient`,
+using OPC Foundation .NET Stack 2.0.1. `OpcUaRegistryReader` maps Registry,
+Group, logical Resource and exact Version properties. Default Resource
+operations use the logical Resource's delegated interface; explicit Version
+operations resolve a typed `Versions` component and its exact Version child.
+The reader also reads document-bearing Resources. `OpcUaRegistryReadSource`
+implements `IFederationReadSource` for Registry, Group, Resource, Meta and
+exact Version views. It returns Registry Model and Capabilities, complete
+collection snapshots and selector results, with local JSON Pointers rebased to
+each returned view. Document reads return exact local FileType bytes or an
+unfetched external ExpandedNodeId descriptor; the source does not fetch remote
+content. `OpcUaRegistryWriter` writes scalar Properties; calls create,
+get-or-create, delete and attribute Methods; and replaces model-declared
+Resource documents through FileTransfer. It supports both entity `Labels` and
+Resource Meta `MetaLabels`. Document writes are bounded, start at position
+zero, erase the prior contents and always attempt to close an opened handle.
+
+The reader, writer and read source have fake-Session coverage. An in-process
+OPC UA Stack server also verifies Session establishment, SpecVersion gating,
+event Subscription creation and removal, Property writes, Group and Resource
+Methods, attribute Methods, expected-Epoch `Delete`, model-resolved Resource
+document replacement, created-Resource completion, and FileType byte
+readback. Callers still supply OPC UA type NodeIds for Groups and Resources,
+and the `ResourceVersionsType` NodeId for version operations. The binding draft permits
+several ways to represent collection names but does not define a deterministic
+collection-name-to-ObjectType lookup. The source does not provide API views
+because the binding exposes no retrievable Core API URL. Metadata-only
+`MetadataResourceType` Resources with `hasdocument=false` and `maxversions=1`
+are projected from their read-only `Metadata` FileType. Resource Properties
+are read while that file handle pins the committed revision; exact Version
+selection requires an observed `VersionId`, and the source does not invent a
+`Versions` hierarchy or document bytes. `MetaDeprecated` is decoded only when
+its ExtensionObject encoding resolves to `DeprecationDataType`; its optional
+fields retain their JSON types. Other model-defined Properties are projected
+when their BrowseNames map to non-system attributes in the compiled Registry
+Model. ExtensionObject values must resolve to a DataType; the reader normalizes
+structured fields to lowercase xRegistry names and validates each JSON value
+against the model. Unmodelled extension Properties are not projected. The
+source preserves OPC UA `ExternalReference` values as unfetched descriptors.
+Federation can resolve external Resource and Version targets only through a
+caller-injected trusted provider lease; it verifies the target Registry, model
+and node roles,
+application identity, namespace mapping and origin-relative XID before
+returning a target node. Event type discovery, notification decoding and
+Subscription management implement the draft's `XREG-Events` behavior.
+A two-server test resolves a caller-authorized metadata-only Resource to an
+exact target Version, reads its FileType bytes, and verifies the selected XID,
+ContentType and bytes. The target uses alternate Group/Resource collection
+names and distinct ObjectType NodeIds supplied through the caller mapping.
+Endpoint security policy remains the caller's choice; this binding does not
+impose a secure-only default. It does not claim OPC UA API conformance. The
+generic Federation package has no OPC UA stack dependency.
 
 Invalid writes use existing Core errors such as `invalid_attribute`,
 `unknown_attribute`, and `required_attribute_missing`, with the Version path
@@ -95,6 +159,39 @@ Readonly input is ignored and defaults are applied by Core before domain checks.
 Malformed common catalog data in an offline consumer reports `invalid_package`,
 including URI user information. Explicit selection/access-policy denial still
 reports `policy_denied`.
+
+## Publication snapshots and channels
+
+`PublicationChannelStore` in `XRegistry.Publication.Server` stores exact
+manifest bytes and the supplied objects named by their descriptors. It verifies
+byte size and SHA-256 before commit, rejects a changed object at an existing
+reference, and commits new objects with the channel-head update in one
+`IRegistryPersistence` batch. A channel update must supply the current epoch;
+the publication scope remains fixed after channel creation.
+
+Opening a channel reads the retained manifest and checks its descriptor, scope
+and completeness. Offline replay is limited to `offline-complete` manifests,
+which must supply every referenced object; replay verifies each object again
+and returns the original manifest and object bytes. Durability depends on the
+selected persistence provider. The store does not resolve external references
+through binding adapters.
+
+`PublicationBundle.WritePackageAsync` writes the selected manifest and required
+objects to a directory containing `publication-package.json`.
+`PublicationPackage.OpenDirectoryAsync` reads that package without network
+access. It checks every mapped path for resolved containment, applies object
+and traversal limits, and verifies bytes against their descriptors.
+`PublicationReadClient.OpenRecordAsync` and package readers accept `sources` as
+pinned provenance. They read the materialized top-level snapshot and do not
+fetch or reconstruct constituent sources; source composition remains
+unsupported.
+
+`MapPublicationSnapshot` exposes a read-only Core HTTP view for a
+`PublicationOpenedSnapshot`. The caller must build its backend from that
+snapshot's captured Registry bytes and matching model; the mapper cannot verify
+that provenance. It enforces read-only persistence and the open-record
+response-size budget, serves the context at `/.well-known/xregistry-open`, and
+adds the Publication context relation to root responses.
 
 ## No acquisition authority
 

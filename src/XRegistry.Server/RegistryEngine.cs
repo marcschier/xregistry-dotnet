@@ -6,7 +6,7 @@ using System.Text.Json.Nodes;
 namespace XRegistry.Server;
 
 /// <summary>A bounded, transport-independent core registry with atomic persistence and explicit host policies.</summary>
-public sealed partial class RegistryEngine : IRegistryHostBackend
+public sealed partial class RegistryEngine : IReadOnlyRegistryHostBackend
 {
     private const string ModelKey = "$modelsource";
     private readonly RegistryEngineOptions _options;

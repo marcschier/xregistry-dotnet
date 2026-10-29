@@ -316,6 +316,23 @@ public class EndpointAuthoredStorageTests
     }
 
     [Test]
+    public async Task MediaEndpointAllowsGeneratedDiscoveryForAnEmptyMessageCollection()
+    {
+        var engine = Domain(RegistryModelKind.Endpoint);
+
+        var created = await Send(engine, RegistryAction.Replace, "/endpoints/media", """
+            {"usage":["consumer"],"protocol":"HLS",
+             "protocoloptions":{"endpoints":[{"uri":"https://media.example.test/master.m3u8"}]}}
+            """);
+
+        await Assert.That(created.Kind).IsEqualTo(RegistryResultKind.Created);
+        await Assert.That(created.Metadata!.RootElement.GetProperty("messagescount").GetInt32()).IsEqualTo(0);
+        await Assert.That(created.Metadata.RootElement.GetProperty("messagesurl").GetString())
+            .IsEqualTo("https://registry.example/catalog/endpoints/media/messages");
+        await Assert.That(created.Metadata.RootElement.TryGetProperty("messages", out _)).IsFalse();
+    }
+
+    [Test]
     public async Task GenericCoreUriMapNameEnumAndFullUriTemplateRulesRemainUnchanged()
     {
         var engine = Create("""

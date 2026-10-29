@@ -164,6 +164,30 @@ public class MessageEndpointRuntimeRulesTests
     }
 
     [Test]
+    public async Task MessageSchemaReferenceAllowsAFormatSelectorOnlyAfterExactDocumentIdentityMatches()
+    {
+        var model = BuiltInRegistryModels.Compile(RegistryModelKind.CloudEvents);
+        const string self = "https://registry.example/catalog/schemagroups/g/schemas/s$details";
+        var selectedObject = RegistryJson.Parse("""
+            {"dataschemaxid":"/schemagroups/g/schemas/s",
+             "dataschemauri":"https://registry.example/catalog/schemagroups/g/schemas/s$details#Metrics"}
+            """);
+
+        await Assert.That(() => RegistryDomainRules.ValidateMessageSchemaReference(
+            selectedObject.RootElement, model, (_, _) => self)).ThrowsNothing();
+
+        var wrongDocument = RegistryJson.Parse("""
+            {"dataschemaxid":"/schemagroups/g/schemas/s",
+             "dataschemauri":"https://registry.example/catalog/schemagroups/other/schemas/s$details#Metrics"}
+            """);
+        var failure = await Assert.That(() => RegistryDomainRules.ValidateMessageSchemaReference(
+                wrongDocument.RootElement, model, (_, _) => self))
+            .Throws<RegistryException>() ?? throw new InvalidOperationException("Expected an owner-identity diagnostic.");
+
+        await Assert.That(failure.Diagnostic.Path).IsEqualTo("/dataschemauri");
+    }
+
+    [Test]
     [Arguments(RegistryModelKind.Message, """{"protocol":"HTTP"}""", """{"protocol":"http"}""", true)]
     [Arguments(RegistryModelKind.Message, """{"protocol":"HTTP"}""", "{}", true)]
     [Arguments(RegistryModelKind.Message, """{"protocol":"HTTP"}""", """{"protocol":"NATS"}""", false)]

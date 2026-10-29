@@ -183,7 +183,7 @@ internal static partial class ModelCompiler
         }
 
         var singular = Text(node, "singular", path);
-        if (singular is null || !RegistryNames.IsAttribute(singular, maxLength: group ? 63 : 57))
+        if (singular is null || !RegistryNames.IsAttribute(singular, maxLength: group ? 61 : 57))
         {
             throw Diagnostics.Error("model_error", path + "/singular", "A valid singular name is required.");
         }
@@ -253,7 +253,7 @@ internal static partial class ModelCompiler
 
         CheckObject(node, path);
         CheckMembers(node, path, item
-            ? ["type", "target", "namecharset", "attributes", "item"]
+            ? ["type", "enum", "strict", "target", "namecharset", "attributes", "item"]
             : ["name", "type", "target", "namecharset", "description", "enum", "strict", "matchversions",
                 "readonly", "immutable", "required", "default", "attributes", "item", "ifvalues"]);
         var declaredName = Text(node, "name", path);

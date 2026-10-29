@@ -119,6 +119,20 @@ newly created artifacts; cleanup failures are reported explicitly. This is not
 a multi-file crash-recovery protocol: interruption can leave unlisted artifacts,
 which verification rejects rather than silently adopting or deleting.
 
+## Working-draft model sources
+
+An unmerged draft model must not change the correction manifest: any manifest
+change invalidates requirement reviews, even when the model is outside the
+normative oracle. `eng/draft-models.json` records each draft model's source
+GitHub repository (the repository that contains the pinned commit), source
+commit, path and SHA-256. The model synchronizer copies only bytes whose digest
+matches that entry from `tests/Conformance/DraftSources`.
+`python -B eng\sync_models.py --check` rejects missing or changed sources.
+
+A packaged draft model is an implementation input, not a released requirement
+or conformance result. Its API validation and operation behavior still require
+separate implementation and tests.
+
 ## Review workflow
 
 `generate` extracts uppercase normative keywords from prose blocks and table

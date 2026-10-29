@@ -30,3 +30,14 @@ public interface IRegistryHostBackend : IRegistryEngine
         RegistryOperationContext context, IReadOnlyList<KeyValuePair<string, string?>> parameters,
         CancellationToken cancellationToken = default);
 }
+
+/// <summary>A host backend that explicitly reports whether its selected registry persistence is read-only.</summary>
+/// <remarks>
+/// Snapshot projections use this contract rather than assuming that a backend mounted for reads cannot mutate.
+/// Implementations must report the property from the actual persistence boundary.
+/// </remarks>
+public interface IReadOnlyRegistryHostBackend : IRegistryHostBackend
+{
+    /// <summary>Gets whether the backend's underlying persistence rejects all mutations.</summary>
+    bool IsReadOnly { get; }
+}

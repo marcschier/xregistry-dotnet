@@ -387,7 +387,7 @@ internal static class Program
                 retainedMetadata?.Dispose();
             }
             await EmbeddingRuntimeCases.RunAsync(report, arguments["--fixtures"], arguments["--work"], model).ConfigureAwait(false);
-            Require(report.Cases.Count == 25 && JitInfo.GetCompiledMethodCount() == 0, "exact native case count");
+            Require(report.Cases.Count == 27 && JitInfo.GetCompiledMethodCount() == 0, "exact native case count");
             report.Outcome = "passed";
             return 0;
         }

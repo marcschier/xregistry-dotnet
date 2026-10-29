@@ -50,6 +50,22 @@ public class SharedQuerySemanticsTests
     }
 
     [Test]
+    public async Task QuotedBracketPropertyDelimitersDoNotSplitTheExpressionOrConjunction()
+    {
+        var source = Groups();
+        source.Add("/fleets/a", """
+            {"fleetid":"a","rank":2,
+             "info":{"addresses":{"home,office=west":{"state":"CA"}}}}
+            """);
+        using var budget = new RegistryQueryBudget();
+
+        var result = await Evaluate(source, budget,
+            filters: ["info.addresses['home,office=west'].state=CA,rank=2"]);
+
+        await Assert.That(Ids(result)).IsEqualTo("a");
+    }
+
+    [Test]
     public async Task AndRequiresOneMatchingSubtreeWhileRepeatedFiltersUnionParentsAndLeaves()
     {
         var source = Tree();

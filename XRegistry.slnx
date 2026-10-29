@@ -15,9 +15,12 @@
     <Project Path="src/XRegistry.Bindings.File/XRegistry.Bindings.File.csproj" />
     <Project Path="src/XRegistry.Bindings.Git/XRegistry.Bindings.Git.csproj" />
     <Project Path="src/XRegistry.Bindings.Oci/XRegistry.Bindings.Oci.csproj" />
+    <Project Path="src/XRegistry.Bindings.OpcUa/XRegistry.Bindings.OpcUa.csproj" />
     <Project Path="src/XRegistry.Client/XRegistry.Client.csproj" />
     <Project Path="src/XRegistry.Federation/XRegistry.Federation.csproj" />
     <Project Path="src/XRegistry.Models/XRegistry.Models.csproj" />
+    <Project Path="src/XRegistry.Publication/XRegistry.Publication.csproj" />
+    <Project Path="src/XRegistry.Publication.Server/XRegistry.Publication.Server.csproj" />
     <Project Path="src/XRegistry.Server/XRegistry.Server.csproj" />
     <Project Path="src/XRegistry.Storage.File/XRegistry.Storage.File.csproj" />
     <Project Path="src/XRegistry.Validation/XRegistry.Validation.csproj" />
@@ -35,6 +38,9 @@
     <Project Path="tests/XRegistry.Http.Tests/XRegistry.Http.Tests.csproj" />
     <Project Path="tests/XRegistry.Models.Tests/XRegistry.Models.Tests.csproj" />
     <Project Path="tests/XRegistry.Oci.Tests/XRegistry.Oci.Tests.csproj" />
+    <Project Path="tests/XRegistry.OpcUa.Tests/XRegistry.OpcUa.Tests.csproj" />
+    <Project Path="tests/XRegistry.Publication.Tests/XRegistry.Publication.Tests.csproj" />
+    <Project Path="tests/XRegistry.Publication.Server.Tests/XRegistry.Publication.Server.Tests.csproj" />
     <Project Path="tests/XRegistry.SampleHosting.Tests/XRegistry.SampleHosting.Tests.csproj" />
     <Project Path="tests/XRegistry.Server.Tests/XRegistry.Server.Tests.csproj" />
     <Project Path="tests/XRegistry.Storage.CrashProbe/XRegistry.Storage.CrashProbe.csproj" />

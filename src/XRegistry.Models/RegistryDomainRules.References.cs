@@ -84,9 +84,11 @@ public static partial class RegistryDomainRules
             {
                 throw new InvalidOperationException("The host must supply the schema Resource's self URL.");
             }
-            if (!string.Equals(uri, self, StringComparison.Ordinal))
+            var fragmentSeparator = uri.IndexOf('#');
+            var schemaDocumentUri = fragmentSeparator < 0 ? uri : uri[..fragmentSeparator];
+            if (!string.Equals(schemaDocumentUri, self, StringComparison.Ordinal))
             {
-                throw Invalid("dataschemauri must equal the local schema Resource's self URL.", "/dataschemauri");
+                throw Invalid("dataschemauri must identify the local schema Resource's document.", "/dataschemauri");
             }
         }
     }

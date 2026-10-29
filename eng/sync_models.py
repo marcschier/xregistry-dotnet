@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 from pathlib import Path
+import re
 import sys
 
 
@@ -29,9 +30,10 @@ MODELS = {
     "registry": "workingdrafts/models/registry/model.json",
     "openusd": "workingdrafts/models/openusd/model.json",
 }
+DRAFT_MODELS = "eng/draft-models.json"
 
 
-def synchronize(root: Path, check: bool) -> None:
+def synchronize(root: Path, check: bool) -> int:
     lock = source_tool.verify_corpus(root)
     records = source_tool.source_records(lock)
     directory = root / "src" / "XRegistry.Models" / "Resources"
@@ -41,6 +43,44 @@ def synchronize(root: Path, check: bool) -> None:
             raise source_tool.SpecificationError(f"The pinned model is missing: {path}")
         filename = name if name == "LICENSE" else name + ".json"
         expected[filename], _ = source_tool.active_source(root, path, records)
+    draft_manifest = source_tool.read_json(source_tool.contained(root, DRAFT_MODELS))
+    if (
+        not isinstance(draft_manifest, dict)
+        or set(draft_manifest) != {"schemaVersion", "models"}
+        or type(draft_manifest["schemaVersion"]) is not int
+        or draft_manifest["schemaVersion"] != 1
+        or not isinstance(draft_manifest["models"], dict)
+    ):
+        raise source_tool.SpecificationError("Invalid working-draft model source manifest.")
+    for name, entry in draft_manifest["models"].items():
+        if (
+            not isinstance(name, str)
+            or not re.fullmatch(r"[a-z][a-z0-9-]*", name)
+            or name in MODELS
+            or not isinstance(entry, dict)
+            or set(entry) != {"sourceRepository", "sourceCommit", "sourcePath", "file", "sha256"}
+            or not isinstance(entry["sourceRepository"], str)
+            or re.fullmatch(r"https://github\.com/[A-Za-z0-9-]+/[A-Za-z0-9._-]+", entry["sourceRepository"]) is None
+            or not isinstance(entry["sourceCommit"], str)
+            or not re.fullmatch(r"[a-f0-9]{40}", entry["sourceCommit"])
+            or not isinstance(entry["sourcePath"], str)
+            or "\\" in entry["sourcePath"]
+            or not entry["sourcePath"].startswith("workingdrafts/")
+            or not entry["sourcePath"].endswith(".json")
+            or not isinstance(entry["file"], str)
+            or not entry["file"].startswith("tests/Conformance/DraftSources/")
+            or not isinstance(entry["sha256"], str)
+            or not re.fullmatch(r"[a-f0-9]{64}", entry["sha256"])
+        ):
+            raise source_tool.SpecificationError(f"Invalid working-draft model provenance: {name}")
+        source_tool.contained(root, entry["sourcePath"])
+        source_path = source_tool.contained(root, entry["file"])
+        if not source_path.is_file():
+            raise source_tool.SpecificationError(f"Working-draft model source is missing: {entry['file']}")
+        data = source_path.read_bytes()
+        if source_tool.sha256(data) != entry["sha256"]:
+            raise source_tool.SpecificationError(f"Working-draft model source hash mismatch: {entry['file']}")
+        expected[name + ".json"] = data
     if directory.exists():
         actual = {path.name for path in directory.iterdir()}
         if actual - expected.keys():
@@ -48,6 +88,7 @@ def synchronize(root: Path, check: bool) -> None:
     for filename, data in expected.items():
         path = source_tool.contained(directory, filename)
         source_tool.write_output(path, data, check)
+    return len(draft_manifest["models"])
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -55,11 +96,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args(argv)
     try:
-        synchronize(ROOT, args.check)
+        draft_count = synchronize(ROOT, args.check)
     except (source_tool.SpecificationError, OSError, UnicodeError, ValueError) as error:
         print(f"Built-in model resource error: {error}", file=sys.stderr)
         return 1
-    print(f"Verified {len(MODELS)} pinned model resources and their retained license.")
+    print(f"Verified {len(MODELS)} pinned and {draft_count} draft model resources plus their retained license.")
     return 0
 
 

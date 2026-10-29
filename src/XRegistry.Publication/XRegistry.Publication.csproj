@@ -1,0 +1,13 @@
+<!-- Copyright (c) 2026 xregistry-dotnet contributors. -->
+<!-- SPDX-License-Identifier: MIT -->
+
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>XRegistry.Publication</PackageId>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" Condition="'$(TargetFramework)' == 'net8.0'" />
+    <ProjectReference Include="..\XRegistry\XRegistry.csproj" />
+  </ItemGroup>
+</Project>

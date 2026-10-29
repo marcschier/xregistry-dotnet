@@ -12,5 +12,8 @@
     <PackageVersion Include="SharpZipLib" Version="1.4.2" />
     <PackageVersion Include="TUnit" Version="1.76.28" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.14" />
+    <PackageVersion Include="OPCFoundation.NetStandard.Opc.Ua.Client" Version="2.0.1" />
+    <PackageVersion Include="OPCFoundation.NetStandard.Opc.Ua.Server" Version="2.0.1" />
+    <PackageVersion Include="System.Text.Json" Version="10.0.12" />
   </ItemGroup>
 </Project>

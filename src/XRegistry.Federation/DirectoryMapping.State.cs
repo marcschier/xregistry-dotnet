@@ -111,9 +111,24 @@ public sealed partial class DirectoryMapping
             throw FederationJson.Invalid("The captured Resource requires exactly one Version ancestry root.");
         }
         var matching = MatchingAttributes(state.Definition, cancellationToken);
+        JsonObject[]? metadata = null;
+        if (state.Definition.Singular == "api" && versions.Count > 1)
+        {
+            metadata = versions.Select(version => JsonNode.Parse(_modelValidation.Metadata(version).GetRawText())!.AsObject()).ToArray();
+            var firstFormat = metadata[0]["format"];
+            for (var index = 1; index < metadata.Length; index++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                _budget.ChargeWork();
+                if (!RegistryMetadataValidator.ApiVersionFormatsEqual(firstFormat, metadata[index]["format"]))
+                {
+                    throw FederationJson.Invalid("Captured API Versions do not use one case-insensitively equal format identifier.");
+                }
+            }
+        }
         if (matching.Count != 0 && versions.Count > 1)
         {
-            var metadata = versions.Select(version => JsonNode.Parse(_modelValidation.Metadata(version).GetRawText())!.AsObject()).ToArray();
+            metadata ??= versions.Select(version => JsonNode.Parse(_modelValidation.Metadata(version).GetRawText())!.AsObject()).ToArray();
             foreach (var attribute in matching)
             {
                 var expected = At(metadata[0], attribute.Path);
@@ -121,7 +136,8 @@ public sealed partial class DirectoryMapping
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     _budget.ChargeWork();
-                    if (!SameScalar(expected, At(metadata[index], attribute.Path), attribute.Definition.Type))
+                    if (!RegistryMetadataValidator.MatchVersionsEqual(state.Definition, attribute.Path,
+                        attribute.Definition.Type, expected, At(metadata[index], attribute.Path)))
                     {
                         throw FederationJson.Invalid("Captured Versions violate a model matchversions constraint.");
                     }
@@ -164,23 +180,6 @@ public sealed partial class DirectoryMapping
             value = value is JsonObject owner ? owner[name] : null;
         }
         return value;
-    }
-
-    private static bool SameScalar(JsonNode? first, JsonNode? second, RegistryValueType type)
-    {
-        if (first is null || second is null) { return first is null && second is null; }
-        if (type is RegistryValueType.Integer or RegistryValueType.UInteger or RegistryValueType.Decimal)
-        {
-            return RegistryNumber.Parse(first.ToJsonString()).Equals(RegistryNumber.Parse(second.ToJsonString()));
-        }
-        if (type == RegistryValueType.Timestamp)
-        {
-            var left = first.GetValue<string>();
-            var right = second.GetValue<string>();
-            return left[..19] == right[..19] &&
-                left[19..^1].TrimEnd('0').TrimEnd('.') == right[19..^1].TrimEnd('0').TrimEnd('.');
-        }
-        return JsonNode.DeepEquals(first, second);
     }
 
     private static void CheckDefault(TreeObject meta, TreeObject version)

@@ -122,12 +122,21 @@ public sealed partial class ProducerRegistryView
             token.ThrowIfCancellationRequested();
             _budget.ChargeWork();
             if (first is null) { first = version; continue; }
+            if (resource.Singular == "api" &&
+                !RegistryMetadataValidator.ApiVersionFormatsEqual(ModelValueAt(first, ["format"]),
+                    ModelValueAt(version, ["format"])))
+            {
+                throw new FederationException(FederationErrorCode.InvalidPackage,
+                    "The selected API Resource's Versions do not use one case-insensitively equal format identifier.",
+                    "api_format_mismatch");
+            }
             foreach (var attribute in attributes)
             {
                 var left = ModelValueAt(first, attribute.Path);
                 var right = ModelValueAt(version, attribute.Path);
                 _budget.ChargeWork();
-                if (!SameModelScalar(left, right, attribute.Definition.Type))
+                if (!RegistryMetadataValidator.MatchVersionsEqual(resource, attribute.Path,
+                    attribute.Definition.Type, left, right))
                 {
                     throw new FederationException(FederationErrorCode.InvalidPackage,
                         "The selected Resource's Versions violate a static matchversions rule.", "matchversions_failure");
@@ -147,21 +156,4 @@ public sealed partial class ProducerRegistryView
         return node;
     }
 
-    private static bool SameModelScalar(JsonNode? left, JsonNode? right, RegistryValueType type)
-    {
-        if (left is null || right is null) { return left is null && right is null; }
-        if (type is RegistryValueType.Decimal or RegistryValueType.Integer or RegistryValueType.UInteger)
-        {
-            return RegistryNumber.Parse(left.ToJsonString()).Equals(RegistryNumber.Parse(right.ToJsonString()));
-        }
-        if (type == RegistryValueType.Timestamp)
-        {
-            var first = left.GetValue<string>();
-            var second = right.GetValue<string>();
-            return first.AsSpan(0, 19).SequenceEqual(second.AsSpan(0, 19)) &&
-                first.AsSpan(19, first.Length - 20).TrimEnd('0').TrimEnd('.')
-                    .SequenceEqual(second.AsSpan(19, second.Length - 20).TrimEnd('0').TrimEnd('.'));
-        }
-        return JsonNode.DeepEquals(left, right);
-    }
 }

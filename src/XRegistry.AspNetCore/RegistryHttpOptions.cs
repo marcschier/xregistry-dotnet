@@ -25,4 +25,7 @@ public sealed record RegistryHttpOptions
     public int MaxErrorBytes { get; init; } = 32 * 1024;
     /// <summary>Gets the complete request/body/response lifetime budget, independent of client disconnect cancellation.</summary>
     public TimeSpan RequestTimeout { get; init; } = TimeSpan.FromSeconds(30);
+
+    internal Uri? PublicationContextUri { get; init; }
+    internal byte[]? PublicationContextBytes { get; init; }
 }

@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "models": {
+    "api": {
+      "sourceRepository": "https://github.com/marcschier/xregistry-drafts",
+      "sourceCommit": "14c29119bdcb1a725489e6a0842dfb372b2a9d94",
+      "sourcePath": "workingdrafts/models/api/model.json",
+      "file": "tests/Conformance/DraftSources/api/model.json",
+      "sha256": "c3d333b91a8b5b926ba3c41a88c6a55a141697c6f514dc53d820da1608e4250f"
+    },
+    "publication": {
+      "sourceRepository": "https://github.com/marcschier/xregistry-drafts",
+      "sourceCommit": "b43c89d5fdec82e9362b27672bea96a7e9563956",
+      "sourcePath": "workingdrafts/publication/model.json",
+      "file": "tests/Conformance/DraftSources/publication/model.json",
+      "sha256": "f287f3c0972e5fda9a8e3c5e8a727ecc43c536f254795cf6a6433a4d69e6d134"
+    },
+    "wot": {
+      "sourceRepository": "https://github.com/xregistry/spec",
+      "sourceCommit": "811de7d20711dd3edc8c676ae634adebee235188",
+      "sourcePath": "workingdrafts/models/wot/model.json",
+      "file": "tests/Conformance/DraftSources/wot/model.json",
+      "sha256": "5a1cd2f60e8b54dd7151d6be25d033701a251780c14468711227b2e69a86d832"
+    }
+  }
+}

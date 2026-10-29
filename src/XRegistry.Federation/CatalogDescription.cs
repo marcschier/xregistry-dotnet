@@ -90,6 +90,7 @@ public sealed class CatalogAdvertisement
             "git" => ["revision", "path"],
             "oci" => ["reference"],
             "file" => ["layout", "reference"],
+            "opcua" => ["registryroot", "applicationuri", "transportprofileuri"],
             _ => null,
         };
         if (allowed is null)

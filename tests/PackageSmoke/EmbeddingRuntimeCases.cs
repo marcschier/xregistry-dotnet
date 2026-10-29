@@ -4,6 +4,7 @@
 using System.Diagnostics;
 using System.Net;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using XRegistry;
 using XRegistry.Bindings.File;
@@ -11,6 +12,8 @@ using XRegistry.Bindings.Git;
 using XRegistry.Bindings.Git.Objects;
 using XRegistry.Bindings.Oci;
 using XRegistry.Federation;
+using XRegistry.Publication;
+using XRegistry.Publication.Server;
 using XRegistry.Server;
 using XRegistry.Storage.File;
 
@@ -48,6 +51,7 @@ internal static class EmbeddingRuntimeCases
         await report.CaseAsync("oci-linked-frozen-closure",
             () => OciAsync(report, oci, "linked", expected.RootElement)).ConfigureAwait(false);
         await report.CaseAsync("federation-live-http-source", () => FederationAsync(report, model)).ConfigureAwait(false);
+        await report.CaseAsync("publication-manifest-integrity", () => PublicationAsync(report)).ConfigureAwait(false);
         await report.CaseAsync("native-dependencies-no-git-backend", () =>
         {
             using var process = Process.GetCurrentProcess();
@@ -71,6 +75,8 @@ internal static class EmbeddingRuntimeCases
             return Task.CompletedTask;
         }).ConfigureAwait(false);
         await report.CaseAsync("federation-escaped-identities", () => EscapedFederationAsync(report, model)).ConfigureAwait(false);
+        await report.CaseAsync("publication-channel-retained-replay",
+            () => PublicationChannelAsync(report, Path.Combine(work, "publication-store"))).ConfigureAwait(false);
     }
 
     private static FileStoreLimits StorageLimits() => new()
@@ -82,6 +88,90 @@ internal static class EmbeddingRuntimeCases
         MaxTemporaryFiles = 16, MaxTemporaryBytes = 1024 * 1024,
         MaxReadSnapshots = 8, MaxOpenDocumentStreams = 8, MaxDatabaseBytes = 8 * 1024 * 1024
     };
+
+    private static Task PublicationAsync(EmbeddingReport report)
+    {
+        var registryBytes = "{}"u8.ToArray();
+        var digest = Convert.ToHexString(SHA256.HashData(registryBytes)).ToLowerInvariant();
+        var manifestBytes = Encoding.UTF8.GetBytes($$"""
+            {
+              "format": "xregistry-publication/1",
+              "scope": "urn:example:release",
+              "capture": "assembled",
+              "completeness": "offline-complete",
+              "registry": {
+                "reference": {
+                  "registry": {
+                    "binding": "http",
+                    "endpoint": "https://publisher.example.test"
+                  },
+                  "version": "/publications/team/objects/registry/versions/content"
+                },
+                "digest": "sha256:{{digest}}",
+                "size": 2
+              },
+              "documents": []
+            }
+            """);
+        var manifest = PublicationManifest.Parse(manifestBytes);
+        PublicationIntegrity.Verify(registryBytes, manifest.Registry);
+        Program.Require(manifest.Scope == "urn:example:release" && manifest.Documents.Count == 0 &&
+            manifest.SnapshotId == Convert.ToHexString(SHA256.HashData(manifestBytes)).ToLowerInvariant(),
+            "packaged Publication parsing and exact byte integrity");
+        report.RuntimeFacts["publicationSnapshotId"] = manifest.SnapshotId;
+        return Task.CompletedTask;
+    }
+
+    private static async Task PublicationChannelAsync(EmbeddingReport report, string directory)
+    {
+        Directory.CreateDirectory(directory);
+        var registryBytes = "{}"u8.ToArray();
+        var digest = Convert.ToHexString(SHA256.HashData(registryBytes)).ToLowerInvariant();
+        var manifestBytes = Encoding.UTF8.GetBytes($$"""
+            {
+              "format": "xregistry-publication/1",
+              "scope": "urn:example:release",
+              "capture": "assembled",
+              "completeness": "offline-complete",
+              "registry": {
+                "reference": {
+                  "registry": {
+                    "binding": "http",
+                    "endpoint": "https://publisher.example.test"
+                  },
+                  "version": "/publications/team/objects/registry/versions/content"
+                },
+                "digest": "sha256:{{digest}}",
+                "size": 2
+              },
+              "documents": []
+            }
+            """);
+        var manifest = PublicationManifest.Parse(manifestBytes);
+        var content = new PublicationStoredObject(manifest.Registry, registryBytes);
+        var registryAccess = new PublicationRegistryAccess("http", "https://publisher.example.test",
+            new Dictionary<string, string>(StringComparer.Ordinal));
+        using (var localStore = LocalFileStore.Initialize(directory, StorageLimits()))
+        using (var persistence = new LocalRegistryPersistence(localStore))
+        {
+            var store = new PublicationChannelStore(persistence, registryAccess, 64 * 1024);
+            var opened = await store.PublishAsync("/publications/team/channels/stable", manifestBytes,
+                [content], 0).ConfigureAwait(false);
+            Program.Require(opened.Channel?.Epoch == 1, "atomic publication channel epoch advances to one");
+        }
+
+        using var reopenedStore = LocalFileStore.Open(directory, StorageLimits());
+        using var reopenedPersistence = new LocalRegistryPersistence(reopenedStore);
+        var replay = await new PublicationChannelStore(reopenedPersistence, registryAccess, 64 * 1024)
+            .ReplayOfflineBundleAsync("/publications/team/channels/stable").ConfigureAwait(false);
+        Program.Require(replay.Manifest.SnapshotId == manifest.SnapshotId &&
+            replay.GetExactManifestBytes().AsSpan().SequenceEqual(manifestBytes) &&
+            replay.Objects.Count == 1 && replay.Objects[0].GetExactBytes().AsSpan().SequenceEqual(registryBytes),
+            "durable channel reopen and byte-for-byte offline replay");
+        report.RuntimeEvidence["publicationChannelEpoch"] = 1;
+        report.RuntimeEvidence["publicationBundleObjects"] = replay.Objects.Count;
+        report.DocumentBytesVerified += registryBytes.Length;
+    }
 
     private static async Task StorageAsync(EmbeddingReport report, string directory)
     {

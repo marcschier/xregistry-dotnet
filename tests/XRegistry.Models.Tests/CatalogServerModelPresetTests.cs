@@ -42,10 +42,13 @@ public class CatalogServerModelPresetTests
         await Assert.That(source.GetProperty("$include").GetString()).IsEqualTo("https://xregistry.invalid/spec/core/model.json");
         var groups = source.GetProperty("groups");
         var includes = groups.GetProperty("$includes");
-        await Assert.That(includes.GetArrayLength()).IsEqualTo(3);
+        await Assert.That(includes.GetArrayLength()).IsEqualTo(6);
         await Assert.That(includes[0].GetString()).IsEqualTo("https://xregistry.invalid/spec/cloudevents/model.json#/groups");
         await Assert.That(includes[1].GetString()).IsEqualTo("https://xregistry.invalid/spec/workingdrafts/models/registry/model.json#/groups");
         await Assert.That(includes[2].GetString()).IsEqualTo("https://xregistry.invalid/spec/workingdrafts/models/openusd/model.json#/groups");
+        await Assert.That(includes[3].GetString()).IsEqualTo("https://xregistry.invalid/spec/workingdrafts/models/api/model.json#/groups");
+        await Assert.That(includes[4].GetString()).IsEqualTo("https://xregistry.invalid/spec/workingdrafts/models/publication/model.json#/groups");
+        await Assert.That(includes[5].GetString()).IsEqualTo("https://xregistry.invalid/spec/workingdrafts/models/wot/model.json#/groups");
         await Assert.That(groups.TryGetProperty("messagegroups", out _)).IsFalse();
         await Assert.That(groups.TryGetProperty("usdassetgroups", out _)).IsFalse();
         await Assert.That(groups.GetProperty("categories").GetProperty("resources").GetProperty("registries")
@@ -90,6 +93,9 @@ public class CatalogServerModelPresetTests
     [Arguments(RegistryModelKind.Schema)]
     [Arguments(RegistryModelKind.CloudEvents)]
     [Arguments(RegistryModelKind.OpenUsd)]
+    [Arguments(RegistryModelKind.Api)]
+    [Arguments(RegistryModelKind.Publication)]
+    [Arguments(RegistryModelKind.Wot)]
     public async Task OtherServerPresetChoicesRetainOrdinaryCompilation(RegistryModelKind kind)
     {
         var ordinary = BuiltInRegistryModels.Compile(kind);
@@ -101,7 +107,7 @@ public class CatalogServerModelPresetTests
 
     [Test]
     [Arguments(-1)]
-    [Arguments(7)]
+    [Arguments(10)]
     [Arguments(int.MaxValue)]
     public async Task UnknownServerPresetKindsDoNotFallBackToAValidModel(int kind)
     {

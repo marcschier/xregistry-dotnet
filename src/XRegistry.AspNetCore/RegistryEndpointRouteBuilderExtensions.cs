@@ -128,8 +128,32 @@ public static class RegistryEndpointRouteBuilderExtensions
                 {
                     RequestScope = requestScope,
                     PrepareResponseAsync = async (result, ct) =>
-                        prepared = await PreparedResponse.CreateAsync(result, backend, ct).ConfigureAwait(false)
+                        prepared = await PreparedResponse.CreateAsync(result, backend, ct,
+                            options.PublicationContextUri).ConfigureAwait(false)
                 };
+                if (options.PublicationContextBytes is { } openRecordBytes &&
+                    requestPath == PublicationEndpointRouteBuilderExtensions.ContextPath)
+                {
+                    CheckHeaders(http.Request.Headers, backend.Limits.MaxHeaderBytes, requestPath);
+                    await backend.AuthorizeRequestAsync(RegistryAction.Read, RegistryPath.Parse("/"), context,
+                        cancellationToken).ConfigureAwait(false);
+                    if (!HttpMethods.IsGet(http.Request.Method) && !HttpMethods.IsHead(http.Request.Method))
+                    {
+                        throw Error("action_not_supported", requestPath,
+                            "The publication context endpoint supports only GET and HEAD.",
+                            ("action", http.Request.Method));
+                    }
+
+                    http.Response.StatusCode = StatusCodes.Status200OK;
+                    http.Response.ContentType = "application/json; charset=utf-8";
+                    http.Response.ContentLength = openRecordBytes.Length;
+                    if (!HttpMethods.IsHead(http.Request.Method))
+                    {
+                        await http.Response.Body.WriteAsync(openRecordBytes, cancellationToken).ConfigureAwait(false);
+                    }
+                    return;
+                }
+
                 if (requestPath.Split('/') is { Length: > 2 } segments &&
                     segments[1] is "model" or "modelsource" or "capabilities" or "capabilitiesoffered" or "export" or ".xregistry")
                 {

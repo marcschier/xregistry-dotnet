@@ -37,7 +37,9 @@ $evidenceTool = Join-Path $templates 'EmbeddingEvidence.py'
 $workSelection = $null
 New-Item -ItemType Directory -Path $feed, $cache, $packCache, $scratch | Out-Null
 $packageIds = @('XRegistry', 'XRegistry.Models', 'XRegistry.Validation', 'XRegistry.Server', 'XRegistry.Client', 'XRegistry.AspNetCore',
-    'XRegistry.Storage.File', 'XRegistry.Federation', 'XRegistry.Bindings.Oci', 'XRegistry.Bindings.File', 'XRegistry.Bindings.Git')
+    'XRegistry.Storage.File', 'XRegistry.Federation', 'XRegistry.Bindings.Oci', 'XRegistry.Bindings.File', 'XRegistry.Bindings.Git',
+    'XRegistry.Publication', 'XRegistry.Publication.Server')
+$nativeAotExcludedPackageIds = @('XRegistry.Bindings.OpcUa')
 $caseCount = @(Get-Content -LiteralPath (Join-Path $templates 'EmbeddingCases.json') -Raw | ConvertFrom-Json).Count
 $oldPath = $env:PATH
 $scratchEnvironment = @{
@@ -104,13 +106,13 @@ try {
     & python $evidenceTool sources --root $root --output (Join-Path $run 'source-before.json')
     if ($LASTEXITCODE -ne 0) { throw 'Source fingerprinting failed.' }
     $planned = Get-Content -LiteralPath (Join-Path $root 'eng\packages.json') -Raw | ConvertFrom-Json
-    if (@(Compare-Object ($planned.packages.id | Sort-Object) ($packageIds | Sort-Object)).Count -ne 0) {
-        throw 'The consumer must include every runtime package declared in eng/packages.json.'
+    if (@(Compare-Object ($planned.packages.id | Sort-Object) (($packageIds + $nativeAotExcludedPackageIds) | Sort-Object)).Count -ne 0) {
+        throw 'The package and NativeAOT-consumer inventories must explicitly classify every runtime package.'
     }
     & python $evidenceTool fixtures --root $root --destination (Join-Path $run 'fixtures') --output (Join-Path $run 'fixture-inventory.json')
     if ($LASTEXITCODE -ne 0) { throw 'Independent fixture staging failed.' }
     $summary.fixtureInventory = 'fixture-inventory.json'
-    $summary.packageStatuses = @($planned.packages | Where-Object { $_.id -in $packageIds } | Select-Object id, status)
+    $summary.packageStatuses = @($planned.packages | Select-Object id, status)
     foreach ($id in $packageIds) {
         $project = Join-Path $root "src\$id\$id.csproj"
         Invoke-Recorded -Program dotnet -ArgumentList @(
@@ -146,7 +148,7 @@ try {
         }
         finally { $archive.Dispose() }
     }
-    if ($versions.Count -ne $packageIds.Count) { throw 'The development feed must contain all eleven selected runtime packages.' }
+    if ($versions.Count -ne $packageIds.Count) { throw 'The development feed must contain all thirteen selected runtime packages.' }
     $versionsPath = Join-Path $run 'versions.json'
     $versions | ConvertTo-Json | Set-Content -LiteralPath $versionsPath -Encoding utf8
 

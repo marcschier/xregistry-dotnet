@@ -45,6 +45,7 @@ public sealed partial class RegistryEngine
         private RegistryJson _modelSource;
         private RegistryPath _responsePath;
         private bool _modelChanged;
+        private byte[]? _wotDocumentInput;
         private int _work;
         private long _workingBytes;
 
@@ -527,6 +528,17 @@ public sealed partial class RegistryEngine
             var completedMetadata = result.Metadata;
             try
             {
+                if (path.Kind == RegistryPathKind.Group && group!.Singular == "apigroup")
+                {
+                    RegistryDomainRules.ValidateApiGroupMetadata(result.Metadata.RootElement, _ct);
+                }
+                else if (path.Kind == RegistryPathKind.Version &&
+                    group!.Singular == "apigroup" && resource!.Singular == "api")
+                {
+                    RegistryDomainRules.ValidateApiVersionMetadata(
+                        result.Metadata.RootElement, owningGroupMetadata, _ct);
+                }
+
                 if (path.Kind == RegistryPathKind.Group &&
                     string.Equals(group!.Annotations.ModelCompatibleWith,
                         "https://xregistry.io/xreg/domains/endpoint/specs/model.json", StringComparison.Ordinal))

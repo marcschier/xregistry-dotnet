@@ -14,7 +14,9 @@ import zipfile
 PACKAGE_IDS = ("XRegistry", "XRegistry.Client", "XRegistry.Server",
                "XRegistry.AspNetCore", "XRegistry.Models", "XRegistry.Validation",
                "XRegistry.Storage.File", "XRegistry.Federation", "XRegistry.Bindings.File",
-               "XRegistry.Bindings.Git", "XRegistry.Bindings.Oci")
+               "XRegistry.Bindings.Git", "XRegistry.Bindings.Oci", "XRegistry.Publication",
+               "XRegistry.Publication.Server")
+NATIVE_AOT_EXCLUDED_PACKAGE_IDS = ("XRegistry.Bindings.OpcUa",)
 CASE_NAMES = json.loads(Path(__file__).with_name("EmbeddingCases.json").read_bytes())
 RUNTIME_MEASUREMENTS = {
     "storageReopenedGeneration": 2, "storageAdapterGeneration": 2,
@@ -27,6 +29,7 @@ RUNTIME_MEASUREMENTS = {
     "federationDocumentBytes": 15, "gitNativeModules": 0,
     "federationEscapedMetadataForms": 9, "federationEscapedDocumentForms": 6,
     "federationEscapedDocumentBytes": 90, "federationEscapedInvalidTargets": 6,
+    "publicationChannelEpoch": 1, "publicationBundleObjects": 1,
 }
 
 
@@ -115,7 +118,7 @@ def validate_report(report: dict, framework: str, rid: str, mode: str) -> None:
 
 def validate_assets(assets: dict, versions: dict[str, str]) -> None:
     libraries = assets.get("libraries", {})
-    require(set(versions) == set(PACKAGE_IDS), "All eleven development runtime packages must be explicit.")
+    require(set(versions) == set(PACKAGE_IDS), "All thirteen development runtime packages must be explicit.")
     for identity, library in libraries.items():
         name = identity.split("/")[0]
         require(library.get("type") != "project", "The consumer must not use source ProjectReferences.")

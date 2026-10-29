@@ -320,6 +320,28 @@ public sealed partial class RegistryEngine
                 return;
             }
 
+            var resourceDefinition = ResourceDefinition(RegistryPath.Parse(versions[0].Key));
+            if (resourceDefinition.Singular == "api")
+            {
+                var firstFormat = versions[0].Attributes["format"];
+                for (var index = 1; index < versions.Count; index++)
+                {
+                    if (RegistryMetadataValidator.ApiVersionFormatsEqual(firstFormat, versions[index].Attributes["format"]))
+                    {
+                        continue;
+                    }
+
+                    if (_modelChanged)
+                    {
+                        throw ServerErrors.Create("model_compliance_error", "/model",
+                            "Existing API Versions do not use one case-insensitively equal format identifier.");
+                    }
+
+                    throw ServerErrors.With("mismatched_version_attribute", ResourceKey(RegistryPath.Parse(versions[0].Key)),
+                        "API Versions must use the same format identifier, compared case-insensitively.", ("name", "format"));
+                }
+            }
+
             var defaultId = ServerJson.Text(Require(ResourceKey(RegistryPath.Parse(versions[0].Key))).Attributes, "defaultversionid");
             CheckObject(versions.Select(static version => version.Attributes).ToList(), definitions, "");
             void CheckObject(List<JsonObject> values, IReadOnlyDictionary<string, RegistryAttributeDefinition> shape, string pointer)
@@ -337,7 +359,9 @@ public sealed partial class RegistryEngine
                             // Default membership is derived after final ordering/retention, not stored in the Version record.
                             var equal = defaultMembership
                                 ? (Id(versions[0]) == defaultId) == (Id(versions[index]) == defaultId)
-                                : ServerJson.Equal(first, values[index][definition.Name]);
+                                : RegistryMetadataValidator.MatchVersionsEqual(resourceDefinition,
+                                    pointer.Length == 0 ? [definition.Name] : [.. pointer.Split('/'), definition.Name],
+                                    definition.Type, first, values[index][definition.Name]);
                             if (!equal)
                             {
                                 if (_modelChanged)

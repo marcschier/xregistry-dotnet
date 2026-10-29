@@ -102,9 +102,11 @@ release safeguards remain in their subject guides.
 
 ## Explicit non-commitments
 
-The current documentation does not commit the project to an OPC UA runtime,
-native OpenUSD runtime, Git publication, GitHub Packages publication, arbitrary
-schema dialects, external TLS termination for the samples, federation mutation,
-automatic migration from another implementation, or compatibility aliases for
-old private APIs. Adding any of these requires a separately approved design and
-evidence plan.
+The OPC UA client binding exists, but this roadmap does not commit the project
+to Core API views, NodeSet projection, NativeAOT qualification, or complete
+protocol conformance. The current documentation also does not commit the project
+to a native OpenUSD runtime, Git publication, GitHub Packages publication,
+arbitrary schema dialects, external TLS termination for the samples, federation
+mutation, automatic migration from another implementation, or compatibility
+aliases for old private APIs. Adding any of these requires a separately approved
+design and evidence plan.

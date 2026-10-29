@@ -285,4 +285,141 @@ public class OciMetadataCompletionTests
         });
         return tree;
     }
+
+    [Test]
+    [Arguments("OpenAPI/3.1", "openapi/3.1")]
+    [Arguments("OpenAPI/3.1", "OpenAPI/3.1")]
+    public async Task ApiVersionFormatsCaseOnlyDifferencesAreAcceptedDuringSnapshotValidation(
+        string firstFormat, string secondFormat)
+    {
+        var tree = await ApiLayout(firstFormat, secondFormat);
+        await using var snapshot = await OciSnapshot.OpenLayoutAsync(tree, "offline");
+
+        var result = await snapshot.ValidateAsync();
+        var versions = await snapshot.ReadAsync(new(FederationOperation.Collection, ApiItem + "/versions"));
+
+        await Assert.That(result.Configs).IsEqualTo(6);
+        await Assert.That(result.RootDigest).IsEqualTo(snapshot.RootDigest);
+        await Assert.That(result.SnapshotClass).IsEqualTo("offline-complete");
+        await Assert.That(versions.Value.EnumerateObject().Count()).IsEqualTo(2);
+        await Assert.That(versions.Value.GetProperty("v1").GetProperty("format").GetString()).IsEqualTo(firstFormat);
+        await Assert.That(versions.Value.GetProperty("v2").GetProperty("format").GetString()).IsEqualTo(secondFormat);
+        await Assert.That(tree.DisposedStreams).IsEqualTo(tree.Reads.Count);
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.1", "OpenAPI/3.0")]
+    [Arguments("OpenAPI/3.1", "AsyncAPI/3.1")]
+    public async Task DistinctApiVersionFormatsAreRejectedDuringSnapshotValidation(
+        string firstFormat, string secondFormat)
+    {
+        var tree = await ApiLayout(firstFormat, firstFormat);
+        GraphFixture.Rewrite(tree, (record, media) =>
+        {
+            if (media == GraphFixture.Config &&
+                record["entity"]?["xid"]?.GetValue<string>() == ApiItem + "/versions/v2")
+            {
+                record["entity"]!["format"] = secondFormat;
+            }
+            return GraphFixture.Encode(record);
+        });
+        await using var snapshot = await OciSnapshot.OpenLayoutAsync(tree, "offline");
+
+        var error = await Check.Error(() => snapshot.ValidateAsync().AsTask(), FederationErrorCode.InvalidPackage);
+
+        await Assert.That(error.Message).IsEqualTo(
+            "Captured API Versions do not use one case-insensitively equal format identifier.");
+        await Assert.That(tree.DisposedStreams).IsEqualTo(tree.Reads.Count);
+    }
+
+    [Test]
+    public async Task SingleApiVersionFormatIsAcceptedDuringSnapshotValidation()
+    {
+        var tree = await ApiLayout("OpenAPI/3.1");
+        await using var snapshot = await OciSnapshot.OpenLayoutAsync(tree, "offline");
+
+        var result = await snapshot.ValidateAsync();
+        var versions = await snapshot.ReadAsync(new(FederationOperation.Collection, ApiItem + "/versions"));
+
+        await Assert.That(result.Configs).IsEqualTo(5);
+        await Assert.That(versions.Value.EnumerateObject().Count()).IsEqualTo(1);
+        await Assert.That(versions.Value.GetProperty("v1").GetProperty("format").GetString()).IsEqualTo("OpenAPI/3.1");
+        await Assert.That(tree.DisposedStreams).IsEqualTo(tree.Reads.Count);
+    }
+
+    private const string ApiItem = "/groups/main/apis/sample";
+
+    private static async Task<MemoryLayout> ApiLayout(string firstFormat, string? secondFormat = null)
+    {
+        var model = RegistryJson.Parse("""
+            {"groups":{"groups":{"singular":"group","resources":{"apis":{"singular":"api","hasdocument":false,
+              "attributes":{"format":{"type":"string","required":true},"*":{"type":"any"}}
+            }}}}}
+            """);
+        var records = new List<RegistryJson> { AuthoredCapture.Registry(model) };
+        records.Add(ApiRecord("group", new JsonObject
+        {
+            ["xid"] = "/groups/main",
+            ["groupid"] = "main",
+            ["epoch"] = 1,
+            ["createdat"] = "2026-09-01T12:00:00Z",
+            ["modifiedat"] = "2026-09-01T12:00:00Z",
+        }));
+        records.Add(ApiRecord("resource", new JsonObject
+        {
+            ["xid"] = ApiItem,
+            ["apiid"] = "sample",
+        }));
+        records.Add(ApiRecord("meta", new JsonObject
+        {
+            ["xid"] = ApiItem + "/meta",
+            ["apiid"] = "sample",
+            ["epoch"] = 1,
+            ["createdat"] = "2026-09-01T12:00:00Z",
+            ["modifiedat"] = "2026-09-01T12:00:00Z",
+            ["readonly"] = false,
+            ["defaultversionsticky"] = false,
+            ["defaultversionid"] = "v1",
+        }));
+        records.Add(ApiVersion("v1", firstFormat, isDefault: true));
+        if (secondFormat is not null) { records.Add(ApiVersion("v2", secondFormat, isDefault: false)); }
+
+        var package = await OciSnapshotWriter.CreateAsync(new(records));
+        var tree = new MemoryLayout();
+        tree.Files.Add("oci-layout", System.Text.Encoding.UTF8.GetBytes("""{"imageLayoutVersion":"1.0.0"}"""));
+        tree.Files.Add("index.json", await Check.Bytes(package.CreateLayoutEntryPoint("offline")));
+        foreach (var item in package.Objects)
+        {
+            await using var stream = item.OpenRead();
+            using var output = new MemoryStream();
+            await stream.CopyToAsync(output);
+            tree.Files.Add("blobs/sha256/" + item.Digest[7..], output.ToArray());
+        }
+        return tree;
+    }
+
+    private static RegistryJson ApiVersion(string id, string format, bool isDefault) => ApiRecord("version", new JsonObject
+    {
+        ["xid"] = ApiItem + "/versions/" + id,
+        ["apiid"] = "sample",
+        ["epoch"] = 1,
+        ["createdat"] = "2026-09-01T12:00:00Z",
+        ["modifiedat"] = "2026-09-01T12:00:00Z",
+        ["versionid"] = id,
+        ["ancestorid"] = "v1",
+        ["isdefault"] = isDefault,
+        ["format"] = format,
+    });
+
+    private static RegistryJson ApiRecord(string kind, JsonObject entity)
+    {
+        var record = new JsonObject
+        {
+            ["formatversion"] = 1,
+            ["kind"] = kind,
+            ["entity"] = entity,
+        };
+        if (kind == "version") { record["document"] = new JsonObject { ["mode"] = "metadata-only" }; }
+        return RegistryJson.Parse(record.ToJsonString());
+    }
 }

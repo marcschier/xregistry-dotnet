@@ -1,0 +1,707 @@
+// Copyright (c) 2026 xregistry-dotnet contributors.
+// SPDX-License-Identifier: MIT
+
+using System.Collections.ObjectModel;
+using System.Text.Json;
+
+namespace XRegistry.Validation;
+
+/// <summary>Loads an explicitly authorized API dependency from its absolute document URI.</summary>
+public delegate ValueTask<ReadOnlyMemory<byte>?> ApiOperationDocumentDependencyResolver(
+    string absoluteDocumentUri, CancellationToken cancellationToken);
+
+/// <summary>Describes the API document formats and selectors handled by the optional resolver.</summary>
+public sealed class ApiOperationResolverCapabilities
+{
+    internal ApiOperationResolverCapabilities()
+    {
+        Formats = Array.AsReadOnly(["OpenAPI/3.0", "OpenAPI/3.1", "Swagger/2.0"]);
+        ContentTypes = Array.AsReadOnly(["application/json"]);
+        Selectors = Array.AsReadOnly([ApiOperationSelectorKind.Operation, ApiOperationSelectorKind.JsonPointer]);
+        SupportsCallerProvidedPathItemReferences = true;
+        SupportsCallerProvidedOperationReferences = true;
+        MaxReferencedDocuments = 32;
+        SupportsApiDocumentValidation = false;
+        SupportsOperationResolution = true;
+    }
+
+    /// <summary>Gets the exact API format identifiers accepted by the resolver.</summary>
+    public ReadOnlyCollection<string> Formats { get; }
+
+    /// <summary>Gets the media types accepted by the resolver.</summary>
+    public ReadOnlyCollection<string> ContentTypes { get; }
+
+    /// <summary>Gets the selector forms accepted by the resolver.</summary>
+    public ReadOnlyCollection<ApiOperationSelectorKind> Selectors { get; }
+
+    /// <summary>Gets whether operationId selection follows Path Item references supplied by the caller.</summary>
+    public bool SupportsCallerProvidedPathItemReferences { get; }
+
+    /// <summary>
+    /// Gets whether operationId selection can resolve Operation Object references through a caller-supplied resolver.
+    /// </summary>
+    public bool SupportsCallerProvidedOperationReferences { get; }
+
+    /// <summary>Gets the maximum number of distinct referenced documents loaded for one resolution.</summary>
+    public int MaxReferencedDocuments { get; }
+
+    /// <summary>Gets whether full API document validation is available.</summary>
+    public bool SupportsApiDocumentValidation { get; }
+
+    /// <summary>Gets whether operation resolution is available.</summary>
+    public bool SupportsOperationResolution { get; }
+}
+
+/// <summary>An API operation selection or an explicit resolution outcome.</summary>
+public sealed class ApiOperationResolutionResult
+{
+    internal ApiOperationResolutionResult(ApiOperationResolutionStatus status, DocumentDiagnostic? diagnostic = null,
+        JsonElement operation = default, string? documentPath = null, Uri? documentUri = null)
+    {
+        if (status == ApiOperationResolutionStatus.Selected &&
+            (operation.ValueKind != JsonValueKind.Object || string.IsNullOrEmpty(documentPath)) ||
+            status != ApiOperationResolutionStatus.Selected && diagnostic is null)
+        {
+            throw new ArgumentException("A selected operation or a diagnostic is required.");
+        }
+
+        Status = status;
+        Diagnostic = diagnostic;
+        Operation = operation.ValueKind == JsonValueKind.Undefined ? default : operation.Clone();
+        DocumentPath = documentPath;
+        DocumentUri = documentUri;
+    }
+
+    /// <summary>Gets the resolution outcome.</summary>
+    public ApiOperationResolutionStatus Status { get; }
+
+    /// <summary>Gets the selected OpenAPI or Swagger Operation Object.</summary>
+    public JsonElement Operation { get; }
+
+    /// <summary>Gets the document-local JSON Pointer to the selected Operation Object.</summary>
+    public string? DocumentPath { get; }
+
+    /// <summary>Gets the source document URI when the selected operation came from a referenced document.</summary>
+    public Uri? DocumentUri { get; }
+
+    /// <summary>Gets the diagnostic for a non-selection outcome.</summary>
+    public DocumentDiagnostic? Diagnostic { get; }
+}
+
+/// <summary>Reports why an API operation selector did not produce one operation.</summary>
+public enum ApiOperationResolutionStatus
+{
+    /// <summary>Exactly one operation was selected.</summary>
+    Selected,
+
+    /// <summary>The document, format declaration, or selected value is invalid.</summary>
+    Invalid,
+
+    /// <summary>No matching operation exists in the supplied document.</summary>
+    NotFound,
+
+    /// <summary>More than one operation matches the selector.</summary>
+    Ambiguous,
+
+    /// <summary>The format, content type, or selector form is not supported.</summary>
+    Unsupported,
+
+    /// <summary>An unresolved document reference prevents a conclusive result.</summary>
+    Indeterminate,
+}
+
+/// <summary>Selects OpenAPI and Swagger operations from an already acquired JSON document.</summary>
+public static class ApiOperationDocumentResolver
+{
+    private static readonly string[] s_methods =
+        ["get", "put", "post", "delete", "options", "head", "patch", "trace"];
+
+    /// <summary>Gets the exact optional resolution features available from this implementation.</summary>
+    public static ApiOperationResolverCapabilities Capabilities { get; } = new();
+
+    /// <summary>Resolves an operation selector without invoking a dependency resolver.</summary>
+    public static ApiOperationResolutionResult Resolve(string format, string contentType,
+        ReadOnlyMemory<byte> document, ApiOperationReference reference,
+        CancellationToken cancellationToken = default)
+    {
+        return ResolveAsync(format, contentType, document, reference, cancellationToken: cancellationToken)
+            .AsTask().GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// Resolves an operation selector and uses only the reference documents returned by the supplied callback.
+    /// No network access occurs unless the callback performs it.
+    /// </summary>
+    public static async ValueTask<ApiOperationResolutionResult> ResolveAsync(string format, string contentType,
+        ReadOnlyMemory<byte> document, ApiOperationReference reference, Uri? documentUri = null,
+        ApiOperationDocumentDependencyResolver? resolveReference = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(format);
+        ArgumentNullException.ThrowIfNull(contentType);
+        ArgumentNullException.ThrowIfNull(reference);
+        if (documentUri is { IsAbsoluteUri: false })
+        {
+            throw new ArgumentException("The API document URI must be absolute.", nameof(documentUri));
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (!Capabilities.Formats.Contains(format, StringComparer.Ordinal))
+        {
+            return Failure(ApiOperationResolutionStatus.Unsupported, "format.unsupported",
+                $"The API format '{format}' is not supported.");
+        }
+        if (!string.Equals(contentType.Split(';', 2)[0].Trim(), "application/json",
+            StringComparison.OrdinalIgnoreCase))
+        {
+            return Failure(ApiOperationResolutionStatus.Unsupported, "contenttype.unsupported",
+                "The API operation resolver accepts JSON documents only.");
+        }
+        if (reference.Selector.Kind is not (ApiOperationSelectorKind.Operation or ApiOperationSelectorKind.JsonPointer))
+        {
+            return Failure(ApiOperationResolutionStatus.Unsupported, "selector.unsupported",
+                "The API operation selector is not supported for OpenAPI and Swagger.");
+        }
+
+        JsonDocument parsed;
+        try
+        {
+            parsed = JsonDocument.Parse(document);
+        }
+        catch (JsonException exception)
+        {
+            return Failure(ApiOperationResolutionStatus.Invalid, "document.json",
+                $"The API document is not valid JSON: {exception.Message}");
+        }
+
+        using (parsed)
+        {
+            var root = parsed.RootElement;
+            var version = ValidateRoot(format, root);
+            if (version is not null)
+            {
+                return version;
+            }
+
+            if (reference.Selector.Kind == ApiOperationSelectorKind.JsonPointer)
+            {
+                return ResolvePointer(root, reference.Selector.Tokens, cancellationToken);
+            }
+            using var references = new ReferenceContext(parsed, documentUri, resolveReference);
+            return await ResolveOperationIdAsync(root, reference.Selector.Tokens[^1], references,
+                cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static ApiOperationResolutionResult? ValidateRoot(string format, JsonElement root)
+    {
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            return Failure(ApiOperationResolutionStatus.Invalid, "document.root",
+                "An OpenAPI or Swagger document must be a JSON object.");
+        }
+
+        if (format.StartsWith("OpenAPI/", StringComparison.Ordinal))
+        {
+            var expectedPrefix = format == "OpenAPI/3.0" ? "3.0." : "3.1.";
+            if (!root.TryGetProperty("openapi", out var version) || version.ValueKind != JsonValueKind.String ||
+                !version.GetString()!.StartsWith(expectedPrefix, StringComparison.Ordinal))
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid, "document.openapi_version",
+                    $"The root openapi value does not match '{format}'.", "$/openapi");
+            }
+        }
+        else if (!root.TryGetProperty("swagger", out var swagger) ||
+            swagger.ValueKind != JsonValueKind.String || swagger.GetString() != "2.0")
+        {
+            return Failure(ApiOperationResolutionStatus.Invalid, "document.swagger_version",
+                "The root swagger value must be '2.0'.", "$/swagger");
+        }
+
+        if (!root.TryGetProperty("paths", out var paths) || paths.ValueKind != JsonValueKind.Object)
+        {
+            return Failure(ApiOperationResolutionStatus.Invalid, "document.paths",
+                "The API document must contain a paths object.", "$/paths");
+        }
+        return null;
+    }
+
+    private static async ValueTask<ApiOperationResolutionResult> ResolveOperationIdAsync(JsonElement root,
+        string operationId, ReferenceContext references, CancellationToken cancellationToken)
+    {
+        var matches = new List<OperationLocation>();
+        var paths = root.GetProperty("paths");
+        foreach (var path in paths.EnumerateObject())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (path.Value.ValueKind != JsonValueKind.Object)
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid, "document.path_item",
+                    "Every paths entry must be an object.", "$/paths/" + Escape(path.Name));
+            }
+
+            var pathPointer = "$/paths/" + Escape(path.Name);
+            var pathItem = await ResolvePathItemAsync(path.Value, references.Root, pathPointer, references,
+                new(StringComparer.Ordinal), cancellationToken).ConfigureAwait(false);
+            if (pathItem.Failure is not null)
+            {
+                return pathItem.Failure;
+            }
+
+            foreach (var operation in pathItem.Operations)
+            {
+                if (operation.Value.Operation.TryGetProperty("operationId", out var id))
+                {
+                    if (id.ValueKind != JsonValueKind.String)
+                    {
+                        return Failure(ApiOperationResolutionStatus.Invalid, "document.operation_id",
+                            "An operationId must be a string.",
+                            operation.Value.Pointer + "/operationId");
+                    }
+                    if (string.Equals(id.GetString(), operationId, StringComparison.Ordinal))
+                    {
+                        matches.Add(operation.Value);
+                    }
+                }
+            }
+        }
+
+        return matches.Count switch
+        {
+            0 => Failure(ApiOperationResolutionStatus.NotFound, "selection.not_found",
+                $"No operation has the exact operationId '{operationId}'."),
+            1 => Selected(matches[0].Operation, matches[0].Pointer, matches[0].DocumentUri),
+            _ => Failure(ApiOperationResolutionStatus.Ambiguous, "selection.ambiguous",
+                $"More than one operation has the exact operationId '{operationId}'.")
+        };
+    }
+
+    private static async ValueTask<PathItemResolution> ResolvePathItemAsync(JsonElement pathItem,
+        ReferencedDocument source, string sourcePointer, ReferenceContext references, HashSet<string> referencePath,
+        CancellationToken cancellationToken)
+    {
+        if (pathItem.ValueKind != JsonValueKind.Object)
+        {
+            return PathItemResolution.Failed(Failure(ApiOperationResolutionStatus.Invalid, "document.path_item",
+                "A Path Item reference target must be an object.", sourcePointer));
+        }
+
+        var operations = new Dictionary<string, OperationLocation>(StringComparer.Ordinal);
+        if (pathItem.TryGetProperty("$ref", out var referenceValue))
+        {
+            if (referenceValue.ValueKind != JsonValueKind.String)
+            {
+                return PathItemResolution.Failed(Failure(ApiOperationResolutionStatus.Invalid,
+                    "dependency.path_item", "A Path Item $ref must be a string.", sourcePointer + "/$ref"));
+            }
+
+            var target = await references.ResolveAsync(source, referenceValue.GetString()!, sourcePointer + "/$ref",
+                cancellationToken).ConfigureAwait(false);
+            if (target.Failure is not null)
+            {
+                return PathItemResolution.Failed(target.Failure);
+            }
+
+            var resolvedTarget = target.Target!;
+            var targetIdentity = resolvedTarget.Document.Identity + "#" + resolvedTarget.Pointer;
+            if (!referencePath.Add(targetIdentity))
+            {
+                return PathItemResolution.Failed(Failure(ApiOperationResolutionStatus.Indeterminate,
+                    "dependency.cycle", "A Path Item reference cycle prevents operationId selection.",
+                    sourcePointer + "/$ref"));
+            }
+
+            var inherited = await ResolvePathItemAsync(resolvedTarget.Value, resolvedTarget.Document,
+                resolvedTarget.Pointer, references, referencePath, cancellationToken).ConfigureAwait(false);
+            referencePath.Remove(targetIdentity);
+            if (inherited.Failure is not null)
+            {
+                return inherited;
+            }
+
+            operations = new(inherited.Operations, StringComparer.Ordinal);
+        }
+
+        foreach (var method in s_methods)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!pathItem.TryGetProperty(method, out var operation))
+            {
+                continue;
+            }
+            if (operation.ValueKind != JsonValueKind.Object)
+            {
+                return PathItemResolution.Failed(Failure(ApiOperationResolutionStatus.Invalid,
+                    "document.operation", "An HTTP method entry must be an Operation Object.",
+                    sourcePointer + "/" + method));
+            }
+            var resolvedOperation = await ResolveOperationAsync(operation, source, sourcePointer + "/" + method,
+                references, new(StringComparer.Ordinal), cancellationToken).ConfigureAwait(false);
+            if (resolvedOperation.Failure is not null)
+            {
+                return PathItemResolution.Failed(resolvedOperation.Failure);
+            }
+
+            if (operations.ContainsKey(method))
+            {
+                return PathItemResolution.Failed(Failure(ApiOperationResolutionStatus.Indeterminate,
+                    "dependency.path_item_conflict",
+                    "The referenced and containing Path Items both define the same HTTP method.",
+                    sourcePointer + "/" + method));
+            }
+            operations[method] = resolvedOperation.Operation!;
+        }
+
+        return PathItemResolution.Succeeded(operations);
+    }
+
+    private static async ValueTask<OperationReferenceResolution> ResolveOperationAsync(JsonElement operation,
+        ReferencedDocument source, string sourcePointer, ReferenceContext references,
+        HashSet<string> referencePath, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (operation.ValueKind != JsonValueKind.Object)
+        {
+            return OperationReferenceResolution.Failed(Failure(ApiOperationResolutionStatus.Invalid,
+                "document.operation", "An HTTP method entry must be an Operation Object.", sourcePointer));
+        }
+        if (!operation.TryGetProperty("$ref", out var referenceValue))
+        {
+            return OperationReferenceResolution.Succeeded(new(operation, sourcePointer,
+                source.IsRoot ? null : source.Uri));
+        }
+        if (referenceValue.ValueKind != JsonValueKind.String)
+        {
+            return OperationReferenceResolution.Failed(Failure(ApiOperationResolutionStatus.Invalid,
+                "dependency.operation", "An Operation Object $ref must be a string.", sourcePointer + "/$ref"));
+        }
+        if (operation.EnumerateObject().Any(static property => property.Name is not ("$ref" or "summary" or "description")))
+        {
+            return OperationReferenceResolution.Failed(Failure(ApiOperationResolutionStatus.Indeterminate,
+                "dependency.operation_siblings",
+                "Operation Object reference siblings cannot be merged for operationId selection.",
+                sourcePointer));
+        }
+
+        var target = await references.ResolveAsync(source, referenceValue.GetString()!, sourcePointer + "/$ref",
+            cancellationToken).ConfigureAwait(false);
+        if (target.Failure is not null)
+        {
+            return OperationReferenceResolution.Failed(target.Failure);
+        }
+
+        var resolvedTarget = target.Target!;
+        if (resolvedTarget.Value.ValueKind != JsonValueKind.Object)
+        {
+            return OperationReferenceResolution.Failed(Failure(ApiOperationResolutionStatus.Invalid,
+                "document.operation", "An Operation Object reference target must be an object.",
+                sourcePointer + "/$ref"));
+        }
+
+        var targetIdentity = resolvedTarget.Document.Identity + "#" + resolvedTarget.Pointer;
+        if (!referencePath.Add(targetIdentity))
+        {
+            return OperationReferenceResolution.Failed(Failure(ApiOperationResolutionStatus.Indeterminate,
+                "dependency.cycle", "An Operation Object reference cycle prevents operationId selection.",
+                sourcePointer + "/$ref"));
+        }
+
+        var inherited = await ResolveOperationAsync(resolvedTarget.Value, resolvedTarget.Document,
+            resolvedTarget.Pointer, references, referencePath, cancellationToken).ConfigureAwait(false);
+        referencePath.Remove(targetIdentity);
+        return inherited;
+    }
+
+    private static ApiOperationResolutionResult ResolvePointer(JsonElement root, IReadOnlyList<string> tokens,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (tokens.Count != 3 || tokens[0] != "paths" || !s_methods.Contains(tokens[2], StringComparer.Ordinal))
+        {
+            return Failure(ApiOperationResolutionStatus.Invalid, "selection.operation_pointer",
+                "An OpenAPI or Swagger operation pointer must select paths/{path}/{http-method}.");
+        }
+
+        if (!root.GetProperty("paths").TryGetProperty(tokens[1], out var pathItem))
+        {
+            return Failure(ApiOperationResolutionStatus.NotFound, "selection.not_found",
+                "The selected path does not exist.");
+        }
+        if (pathItem.ValueKind != JsonValueKind.Object)
+        {
+            return Failure(ApiOperationResolutionStatus.NotFound, "selection.not_found",
+                "The selected HTTP operation does not exist.");
+        }
+        if (pathItem.TryGetProperty("$ref", out _))
+        {
+            return Failure(ApiOperationResolutionStatus.NotFound, "selection.not_found",
+                "The pointer does not traverse a Path Item reference.",
+                "$/paths/" + Escape(tokens[1]));
+        }
+        if (!pathItem.TryGetProperty(tokens[2], out var operation))
+        {
+            return Failure(ApiOperationResolutionStatus.NotFound, "selection.not_found",
+                "The selected HTTP operation does not exist.");
+        }
+        if (operation.ValueKind != JsonValueKind.Object)
+        {
+            return Failure(ApiOperationResolutionStatus.Invalid, "selection.not_operation",
+                "The selected value is not an inline Operation Object.");
+        }
+        if (operation.TryGetProperty("$ref", out _))
+        {
+            return Failure(ApiOperationResolutionStatus.Invalid, "selection.not_operation",
+                "The pointer selects a reference object, not an inline Operation Object.",
+                "$/paths/" + Escape(tokens[1]) + "/" + tokens[2]);
+        }
+        return Selected(operation, "$/paths/" + Escape(tokens[1]) + "/" + tokens[2]);
+    }
+
+    private static ApiOperationResolutionResult Selected(JsonElement operation, string pointer, Uri? documentUri = null) =>
+        new(ApiOperationResolutionStatus.Selected, operation: operation, documentPath: pointer, documentUri: documentUri);
+
+    private static ApiOperationResolutionResult Failure(ApiOperationResolutionStatus status, string code,
+        string detail, string path = "$/selector") =>
+        new(status, new(path, code, detail));
+
+    private static string Escape(string token) =>
+        token.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal);
+
+    private sealed record OperationLocation(JsonElement Operation, string Pointer, Uri? DocumentUri);
+
+    private sealed record PathItemResolution(IReadOnlyDictionary<string, OperationLocation> Operations,
+        ApiOperationResolutionResult? Failure)
+    {
+        internal static PathItemResolution Succeeded(IReadOnlyDictionary<string, OperationLocation> operations) =>
+            new(operations, null);
+
+        internal static PathItemResolution Failed(ApiOperationResolutionResult failure) =>
+            new(new Dictionary<string, OperationLocation>(), failure);
+    }
+
+    private sealed record OperationReferenceResolution(OperationLocation? Operation,
+        ApiOperationResolutionResult? Failure)
+    {
+        internal static OperationReferenceResolution Succeeded(OperationLocation operation) =>
+            new(operation, null);
+
+        internal static OperationReferenceResolution Failed(ApiOperationResolutionResult failure) =>
+            new(null, failure);
+    }
+
+    private sealed class ReferencedDocument(JsonDocument json, Uri? uri, string identity, bool isRoot) : IDisposable
+    {
+        public JsonDocument Json { get; } = json;
+        public Uri? Uri { get; } = uri;
+        public string Identity { get; } = identity;
+        public bool IsRoot { get; } = isRoot;
+        public JsonElement Root => Json.RootElement;
+
+        public void Dispose() => Json.Dispose();
+    }
+
+    private sealed record ReferenceTarget(ReferencedDocument Document, JsonElement Value, string Pointer);
+
+    private sealed record ReferenceTargetResolution(ReferenceTarget? Target, ApiOperationResolutionResult? Failure)
+    {
+        internal static ReferenceTargetResolution Succeeded(ReferenceTarget target) => new(target, null);
+
+        internal static ReferenceTargetResolution Failed(ApiOperationResolutionResult failure) =>
+            new(null, failure);
+    }
+
+    private sealed class ReferenceContext : IDisposable
+    {
+        private readonly ApiOperationDocumentDependencyResolver? _resolver;
+        private readonly Dictionary<string, ReferencedDocument> _documents = new(StringComparer.Ordinal);
+        private int _externalDocumentCount;
+
+        internal ReferenceContext(JsonDocument root, Uri? rootUri,
+            ApiOperationDocumentDependencyResolver? resolver)
+        {
+            var uri = WithoutFragment(rootUri);
+            Root = new(root, uri, uri?.AbsoluteUri ?? "$root", true);
+            if (uri is not null)
+            {
+                _documents.Add(uri.AbsoluteUri, Root);
+            }
+            _resolver = resolver;
+        }
+
+        internal ReferencedDocument Root { get; }
+
+        internal async ValueTask<ReferenceTargetResolution> ResolveAsync(ReferencedDocument source,
+            string reference, string path, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Uri resolved;
+            try
+            {
+                if (reference.StartsWith('#'))
+                {
+                    if (source.Uri is null)
+                    {
+                        return ReferenceTargetResolution.Succeeded(CreateTarget(source, reference));
+                    }
+                    resolved = new Uri(source.Uri, reference);
+                }
+                else if (Uri.TryCreate(reference, UriKind.Absolute, out var absolute))
+                {
+                    resolved = absolute;
+                }
+                else if (source.Uri is null)
+                {
+                    return ReferenceTargetResolution.Failed(Failure(ApiOperationResolutionStatus.Indeterminate,
+                        "dependency.base_uri", "A relative API document reference requires an absolute document URI.",
+                        path));
+                }
+                else if (Uri.TryCreate(source.Uri, reference, out var relative))
+                {
+                    resolved = relative;
+                }
+                else
+                {
+                    return ReferenceTargetResolution.Failed(Failure(ApiOperationResolutionStatus.Invalid,
+                        "dependency.uri", "The API document reference is not a valid URI reference.", path));
+                }
+            }
+            catch (UriFormatException exception)
+            {
+                return ReferenceTargetResolution.Failed(Failure(ApiOperationResolutionStatus.Invalid,
+                    "dependency.uri", $"The API document reference URI is invalid: {exception.Message}", path));
+            }
+            catch (FormatException exception)
+            {
+                return ReferenceTargetResolution.Failed(Failure(ApiOperationResolutionStatus.Invalid,
+                    "dependency.pointer", exception.Message, path));
+            }
+
+            var documentUri = WithoutFragment(resolved)!;
+            if (!_documents.TryGetValue(documentUri.AbsoluteUri, out var document))
+            {
+                if (_resolver is null)
+                {
+                    return ReferenceTargetResolution.Failed(Failure(ApiOperationResolutionStatus.Indeterminate,
+                        "dependency.unresolved", $"No caller-supplied resolver can load '{documentUri}'.", path));
+                }
+                if (_externalDocumentCount >= Capabilities.MaxReferencedDocuments)
+                {
+                    return ReferenceTargetResolution.Failed(Failure(ApiOperationResolutionStatus.Indeterminate,
+                        "limit.references", "The API reference document limit was exceeded.", path));
+                }
+
+                var bytes = await _resolver(documentUri.AbsoluteUri, cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+                if (bytes is null)
+                {
+                    return ReferenceTargetResolution.Failed(Failure(ApiOperationResolutionStatus.Indeterminate,
+                        "dependency.unresolved", $"The caller-supplied resolver did not return '{documentUri}'.", path));
+                }
+                JsonDocument parsed;
+                try
+                {
+                    parsed = JsonDocument.Parse(bytes.Value);
+                }
+                catch (JsonException exception)
+                {
+                    return ReferenceTargetResolution.Failed(Failure(ApiOperationResolutionStatus.Invalid,
+                        "dependency.json", $"The referenced API document is not valid JSON: {exception.Message}",
+                        path));
+                }
+
+                document = new(parsed, documentUri, documentUri.AbsoluteUri, false);
+                _documents.Add(documentUri.AbsoluteUri, document);
+                _externalDocumentCount++;
+            }
+
+            try
+            {
+                return ReferenceTargetResolution.Succeeded(CreateTarget(document, resolved.Fragment));
+            }
+            catch (FormatException exception)
+            {
+                return ReferenceTargetResolution.Failed(Failure(ApiOperationResolutionStatus.Invalid,
+                    "dependency.pointer", exception.Message, path));
+            }
+        }
+
+        private static ReferenceTarget CreateTarget(ReferencedDocument document, string reference)
+        {
+            var fragment = reference.StartsWith('#') ? reference[1..] : reference;
+            fragment = Uri.UnescapeDataString(fragment);
+            if (fragment.Length == 0)
+            {
+                return new(document, document.Root, "$");
+            }
+            if (fragment[0] != '/')
+            {
+                throw new FormatException("An API document reference fragment must be a JSON Pointer.");
+            }
+
+            var value = document.Root;
+            var decodedTokens = new List<string>();
+            foreach (var rawToken in fragment[1..].Split('/'))
+            {
+                var token = DecodePointerToken(rawToken);
+                decodedTokens.Add(token);
+                if (value.ValueKind == JsonValueKind.Object && value.TryGetProperty(token, out var property))
+                {
+                    value = property;
+                    continue;
+                }
+                if (value.ValueKind == JsonValueKind.Array && int.TryParse(token,
+                    System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture,
+                    out var index) && index >= 0 && index < value.GetArrayLength() &&
+                    index.ToString(System.Globalization.CultureInfo.InvariantCulture) == token)
+                {
+                    value = value[index];
+                    continue;
+                }
+                throw new FormatException($"The API document reference JSON Pointer '{fragment}' does not exist.");
+            }
+
+            return new(document, value, "$/" + string.Join("/", decodedTokens.Select(Escape)));
+        }
+
+        private static string DecodePointerToken(string token)
+        {
+            var decoded = new System.Text.StringBuilder(token.Length);
+            for (var index = 0; index < token.Length; index++)
+            {
+                if (token[index] != '~')
+                {
+                    decoded.Append(token[index]);
+                    continue;
+                }
+
+                if (++index >= token.Length || token[index] is not ('0' or '1'))
+                {
+                    throw new FormatException("An API document reference contains an invalid JSON Pointer escape.");
+                }
+                decoded.Append(token[index] == '0' ? '~' : '/');
+            }
+            return decoded.ToString();
+        }
+
+        private static Uri? WithoutFragment(Uri? uri)
+        {
+            if (uri is null || string.IsNullOrEmpty(uri.Fragment))
+            {
+                return uri;
+            }
+            var builder = new UriBuilder(uri) { Fragment = "" };
+            return builder.Uri;
+        }
+
+        public void Dispose()
+        {
+            foreach (var document in _documents.Values)
+            {
+                if (!ReferenceEquals(document, Root))
+                {
+                    document.Dispose();
+                }
+            }
+        }
+    }
+}

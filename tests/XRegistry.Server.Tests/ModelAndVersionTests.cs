@@ -3,6 +3,7 @@
 
 using TUnit.Assertions;
 using TUnit.Core;
+using XRegistry.Models;
 using static XRegistry.Server.Tests.EngineTests;
 using static XRegistry.Server.Tests.LifecycleTests;
 
@@ -145,6 +146,115 @@ public class ModelAndVersionTests
         var third = await Send(engine, RegistryAction.Post, "/teams/g/notes/n", "{}");
         await Assert.That(third.Metadata!.RootElement.GetProperty("versionid").GetString()).IsEqualTo("3");
         await ExpectCode(() => Send(engine, RegistryAction.Post, "/teams/g/notes/n", """{"versionid":"chosen"}"""), "versionid_not_allowed");
+    }
+
+    [Test]
+    public async Task ApiGroupAndVersionFormatsMatchCaseInsensitively()
+    {
+        using var source = BuiltInRegistryModels.LoadSource(RegistryModelKind.Api);
+        var engine = Create(source.RootElement.GetRawText());
+        await Send(engine, RegistryAction.Replace, "/apigroups/g", """{"format":"OpenAPI/3.1"}""");
+        await Send(engine, RegistryAction.Replace, "/apigroups/g/apis/a", """{"format":"OpenAPI/3.1"}""");
+
+        var second = await Send(engine, RegistryAction.Post, "/apigroups/g/apis/a",
+            """{"versionid":"v2","format":"openapi/3.1"}""");
+
+        await Assert.That(second.Metadata!.RootElement.GetProperty("versionid").GetString()).IsEqualTo("v2");
+    }
+
+    [Test]
+    public async Task ApiVersionFormatCaseOnlyAndExactValuesAreAcceptedByOrdinaryMutation()
+    {
+        using var source = BuiltInRegistryModels.LoadSource(RegistryModelKind.Api);
+        var engine = Create(source.RootElement.GetRawText());
+        await Send(engine, RegistryAction.Replace, "/apigroups/g", """{"format":"OpenAPI/3.1"}""");
+        await Send(engine, RegistryAction.Replace, "/apigroups/g/apis/a", """{"versionid":"v1","format":"OpenAPI/3.1"}""");
+        await Send(engine, RegistryAction.Post, "/apigroups/g/apis/a",
+            """{"versionid":"v2","format":"openapi/3.1"}""");
+        await Send(engine, RegistryAction.Post, "/apigroups/g/apis/a",
+            """{"versionid":"v3","format":"OpenAPI/3.1"}""");
+
+        var versions = (await Send(engine, RegistryAction.Read, "/apigroups/g/apis/a/versions")).Metadata!.RootElement;
+        await Assert.That(versions.EnumerateObject().Count()).IsEqualTo(3);
+        await Assert.That(versions.GetProperty("v1").GetProperty("format").GetString()).IsEqualTo("OpenAPI/3.1");
+        await Assert.That(versions.GetProperty("v2").GetProperty("format").GetString()).IsEqualTo("openapi/3.1");
+        await Assert.That(versions.GetProperty("v3").GetProperty("format").GetString()).IsEqualTo("OpenAPI/3.1");
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0")]
+    [Arguments("AsyncAPI/3.1")]
+    public async Task ApiGroupAndVersionFormatsRejectDistinctCompleteFormatOnMutation(string differentFormat)
+    {
+        using var source = BuiltInRegistryModels.LoadSource(RegistryModelKind.Api);
+        var engine = Create(source.RootElement.GetRawText());
+        await Send(engine, RegistryAction.Replace, "/apigroups/g", "{}");
+        await Send(engine, RegistryAction.Replace, "/apigroups/g/apis/a", """{"versionid":"v1","format":"OpenAPI/3.1"}""");
+
+        await ExpectCode(() => Send(engine, RegistryAction.Post, "/apigroups/g/apis/a",
+            $$"""{"versionid":"v2","format":"{{differentFormat}}"}"""), "mismatched_version_attribute");
+
+        var versions = (await Send(engine, RegistryAction.Read, "/apigroups/g/apis/a/versions")).Metadata!.RootElement;
+        await Assert.That(versions.EnumerateObject().Select(static item => item.Name).ToArray())
+            .IsEquivalentTo(["v1"], StringComparer.Ordinal);
+        await Assert.That(versions.GetProperty("v1").GetProperty("format").GetString()).IsEqualTo("OpenAPI/3.1");
+        await Assert.That(versions.TryGetProperty("v2", out _)).IsFalse();
+    }
+
+    [Test]
+    public async Task ApiVersionFormatsCaseOnlyAndExactValuesAreAcceptedDuringCompleteResourceReconciliation()
+    {
+        using var source = BuiltInRegistryModels.LoadSource(RegistryModelKind.Api);
+        var engine = Create(source.RootElement.GetRawText());
+        await Send(engine, RegistryAction.Replace, "/apigroups/g", """
+            {"apis":{"a":{"versions":{
+              "v1":{"format":"OpenAPI/3.1"},
+              "v2":{"format":"openapi/3.1"},
+              "v3":{"format":"OpenAPI/3.1"}
+            }}}}
+            """);
+
+        var versions = (await Send(engine, RegistryAction.Read, "/apigroups/g/apis/a/versions")).Metadata!.RootElement;
+        await Assert.That(versions.EnumerateObject().Count()).IsEqualTo(3);
+        await Assert.That(versions.GetProperty("v1").GetProperty("format").GetString()).IsEqualTo("OpenAPI/3.1");
+        await Assert.That(versions.GetProperty("v2").GetProperty("format").GetString()).IsEqualTo("openapi/3.1");
+        await Assert.That(versions.GetProperty("v3").GetProperty("format").GetString()).IsEqualTo("OpenAPI/3.1");
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0")]
+    [Arguments("AsyncAPI/3.1")]
+    public async Task DistinctApiVersionFormatsAreRejectedDuringCompleteResourceReconciliationWithoutChangingStoredState(
+        string differentFormat)
+    {
+        using var source = BuiltInRegistryModels.LoadSource(RegistryModelKind.Api);
+        var engine = Create(source.RootElement.GetRawText());
+        await Send(engine, RegistryAction.Replace, "/apigroups/g", """
+            {"apis":{"a":{"versions":{"v1":{"format":"OpenAPI/3.1"}}}}}
+            """);
+
+        var importedGroup = new System.Text.Json.Nodes.JsonObject
+        {
+            ["apis"] = new System.Text.Json.Nodes.JsonObject
+            {
+                ["a"] = new System.Text.Json.Nodes.JsonObject
+                {
+                    ["versions"] = new System.Text.Json.Nodes.JsonObject
+                    {
+                        ["v1"] = new System.Text.Json.Nodes.JsonObject { ["format"] = "OpenAPI/3.1" },
+                        ["v2"] = new System.Text.Json.Nodes.JsonObject { ["format"] = differentFormat }
+                    }
+                }
+            }
+        };
+        await ExpectCode(() => Send(engine, RegistryAction.Replace, "/apigroups/g", importedGroup.ToJsonString()),
+            "mismatched_version_attribute");
+
+        var versions = (await Send(engine, RegistryAction.Read, "/apigroups/g/apis/a/versions")).Metadata!.RootElement;
+        await Assert.That(versions.EnumerateObject().Select(static item => item.Name).ToArray())
+            .IsEquivalentTo(["v1"], StringComparer.Ordinal);
+        await Assert.That(versions.GetProperty("v1").GetProperty("format").GetString()).IsEqualTo("OpenAPI/3.1");
+        await Assert.That(versions.TryGetProperty("v2", out _)).IsFalse();
     }
 
     private sealed class IncludeResolver : IRegistryModelResolver

@@ -20,7 +20,7 @@ PACKAGE_IDS = (
     "XRegistry", "XRegistry.Client", "XRegistry.Server", "XRegistry.AspNetCore",
     "XRegistry.Storage.File", "XRegistry.Models", "XRegistry.Validation",
     "XRegistry.Federation", "XRegistry.Bindings.File", "XRegistry.Bindings.Git",
-    "XRegistry.Bindings.Oci",
+    "XRegistry.Bindings.Oci", "XRegistry.Publication", "XRegistry.Publication.Server",
 )
 PINNED_ACTIONS = {
     "actions/checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1",
@@ -124,7 +124,7 @@ class NuGetWorkflowTests(unittest.TestCase):
         self.assertIn("--skip-duplicate", job)
         self.assertIn('ver=$(curl -fsSL -H "$auth" "$base/xregistry/index.json" | jq -r \'.versions | last\')', job)
         self.assertIn('curl -fsSL -H "$auth" "$base/$lower/$ver/$lower.$ver.nupkg"', job)
-        self.assertIn('if [ "$count" -ne 11 ]; then', job)
+        self.assertIn('if [ "$count" -ne 13 ]; then', job)
         self.assertIn("Invalid package version", job)
 
     def test_verifies_nuget_user_is_resolved_before_login_to_surface_misconfiguration_early(

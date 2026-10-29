@@ -1,0 +1,13 @@
+<!-- Copyright (c) 2026 xregistry-dotnet contributors. -->
+<!-- SPDX-License-Identifier: MIT -->
+
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>XRegistry.Publication.Server</PackageId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\XRegistry.Publication\XRegistry.Publication.csproj" />
+    <ProjectReference Include="..\XRegistry.Server\XRegistry.Server.csproj" />
+  </ItemGroup>
+</Project>

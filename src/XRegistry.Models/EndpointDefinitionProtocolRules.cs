@@ -12,7 +12,8 @@ internal static partial class EndpointDefinitionSemantics
     internal static string? ValidateConsumer(JsonElement endpoint, EndpointDefinitionEvaluation evaluation)
     {
         var protocol = Protocol(endpoint);
-        var known = protocol is "HTTP" or "AMQP/1.0" or "MQTT/3.1.1" or "MQTT/5.0" or "KAFKA" or "NATS";
+        var known = protocol is "HTTP" or "AMQP/1.0" or "MQTT/3.1.1" or "MQTT/5.0" or "KAFKA" or "NATS" ||
+            MediaEndpointSemantics.IsDraftMediaProtocol(protocol);
         if (!known)
         {
             evaluation.Defer("protocol_contract", "/protocol", "An explicit protocol contract must be supplied by the consumer.");
@@ -206,6 +207,12 @@ internal static partial class EndpointDefinitionSemantics
     private static bool IsDefinedOption(string? protocol, string name)
     {
         if (name is "deployed" or "endpoints" or "authorization")
+        {
+            return true;
+        }
+        if (MediaEndpointSemantics.IsDraftMediaProtocol(protocol) &&
+            name is "streamformat" or "videocodec" or "audiocodec" or "streamid" or "signaling" or
+                "signalingreference" or "sessiondescription" or "application" or "streamname")
         {
             return true;
         }

@@ -58,6 +58,42 @@ public sealed class RegistryMetadataValidationResult
 /// <summary>Checks model-defined metadata shapes without performing lifecycle, storage, or remote resolution.</summary>
 public static class RegistryMetadataValidator
 {
+    /// <summary>Compares API Version format values using the draft's case-insensitive equality rule.</summary>
+    public static bool ApiVersionFormatsEqual(JsonNode? first, JsonNode? second) =>
+        first is JsonValue left && left.TryGetValue<string>(out var leftText) &&
+        second is JsonValue right && right.TryGetValue<string>(out var rightText) &&
+        string.Equals(leftText, rightText, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Compares API Version format values represented as JSON elements.</summary>
+    public static bool ApiVersionFormatsEqual(JsonElement first, JsonElement second) =>
+        first.ValueKind == JsonValueKind.String && second.ValueKind == JsonValueKind.String &&
+        string.Equals(first.GetString(), second.GetString(), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Compares one model matchversions value using Core's typed equality semantics.</summary>
+    public static bool MatchVersionsEqual(RegistryResourceDefinition resource, IReadOnlyList<string> attributePath,
+        RegistryValueType type, JsonNode? first, JsonNode? second)
+    {
+        ArgumentNullException.ThrowIfNull(resource);
+        ArgumentNullException.ThrowIfNull(attributePath);
+        if (first is null || second is null)
+        {
+            return first is null && second is null;
+        }
+
+        return ScalarValues.Equal(type,
+            JsonSerializer.SerializeToElement(first, RegistryMetadataJsonContext.Default.JsonNode),
+            JsonSerializer.SerializeToElement(second, RegistryMetadataJsonContext.Default.JsonNode));
+    }
+
+    /// <summary>Compares one model matchversions value represented as JSON elements.</summary>
+    public static bool MatchVersionsEqual(RegistryResourceDefinition resource, IReadOnlyList<string> attributePath,
+        RegistryValueType type, JsonElement first, JsonElement second)
+    {
+        ArgumentNullException.ThrowIfNull(resource);
+        ArgumentNullException.ThrowIfNull(attributePath);
+        return ScalarValues.Equal(type, first, second);
+    }
+
     /// <summary>Normalizes and validates one modeled object, throwing exact-pointer diagnostics on invalid input.</summary>
     /// <remarks>
     /// ClientInput ignores readonly fields, including epoch; hosts must extract binding-specific preconditions
@@ -518,7 +554,13 @@ public static class RegistryMetadataValidator
                 if (ModelCompiler.HasValue(expected))
                 {
                     Work(1);
-                    if (value is null || !ScalarValues.Equal(definition.Type, expected, actual))
+                    var apiFormatEquals = options.Group.Singular == "apigroup" && options.Group.Plural == "apigroups" &&
+                        options.Resource.Singular == "api" && options.Resource.Plural == "apis" &&
+                        constraint.AttributePath is ["format"] && constraint.EqualsPath is ["format"] &&
+                        expected.ValueKind == JsonValueKind.String && actual.ValueKind == JsonValueKind.String
+                            ? string.Equals(expected.GetString(), actual.GetString(), StringComparison.OrdinalIgnoreCase)
+                            : value is not null && ScalarValues.Equal(definition.Type, expected, actual);
+                    if (value is null || !apiFormatEquals)
                     {
                         throw Diagnostics.Error("constraint_failure", path, "The value differs from its owning Group's equals constraint.");
                     }

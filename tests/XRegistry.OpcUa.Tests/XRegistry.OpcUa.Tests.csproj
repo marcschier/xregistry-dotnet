@@ -1,0 +1,15 @@
+<!-- Copyright (c) 2026 xregistry-dotnet contributors. -->
+<!-- SPDX-License-Identifier: MIT -->
+
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="OPCFoundation.NetStandard.Opc.Ua.Server" />
+    <PackageReference Include="TUnit" />
+    <ProjectReference Include="..\..\src\XRegistry.Bindings.OpcUa\XRegistry.Bindings.OpcUa.csproj" />
+  </ItemGroup>
+</Project>

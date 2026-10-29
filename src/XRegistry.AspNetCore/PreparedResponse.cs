@@ -14,7 +14,7 @@ internal sealed class PreparedResponse(int statusCode, Dictionary<string, string
     internal int StatusCode => statusCode;
 
     internal static async ValueTask<PreparedResponse> CreateAsync(RegistryResult result, IRegistryHostBackend engine,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, Uri? publicationContextUri = null)
     {
         var headers = RootHeaders(engine.PublicRoot);
         var status = result.Kind switch
@@ -77,6 +77,12 @@ internal sealed class PreparedResponse(int statusCode, Dictionary<string, string
             {
                 headers["Expires"] = expires.ToUniversalTime().ToString("R", CultureInfo.InvariantCulture);
             }
+        }
+
+        if (publicationContextUri is not null && result.Path.EscapedPath == "/")
+        {
+            headers["Link"] += ", <" + publicationContextUri.AbsoluteUri + ">;rel=\"" +
+                PublicationEndpointRouteBuilderExtensions.ContextRelation + "\"";
         }
 
         if (result.AllowedActions.Count != 0)

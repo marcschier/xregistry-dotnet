@@ -3,7 +3,7 @@
 
 namespace XRegistry.Models;
 
-/// <summary>Identifies a model source included in the pinned specification baseline.</summary>
+/// <summary>Identifies a built-in Registry model source.</summary>
 public enum RegistryModelKind
 {
     /// <summary>The core registry attributes.</summary>
@@ -25,5 +25,14 @@ public enum RegistryModelKind
     Registry,
 
     /// <summary>OpenUSD asset and codeless schema-plugin metadata.</summary>
-    OpenUsd
+    OpenUsd,
+
+    /// <summary>The API Registry model for versioned synchronous API definitions.</summary>
+    Api,
+
+    /// <summary>Publication channels, immutable objects, and snapshots.</summary>
+    Publication,
+
+    /// <summary>WoT Thing Models and Thing Descriptions.</summary>
+    Wot
 }

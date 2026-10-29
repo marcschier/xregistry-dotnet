@@ -135,41 +135,28 @@ public sealed partial class OciSnapshot
             resolved.UnionWith(active);
         }
         var metadata = versions.Select(v => v.SemanticEntity).ToArray();
-        foreach (var attribute in resource.Attributes.Values) { Match(attribute, metadata); }
+        if (resource.Singular == "api" && metadata.Skip(1).Any(value =>
+            !RegistryMetadataValidator.ApiVersionFormatsEqual(
+                metadata[0].TryGetProperty("format", out var firstFormat) ? firstFormat : default,
+                value.TryGetProperty("format", out var format) ? format : default)))
+        {
+            throw OciJson.Invalid("Captured API Versions do not use one case-insensitively equal format identifier.");
+        }
+        foreach (var attribute in resource.Attributes.Values) { Match(attribute, metadata, []); }
 
-        void Match(RegistryAttributeDefinition definition, JsonElement[] values)
+        void Match(RegistryAttributeDefinition definition, JsonElement[] values, IReadOnlyList<string> parentPath)
         {
             cancellationToken.ThrowIfCancellationRequested();
             session.Budget.ChargeWork(values.Length);
+            var path = parentPath.Append(definition.Name).ToArray();
             var projected = values.Select(v => v.ValueKind == JsonValueKind.Object && v.TryGetProperty(definition.Name, out var value)
                 ? value : default).ToArray();
-            if (definition.MatchVersions && projected.Skip(1).Any(v => !Same(v, projected[0], definition.Type)))
+            if (definition.MatchVersions && projected.Skip(1).Any(v =>
+                !RegistryMetadataValidator.MatchVersionsEqual(resource, path, definition.Type, projected[0], v)))
             {
                 throw OciJson.Invalid("Captured Versions violate a model matchversions constraint.");
             }
-            foreach (var child in definition.Attributes.Values.Where(a => a.Name != "*")) { Match(child, projected); }
+            foreach (var child in definition.Attributes.Values.Where(a => a.Name != "*")) { Match(child, projected, path); }
         }
-    }
-
-    private static bool Same(JsonElement left, JsonElement right, RegistryValueType type)
-    {
-        if (left.ValueKind == JsonValueKind.Undefined || right.ValueKind == JsonValueKind.Undefined)
-        {
-            return left.ValueKind == right.ValueKind;
-        }
-        if (type is RegistryValueType.Integer or RegistryValueType.UInteger or RegistryValueType.Decimal)
-        {
-            return RegistryNumber.FromElement(left).Equals(RegistryNumber.FromElement(right));
-        }
-        if (type == RegistryValueType.Timestamp)
-        {
-            // Core-normalized UTC values retain arbitrary fractional precision, as in DirectoryMapping.
-            var first = left.GetString()!;
-            var second = right.GetString()!;
-            return first.AsSpan(0, 19).SequenceEqual(second.AsSpan(0, 19)) &&
-                first.AsSpan(19, first.Length - 20).TrimEnd('0').TrimEnd('.')
-                    .SequenceEqual(second.AsSpan(19, second.Length - 20).TrimEnd('0').TrimEnd('.'));
-        }
-        return OciJson.Equal(left, right);
     }
 }

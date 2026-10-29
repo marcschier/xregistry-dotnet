@@ -4,9 +4,11 @@ For an application-specific worked example, start with
 [Define a custom xRegistry model](custom-models.md).
 
 `XRegistry.Models` embeds seven model sources from the pinned specification
-baseline and explicit [source corrections](spec-feedback.md): Core, Endpoint, Message, Schema, CloudEvents,
-Registry-of-Registries, and OpenUSD. Model-source loading does not require a
-filesystem, network connection, or domain runtime.
+baseline and explicit [source corrections](spec-feedback.md): Core, Endpoint,
+Message, Schema, CloudEvents, Registry-of-Registries, and OpenUSD. It also
+embeds separately pinned working-draft API, Publication, and WoT models.
+Model-source loading does not require a filesystem, network connection, or
+domain runtime.
 
 ```csharp
 using XRegistry.Models;
@@ -119,7 +121,10 @@ and unknown extensions and never authorize or acquire an advertised source.
 Concrete Message `dataschemauri` selection is available through
 [`SchemaObjectSelector`](schema-selection.md): JSON Pointer, Avro record,
 Protobuf message and bounded XSD structural selectors retain the complete
-authorized document context. Message inheritance and Endpoint authoring/consumer
+authorized document context. When `dataschemaxid` identifies a local Schema
+Resource, any `dataschemauri` must have the exact same document URI as that
+Resource's self URL; its fragment remains available to select a format-specific
+object. Message inheritance and Endpoint authoring/consumer
 materialization have separate [Message](message-materialization.md) and
 [Endpoint](endpoint-templates.md) APIs. Neither definition materialization nor
 schema selection sends runtime application messages or implicitly acquires a URI.

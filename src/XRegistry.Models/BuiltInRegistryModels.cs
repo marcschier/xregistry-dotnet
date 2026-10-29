@@ -50,6 +50,9 @@ public static class BuiltInRegistryModels
             RegistryModelKind.CloudEvents => "cloudevents",
             RegistryModelKind.Registry => "registry",
             RegistryModelKind.OpenUsd => "openusd",
+            RegistryModelKind.Api => "api",
+            RegistryModelKind.Publication => "publication",
+            RegistryModelKind.Wot => "wot",
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown built-in model.")
         };
 
@@ -84,7 +87,10 @@ public static class BuiltInRegistryModels
          "groups":{"$includes":[
           "https://xregistry.invalid/spec/cloudevents/model.json#/groups",
           "https://xregistry.invalid/spec/workingdrafts/models/registry/model.json#/groups",
-          "https://xregistry.invalid/spec/workingdrafts/models/openusd/model.json#/groups"
+          "https://xregistry.invalid/spec/workingdrafts/models/openusd/model.json#/groups",
+          "https://xregistry.invalid/spec/workingdrafts/models/api/model.json#/groups",
+          "https://xregistry.invalid/spec/workingdrafts/models/publication/model.json#/groups",
+          "https://xregistry.invalid/spec/workingdrafts/models/wot/model.json#/groups"
         ]}}
         """);
 
@@ -107,6 +113,9 @@ public static class BuiltInRegistryModels
             RegistryModelKind.CloudEvents => "cloudevents",
             RegistryModelKind.Registry => "workingdrafts/models/registry",
             RegistryModelKind.OpenUsd => "workingdrafts/models/openusd",
+            RegistryModelKind.Api => "workingdrafts/models/api",
+            RegistryModelKind.Publication => "workingdrafts/models/publication",
+            RegistryModelKind.Wot => "workingdrafts/models/wot",
             _ => throw new ArgumentOutOfRangeException(nameof(kind))
         };
         return new Uri("https://xregistry.invalid/spec/" + path + "/model.json");

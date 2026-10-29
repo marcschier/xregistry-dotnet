@@ -27,7 +27,8 @@ CASES = json.loads((ROOT / "tests" / "PackageSmoke" / "EmbeddingCases.json").rea
 class EmbeddingEvidenceTests(unittest.TestCase):
     def test_every_runtime_package_in_the_declared_manifest_is_required(self) -> None:
         declared = json.loads((ROOT / "eng" / "packages.json").read_bytes())
-        self.assertEqual({package["id"] for package in declared["packages"]}, set(tool.PACKAGE_IDS))
+        classified = set(tool.PACKAGE_IDS) | set(tool.NATIVE_AOT_EXCLUDED_PACKAGE_IDS)
+        self.assertEqual({package["id"] for package in declared["packages"]}, classified)
 
     def test_original_fifteen_cases_remain_intact_before_new_runtime_cases(self) -> None:
         self.assertEqual([
@@ -39,8 +40,8 @@ class EmbeddingEvidenceTests(unittest.TestCase):
             "direct-operation-caller-stream-ownership", "staged-publication-conflict-and-cancellation",
             "snapshot-lease-lifetimes", "results-outlive-host-and-store"
         ], CASES[:15])
-        self.assertEqual(25, len(CASES))
-        self.assertEqual("federation-escaped-identities", CASES[-1])
+        self.assertEqual(27, len(CASES))
+        self.assertEqual("publication-channel-retained-replay", CASES[-1])
 
     def native_report(self) -> dict:
         return {
@@ -241,7 +242,7 @@ class EmbeddingEvidenceTests(unittest.TestCase):
             root = Path(directory)
             assets, versions, feed, cache = self.package_fixture(root)
             result = tool.inventory(assets, versions, feed, cache, "net8.0", "win-x64", root / "retained")
-            self.assertEqual(11, len(result["packages"]))
+            self.assertEqual(len(tool.PACKAGE_IDS), len(result["packages"]))
             self.assertEqual(set(tool.PACKAGE_IDS), {item["name"] for item in result["assemblies"]})
             for item in result["assemblies"]:
                 retained = Path(item["path"])
