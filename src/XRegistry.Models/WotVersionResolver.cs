@@ -288,8 +288,9 @@ public static class WotVersionResolver
 
     private static void ValidateMinimumVersionKind(WotVersionResolutionRequest request)
     {
-        if (request.MinimumVersionKind != (request.TargetKind == WotReferenceTargetKind.ThingModel
-                ? WotMinimumVersionKind.ThingModel : WotMinimumVersionKind.ThingDescription))
+        var expected = request.TargetKind == WotReferenceTargetKind.ThingModel
+            ? WotMinimumVersionKind.ThingModel : WotMinimumVersionKind.ThingDescription;
+        if (request.MinimumVersionKind is { } supplied && supplied != expected)
         {
             throw Error("invalid-floor", "The minimum-version term does not match the referenced document kind.");
         }

@@ -99,6 +99,41 @@ public class WotVersionAssignmentContractTests
             "urn:example:authored-exact", exactDocument);
     }
 
+    [Test]
+    public async Task ExecuteAsyncRejectsMismatchedThingDescriptionVersionIdAndBuildMetadata()
+    {
+        var fixture = CreateWotFixture();
+        var resourcePath = fixture.ResourcePath("thingdescription", "rejected");
+        const string authored = """{"id":"urn:example:td","version":{"instance":"1.2.3"}}""";
+        var mismatch = await Assert.That(async () => await ExecuteDocumentAsync(fixture.Engine, RegistryAction.Post,
+            resourcePath, authored, """{"versionid":"1.2.4"}"""))
+            .Throws<RegistryException>() ?? throw new InvalidOperationException("Expected a mismatched Version id failure.");
+        const string buildMetadata = """{"id":"urn:example:td-build","version":{"instance":"1.2.3+build.7"}}""";
+        var invalid = await Assert.That(async () => await ExecuteDocumentAsync(fixture.Engine, RegistryAction.Replace,
+            fixture.ResourcePath("thingdescription", "build"), buildMetadata, "{}"))
+            .Throws<RegistryException>() ?? throw new InvalidOperationException("Expected build metadata to be rejected.");
+
+        await Assert.That(mismatch.Diagnostic.Code).IsEqualTo("mismatched_id");
+        await Assert.That(invalid.Diagnostic.Code).IsEqualTo("invalid_attribute");
+    }
+
+    [Test]
+    public async Task ExecuteAsyncLateSemVerPatchDoesNotReplaceNewerDefault()
+    {
+        var fixture = CreateWotFixture();
+        var resourcePath = fixture.ResourcePath("thingmodel", "late-patch");
+        await ExecuteDocumentAsync(fixture.Engine, RegistryAction.Replace, resourcePath,
+            """{"id":"urn:example:pump","version":{"model":"1.0.0"}}""", "{}");
+        await ExecuteDocumentAsync(fixture.Engine, RegistryAction.Post, resourcePath,
+            """{"id":"urn:example:pump","version":{"model":"1.1.0"}}""", "{}");
+        await ExecuteDocumentAsync(fixture.Engine, RegistryAction.Replace, VersionPath(resourcePath, "1.0.1"),
+            """{"id":"urn:example:pump","version":{"model":"1.0.1"}}""", "{}");
+
+        var metadata = await fixture.Engine.ExecuteAsync(new(RegistryAction.Read,
+            RegistryPath.Parse(resourcePath.EscapedPath + "/meta")), Reader());
+        await Assert.That(metadata.Metadata!.RootElement.GetProperty("defaultversionid").GetString()).IsEqualTo("1.1.0");
+    }
+
     private static WotFixture CreateWotFixture()
     {
         using var source = BuiltInRegistryModels.LoadSource(RegistryModelKind.Wot);
