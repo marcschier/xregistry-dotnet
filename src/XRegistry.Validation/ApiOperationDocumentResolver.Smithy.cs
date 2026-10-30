@@ -2434,6 +2434,8 @@ public static partial class ApiOperationDocumentResolver
                                 var numericComparator = '\0';
                                 var inclusive = false;
                                 List<JsonNumber?>? numericOperands = null;
+                                List<(bool Projection, List<string> Values)>? subsetOperands = null;
+                                var properSubset = false;
                                 var stringComparator = '\0';
                                 List<string>? stringOperands = null;
                                 if (position < text.Length && text[position] == '?')
@@ -2469,6 +2471,48 @@ public static partial class ApiOperationDocumentResolver
                                             acceptsPresent |= expected == "true";
                                             acceptsAbsent |= expected == "false";
                                         }
+                                        SkipWhitespace();
+                                        if (position == text.Length || text[position] != ',') { break; }
+                                        position++;
+                                    }
+                                }
+                                else if (scoped && position < text.Length && text[position] == '{')
+                                {
+                                    position++;
+                                    if (position == text.Length || text[position++] != '<') { return null; }
+                                    properSubset = position < text.Length && text[position] == '<';
+                                    if (properSubset) { position++; }
+                                    if (position == text.Length || text[position++] != '}') { return null; }
+                                    subsetOperands = [];
+                                    while (true)
+                                    {
+                                        SkipWhitespace();
+                                        var projection = false;
+                                        List<string> texts = [];
+                                        if (position < text.Length && text[position] == '@')
+                                        {
+                                            var operands = ProjectionContextValues(evaluateAssertion, context,
+                                                contexts is not null, out projection);
+                                            if (operands is null) { return null; }
+                                            foreach (var operand in operands)
+                                            {
+                                                budget.Work(path: path);
+                                                var value = AttributeText(operand);
+                                                if (value is null) { return null; }
+                                                texts.Add(value);
+                                            }
+                                        }
+                                        else
+                                        {
+                                            if (position == text.Length || char.IsAsciiDigit(text[position]) || text[position] == '-')
+                                            {
+                                                return null;
+                                            }
+                                            var operand = AttributeName();
+                                            if (operand is null) { return null; }
+                                            texts.Add(operand);
+                                        }
+                                        subsetOperands.Add((projection, texts));
                                         SkipWhitespace();
                                         if (position == text.Length || text[position] != ',') { break; }
                                         position++;
@@ -2541,14 +2585,22 @@ public static partial class ApiOperationDocumentResolver
                                     }
                                 }
                                 else if (scoped) { return null; }
-                                var ignoreCase = stringOperands is not null && position < text.Length && text[position] == 'i';
+                                var ignoreCase = (stringOperands is not null || subsetOperands is not null) &&
+                                    position < text.Length && text[position] == 'i';
                                 if (ignoreCase)
                                 {
                                     position++;
                                     SkipWhitespace();
-                                    foreach (var operand in stringOperands!)
+                                    foreach (var operand in stringOperands ?? [])
                                     {
                                         if (evaluateAssertion && !AsciiText(operand)) { return null; }
+                                    }
+                                    foreach (var operand in subsetOperands ?? [])
+                                    {
+                                        foreach (var value in operand.Values)
+                                        {
+                                            if (evaluateAssertion && !AsciiText(value)) { return null; }
+                                        }
                                     }
                                 }
                                 moreAssertions = scoped && position + 1 < text.Length &&
@@ -2564,12 +2616,32 @@ public static partial class ApiOperationDocumentResolver
                                     assertionsMatch = false;
                                     continue;
                                 }
+                                var leftProjection = false;
                                 var values = literal is not null
                                     ? [new SmithyAttribute(SmithyAttributeKind.Text, Text: literal)]
-                                    : AttributeValues(attribute, properties, context);
+                                    : ProjectionAttributeValues(attribute, properties, out leftProjection, context);
                                 if (values is null) { return null; }
                                 current = false;
-                                if (stringOperands is not null)
+                                if (subsetOperands is not null)
+                                {
+                                    List<string> leftValues = [];
+                                    foreach (var selected in values)
+                                    {
+                                        budget.Work(path: path);
+                                        var value = AttributeText(selected);
+                                        if (value is null || ignoreCase && !AsciiText(value)) { return null; }
+                                        leftValues.Add(value);
+                                    }
+                                    foreach (var operand in subsetOperands)
+                                    {
+                                        budget.Work(path: path);
+                                        if (!leftProjection || !operand.Projection) { continue; }
+                                        var subset = ContainsEvery(leftValues, operand.Values, ignoreCase);
+                                        var same = !properSubset || ContainsEvery(operand.Values, leftValues, ignoreCase);
+                                        current |= subset && (!properSubset || !same);
+                                    }
+                                }
+                                else if (stringOperands is not null)
                                 {
                                     foreach (var selected in values)
                                     {
@@ -2704,8 +2776,30 @@ public static partial class ApiOperationDocumentResolver
                 return true;
             }
 
-            List<SmithyAttribute>? ContextValues(bool evaluate, SmithyAttribute? context, bool relative)
+            bool ContainsEvery(List<string> source, List<string> target, bool ignoreCase)
             {
+                var all = true;
+                foreach (var value in source)
+                {
+                    budget.Work(path: path);
+                    var found = false;
+                    foreach (var candidate in target)
+                    {
+                        budget.Work(value.Length + candidate.Length + 1L, path);
+                        found |= value.Equals(candidate, ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+                    }
+                    all &= found;
+                }
+                return all;
+            }
+
+            List<SmithyAttribute>? ContextValues(bool evaluate, SmithyAttribute? context, bool relative) =>
+                ProjectionContextValues(evaluate, context, relative, out _);
+
+            List<SmithyAttribute>? ProjectionContextValues(bool evaluate, SmithyAttribute? context, bool relative,
+                out bool projection)
+            {
+                projection = false;
                 position++;
                 SkipWhitespace();
                 if (position == text.Length || text[position++] != '{') { return null; }
@@ -2713,12 +2807,16 @@ public static partial class ApiOperationDocumentResolver
                 if (!AttributePath(out var attribute, out var properties, relative)) { return null; }
                 if (position == text.Length || text[position++] != '}') { return null; }
                 SkipWhitespace();
-                return evaluate ? AttributeValues(attribute, properties, context) : [];
+                return evaluate ? ProjectionAttributeValues(attribute, properties, out projection, context) : [];
             }
 
             List<SmithyAttribute>? AttributeValues(string attribute, List<(string Name, bool Function)>? properties,
-                SmithyAttribute? context = null)
+                SmithyAttribute? context = null) => ProjectionAttributeValues(attribute, properties, out _, context);
+
+            List<SmithyAttribute>? ProjectionAttributeValues(string attribute, List<(string Name, bool Function)>? properties,
+                out bool projection, SmithyAttribute? context = null)
             {
+                projection = false;
                 List<SmithyAttribute> values = [];
                 if (context is { } scopedValue) { values.Add(scopedValue); }
                 else if (attribute == "trait")
@@ -2739,6 +2837,7 @@ public static partial class ApiOperationDocumentResolver
                 {
                     if (property.Function && property.Name == "first")
                     {
+                        projection = false;
                         budget.Work(values.Count, path);
                         if (values.Count > 1) { values.RemoveRange(1, values.Count - 1); }
                         continue;
@@ -2747,6 +2846,14 @@ public static partial class ApiOperationDocumentResolver
                     foreach (var value in values)
                     {
                         budget.Work(path: path);
+                        if (property.Function && property.Name is "keys" or "values" &&
+                            (value.Kind == SmithyAttributeKind.Traits ||
+                             value.Kind == SmithyAttributeKind.Node &&
+                             (value.Node.ValueKind == JsonValueKind.Object ||
+                              property.Name == "values" && value.Node.ValueKind == JsonValueKind.Array)))
+                        {
+                            projection = true;
+                        }
                         if (!SelectProperty(value, property.Name, property.Function, next)) { return null; }
                     }
                     values = next;

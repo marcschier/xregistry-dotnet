@@ -528,8 +528,7 @@ Literal alternatives, presence checks, numeric comparisons and per-assertion
 ASCII `i` modifiers retain their ordinary attribute semantics. Every assertion
 is parsed and checked, including after a false assertion; unknown functions
 parse these assertions without evaluating them. Assertion scans and
-comparisons consume the shared work budget. Projection set operators remain
-unsupported.
+comparisons consume the shared work budget.
 The left operand can also be quoted text, an unquoted Boolean or a root shape
 ID, for example `[@: '10' > 9 && true ?= true]`. These are present text values;
 quoted numeric text uses the same exact numeric comparison and 256-character
@@ -553,7 +552,7 @@ projection supplies no alternatives, so it cannot make an absence check match.
 Every supplied context value is checked, even after a matching Boolean
 alternative or when the left side is absent. Numeric JSON rendering remains
 unsupported, and the ASCII `i` modifier remains limited to ordinary string
-comparisons. Projection set operators remain unsupported.
+comparisons.
 Named scopes resolve an attribute once, then evaluate relative context paths
 against that value; for example, `[@trait|example#Custom: @{min} < @{max}]`.
 This also applies to the `id` and `service` attributes and trait-key identities.
@@ -565,6 +564,18 @@ absence checks. Its assertion syntax is still parsed. Later elements remain
 subject to unsupported-value checks and shared numeric/work limits after an
 earlier element matches. Unknown functions parse named scopes without resolving
 their values.
+Scoped `{<}` and `{<<}` comparisons test projection subset and proper-subset
+membership using the same string representations. Both operands must be
+projections, including when either is empty or contains one value. A missing
+attribute or a scalar passed to `(values)` is not an empty projection;
+forwarding a missing property through an existing projection preserves its
+projection type. `(first)` removes that type. Comparisons ignore order and
+duplicate values. A proper subset must also omit at least one value found in
+the right projection. Comma-separated alternatives and ASCII `i` retain their
+ordinary matching rules, and every operand is checked before a result is
+accepted. Membership comparisons consume the shared work budget.
+`{=}` and `{!=}` remain unsupported: the publisher's `{=}` table describes
+one-way containment while the surrounding text calls it equality.
 
 After schema-closure checks, each custom trait application is checked against
 its declared node types. Scalar checks cover Boolean/string values, base64
