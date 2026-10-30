@@ -417,8 +417,8 @@ Trait names and property names may use single or double quotes; quoted names
 cannot be empty or contain backslashes or control characters below U+0020.
 Names match exactly without Unicode normalization or JSON Pointer decoding.
 Missing properties and descent through scalars or arrays yield absence; a
-property containing null still exists. Unquoted numeric keys, projections and
-function properties other than the aggregate `(length)` checks below remain
+property containing null still exists. Unquoted numeric keys and
+function properties other than `(keys)`, `(values)` and the `(length)` checks below remain
 unsupported. Property scans consume the shared work budget.
 Trait and nested-property predicates also support `>`, `>=`, `<` and `<=`.
 Both sides must contain Smithy number spellings, either as numbers or strings;
@@ -435,7 +435,7 @@ aggregates compare as empty strings, but absent attributes never match any of
 these operators, including `!=`. Quoted numeric text is compared literally;
 numeric JSON values and unquoted numeric operands report `Unsupported` because
 numeric-to-string rendering is not implemented. Empty quoted operands,
-projection and scoped comparisons remain unsupported. The `i` modifier enables
+projection-to-projection and scoped comparisons remain unsupported. The `i` modifier enables
 case-insensitive string comparison when every operand and the selected value
 contain only ASCII characters. Non-ASCII case folding remains unsupported,
 including an operand after an earlier match or on an absent attribute. Trait
@@ -462,6 +462,19 @@ even when the shape omits its traits object. The collection compares as an
 empty string with string comparators and has no numeric representation;
 `[trait|name]` still tests an individual trait. Malformed traits objects remain
 invalid, and unmaterialized implicit prelude shapes remain unsupported.
+The `(keys)` and `(values)` properties create projections. Trait keys expose
+absolute trait identities, including their namespace/name parts; object-node
+keys expose literal text without interpreting punctuation. Values expose each
+object entry or array item, including nulls. Further properties apply to every
+projected value, and nested projections flatten their results. Missing paths
+contribute no values. A projection exists only when it has a value; empty
+projections never match string or numeric comparisons. Supported comparisons
+match any projected value against any operand, so `!=` does not mean that every
+value differs. Every value is checked before accepting a match; unsupported
+numeric rendering or non-ASCII folding in a later value still reports
+`Unsupported`. Expansion and comparison consume the shared work budget.
+`(first)`, projection-to-projection operators and scoped selectors remain
+unsupported.
 The `id` attribute exposes the selected shape's absolute identity. Its
 `namespace`, `name` and `member` properties return the corresponding text;
 `member` is absent on a root shape. `(length)` counts the full identity or a
@@ -680,7 +693,7 @@ trait-existence checks, and can compose with sequences or negation. Graph-yieldi
 branches remain unsupported; they are not treated as Boolean tests on the
 starting shape. The deprecated optional `:each` alias is not implemented.
 The evaluator checks the entire supported expression before returning a result;
-unsupported attribute comparisons/projections, graph traversal or functions do
+unsupported attribute operations, graph traversal or functions do
 not become matches through a true branch or a negated false branch. Empty arguments and partially
 parsed expressions report `Unsupported`. Nesting and token scanning consume the
 shared depth and work budgets.

@@ -232,8 +232,8 @@ vocabulary/source mapping. It does not supply their implementation.
   Literal nested object paths and quoted trait/property names use exact
   matching. Missing properties and descent through scalars or arrays yield
   absence; present nulls still exist. Property scans consume the shared work
-  budget. Unquoted numeric path tokens, projections and function properties
-  other than supported node `(length)` remain unsupported.
+  budget. Unquoted numeric path tokens and function properties
+  other than `(keys)`, `(values)` and supported `(length)` remain unsupported.
   Numeric trait/node predicates support `>`, `>=`, `<` and `<=` with exact
   decimal comparison and comma-separated alternatives. Both sides must contain
   Smithy number spellings; absent or nonnumeric values do not match.
@@ -254,6 +254,13 @@ vocabulary/source mapping. It does not supply their implementation.
   Bare `[trait]` exposes a present trait collection even when its object is
   omitted. The collection compares as an empty string and has no numeric
   representation. Named trait lookups retain their separate presence rules.
+  Trait/node `(keys)` and `(values)` create projections with forwarded property
+  access and flattened nested results. Trait keys expose identities; object-node
+  keys expose text. Projections exist only when nonempty. Comparisons match any
+  projected value against any operand, including `!=`; unsupported later values
+  are not hidden by earlier matches. Expansion consumes the shared work budget.
+  `(first)`, scoped selectors and projection-to-projection operators remain
+  unsupported.
   String trait/node predicates support ordinal `=`, `!=`, `^=`, `$=` and `*=`
   with operand alternatives. Booleans use their lowercase text; present nulls
   and aggregates compare as empty strings, while missing attributes never

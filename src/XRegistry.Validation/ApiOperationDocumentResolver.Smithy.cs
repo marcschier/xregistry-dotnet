@@ -2345,6 +2345,11 @@ public static partial class ApiOperationDocumentResolver
             }
         }
 
+        private enum SmithyAttributeKind { Node, Traits, Identity, Text, Length, Service }
+
+        private readonly record struct SmithyAttribute(
+            SmithyAttributeKind Kind, JsonElement Node = default, string? Text = null, int Length = 0);
+
         private bool? MatchSmithySelector(string text, string kind, string path, JsonElement shape, string shapeId)
         {
             var position = 0;
@@ -2377,45 +2382,29 @@ public static partial class ApiOperationDocumentResolver
                         var attribute = Identifier();
                         if (attribute is not ("trait" or "id" or "service")) { return null; }
                         SkipWhitespace();
-                        var traitCollection = attribute == "trait" && (position == text.Length || text[position] != '|');
-                        if (attribute == "trait" && !traitCollection) { position++; SkipWhitespace(); }
-                        var countTraits = attribute == "trait" && !traitCollection &&
-                            position < text.Length && text[position] == '(';
-                        string? traitId = null;
-                        if (countTraits)
-                        {
-                            position++;
-                            SkipWhitespace();
-                            if (Identifier() != "length") { return null; }
-                            SkipWhitespace();
-                            if (position == text.Length || text[position++] != ')') { return null; }
-                        }
-                        else if (attribute == "trait" && !traitCollection)
-                        {
-                            traitId = AttributeName();
-                            if (traitId is null) { return null; }
-                            if (!traitId.Contains('#', StringComparison.Ordinal)) { traitId = "smithy.api#" + traitId; }
-                            if (!IsSmithyShapeId(traitId)) { return null; }
-                        }
-                        SkipWhitespace();
-                        List<(string Name, bool Length)>? properties = null;
+                        List<(string Name, bool Function)>? properties = null;
                         while (position < text.Length && text[position] == '|')
                         {
                             position++;
                             SkipWhitespace();
-                            var length = position < text.Length && text[position] == '(';
+                            var functionProperty = position < text.Length && text[position] == '(';
                             string? property;
-                            if (length)
+                            if (functionProperty)
                             {
                                 position++;
                                 SkipWhitespace();
                                 property = Identifier();
                                 SkipWhitespace();
-                                if (property != "length" || position == text.Length || text[position++] != ')') { return null; }
+                                if (property is not ("length" or "keys" or "values") ||
+                                    position == text.Length || text[position++] != ')') { return null; }
                             }
                             else { property = AttributeName(); }
                             if (property is null) { return null; }
-                            (properties ??= []).Add((property, length));
+                            if (attribute == "trait" && properties is null && !functionProperty &&
+                                !IsSmithyShapeId(property.Contains('#', StringComparison.Ordinal)
+                                    ? property : "smithy.api#" + property)) { return null; }
+                            if (attribute is "id" or "service" && functionProperty && property != "length") { return null; }
+                            (properties ??= []).Add((property, functionProperty));
                             SkipWhitespace();
                         }
                         var acceptsPresent = true;
@@ -2495,105 +2484,49 @@ public static partial class ApiOperationDocumentResolver
                         {
                             return null;
                         }
-                        var node = default(JsonElement);
-                        int? nodeLength = countTraits ? 0 : null;
-                        var idValue = attribute == "id" ? shapeId : null;
-                        var serviceValue = attribute == "service" && kind == "service";
-                        string? textValue = null;
+                        List<SmithyAttribute> values = [];
                         if (attribute == "trait" && shape.TryGetProperty("traits", out var traits))
                         {
                             ValidationContext.Require(traits.ValueKind == JsonValueKind.Object,
                                 path, "document.traits", "Smithy traits must be an object.");
-                            if (countTraits) { nodeLength = ObjectLength(traits); }
-                            else if (!traitCollection) { node = Property(traits, traitId!); }
+                            values.Add(new(SmithyAttributeKind.Traits, traits));
                         }
+                        else if (attribute == "trait") { values.Add(new(SmithyAttributeKind.Traits)); }
+                        else if (attribute == "id") { values.Add(new(SmithyAttributeKind.Identity, Text: shapeId)); }
+                        else if (kind == "service") { values.Add(new(SmithyAttributeKind.Service, shape, shapeId)); }
                         if (properties is not null)
                         {
                             foreach (var property in properties)
                             {
-                                if (serviceValue)
+                                var next = new List<SmithyAttribute>();
+                                foreach (var value in values)
                                 {
                                     budget.Work(path: path);
-                                    if (!property.Length && property.Name == "id") { idValue = shapeId; }
-                                    else if (!property.Length && property.Name == "version" &&
-                                        shape.TryGetProperty("version", out var serviceVersion))
-                                    {
-                                        ValidationContext.Require(serviceVersion.ValueKind == JsonValueKind.String,
-                                            path, "document.service_version", "A Smithy service version must be a string.");
-                                        textValue = serviceVersion.GetString()!;
-                                    }
-                                    serviceValue = false;
-                                    continue;
+                                    if (!SelectProperty(value, property.Name, property.Function, next)) { return null; }
                                 }
-                                if (idValue is not null)
-                                {
-                                    budget.Work(idValue.Length, path);
-                                    if (property.Length) { nodeLength = idValue.Length; }
-                                    else
-                                    {
-                                        var namespaceEnd = idValue.IndexOf('#');
-                                        var memberStart = idValue.IndexOf('$');
-                                        textValue = property.Name switch
-                                        {
-                                            "namespace" => idValue[..namespaceEnd],
-                                            "name" => idValue[(namespaceEnd + 1)..(memberStart < 0 ? idValue.Length : memberStart)],
-                                            "member" => memberStart < 0 ? null : idValue[(memberStart + 1)..],
-                                            _ => null
-                                        };
-                                    }
-                                    idValue = null;
-                                    continue;
-                                }
-                                if (textValue is not null)
-                                {
-                                    if (property.Length)
-                                    {
-                                        if (!AsciiText(textValue)) { return null; }
-                                        nodeLength = textValue.Length;
-                                    }
-                                    textValue = null;
-                                    continue;
-                                }
-                                if (nodeLength is not null)
-                                {
-                                    nodeLength = null;
-                                    node = default;
-                                }
-                                if (property.Length)
-                                {
-                                    budget.Work(path: path);
-                                    if (node.ValueKind == JsonValueKind.String)
-                                    {
-                                        var value = node.GetString()!;
-                                        if (!AsciiText(value)) { return null; }
-                                        nodeLength = value.Length;
-                                    }
-                                    else if (node.ValueKind == JsonValueKind.Array) { nodeLength = node.GetArrayLength(); }
-                                    else if (node.ValueKind == JsonValueKind.Object)
-                                    {
-                                        nodeLength = ObjectLength(node);
-                                    }
-                                    node = default;
-                                }
-                                else { node = Property(node, property.Name); }
+                                values = next;
                             }
                         }
+                        current = false;
                         if (stringOperands is not null)
                         {
-                            if (node.ValueKind == JsonValueKind.Number) { return null; }
-                            current = false;
-                            if (traitCollection || serviceValue || idValue is not null || textValue is not null ||
-                                nodeLength is not null || node.ValueKind != JsonValueKind.Undefined)
+                            foreach (var selected in values)
                             {
-                                var value = (serviceValue ? shapeId : null) ?? idValue ?? textValue ?? (nodeLength is { } countValue
-                                    ? countValue.ToString(System.Globalization.CultureInfo.InvariantCulture)
-                                    : node.ValueKind switch
+                                budget.Work(path: path);
+                                if (selected.Kind == SmithyAttributeKind.Node &&
+                                    selected.Node.ValueKind == JsonValueKind.Number) { return null; }
+                                var value = selected.Kind switch
                                 {
-                                    JsonValueKind.String => node.GetString()!,
-                                    JsonValueKind.True => "true",
-                                    JsonValueKind.False => "false",
-                                    _ => ""
-                                });
+                                    SmithyAttributeKind.Identity or SmithyAttributeKind.Text or SmithyAttributeKind.Service => selected.Text!,
+                                    SmithyAttributeKind.Length => selected.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                                    _ => selected.Node.ValueKind switch
+                                    {
+                                        JsonValueKind.String => selected.Node.GetString()!,
+                                        JsonValueKind.True => "true",
+                                        JsonValueKind.False => "false",
+                                        _ => ""
+                                    }
+                                };
                                 if (ignoreCase && !AsciiText(value)) { return null; }
                                 var comparison = ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
                                 foreach (var operand in stringOperands)
@@ -2612,25 +2545,28 @@ public static partial class ApiOperationDocumentResolver
                         }
                         else if (numericOperands is null)
                         {
-                            current = traitCollection || serviceValue || idValue is not null || textValue is not null ||
-                                nodeLength is not null || node.ValueKind != JsonValueKind.Undefined
-                                ? acceptsPresent : acceptsAbsent;
+                            current = values.Count > 0 ? acceptsPresent : acceptsAbsent;
                         }
                         else
                         {
-                            var number = nodeLength is { } lengthValue
-                                ? new JsonNumber(false, lengthValue.ToString(System.Globalization.CultureInfo.InvariantCulture), 0)
-                                : serviceValue ? SelectorNumber(shapeId)
-                                : idValue is not null || textValue is not null ? SelectorNumber(idValue ?? textValue!)
-                                : node.ValueKind switch
+                            foreach (var selected in values)
                             {
-                                JsonValueKind.Number => JsonNumber.Read(node, budget, path),
-                                JsonValueKind.String => SelectorNumber(node.GetString()!),
-                                _ => (JsonNumber?)null
-                            };
-                            current = false;
-                            if (number is { } left)
-                            {
+                                budget.Work(path: path);
+                                var number = selected.Kind switch
+                                {
+                                    SmithyAttributeKind.Length => new JsonNumber(false,
+                                        selected.Length.ToString(System.Globalization.CultureInfo.InvariantCulture), 0),
+                                    SmithyAttributeKind.Identity or SmithyAttributeKind.Text or SmithyAttributeKind.Service =>
+                                        SelectorNumber(selected.Text!),
+                                    SmithyAttributeKind.Node => selected.Node.ValueKind switch
+                                    {
+                                        JsonValueKind.Number => JsonNumber.Read(selected.Node, budget, path),
+                                        JsonValueKind.String => SelectorNumber(selected.Node.GetString()!),
+                                        _ => (JsonNumber?)null
+                                    },
+                                    _ => null
+                                };
+                                if (number is not { } left) { continue; }
                                 foreach (var operand in numericOperands)
                                 {
                                     budget.Work(path: path);
@@ -2677,6 +2613,101 @@ public static partial class ApiOperationDocumentResolver
                     SkipWhitespace();
                 }
                 return count == 0 ? null : matched;
+            }
+
+            bool SelectProperty(SmithyAttribute value, string name, bool function, List<SmithyAttribute> result)
+            {
+                if (value.Kind == SmithyAttributeKind.Service)
+                {
+                    if (!function && name == "id") { result.Add(new(SmithyAttributeKind.Identity, Text: value.Text)); }
+                    else if (!function && name == "version" && value.Node.TryGetProperty("version", out var version))
+                    {
+                        ValidationContext.Require(version.ValueKind == JsonValueKind.String,
+                            path, "document.service_version", "A Smithy service version must be a string.");
+                        result.Add(new(SmithyAttributeKind.Text, Text: version.GetString()!));
+                    }
+                    return true;
+                }
+                if (value.Kind == SmithyAttributeKind.Identity)
+                {
+                    var identity = value.Text!;
+                    budget.Work(identity.Length, path);
+                    if (function && name == "length") { result.Add(new(SmithyAttributeKind.Length, Length: identity.Length)); }
+                    else if (!function)
+                    {
+                        var namespaceEnd = identity.IndexOf('#');
+                        var memberStart = identity.IndexOf('$');
+                        var part = name switch
+                        {
+                            "namespace" => identity[..namespaceEnd],
+                            "name" => identity[(namespaceEnd + 1)..(memberStart < 0 ? identity.Length : memberStart)],
+                            "member" => memberStart < 0 ? null : identity[(memberStart + 1)..],
+                            _ => null
+                        };
+                        if (part is not null) { result.Add(new(SmithyAttributeKind.Text, Text: part)); }
+                    }
+                    return true;
+                }
+                if (value.Kind == SmithyAttributeKind.Text)
+                {
+                    if (function && name == "length")
+                    {
+                        if (!AsciiText(value.Text!)) { return false; }
+                        result.Add(new(SmithyAttributeKind.Length, Length: value.Text!.Length));
+                    }
+                    return true;
+                }
+                if (value.Kind == SmithyAttributeKind.Length) { return true; }
+                var node = value.Node;
+                if (function)
+                {
+                    if (name == "length")
+                    {
+                        int? length = value.Kind == SmithyAttributeKind.Traits && node.ValueKind == JsonValueKind.Undefined ? 0 : null;
+                        if (node.ValueKind == JsonValueKind.String)
+                        {
+                            var textValue = node.GetString()!;
+                            if (!AsciiText(textValue)) { return false; }
+                            length = textValue.Length;
+                        }
+                        else if (node.ValueKind == JsonValueKind.Array) { length = node.GetArrayLength(); }
+                        else if (node.ValueKind == JsonValueKind.Object) { length = ObjectLength(node); }
+                        if (length is { } count) { result.Add(new(SmithyAttributeKind.Length, Length: count)); }
+                    }
+                    else if (node.ValueKind == JsonValueKind.Object)
+                    {
+                        foreach (var item in node.EnumerateObject())
+                        {
+                            budget.Work(item.Name.Length + 1L, path);
+                            if (value.Kind == SmithyAttributeKind.Traits && name == "keys")
+                            {
+                                ValidationContext.Require(IsSmithyShapeId(item.Name), path, "document.trait_id",
+                                    "A Smithy trait ID must be an absolute root shape ID.");
+                            }
+                            result.Add(name == "values" ? new(SmithyAttributeKind.Node, item.Value)
+                                : new(value.Kind == SmithyAttributeKind.Traits ? SmithyAttributeKind.Identity : SmithyAttributeKind.Text,
+                                    Text: item.Name));
+                        }
+                    }
+                    else if (name == "values" && node.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var item in node.EnumerateArray())
+                        {
+                            budget.Work(path: path);
+                            result.Add(new(SmithyAttributeKind.Node, item));
+                        }
+                    }
+                }
+                else
+                {
+                    if (value.Kind == SmithyAttributeKind.Traits && !name.Contains('#', StringComparison.Ordinal))
+                    {
+                        name = "smithy.api#" + name;
+                    }
+                    var selected = Property(node, name);
+                    if (selected.ValueKind != JsonValueKind.Undefined) { result.Add(new(SmithyAttributeKind.Node, selected)); }
+                }
+                return true;
             }
 
             string Identifier()
