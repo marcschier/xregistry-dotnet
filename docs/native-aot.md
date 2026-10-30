@@ -115,6 +115,27 @@ for Storage.File. This establishes one native publication/durability cell.
 Incremental reference selection, the other native cells and requirement-level
 release qualification remain open.
 
+The subsequent profile-selection checkpoint
+`c19673704e3bc8add83c23fed9d2c9f2979afa14` refreshed complete Models and
+Federation suites in the same native cell. Models passed 985 cases, including
+all 31 incremental selector cases; Federation passed 636 cases, including all
+10 incremental provider cases. Both ran ILC with zero IL diagnostics and
+reported native execution with zero JIT compilations. Models' managed control
+reported false/3,981; Federation's reported false/3,982. Both were rejected
+without creating receipts.
+
+Evidence directories are `D:\temp\xregistry-models-native-c196737` and
+`D:\temp\xregistry-fed-native-c196737`, with publish/run logs beside them.
+Their receipts aggregate 329 and 250 distinct passed methods respectively,
+with zero failed or skipped. Executable SHA-256 values:
+`de3ffaff376242c3894db9d6f9fcb47964aedb476322fa5695121af0cb6b0a4a`
+for Models and
+`f2432873cb0d070a0c0e0a7e1a26ac4701eae570545385fbc694fbeddd29cb4d`
+for Federation. These runs cover parsed incremental selection and scoped
+acquisition. They do not establish complete URI/context processing, refreshed
+Server/Storage.File execution at this newer source, other platforms or
+requirement-level release qualification.
+
 The module-level receipts below are historical and have not been refreshed
 against the complete successor source set. Do not treat their counts as
 qualification of the current implementation.

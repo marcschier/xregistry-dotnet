@@ -152,8 +152,11 @@ never substitutes another Version or reads the source again. URI/base/JSON-LD
 processing is still caller-owned; the new tests use parsed references and
 trusted provider metadata rather than claiming complete reference processing.
 The full managed gate for this selection/acquisition slice passed 10,748 cases
-and 283 tooling tests. Native evidence for the new selection paths is not yet
-qualified.
+and 283 tooling tests. At `c196737`, complete Models and Federation suites
+passed 985 and 636 native cases on .NET 10/Windows x64, including all 31
+incremental selector cases and all 10 incremental provider cases. Both ran
+without IL diagnostics or JIT compilation and rejected their managed controls.
+This does not qualify the other native cells or complete URI/context processing.
 
 ## Choose the real seam
 

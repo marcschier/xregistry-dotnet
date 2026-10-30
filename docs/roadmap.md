@@ -33,6 +33,10 @@ release safeguards remain in their subject guides.
   contracts, with zero IL diagnostics or JIT compilations. Their receipts
   cover 415 and 30 distinct methods. Managed controls were rejected without
   creating receipts.
+  Models and Federation were refreshed at `c196737` in the same cell: 985 and
+  636 cases, including all 31 incremental selector and 10 incremental provider
+  cases. Their receipts cover 329 and 250 distinct methods, with zero IL/JIT and
+  rejected managed controls.
   Remaining work: link the shared proof into the other test projects, decide
   whether/how the existing native CI matrix (or a new job) runs the full suites
   across all eight `net8.0`/`net10.0` × `win-x64`/`win-arm64`/`linux-x64`/
@@ -45,14 +49,11 @@ release safeguards remain in their subject guides.
 The selected generic package, model, client/bridge sample and storage matrix
 passed all 28 jobs at `ecd2a3b` on Windows/Linux x64 and ARM64. See
 [native evidence](native-aot.md#current-evidence-and-uncovered-cells).
-Full native TUnit requirement receipts remain incomplete. Newer full-suite
-receipts cover Federation at `6d143c4` and Models at `af72b7f`, each on
-.NET 10/Windows x64; they do not refresh the package-consumer matrix or qualify
-the remaining cells. Models passed 954 native cases, including all 43 pure
-incremental assignment cases, with zero IL diagnostics and JIT compilations.
-Its receipt covers 313 distinct methods. Server and Storage.File receipts at
-`f97af1b` cover the subsequent incremental publication integration in the same
-native cell, without qualifying the other platforms.
+Full native TUnit requirement receipts remain incomplete. Models and Federation
+passed 985 and 636 native cases at `c196737`; Server and Storage.File passed
+886 and 32 at `f97af1b`. All four are .NET 10/Windows x64 receipts tied to their
+own sources. They do not refresh the package-consumer matrix or qualify the
+other platforms.
 
 - Refresh source-matched package-consumer and sample evidence after material
   package changes. Preserve exact source, package, executable, and report hashes.
@@ -117,8 +118,9 @@ native cell, without qualifying the other platforms.
   uses exact lines, numeric floors/ranking, sticky defaults and origin-scoped
   acquisition; retained local references use the captured revision and line.
   Its full managed gate passed 10,748 cases and 283 tooling tests.
-  Other native cells, refreshed selection evidence, URI/context mapping, line
-  eligibility diagnostics and complete workflow evidence remain open.
+  Complete Models/Federation native suites passed at `c196737` on
+  .NET 10/Windows x64. Other native cells, URI/context mapping, line eligibility
+  diagnostics and complete workflow evidence remain open.
   SemVer provider acquisition now
   performs scoped native-source lookup and verifies acquired byte digests.
   Parsed local references use the retained containing revision and its authored
