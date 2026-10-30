@@ -85,12 +85,11 @@ to establish locality, then names the containing WoT identity in a local
 request. `ResolveAsync` rejects local requests; `ResolveLocalAsync` rejects
 Registry pins. Resource aliases must first be resolved to an authorized source,
 and external document descriptors are not dereferenced. Incremental-profile
-selection and publication closure remain unimplemented. Acquisition and local
-resolver cases passed managed execution on both frameworks and native execution
-in the complete Federation suite on .NET 10/Windows x64 at `1c62700`. Fragment
-selection has managed evidence on both frameworks; that older native receipt
-does not cover it. Other native cells remain unqualified; the package-consumer
-fixture does not yet exercise these methods.
+selection and publication closure remain unimplemented. Acquisition, local
+resolution and fragment cases passed managed execution on both frameworks and
+native execution in the complete Federation suite on .NET 10/Windows x64 at
+`6d143c4`. Other native cells remain unqualified; the package-consumer fixture
+does not yet exercise these methods.
 See [native evidence](native-aot.md#current-evidence-and-uncovered-cells).
 
 ## Choose the real seam

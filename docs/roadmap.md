@@ -25,9 +25,9 @@ release safeguards remain in their subject guides.
   jitCompiledMethods: 7169`), and the resulting receipt passes every
   structural/hash/native check in `release_check` up to the still-missing
   seven remaining framework/RID cells. The proof test is now shared by Models
-  and Federation; the complete Federation suite passed 568 native cases on
-  .NET 10/Windows x64 at `1c62700`, with zero IL diagnostics and zero JIT-compiled
-  methods. Its receipt covers 233 distinct methods, not 568 independent methods.
+  and Federation; the complete Federation suite passed 626 native cases on
+  .NET 10/Windows x64 at `6d143c4`, with zero IL diagnostics and zero JIT-compiled
+  methods. Its receipt covers 242 distinct methods, not 626 independent methods.
   Remaining work: link the shared proof into the other test projects, decide
   whether/how the existing native CI matrix (or a new job) runs the full suites
   across all eight `net8.0`/`net10.0` × `win-x64`/`win-arm64`/`linux-x64`/
@@ -102,7 +102,8 @@ refresh the package-consumer matrix or qualify the remaining cells.
   performs scoped native-source lookup and verifies acquired byte digests.
   Parsed local references use the retained containing revision and its authored
   version fields. JSON Pointer fragments are applied after selection without
-  changing full-document provenance; their current evidence is managed execution.
+  changing full-document provenance, with managed and .NET 10/Windows x64 native
+  evidence.
   URI/base/JSON-LD context processing and alias integration remain open.
   WoT publication closure also needs the unresolved source-occurrence and target
   mappings from the draft; do not substitute live targets for captured closure.
