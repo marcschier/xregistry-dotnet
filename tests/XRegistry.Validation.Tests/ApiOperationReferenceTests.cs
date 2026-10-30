@@ -2204,6 +2204,13 @@ public class ApiOperationReferenceTests
     [Arguments("unionMember", """{"smithy.api#required":{}}""")]
     [Arguments("reference", """{"smithy.api#required":{}}""")]
     [Arguments("reference", """{"smithy.api#input":{}}""")]
+    [Arguments("operation", """{"smithy.api#enumValue":"bad"}""")]
+    [Arguments("structure", """{"smithy.api#enumValue":"bad"}""")]
+    [Arguments("member", """{"smithy.api#enumValue":"bad"}""")]
+    [Arguments("listMember", """{"smithy.api#enumValue":"bad"}""")]
+    [Arguments("mapMember", """{"smithy.api#enumValue":"bad"}""")]
+    [Arguments("unionMember", """{"smithy.api#enumValue":"bad"}""")]
+    [Arguments("reference", """{"smithy.api#enumValue":"bad"}""")]
     public async Task SmithyJsonRejectsPreludeTraitsOutsideTheirExplicitTargets(string position, string traits)
     {
         var document = JsonNode.Parse("""
@@ -2635,6 +2642,7 @@ public class ApiOperationReferenceTests
     [Arguments("intEnum", """{"A":{"target":"smithy.api#String","traits":{"smithy.api#enumValue":1}}}""", "document.enum_target")]
     [Arguments("enum", """{"A":{"target":"smithy.api#Unit","traits":{"smithy.api#enumValue":1}}}""", "document.enum_value")]
     [Arguments("enum", """{"A":{"target":"smithy.api#Unit","traits":{"smithy.api#enumValue":null}}}""", "document.enum_value")]
+    [Arguments("enum", """{"A":{"target":"smithy.api#Unit","traits":{"smithy.api#enumValue":""}}}""", "document.enum_value")]
     [Arguments("enum", """{"A":{"target":"smithy.api#Unit","traits":{"smithy.api#enumValue":true}}}""", "document.enum_value")]
     [Arguments("enum", """{"A":{"target":"smithy.api#Unit","traits":{"smithy.api#enumValue":[]}}}""", "document.enum_value")]
     [Arguments("enum", """{"A":{"target":"smithy.api#Unit","traits":{"smithy.api#enumValue":{}}}}""", "document.enum_value")]
@@ -2664,7 +2672,8 @@ public class ApiOperationReferenceTests
     [Test]
     [Arguments("enum", """{"A":{"target":"smithy.api#Unit"}}""")]
     [Arguments("enum", """{"A":{"target":"smithy.api#Unit"},"B":{"target":"smithy.api#Unit"}}""")]
-    [Arguments("enum", """{"A":{"target":"smithy.api#Unit","traits":{"smithy.api#enumValue":""}}}""")]
+    [Arguments("enum", """{"A":{"target":"smithy.api#Unit","traits":{"smithy.api#enumValue":"x"}}}""")]
+    [Arguments("enum", """{"A":{"target":"smithy.api#Unit","traits":{"smithy.api#enumValue":" "}}}""")]
     [Arguments("enum", """{"a":{"target":"smithy.api#Unit"},"_1":{"target":"smithy.api#Unit"}}""")]
     [Arguments("enum", """{"A":{"target":"smithy.api#Unit","traits":{"smithy.api#enumValue":"value"}},"B":{"target":"smithy.api#Unit","traits":{"smithy.api#enumValue":"VALUE"}}}""")]
     [Arguments("intEnum", """{"MIN":{"target":"smithy.api#Unit","traits":{"smithy.api#enumValue":-2147483648}},"MAX":{"target":"smithy.api#Unit","traits":{"smithy.api#enumValue":2147483647}}}""")]
@@ -2689,6 +2698,24 @@ public class ApiOperationReferenceTests
               "example#Input":{"type":"structure","members":{"value":{"target":"example#Choice"}}},
               "example#Choice":{"type":"KIND","members":MEMBERS}}}
             """.Replace("KIND", kind, StringComparison.Ordinal).Replace("MEMBERS", members, StringComparison.Ordinal));
+
+    [Test]
+    [Arguments("enum", "\"value\"")]
+    [Arguments("intEnum", "1")]
+    public async Task SmithyJsonEnumValueCannotAnnotateTheEnumerationItself(string kind, string value)
+    {
+        var result = ResolveSmithy("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"example#Input"}},
+              "example#Input":{"type":"structure","members":{"value":{"target":"example#Choice"}}},
+              "example#Choice":{"type":"KIND","traits":{"smithy.api#enumValue":VALUE},
+                "members":{"A":{"target":"smithy.api#Unit","traits":{"smithy.api#enumValue":VALUE}}}}}}
+            """.Replace("KIND", kind, StringComparison.Ordinal).Replace("VALUE", value, StringComparison.Ordinal));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Choice/traits/smithy.api#enumValue");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
 
     [Test]
     [Arguments("""{"type":"string"}""", ApiOperationResolutionStatus.Selected, null)]

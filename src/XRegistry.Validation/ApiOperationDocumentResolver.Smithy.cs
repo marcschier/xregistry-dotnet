@@ -174,8 +174,9 @@ public static partial class ApiOperationDocumentResolver
                                     traits.TryGetProperty("smithy.api#enumValue", out var enumValue) ? enumValue : default;
                                 if (kind == "enum")
                                 {
-                                    ValidationContext.Require(value.ValueKind is JsonValueKind.Undefined or JsonValueKind.String,
-                                        memberPath, "document.enum_value", "A Smithy enum value must be a string.");
+                                    ValidationContext.Require(value.ValueKind == JsonValueKind.Undefined ||
+                                        value.ValueKind == JsonValueKind.String && value.GetString()!.Length > 0,
+                                        memberPath, "document.enum_value", "A Smithy enum value must be a nonempty string.");
                                     ValidationContext.Require(enumStrings.Add(value.ValueKind == JsonValueKind.Undefined ?
                                         member.Name : value.GetString()!), memberPath, "document.enum_value",
                                         "Smithy enum values must be unique.");
@@ -347,6 +348,7 @@ public static partial class ApiOperationDocumentResolver
                 var targetAllowed = trait.Name switch
                 {
                     "smithy.api#required" => memberContainer == "structure",
+                    "smithy.api#enumValue" => memberContainer is "enum" or "intEnum",
                     "smithy.api#input" or "smithy.api#output" or "smithy.api#error" => kind == "structure",
                     "smithy.api#readonly" or "smithy.api#idempotent" => kind == "operation",
                     "smithy.api#trait" => memberContainer is null && kind is

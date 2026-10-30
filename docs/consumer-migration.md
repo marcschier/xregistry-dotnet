@@ -252,7 +252,10 @@ and terminating union alternatives allow recursion. These checks do not inspect
 unreachable shape definitions for recursive validity.
 
 Enum and intEnum members must target `smithy.api#Unit`. Enum values are unique
-strings and default to the member name when `enumValue` is absent. IntEnum
+nonempty strings and default to the member name when `enumValue` is absent. An
+explicit empty string is invalid; whitespace alone remains a nonempty value.
+The `enumValue` trait is valid only on enum or intEnum members, not on their root
+shapes, other members or operation input/output references. IntEnum
 members require unique signed 32-bit integer values; two members assigned
 numerically equal values such as `1` and `1.0` are rejected as aliases.
 Enum member naming recommendations do not reject otherwise valid identifiers.
