@@ -139,6 +139,20 @@ development cell, not requirement-level release qualification.
 
 ## Current evidence and uncovered cells
 
+The complete Validation suite at `a60ef6c842a8e8e6c61b544e989ab13ae4b28ee2`
+passed on Windows x64 under .NET 8 and .NET 10: 4,940 cases and 861 methods per
+framework. The runs include bounded Smithy breaking-change schema paths,
+non-structure authentication/protocol trait schemas and Avro Protocol
+logical-annotation wire-schema selection. Both publications ran ILC without
+IL diagnostics. Native executable, managed control, report, proof and receipt
+hashes match; regenerated receipts and complete native/managed case inventories
+agree. Both managed proofs were rejected, and source inventories remained
+unchanged. Evidence is retained at
+`D:\temp\xregistry-validation-a60ef6c-net8\native-suites-bnjy3oj7` and
+`D:\temp\xregistry-validation-a60ef6c-net10\native-suites-n5wb0825`.
+These selected-project runs do not refresh other platforms or complete
+thirteen-suite cells, or promote requirement-level qualification.
+
 The complete Models suite at `58743c8cb8d15caf78688571dd4b1010b8da4960`
 passed on Windows x64 under .NET 8 and .NET 10: 1,144 cases and 354 methods per
 framework. This includes the packaged Media model, inherited options and

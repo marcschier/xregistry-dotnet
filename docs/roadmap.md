@@ -47,9 +47,11 @@ qualification. All four .NET 8 cells fail the same four framework JSON warning
 gates. Windows ARM64 initially failed SDK setup; its isolated retry reached the
 harness and passed the other nine suites and 7,675 cases. Its retained source,
 hashes, receipts, managed parity and rejected controls were audited.
-The complete Validation suite also passed at later selector source `f72e125`
-on Windows x64 under both frameworks: 4,820 native cases and 845 methods each,
-with complete managed parity, exact hashes and rejected managed proofs.
+The complete Validation suite also passed at later source `a60ef6c`
+on Windows x64 under both frameworks: 4,940 native cases and 861 methods each,
+including Smithy schema paths and meta-trait schemas and Avro Protocol logical
+wire schemas, with complete managed parity, exact hashes and rejected managed
+proofs.
 That selected-project evidence does not refresh the complete native matrix.
 The Models suite at `58743c8` also passed on Windows x64 under both frameworks:
 1,144 native cases and 354 methods each, including packaged Media sources,
