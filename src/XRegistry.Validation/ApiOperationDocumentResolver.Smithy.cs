@@ -2389,16 +2389,24 @@ public static partial class ApiOperationDocumentResolver
                             (properties ??= []).Add(property);
                             SkipWhitespace();
                         }
-                        var expectedPresence = true;
+                        var acceptsPresent = true;
+                        var acceptsAbsent = false;
                         if (position < text.Length && text[position] == '?')
                         {
                             position++;
                             if (position == text.Length || text[position++] != '=') { return null; }
-                            SkipWhitespace();
-                            var expected = Identifier();
-                            if (expected is not ("true" or "false")) { return null; }
-                            expectedPresence = expected == "true";
-                            SkipWhitespace();
+                            acceptsPresent = false;
+                            while (true)
+                            {
+                                SkipWhitespace();
+                                var expected = AttributeName();
+                                if (expected is not ("true" or "false")) { return null; }
+                                acceptsPresent |= expected == "true";
+                                acceptsAbsent |= expected == "false";
+                                SkipWhitespace();
+                                if (position == text.Length || text[position] != ',') { break; }
+                                position++;
+                            }
                         }
                         if (position == text.Length || text[position++] != ']' ||
                             shape.ValueKind != JsonValueKind.Object)
@@ -2416,7 +2424,7 @@ public static partial class ApiOperationDocumentResolver
                         {
                             foreach (var property in properties) { node = Property(node, property); }
                         }
-                        current = (node.ValueKind != JsonValueKind.Undefined) == expectedPresence;
+                        current = node.ValueKind != JsonValueKind.Undefined ? acceptsPresent : acceptsAbsent;
                     }
                     else if (text[position] == ':')
                     {

@@ -408,8 +408,10 @@ container, target or literal payload. Trait lookups consume the shared work budg
 Trait predicates also support `?= true` and `?= false` for present and absent
 traits, respectively. A present null, false or empty value still exists. These
 checks use the selected shape's own traits and compose with the supported
-Boolean functions. Other operand forms, value lists and comparison modifiers
-remain unsupported.
+Boolean functions. The operands may be unquoted or single/double-quoted
+`true`/`false` values, including comma-separated alternatives. A comparison
+matches any alternative, but every operand is parsed before the result is
+accepted. Other operand values and comparison modifiers remain unsupported.
 Literal object properties can be selected with additional `|name` segments.
 Trait names and property names may use single or double quotes; quoted names
 cannot be empty or contain backslashes or control characters below U+0020.

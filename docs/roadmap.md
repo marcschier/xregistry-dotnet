@@ -225,8 +225,10 @@ vocabulary/source mapping. It does not supply their implementation.
   unqualified names resolve in `smithy.api`, and payload truthiness does not
   affect presence. Trait lookups consume the shared work budget.
   Trait `?= true`/`?= false` predicates test presence/absence independently of
-  payload truthiness, including on selected reference members. Other operand
-  forms, value lists and comparison modifiers remain unsupported.
+  payload truthiness, including on selected reference members. Unquoted or
+  single/double-quoted Boolean operands support comma-separated alternatives;
+  every operand is parsed before a match is accepted. Other operand values
+  and comparison modifiers remain unsupported.
   Literal nested object paths and quoted trait/property names use exact
   matching. Missing properties and descent through scalars or arrays yield
   absence; present nulls still exist. Property scans consume the shared work

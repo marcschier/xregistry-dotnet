@@ -11378,7 +11378,7 @@ public class ApiOperationReferenceTests
     [Arguments("[trait|deprecated ?= TRUE]")]
     [Arguments("[trait|deprecated ?= 1]")]
     [Arguments("[trait|deprecated ?= null]")]
-    [Arguments("[trait|deprecated ?= true,false]")]
+    [Arguments("[trait|deprecated ?= true,invalid]")]
     [Arguments("[trait|deprecated ?= true i]")]
     [Arguments("[trait|deprecated ? = true]")]
     [Arguments("[trait|deprecated ?= false")]
@@ -11562,6 +11562,110 @@ public class ApiOperationReferenceTests
         await Assert.That(bounded.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
         await Assert.That(bounded.Diagnostic!.Code).IsEqualTo("limit.work");
         await Assert.That(bounded.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("true", true, false)]
+    [Arguments("'true'", true, false)]
+    [Arguments("\"true\"", true, false)]
+    [Arguments("false", false, true)]
+    [Arguments("'false'", false, true)]
+    [Arguments("\"false\"", false, true)]
+    [Arguments("true, false", true, true)]
+    [Arguments("'false', \"true\"", true, true)]
+    [Arguments("\"true\", true, 'true'", true, false)]
+    [Arguments("'false',false,\"false\"", false, true)]
+    [Arguments("\n 'true' \t,\r \"false\" ", true, true)]
+    public async Task SmithyJsonExistenceOperandListsMatchAnyBooleanAlternative(string operands, bool matchesPresent, bool matchesAbsent)
+    {
+        var document = SmithyCustomNodeDocument("string", "\"value\"");
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!["selector"] =
+            "[trait|deprecated ?= " + operands + "]";
+        var absent = ResolveSmithy(document.ToJsonString());
+        await Assert.That(absent.Status).IsEqualTo(matchesAbsent ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (matchesAbsent) { await Assert.That(absent.Diagnostic).IsNull(); }
+        else { await Assert.That(absent.Diagnostic!.Code).IsEqualTo("document.trait_selector_target"); }
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#deprecated"] = new JsonObject();
+        var present = ResolveSmithy(document.ToJsonString());
+        await Assert.That(present.Status).IsEqualTo(matchesPresent ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (matchesPresent)
+        {
+            await Assert.That(present.Diagnostic).IsNull();
+            await Assert.That(present.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        }
+        else
+        {
+            await Assert.That(present.Diagnostic!.Code).IsEqualTo("document.trait_selector_target");
+            await Assert.That(present.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments(":test([trait|example#Marker|flag ?= false,true],number)", true)]
+    [Arguments(":is(number,[trait|example#Marker|flag ?= 'true','false'])", true)]
+    [Arguments(":not([trait|example#Marker|flag ?= false,false])", true)]
+    [Arguments(":not([trait|example#Marker|flag ?= true,false])", false)]
+    [Arguments("string[trait|example#Marker|flag ?= true,false]:not([trait|deprecated ?= true])", true)]
+    [Arguments(":test(number,[trait|example#Marker|missing ?= 'true',\"false\"])", true)]
+    public async Task SmithyJsonExistenceOperandListsPreserveFunctionArgumentBoundaries(string selector, bool matches)
+    {
+        var document = SmithyIdRefTraitDocument("example#Target", "{}");
+        document["shapes"]!["example#Target"]!["traits"] = JsonNode.Parse("""{"example#Marker":{"flag":null}}""");
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#idRef"]!["selector"] = selector;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(matches ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (matches) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_id_ref_selector");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("true,invalid")]
+    [Arguments("false,'TRUE'")]
+    [Arguments("'true,false'")]
+    [Arguments("true,")]
+    [Arguments(",true")]
+    [Arguments("true,,false")]
+    [Arguments("true false")]
+    [Arguments("'true")]
+    [Arguments("\"false")]
+    [Arguments("''")]
+    [Arguments("true,'false\\value'")]
+    [Arguments("true,1")]
+    [Arguments("false,null")]
+    [Arguments("true i")]
+    [Arguments("true,false i")]
+    [Arguments("true,example#Value")]
+    public async Task SmithyJsonExistenceOperandListsParseAllValuesBeforeAcceptingMatches(string operands)
+    {
+        var document = SmithyCustomNodeDocument("string", "\"value\"");
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!["selector"] =
+            ":is(*,[trait|deprecated ?= " + operands + "])";
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#deprecated"] = new JsonObject();
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Unsupported);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("smithy.trait_selector");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("[trait|deprecated ?= true,false]")]
+    [Arguments(":is(string,[trait|'deprecated' ?= 'false','true'])")]
+    public async Task SmithyJsonExistenceOperandListsDoNotAssumeUnmaterializedPreludeTraits(string selector)
+    {
+        var document = SmithyIdRefTraitDocument("smithy.api#String", "{}");
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#idRef"]!["selector"] = selector;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Unsupported);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("smithy.id_ref_selector");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        document["shapes"]!["smithy.api#String"] = JsonNode.Parse("""{"type":"string"}""");
+        var explicitTarget = ResolveSmithy(document.ToJsonString());
+        await Assert.That(explicitTarget.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(explicitTarget.Diagnostic).IsNull();
     }
 
     private static JsonNode SmithyIdRefTarget(string kind)
