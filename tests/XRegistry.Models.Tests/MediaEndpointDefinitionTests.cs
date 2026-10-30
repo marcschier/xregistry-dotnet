@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using TUnit.Assertions;
 using TUnit.Core;
 
@@ -112,6 +113,68 @@ public class MediaEndpointDefinitionTests
     }
 
     [Test]
+    [Arguments("SRT", "mpegts")]
+    [Arguments("WebRTC", "srtp")]
+    [Arguments("RTSP/1.0", "rtp")]
+    [Arguments("RTSP/1.0", "rtp-mpegts")]
+    [Arguments("RTP/2", "rtp")]
+    [Arguments("RTP/2", "rtp-mpegts")]
+    [Arguments("MPEGTS-UDP", "mpegts")]
+    [Arguments("RTMP/1.0", "flv")]
+    [Arguments("RIST-Simple/2020", "rtp-mpegts")]
+    [Arguments("RIST-Main/2024", "rtp-mpegts")]
+    public async Task DeclaredStreamFormatsAcceptIndependentKnownCodecDeclarations(string protocol, string streamFormat)
+    {
+        var input = ProducerOptions(protocol);
+        input["protocoloptions"]!["streamformat"] = streamFormat;
+        input["protocoloptions"]!["videocodec"] = "AV1";
+        input["protocoloptions"]!["audiocodec"] = "PCMU";
+
+        var result = EndpointDefinition.MaterializeMedia(RegistryJson.Parse(input.ToJsonString()));
+
+        await Assert.That(result.GetProtocolOption("streamformat").GetString()).IsEqualTo(streamFormat);
+        await Assert.That(result.GetProtocolOption("videocodec").GetString()).IsEqualTo("AV1");
+        await Assert.That(result.GetProtocolOption("audiocodec").GetString()).IsEqualTo("PCMU");
+    }
+
+    [Test]
+    [Arguments("SRT")]
+    [Arguments("WebRTC")]
+    [Arguments("RTSP/1.0")]
+    [Arguments("RTP/2")]
+    [Arguments("MPEGTS-UDP")]
+    [Arguments("RTMP/1.0")]
+    [Arguments("RIST-Simple/2020")]
+    [Arguments("RIST-Main/2024")]
+    public async Task StreamFormatEnumsRejectUnknownCaseVariantsAndNonStringValues(string protocol)
+    {
+        var input = ProducerOptions(protocol);
+        var declared = EndpointDefinition.MaterializeMedia(ValidEndpoint(protocol, "producer"))
+            .GetProtocolOption("streamformat").GetString()!;
+        foreach (var invalid in new[] { "\"not-declared\"", "\"" + declared.ToUpperInvariant() + "\"", "42", "null", "\"\"" })
+        {
+            input["protocoloptions"]!["streamformat"] = JsonNode.Parse(invalid);
+            await Rejects(RegistryJson.Parse(input.ToJsonString()), "/protocoloptions/streamformat");
+        }
+    }
+
+    [Test]
+    [Arguments("aac", "h264")]
+    [Arguments("Aac", "H264/1")]
+    [Arguments("VendorVideo/8", "VendorAudio/9")]
+    public async Task UnrecognizedCodecNamesRemainExactForBothMediaKinds(string videoCodec, string audioCodec)
+    {
+        var input = ProducerOptions("SRT");
+        input["protocoloptions"]!["videocodec"] = videoCodec;
+        input["protocoloptions"]!["audiocodec"] = audioCodec;
+
+        var result = EndpointDefinition.MaterializeMedia(RegistryJson.Parse(input.ToJsonString()));
+
+        await Assert.That(result.GetProtocolOption("videocodec").GetString()).IsEqualTo(videoCodec);
+        await Assert.That(result.GetProtocolOption("audiocodec").GetString()).IsEqualTo(audioCodec);
+    }
+
+    [Test]
     public async Task MediaAddressSchemeMustMatchTheSelectedProtocol()
     {
         var input = Endpoint("SRT", "producer", """{"endpoints":[{"uri":"https://media.example.test:9000"}]}""");
@@ -190,6 +253,9 @@ public class MediaEndpointDefinitionTests
         await Assert.That(() => RegistryDomainRules.ValidateEndpointMetadata(ValidEndpoint("SRT", "producer").RootElement))
             .ThrowsNothing();
     }
+
+    private static JsonObject ProducerOptions(string protocol) =>
+        JsonNode.Parse(ValidEndpoint(protocol, "producer").RootElement.GetRawText())!.AsObject();
 
     private static RegistryJson ValidEndpoint(string protocol, string usage)
     {
