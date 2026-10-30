@@ -294,6 +294,13 @@ vocabulary/source mapping. It does not supply their implementation.
   reports `Unsupported`, and parse-only nesting/scanning remains bounded.
   Known unimplemented `:root`, `:recursive`, `:topdown` and optional `:each`
   remain unsupported.
+  Shape-scoped `[@: @{path} comparator literal]` assertions support `&&`,
+  literal alternatives and the existing `id`/`trait`/`service` attribute paths.
+  Each assertion retains the ordinary presence, numeric, string and ASCII `i`
+  rules, and later assertions are checked even after a false result.
+  Unknown functions parse them without evaluation. Named/projected scope
+  contexts, right-hand context expressions and projection comparators remain
+  unsupported; scans and comparisons consume the shared work budget.
   Each application is checked independently. Type mismatches are invalid;
   unsupported grammar reports `Unsupported` at the application without changing
   unapplied declaration checks or masking earlier missing schema dependencies.

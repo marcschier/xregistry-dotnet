@@ -2379,225 +2379,260 @@ public static partial class ApiOperationDocumentResolver
                     {
                         position++;
                         SkipWhitespace();
-                        var attribute = Identifier();
-                        if (attribute is not ("trait" or "id" or "service")) { return null; }
-                        SkipWhitespace();
-                        List<(string Name, bool Function)>? properties = null;
-                        var projection = false;
-                        while (position < text.Length && text[position] == '|')
+                        var scoped = position < text.Length && text[position] == '@';
+                        if (scoped)
                         {
                             position++;
                             SkipWhitespace();
-                            var functionProperty = position < text.Length && text[position] == '(';
-                            string? property;
-                            if (functionProperty)
-                            {
-                                position++;
-                                SkipWhitespace();
-                                property = Identifier();
-                                SkipWhitespace();
-                                if (property is not ("length" or "keys" or "values" or "first") ||
-                                    position == text.Length || text[position++] != ')') { return null; }
-                                if (property == "first")
-                                {
-                                    if (!projection) { return null; }
-                                    projection = false;
-                                }
-                                else if (property is "keys" or "values") { projection = true; }
-                            }
-                            else { property = AttributeName(); }
-                            if (property is null) { return null; }
-                            if (attribute == "trait" && properties is null && !functionProperty &&
-                                !IsSmithyShapeId(property.Contains('#', StringComparison.Ordinal)
-                                    ? property : "smithy.api#" + property)) { return null; }
-                            if (attribute is "id" or "service" && functionProperty && property != "length") { return null; }
-                            (properties ??= []).Add((property, functionProperty));
+                            if (position == text.Length || text[position++] != ':') { return null; }
                             SkipWhitespace();
                         }
-                        var acceptsPresent = true;
-                        var acceptsAbsent = false;
-                        var numericComparator = '\0';
-                        var inclusive = false;
-                        List<JsonNumber?>? numericOperands = null;
-                        var stringComparator = '\0';
-                        List<string>? stringOperands = null;
-                        if (position < text.Length && text[position] == '?')
+                        var assertionsMatch = true;
+                        bool moreAssertions;
+                        do
                         {
-                            position++;
-                            if (position == text.Length || text[position++] != '=') { return null; }
-                            acceptsPresent = false;
-                            while (true)
+                            budget.Work(path: path);
+                            if (scoped)
                             {
+                                if (position == text.Length || text[position++] != '@') { return null; }
                                 SkipWhitespace();
-                                var expected = AttributeName();
-                                if (expected is not ("true" or "false")) { return null; }
-                                acceptsPresent |= expected == "true";
-                                acceptsAbsent |= expected == "false";
+                                if (position == text.Length || text[position++] != '{') { return null; }
                                 SkipWhitespace();
-                                if (position == text.Length || text[position] != ',') { break; }
-                                position++;
                             }
-                        }
-                        else if (position < text.Length && text[position] is '>' or '<')
-                        {
-                            numericComparator = text[position++];
-                            inclusive = position < text.Length && text[position] == '=';
-                            if (inclusive) { position++; }
-                            numericOperands = [];
-                            while (true)
-                            {
-                                SkipWhitespace();
-                                var operand = NumericOperand();
-                                if (operand is null) { return null; }
-                                numericOperands.Add(evaluate ? SelectorNumber(operand) : null);
-                                SkipWhitespace();
-                                if (position == text.Length || text[position] != ',') { break; }
-                                position++;
-                            }
-                        }
-                        else if (position < text.Length && text[position] is '=' or '!' or '^' or '$' or '*')
-                        {
-                            stringComparator = text[position++];
-                            if (stringComparator != '=' &&
-                                (position == text.Length || text[position++] != '=')) { return null; }
-                            stringOperands = [];
-                            while (true)
-                            {
-                                SkipWhitespace();
-                                if (position == text.Length || char.IsAsciiDigit(text[position]) || text[position] == '-')
-                                {
-                                    return null;
-                                }
-                                var operand = AttributeName();
-                                if (operand is null) { return null; }
-                                stringOperands.Add(operand);
-                                SkipWhitespace();
-                                if (position == text.Length || text[position] != ',') { break; }
-                                position++;
-                            }
-                        }
-                        var ignoreCase = stringOperands is not null && position < text.Length && text[position] == 'i';
-                        if (ignoreCase)
-                        {
-                            position++;
+                            var attribute = Identifier();
+                            if (attribute is not ("trait" or "id" or "service")) { return null; }
                             SkipWhitespace();
-                            foreach (var operand in stringOperands!)
+                            List<(string Name, bool Function)>? properties = null;
+                            var projection = false;
+                            while (position < text.Length && text[position] == '|')
                             {
-                                if (evaluate && !AsciiText(operand)) { return null; }
-                            }
-                        }
-                        if (position == text.Length || text[position++] != ']' ||
-                            evaluate && attribute == "trait" && shape.ValueKind != JsonValueKind.Object)
-                        {
-                            return null;
-                        }
-                        if (!evaluate)
-                        {
-                            matched = false;
-                            count++;
-                            SkipWhitespace();
-                            continue;
-                        }
-                        List<SmithyAttribute> values = [];
-                        if (attribute == "trait" && shape.TryGetProperty("traits", out var traits))
-                        {
-                            ValidationContext.Require(traits.ValueKind == JsonValueKind.Object,
-                                path, "document.traits", "Smithy traits must be an object.");
-                            values.Add(new(SmithyAttributeKind.Traits, traits));
-                        }
-                        else if (attribute == "trait") { values.Add(new(SmithyAttributeKind.Traits)); }
-                        else if (attribute == "id") { values.Add(new(SmithyAttributeKind.Identity, Text: shapeId)); }
-                        else if (kind == "service") { values.Add(new(SmithyAttributeKind.Service, shape, shapeId)); }
-                        if (properties is not null)
-                        {
-                            foreach (var property in properties)
-                            {
-                                if (property.Function && property.Name == "first")
+                                position++;
+                                SkipWhitespace();
+                                var functionProperty = position < text.Length && text[position] == '(';
+                                string? property;
+                                if (functionProperty)
                                 {
-                                    budget.Work(values.Count, path);
-                                    if (values.Count > 1) { values.RemoveRange(1, values.Count - 1); }
-                                    continue;
-                                }
-                                var next = new List<SmithyAttribute>();
-                                foreach (var value in values)
-                                {
-                                    budget.Work(path: path);
-                                    if (!SelectProperty(value, property.Name, property.Function, next)) { return null; }
-                                }
-                                values = next;
-                            }
-                        }
-                        current = false;
-                        if (stringOperands is not null)
-                        {
-                            foreach (var selected in values)
-                            {
-                                budget.Work(path: path);
-                                if (selected.Kind == SmithyAttributeKind.Node &&
-                                    selected.Node.ValueKind == JsonValueKind.Number) { return null; }
-                                var value = selected.Kind switch
-                                {
-                                    SmithyAttributeKind.Identity or SmithyAttributeKind.Text or SmithyAttributeKind.Service => selected.Text!,
-                                    SmithyAttributeKind.Length => selected.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                                    _ => selected.Node.ValueKind switch
+                                    position++;
+                                    SkipWhitespace();
+                                    property = Identifier();
+                                    SkipWhitespace();
+                                    if (property is not ("length" or "keys" or "values" or "first") ||
+                                        position == text.Length || text[position++] != ')') { return null; }
+                                    if (property == "first")
                                     {
-                                        JsonValueKind.String => selected.Node.GetString()!,
-                                        JsonValueKind.True => "true",
-                                        JsonValueKind.False => "false",
-                                        _ => ""
+                                        if (!projection) { return null; }
+                                        projection = false;
                                     }
-                                };
-                                if (ignoreCase && !AsciiText(value)) { return null; }
-                                var comparison = ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-                                foreach (var operand in stringOperands)
+                                    else if (property is "keys" or "values") { projection = true; }
+                                }
+                                else { property = AttributeName(); }
+                                if (property is null) { return null; }
+                                if (attribute == "trait" && properties is null && !functionProperty &&
+                                    !IsSmithyShapeId(property.Contains('#', StringComparison.Ordinal)
+                                        ? property : "smithy.api#" + property)) { return null; }
+                                if (attribute is "id" or "service" && functionProperty && property != "length") { return null; }
+                                (properties ??= []).Add((property, functionProperty));
+                                SkipWhitespace();
+                            }
+                            if (scoped)
+                            {
+                                if (position == text.Length || text[position++] != '}') { return null; }
+                                SkipWhitespace();
+                            }
+                            var acceptsPresent = true;
+                            var acceptsAbsent = false;
+                            var numericComparator = '\0';
+                            var inclusive = false;
+                            List<JsonNumber?>? numericOperands = null;
+                            var stringComparator = '\0';
+                            List<string>? stringOperands = null;
+                            if (position < text.Length && text[position] == '?')
+                            {
+                                position++;
+                                if (position == text.Length || text[position++] != '=') { return null; }
+                                acceptsPresent = false;
+                                while (true)
                                 {
-                                    budget.Work(value.Length + operand.Length + 1L, path);
-                                    current |= stringComparator switch
-                                    {
-                                        '=' => value.Equals(operand, comparison),
-                                        '!' => !value.Equals(operand, comparison),
-                                        '^' => value.StartsWith(operand, comparison),
-                                        '$' => value.EndsWith(operand, comparison),
-                                        _ => value.Contains(operand, comparison)
-                                    };
+                                    SkipWhitespace();
+                                    var expected = AttributeName();
+                                    if (expected is not ("true" or "false")) { return null; }
+                                    acceptsPresent |= expected == "true";
+                                    acceptsAbsent |= expected == "false";
+                                    SkipWhitespace();
+                                    if (position == text.Length || text[position] != ',') { break; }
+                                    position++;
                                 }
                             }
-                        }
-                        else if (numericOperands is null)
-                        {
-                            current = values.Count > 0 ? acceptsPresent : acceptsAbsent;
-                        }
-                        else
-                        {
-                            foreach (var selected in values)
+                            else if (position < text.Length && text[position] is '>' or '<')
                             {
-                                budget.Work(path: path);
-                                var number = selected.Kind switch
+                                numericComparator = text[position++];
+                                inclusive = position < text.Length && text[position] == '=';
+                                if (inclusive) { position++; }
+                                numericOperands = [];
+                                while (true)
                                 {
-                                    SmithyAttributeKind.Length => new JsonNumber(false,
-                                        selected.Length.ToString(System.Globalization.CultureInfo.InvariantCulture), 0),
-                                    SmithyAttributeKind.Identity or SmithyAttributeKind.Text or SmithyAttributeKind.Service =>
-                                        SelectorNumber(selected.Text!),
-                                    SmithyAttributeKind.Node => selected.Node.ValueKind switch
+                                    SkipWhitespace();
+                                    var operand = NumericOperand();
+                                    if (operand is null) { return null; }
+                                    numericOperands.Add(evaluate ? SelectorNumber(operand) : null);
+                                    SkipWhitespace();
+                                    if (position == text.Length || text[position] != ',') { break; }
+                                    position++;
+                                }
+                            }
+                            else if (position < text.Length && text[position] is '=' or '!' or '^' or '$' or '*')
+                            {
+                                stringComparator = text[position++];
+                                if (stringComparator != '=' &&
+                                    (position == text.Length || text[position++] != '=')) { return null; }
+                                stringOperands = [];
+                                while (true)
+                                {
+                                    SkipWhitespace();
+                                    if (position == text.Length || char.IsAsciiDigit(text[position]) || text[position] == '-')
                                     {
-                                        JsonValueKind.Number => JsonNumber.Read(selected.Node, budget, path),
-                                        JsonValueKind.String => SelectorNumber(selected.Node.GetString()!),
-                                        _ => (JsonNumber?)null
-                                    },
-                                    _ => null
-                                };
-                                if (number is not { } left) { continue; }
-                                foreach (var operand in numericOperands)
+                                        return null;
+                                    }
+                                    var operand = AttributeName();
+                                    if (operand is null) { return null; }
+                                    stringOperands.Add(operand);
+                                    SkipWhitespace();
+                                    if (position == text.Length || text[position] != ',') { break; }
+                                    position++;
+                                }
+                            }
+                            else if (scoped) { return null; }
+                            var ignoreCase = stringOperands is not null && position < text.Length && text[position] == 'i';
+                            if (ignoreCase)
+                            {
+                                position++;
+                                SkipWhitespace();
+                                foreach (var operand in stringOperands!)
+                                {
+                                    if (evaluate && !AsciiText(operand)) { return null; }
+                                }
+                            }
+                            moreAssertions = scoped && position + 1 < text.Length &&
+                                text[position] == '&' && text[position + 1] == '&';
+                            if (moreAssertions)
+                            {
+                                position += 2;
+                                SkipWhitespace();
+                            }
+                            else if (position == text.Length || text[position++] != ']') { return null; }
+                            if (evaluate && attribute == "trait" && shape.ValueKind != JsonValueKind.Object)
+                            {
+                                return null;
+                            }
+                            if (!evaluate)
+                            {
+                                assertionsMatch = false;
+                                continue;
+                            }
+                            List<SmithyAttribute> values = [];
+                            if (attribute == "trait" && shape.TryGetProperty("traits", out var traits))
+                            {
+                                ValidationContext.Require(traits.ValueKind == JsonValueKind.Object,
+                                    path, "document.traits", "Smithy traits must be an object.");
+                                values.Add(new(SmithyAttributeKind.Traits, traits));
+                            }
+                            else if (attribute == "trait") { values.Add(new(SmithyAttributeKind.Traits)); }
+                            else if (attribute == "id") { values.Add(new(SmithyAttributeKind.Identity, Text: shapeId)); }
+                            else if (kind == "service") { values.Add(new(SmithyAttributeKind.Service, shape, shapeId)); }
+                            if (properties is not null)
+                            {
+                                foreach (var property in properties)
+                                {
+                                    if (property.Function && property.Name == "first")
+                                    {
+                                        budget.Work(values.Count, path);
+                                        if (values.Count > 1) { values.RemoveRange(1, values.Count - 1); }
+                                        continue;
+                                    }
+                                    var next = new List<SmithyAttribute>();
+                                    foreach (var value in values)
+                                    {
+                                        budget.Work(path: path);
+                                        if (!SelectProperty(value, property.Name, property.Function, next)) { return null; }
+                                    }
+                                    values = next;
+                                }
+                            }
+                            current = false;
+                            if (stringOperands is not null)
+                            {
+                                foreach (var selected in values)
                                 {
                                     budget.Work(path: path);
-                                    if (operand is not { } right) { continue; }
-                                    budget.Work(left.Digits.Length + right.Digits.Length, path);
-                                    var comparison = left.CompareTo(right);
-                                    current |= (inclusive && comparison == 0) ||
-                                        (numericComparator == '>' ? comparison > 0 : comparison < 0);
+                                    if (selected.Kind == SmithyAttributeKind.Node &&
+                                        selected.Node.ValueKind == JsonValueKind.Number) { return null; }
+                                    var value = selected.Kind switch
+                                    {
+                                        SmithyAttributeKind.Identity or SmithyAttributeKind.Text or SmithyAttributeKind.Service => selected.Text!,
+                                        SmithyAttributeKind.Length => selected.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                                        _ => selected.Node.ValueKind switch
+                                        {
+                                            JsonValueKind.String => selected.Node.GetString()!,
+                                            JsonValueKind.True => "true",
+                                            JsonValueKind.False => "false",
+                                            _ => ""
+                                        }
+                                    };
+                                    if (ignoreCase && !AsciiText(value)) { return null; }
+                                    var comparison = ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+                                    foreach (var operand in stringOperands)
+                                    {
+                                        budget.Work(value.Length + operand.Length + 1L, path);
+                                        current |= stringComparator switch
+                                        {
+                                            '=' => value.Equals(operand, comparison),
+                                            '!' => !value.Equals(operand, comparison),
+                                            '^' => value.StartsWith(operand, comparison),
+                                            '$' => value.EndsWith(operand, comparison),
+                                            _ => value.Contains(operand, comparison)
+                                        };
+                                    }
                                 }
                             }
+                            else if (numericOperands is null)
+                            {
+                                current = values.Count > 0 ? acceptsPresent : acceptsAbsent;
+                            }
+                            else
+                            {
+                                foreach (var selected in values)
+                                {
+                                    budget.Work(path: path);
+                                    var number = selected.Kind switch
+                                    {
+                                        SmithyAttributeKind.Length => new JsonNumber(false,
+                                            selected.Length.ToString(System.Globalization.CultureInfo.InvariantCulture), 0),
+                                        SmithyAttributeKind.Identity or SmithyAttributeKind.Text or SmithyAttributeKind.Service =>
+                                            SelectorNumber(selected.Text!),
+                                        SmithyAttributeKind.Node => selected.Node.ValueKind switch
+                                        {
+                                            JsonValueKind.Number => JsonNumber.Read(selected.Node, budget, path),
+                                            JsonValueKind.String => SelectorNumber(selected.Node.GetString()!),
+                                            _ => (JsonNumber?)null
+                                        },
+                                        _ => null
+                                    };
+                                    if (number is not { } left) { continue; }
+                                    foreach (var operand in numericOperands)
+                                    {
+                                        budget.Work(path: path);
+                                        if (operand is not { } right) { continue; }
+                                        budget.Work(left.Digits.Length + right.Digits.Length, path);
+                                        var comparison = left.CompareTo(right);
+                                        current |= (inclusive && comparison == 0) ||
+                                            (numericComparator == '>' ? comparison > 0 : comparison < 0);
+                                    }
+                                }
+                            }
+                            assertionsMatch &= current.Value;
                         }
+                        while (moreAssertions);
+                        current = assertionsMatch;
                     }
                     else if (text[position] == ':')
                     {

@@ -439,7 +439,7 @@ aggregates compare as empty strings, but absent attributes never match any of
 these operators, including `!=`. Quoted numeric text is compared literally;
 numeric JSON values and unquoted numeric operands report `Unsupported` because
 numeric-to-string rendering is not implemented. Empty quoted operands,
-projection-to-projection and scoped comparisons remain unsupported. The `i` modifier enables
+projection-to-projection comparisons remain unsupported. The `i` modifier enables
 case-insensitive string comparison when every operand and the selected value
 contain only ASCII characters. Non-ASCII case folding remains unsupported,
 including an operand after an earlier match or on an absent attribute. Trait
@@ -483,7 +483,7 @@ type. Projections are unordered, so selectors must not depend on which value is
 returned when more than one exists. Use `(first)` when the projection is known
 to contain a single value. Subsequent property access applies to the extracted
 value, not the former projection. Expansion still consumes the shared work
-budget before extraction. Projection-to-projection operators and scoped
+budget before extraction. Projection-to-projection operators and named scoped
 selectors remain unsupported.
 The `id` attribute exposes the selected shape's absolute identity. Its
 `namespace`, `name` and `member` properties return the corresponding text;
@@ -521,6 +521,16 @@ malformed or unsupported arguments still report `Unsupported`; parse-only
 nesting and token scanning retain the shared limits. Recognized but
 unimplemented functions such as `:root`, `:recursive` and `:topdown` remain
 unsupported, and the optional deprecated `:each` alias is not implemented.
+Shape-scoped assertions use `[@: @{path} comparator literal]`, with `&&`
+joining comparisons against the same selected shape. Each path starts with
+`id`, `trait` or `service` and supports the properties described above.
+Literal alternatives, presence checks, numeric comparisons and per-assertion
+ASCII `i` modifiers retain their ordinary attribute semantics. Every assertion
+is parsed and checked, including after a false assertion; unknown functions
+parse these assertions without evaluating them. Assertion scans and
+comparisons consume the shared work budget. Named or projected scope contexts,
+right-hand context expressions such as `@{id}` and projection-to-projection
+operators remain unsupported.
 
 After schema-closure checks, each custom trait application is checked against
 its declared node types. Scalar checks cover Boolean/string values, base64
