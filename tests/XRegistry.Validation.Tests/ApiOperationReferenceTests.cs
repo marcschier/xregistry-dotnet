@@ -2518,6 +2518,129 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
+    [Arguments("""{"servers":[],"tags":[]}""")]
+    [Arguments("""{"servers":[{"url":"../rpc","name":"","summary":"","description":"","variables":{}}]}""")]
+    [Arguments("""{"servers":[{"url":"https://{region}.example/{version}","variables":{"region":{"default":"west","enum":["east","west"],"description":"Region"},"version":{"default":"v1","enum":[]}}}]}""")]
+    [Arguments("""{"servers":[{"url":"{endpoint}","variables":{"endpoint":{"default":"different","enum":["listed","listed"]}}}]}""")]
+    [Arguments("""{"tags":[{"name":"users","description":"","externalDocs":{"url":"https://docs.example/users","description":""}},{"name":"users"}],"externalDocs":{"url":"https://docs.example/method"}}""")]
+    public async Task OpenRpcMethodMetadataPreservesNativeServersVariablesAndTagsWithoutInvokingUrls(string metadata)
+    {
+        var method = JsonNode.Parse(metadata)!.AsObject();
+        method["name"] = "Target";
+        method["params"] = new JsonArray();
+        var native = method.ToJsonString();
+        var document = new JsonObject { ["openrpc"] = "1.4.0", ["methods"] = new JsonArray(method) };
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenRPC/1.4", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Metadata URLs must not be invoked."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(native);
+        await Assert.That(result.Operation.TryGetProperty("result", out _)).IsFalse();
+    }
+
+    [Test]
+    [Arguments("""{"servers":{}}""", "document.servers", "/servers")]
+    [Arguments("""{"servers":[null]}""", "document.server", "/servers/0")]
+    [Arguments("""{"servers":[{"$ref":"https://must-not-load.example/server"}]}""", "document.server_url", "/servers/0/url")]
+    [Arguments("""{"servers":[{"url":false}]}""", "document.server_url", "/servers/0/url")]
+    [Arguments("""{"servers":[{"url":"/rpc","name":0}]}""", "document.annotation", "/servers/0/name")]
+    [Arguments("""{"servers":[{"url":"/rpc","summary":null}]}""", "document.annotation", "/servers/0/summary")]
+    [Arguments("""{"servers":[{"url":"/rpc","description":[]}]}""", "document.annotation", "/servers/0/description")]
+    [Arguments("""{"servers":[{"url":"/rpc","variables":[]}]}""", "document.server_variables", "/servers/0/variables")]
+    [Arguments("""{"servers":[{"url":"/rpc","variables":{"a/b~":null}}]}""", "document.server_variable", "/servers/0/variables/a~1b~0")]
+    [Arguments("""{"servers":[{"url":"/rpc","variables":{"v":{}}}]}""", "document.server_default", "/servers/0/variables/v/default")]
+    [Arguments("""{"servers":[{"url":"/rpc","variables":{"v":{"default":true}}}]}""", "document.server_default", "/servers/0/variables/v/default")]
+    [Arguments("""{"servers":[{"url":"/rpc","variables":{"v":{"default":"","description":false}}}]}""", "document.annotation", "/servers/0/variables/v/description")]
+    [Arguments("""{"servers":[{"url":"/rpc","variables":{"v":{"default":"","enum":null}}}]}""", "document.server_enum", "/servers/0/variables/v/enum")]
+    [Arguments("""{"servers":[{"url":"/rpc","variables":{"v":{"default":"","enum":["ok",1]}}}]}""", "document.server_enum", "/servers/0/variables/v/enum/1")]
+    [Arguments("""{"tags":{}}""", "document.tags", "/tags")]
+    [Arguments("""{"tags":[{}]}""", "document.tag_name", "/tags/0/name")]
+    [Arguments("""{"tags":[{"name":true}]}""", "document.tag_name", "/tags/0/name")]
+    [Arguments("""{"tags":[{"name":"t","description":0}]}""", "document.annotation", "/tags/0/description")]
+    [Arguments("""{"externalDocs":false}""", "document.external_docs", "/externalDocs")]
+    [Arguments("""{"externalDocs":{}}""", "document.external_docs_url", "/externalDocs/url")]
+    [Arguments("""{"externalDocs":{"url":null}}""", "document.external_docs_url", "/externalDocs/url")]
+    [Arguments("""{"externalDocs":{"url":"https://docs.example","description":false}}""", "document.annotation", "/externalDocs/description")]
+    [Arguments("""{"tags":[{"name":"t","externalDocs":{}}]}""", "document.external_docs_url", "/tags/0/externalDocs/url")]
+    public async Task OpenRpcMalformedMethodMetadataInLaterMethodsPreventsSelection(
+        string metadata, string code, string suffix)
+    {
+        var later = JsonNode.Parse(metadata)!.AsObject();
+        later["name"] = "Other";
+        later["params"] = new JsonArray();
+        var document = new JsonObject
+        {
+            ["openrpc"] = "1.4.0",
+            ["methods"] = new JsonArray(new JsonObject { ["name"] = "Target", ["params"] = new JsonArray() }, later)
+        };
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenRPC/1.4", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Metadata URLs must not be invoked."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/methods/1" + suffix);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task OpenRpcTagReferencesUseTheMethodSourceAndRetainNativeReferences()
+    {
+        var calls = new List<string>();
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenRPC/1.4", "application/json", """
+            {"openrpc":"1.4.0","methods":[{"$ref":"./nested/method.json"}]}
+            """u8.ToArray(), ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+            new Uri("https://api.example/root.json"), (uri, _) =>
+            {
+                calls.Add(uri);
+                var json = uri switch
+                {
+                    "https://api.example/nested/method.json" =>
+                        """{"name":"Target","params":[],"tags":[{"$ref":"./tags.json#/users"},{"$ref":"./tags.json#/users"}]}""",
+                    "https://api.example/nested/tags.json" =>
+                        """{"users":{"name":"users","externalDocs":{"url":"https://docs.example/users"}}}""",
+                    _ => throw new InvalidOperationException("Unexpected URL " + uri)
+                };
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(json));
+            });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Operation.GetProperty("tags")[1].GetProperty("$ref").GetString()).IsEqualTo("./tags.json#/users");
+        await Assert.That(result.DocumentUri).IsEqualTo(new Uri("https://api.example/nested/method.json"));
+        await Assert.That(calls.SequenceEqual(["https://api.example/nested/method.json",
+            "https://api.example/nested/tags.json"])).IsTrue();
+    }
+
+    [Test]
+    [Arguments("unavailable", ApiOperationResolutionStatus.Indeterminate, "dependency.unresolved")]
+    [Arguments("denied", ApiOperationResolutionStatus.Denied, "dependency.denied")]
+    [Arguments("malformed", ApiOperationResolutionStatus.Invalid, "document.tag_name")]
+    [Arguments("cycle", ApiOperationResolutionStatus.Indeterminate, "dependency.cycle")]
+    public async Task OpenRpcTagDependencyFailuresCannotProducePartialSelections(
+        string outcome, ApiOperationResolutionStatus expected, string code)
+    {
+        var calls = 0;
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenRPC/1.4", "application/json", """
+            {"openrpc":"1.4.0","methods":[{"name":"Target","params":[],"tags":[{"$ref":"https://api.example/tag.json"}]}]}
+            """u8.ToArray(), ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+            resolveReference: (_, _) =>
+            {
+                calls++;
+                if (outcome == "denied") { throw new UnauthorizedAccessException("Outside policy."); }
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(outcome switch
+                {
+                    "malformed" => "{}"u8.ToArray(),
+                    "cycle" => """{"$ref":"#"}"""u8.ToArray(),
+                    _ => (ReadOnlyMemory<byte>?)null
+                });
+            });
+        await Assert.That(result.Status).IsEqualTo(expected);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        await Assert.That(calls).IsEqualTo(1);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
     [Arguments("""{"name":"Other"}""", "document.params", "/params")]
     [Arguments("""{"name":"Other","params":null}""", "document.params", "/params")]
     [Arguments("""{"name":"Other","params":{}}""", "document.params", "/params")]

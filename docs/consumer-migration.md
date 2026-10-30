@@ -127,6 +127,20 @@ opaque schema data and do not trigger retrieval. This checks method contracts,
 not every schema keyword, linked method, example or document metadata field.
 `SupportsApiDocumentValidation` remains false.
 
+Supplied method servers require a URL string; optional names and descriptions
+retain their string types. Server-variable entries require string defaults and,
+when present, arrays of string enum values. Selection preserves template text
+without substituting variables, inserting a default server or opening a
+connection. This structural check does not validate the complete URL-template
+language. The publisher does not require distinct enum values or state a
+default-membership rule here; selection does not add either restriction.
+Method tags can use caller-authorized references, with the same containing-source
+base and failure behavior as descriptor references. Resolved tags require name
+strings and valid description types. Method and tag `externalDocs` values
+require objects with URL strings and optional descriptions; documentation URLs
+are not retrieved. URL-string shape checks do not establish URL validity.
+Malformed metadata in a later method prevents an earlier selection.
+
 For `AvroProtocol/1.12.0`, `#operations/GetUser` selects the exact `GetUser`
 member of `messages`. An absent or empty `messages` object has no selectable
 operations; an Avro data schema without a protocol declaration is rejected.

@@ -152,6 +152,10 @@ vocabulary/source mapping. It does not supply their implementation.
   integer error-code uniqueness within each method before selection. Descriptor
   and error references use caller-controlled acquisition; schema values remain
   opaque. Complete OpenRPC document and JSON Schema validation remain open.
+  Supplied method servers, server variables, tags and documentation declarations
+  have structural checks. Tag references use the same authorized retrieval;
+  server and documentation URLs remain native strings without invocation.
+  URL-template semantics and complete URL validation remain open.
   Smithy selection checks required operation/data/custom-trait dependencies in
   an already assembled non-mixin AST and rejects invalid recursion in that
   closure, invalid enum targets and duplicate or malformed enum values. Its

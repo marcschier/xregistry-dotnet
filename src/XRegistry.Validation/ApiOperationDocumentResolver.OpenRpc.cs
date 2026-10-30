@@ -16,6 +16,65 @@ public static partial class ApiOperationDocumentResolver
         var path = location.Pointer;
         budget.Work(path: path);
         ValidateOpenRpcAnnotations(method, path);
+        ValidateOpenRpcDocumentation(method, path);
+        if (method.TryGetProperty("servers", out var servers))
+        {
+            ValidationContext.Require(servers.ValueKind == JsonValueKind.Array, path + "/servers",
+                "document.servers", "OpenRPC servers must be an array.");
+            var serverIndex = 0;
+            foreach (var server in servers.EnumerateArray())
+            {
+                var serverPath = path + "/servers/" + (serverIndex++).ToString(CultureInfo.InvariantCulture);
+                budget.Work(path: serverPath);
+                ValidationContext.Require(server.ValueKind == JsonValueKind.Object, serverPath,
+                    "document.server", "An OpenRPC server must be an object.");
+                RequireOpenRpcString(server, "url", serverPath, "document.server_url");
+                ValidateOpenRpcOptionalString(server, "name", serverPath);
+                ValidateOpenRpcOptionalString(server, "summary", serverPath);
+                ValidateOpenRpcOptionalString(server, "description", serverPath);
+                if (!server.TryGetProperty("variables", out var variables)) { continue; }
+                ValidationContext.Require(variables.ValueKind == JsonValueKind.Object, serverPath + "/variables",
+                    "document.server_variables", "OpenRPC server variables must be an object.");
+                foreach (var variable in variables.EnumerateObject())
+                {
+                    var variablePath = serverPath + "/variables/" + Escape(variable.Name);
+                    budget.Work(path: variablePath);
+                    ValidationContext.Require(variable.Value.ValueKind == JsonValueKind.Object, variablePath,
+                        "document.server_variable", "An OpenRPC server variable must be an object.");
+                    RequireOpenRpcString(variable.Value, "default", variablePath, "document.server_default");
+                    ValidateOpenRpcOptionalString(variable.Value, "description", variablePath);
+                    if (!variable.Value.TryGetProperty("enum", out var values)) { continue; }
+                    ValidationContext.Require(values.ValueKind == JsonValueKind.Array, variablePath + "/enum",
+                        "document.server_enum", "An OpenRPC server variable enum must be a string array.");
+                    var enumIndex = 0;
+                    foreach (var value in values.EnumerateArray())
+                    {
+                        budget.Work(path: variablePath);
+                        ValidationContext.Require(value.ValueKind == JsonValueKind.String,
+                            variablePath + "/enum/" + (enumIndex++).ToString(CultureInfo.InvariantCulture),
+                            "document.server_enum", "OpenRPC server variable enum values must be strings.");
+                    }
+                }
+            }
+        }
+        if (method.TryGetProperty("tags", out var tags))
+        {
+            ValidationContext.Require(tags.ValueKind == JsonValueKind.Array, path + "/tags",
+                "document.tags", "OpenRPC tags must be an array.");
+            var tagIndex = 0;
+            foreach (var tag in tags.EnumerateArray())
+            {
+                budget.Work(path: path);
+                var resolved = await ResolveOperationAsync(tag, location.Source,
+                    path + "/tags/" + (tagIndex++).ToString(CultureInfo.InvariantCulture), references,
+                    new(StringComparer.Ordinal), cancellationToken).ConfigureAwait(false);
+                if (resolved.Failure is not null) { return resolved.Failure; }
+                var item = resolved.Operation!;
+                RequireOpenRpcString(item.Operation, "name", item.Pointer, "document.tag_name");
+                ValidateOpenRpcOptionalString(item.Operation, "description", item.Pointer);
+                ValidateOpenRpcDocumentation(item.Operation, item.Pointer);
+            }
+        }
         if (method.TryGetProperty("paramStructure", out var structure))
         {
             ValidationContext.Require(structure.ValueKind == JsonValueKind.String &&
@@ -118,5 +177,31 @@ public static partial class ApiOperationDocumentResolver
             ValidationContext.Require(deprecated.ValueKind is JsonValueKind.True or JsonValueKind.False,
                 path + "/deprecated", "document.deprecated", "OpenRPC deprecated must be a boolean.");
         }
+    }
+
+    private static void RequireOpenRpcString(JsonElement value, string member, string path, string code)
+    {
+        ValidationContext.Require(value.TryGetProperty(member, out var text) &&
+            text.ValueKind == JsonValueKind.String, path + "/" + member, code,
+            $"An OpenRPC {member} string is required.");
+    }
+
+    private static void ValidateOpenRpcOptionalString(JsonElement value, string member, string path)
+    {
+        if (value.TryGetProperty(member, out var text))
+        {
+            ValidationContext.Require(text.ValueKind == JsonValueKind.String, path + "/" + member,
+                "document.annotation", $"OpenRPC {member} must be a string.");
+        }
+    }
+
+    private static void ValidateOpenRpcDocumentation(JsonElement value, string path)
+    {
+        if (!value.TryGetProperty("externalDocs", out var documentation)) { return; }
+        var documentationPath = path + "/externalDocs";
+        ValidationContext.Require(documentation.ValueKind == JsonValueKind.Object, documentationPath,
+            "document.external_docs", "OpenRPC externalDocs must be an object.");
+        RequireOpenRpcString(documentation, "url", documentationPath, "document.external_docs_url");
+        ValidateOpenRpcOptionalString(documentation, "description", documentationPath);
     }
 }
