@@ -2385,6 +2385,17 @@ public static partial class ApiOperationDocumentResolver
                         if (!traitId.Contains('#', StringComparison.Ordinal)) { traitId = "smithy.api#" + traitId; }
                         if (!IsSmithyShapeId(traitId)) { return null; }
                         SkipWhitespace();
+                        var expectedPresence = true;
+                        if (position < text.Length && text[position] == '?')
+                        {
+                            position++;
+                            if (position == text.Length || text[position++] != '=') { return null; }
+                            SkipWhitespace();
+                            var expected = Identifier();
+                            if (expected is not ("true" or "false")) { return null; }
+                            expectedPresence = expected == "true";
+                            SkipWhitespace();
+                        }
                         if (position == text.Length || text[position++] != ']' ||
                             shape.ValueKind != JsonValueKind.Object)
                         {
@@ -2401,6 +2412,7 @@ public static partial class ApiOperationDocumentResolver
                                 if (trait.Name == traitId) { current = true; break; }
                             }
                         }
+                        current = current.Value == expectedPresence;
                     }
                     else if (text[position] == ':')
                     {

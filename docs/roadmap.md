@@ -224,6 +224,9 @@ vocabulary/source mapping. It does not supply their implementation.
   Exact `[trait|name]` existence predicates inspect that shape's own traits;
   unqualified names resolve in `smithy.api`, and payload truthiness does not
   affect presence. Trait lookups consume the shared work budget.
+  Trait `?= true`/`?= false` predicates test presence/absence independently of
+  payload truthiness, including on selected reference members. Other operand
+  forms, value lists and comparison modifiers remain unsupported.
   Each application is checked independently. Type mismatches are invalid;
   unsupported grammar reports `Unsupported` at the application without changing
   unapplied declaration checks or masking earlier missing schema dependencies.

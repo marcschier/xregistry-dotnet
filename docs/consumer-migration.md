@@ -405,6 +405,11 @@ supported. Unqualified names resolve only in `smithy.api`; fully qualified trait
 IDs match exactly. Presence does not depend on the trait value's truthiness or
 collection size. Predicates inspect the application shape's own traits, not its
 container, target or literal payload. Trait lookups consume the shared work budget.
+Trait predicates also support `?= true` and `?= false` for present and absent
+traits, respectively. A present null, false or empty value still exists. These
+checks use the selected shape's own traits and compose with the supported
+Boolean functions. Other operand forms, value lists and comparison modifiers
+remain unsupported.
 A member is not matched as its target or container type. An omitted selector
 permits every shape; each reached application is checked independently.
 Type mismatches are invalid. Other selector expressions report `Unsupported`
