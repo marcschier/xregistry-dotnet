@@ -28,6 +28,10 @@ public static partial class ApiOperationDocumentResolver
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
     private static partial Regex SmithyEncodedNumber();
 
+    [GeneratedRegex(@"\A[A-Za-z_][A-Za-z_0-9-]*(?::[A-Za-z_][A-Za-z_0-9-]*)?\z",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
+    private static partial Regex SmithyXmlName();
+
     private static ApiOperationResolutionResult ResolveSmithyOperation(JsonElement root, string shapeId,
         Uri? documentUri, ValidationContext budget)
     {
@@ -1066,6 +1070,10 @@ public static partial class ApiOperationDocumentResolver
                     "smithy.api#idempotencyToken" => memberContainer == "structure",
                     "smithy.api#eventPayload" or "smithy.api#eventHeader" => memberContainer == "structure",
                     "smithy.api#jsonName" => memberContainer is "structure" or "union",
+                    "smithy.api#xmlName" => memberContainer is not null ||
+                        kind is "structure" or "union",
+                    "smithy.api#xmlAttribute" => memberContainer == "structure",
+                    "smithy.api#xmlFlattened" => memberContainer is "structure" or "union",
                     "smithy.api#requestCompression" => memberContainer is null && kind == "operation",
                     "smithy.api#streaming" => memberContainer is null && kind is "blob" or "union",
                     "smithy.api#requiresLength" => memberContainer is null && kind == "blob" &&
@@ -1095,6 +1103,8 @@ public static partial class ApiOperationDocumentResolver
                     "smithy.api#recommended" => traits.TryGetProperty("smithy.api#required", out _),
                     "smithy.api#eventPayload" => traits.TryGetProperty("smithy.api#eventHeader", out _),
                     "smithy.api#eventHeader" => traits.TryGetProperty("smithy.api#eventPayload", out _),
+                    "smithy.api#xmlAttribute" => traits.TryGetProperty("smithy.api#xmlNamespace", out _),
+                    "smithy.api#xmlNamespace" => traits.TryGetProperty("smithy.api#xmlAttribute", out _),
                     "smithy.api#required" => traits.TryGetProperty("smithy.api#recommended", out _),
                     "smithy.api#readonly" => traits.TryGetProperty("smithy.api#idempotent", out _),
                     "smithy.api#input" => traits.TryGetProperty("smithy.api#output", out _) ||
@@ -1121,6 +1131,26 @@ public static partial class ApiOperationDocumentResolver
                         ValidationContext.Require(millis.IsInteger && FitsNumericRange("integer", millis) &&
                             millis.CompareTo(new(false, "1", 0)) >= 0, timeoutPath, "document.long_poll_timeout",
                             "Smithy longPoll timeoutMillis must be a positive signed 32-bit integer.");
+                        continue;
+                    case "smithy.api#xmlName":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.String, traitPath,
+                            "document.trait_value", "The Smithy xmlName trait requires a string value.");
+                        var xmlName = trait.Value.GetString()!;
+                        budget.Work(xmlName.Length, traitPath);
+                        ValidationContext.Require(SmithyXmlName().IsMatch(xmlName), traitPath,
+                            "document.xml_name", "The Smithy XML name must follow its ASCII identifier or prefix:identifier grammar.");
+                        continue;
+                    case "smithy.api#xmlAttribute":
+                    case "smithy.api#xmlFlattened":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
+                            "document.trait_value", "Smithy XML binding annotations require object values.");
+                        var xmlTargetId = shape.GetProperty("target").GetString()!;
+                        var xmlKind = shapes.TryGetProperty(xmlTargetId, out var xmlTarget)
+                            ? xmlTarget.GetProperty("type").GetString() : SmithyPreludeKind(xmlTargetId);
+                        ValidationContext.Require(xmlKind is null || (trait.Name == "smithy.api#xmlFlattened"
+                            ? xmlKind is "list" or "map"
+                            : IsNumericKind(xmlKind) || xmlKind is "intEnum" or "boolean" or "string" or "enum" or "timestamp"),
+                            traitPath, "document.trait_target", "The Smithy XML binding has an ineligible member target.");
                         continue;
                     case "smithy.api#jsonName":
                         ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.String, traitPath,

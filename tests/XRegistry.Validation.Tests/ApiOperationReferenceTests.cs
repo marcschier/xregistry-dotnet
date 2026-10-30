@@ -6133,6 +6133,292 @@ public class ApiOperationReferenceTests
         await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
     }
 
+    [Test]
+    [Arguments("a", true)]
+    [Arguments("_", true)]
+    [Arguments("_A-z_09", true)]
+    [Arguments("p:Name-09", true)]
+    [Arguments("_:_", true)]
+    [Arguments("", false)]
+    [Arguments("0name", false)]
+    [Arguments("-name", false)]
+    [Arguments("name.part", false)]
+    [Arguments("name ", false)]
+    [Arguments(" name", false)]
+    [Arguments("a\n", false)]
+    [Arguments(":name", false)]
+    [Arguments("name:", false)]
+    [Arguments("p:0name", false)]
+    [Arguments("p:x:y", false)]
+    [Arguments("caf\u00e9", false)]
+    [Arguments("\u03b1", false)]
+    public async Task SmithyJsonXmlNamesFollowThePublisherAsciiGrammar(string name, bool valid)
+    {
+        var document = SmithyEventBindingDocument("xmlName");
+        document["shapes"]!["example#Event"]!["members"]!["data"]!["traits"]!["smithy.api#xmlName"] = name;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.xml_name");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Event/members/data/traits/smithy.api#xmlName");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("structure", true)]
+    [Arguments("union", true)]
+    [Arguments("string", false)]
+    [Arguments("blob", false)]
+    [Arguments("list", false)]
+    [Arguments("map", false)]
+    [Arguments("enum", false)]
+    [Arguments("intEnum", false)]
+    [Arguments("operation", false)]
+    public async Task SmithyJsonXmlNamesRestrictRootShapeEligibility(string kind, bool valid)
+    {
+        var document = SmithyEventBindingDocument("eventHeader");
+        var selected = kind == "operation" ? document["shapes"]!["example#Get"]! :
+            document["shapes"]!["example#Target"]!;
+        if (kind != "operation") { selected["type"] = kind; }
+        selected["traits"] = JsonNode.Parse("""{"smithy.api#xmlName":"p:renamed"}""");
+        if (kind == "union") { selected["members"] = JsonNode.Parse("""{"one":{"target":"smithy.api#Unit"}}"""); }
+        document["shapes"]!["example#Event"]!["members"]!["data"]!.AsObject().Remove("traits");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("structure")]
+    [Arguments("union")]
+    [Arguments("list")]
+    [Arguments("map")]
+    [Arguments("enum")]
+    [Arguments("intEnum")]
+    public async Task SmithyJsonXmlNamesCanAnnotateEveryDataMemberKind(string kind)
+    {
+        var document = SmithyEventBindingDocument("eventHeader");
+        document["shapes"]!["example#Event"]!["members"]!["data"]!.AsObject().Remove("traits");
+        var aggregate = JsonNode.Parse(kind switch
+        {
+            "list" => """{"type":"list","member":{"target":"smithy.api#String"}}""",
+            "map" => """{"type":"map","key":{"target":"smithy.api#String"},"value":{"target":"smithy.api#String"}}""",
+            "enum" => """{"type":"enum","members":{"one":{"target":"smithy.api#Unit"}}}""",
+            "intEnum" => """{"type":"intEnum","members":{"one":{"target":"smithy.api#Unit","traits":{"smithy.api#enumValue":1}}}}""",
+            _ => """{"type":"KIND","members":{"one":{"target":"smithy.api#String"}}}""".Replace("KIND", kind, StringComparison.Ordinal)
+        })!;
+        var members = kind == "list" ? new[] { aggregate["member"]! } :
+            kind == "map" ? new[] { aggregate["key"]!, aggregate["value"]! } : new[] { aggregate["members"]!["one"]! };
+        foreach (var member in members)
+        {
+            member["traits"] ??= new JsonObject();
+            member["traits"]!["smithy.api#xmlName"] = "p:Field";
+        }
+        document["shapes"]!["example#Target"] = aggregate;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+    }
+
+    [Test]
+    [Arguments("xmlAttribute", "boolean", true)]
+    [Arguments("xmlAttribute", "byte", true)]
+    [Arguments("xmlAttribute", "short", true)]
+    [Arguments("xmlAttribute", "integer", true)]
+    [Arguments("xmlAttribute", "long", true)]
+    [Arguments("xmlAttribute", "float", true)]
+    [Arguments("xmlAttribute", "double", true)]
+    [Arguments("xmlAttribute", "bigInteger", true)]
+    [Arguments("xmlAttribute", "bigDecimal", true)]
+    [Arguments("xmlAttribute", "string", true)]
+    [Arguments("xmlAttribute", "enum", true)]
+    [Arguments("xmlAttribute", "intEnum", true)]
+    [Arguments("xmlAttribute", "timestamp", true)]
+    [Arguments("xmlAttribute", "blob", false)]
+    [Arguments("xmlAttribute", "document", false)]
+    [Arguments("xmlAttribute", "structure", false)]
+    [Arguments("xmlAttribute", "union", false)]
+    [Arguments("xmlAttribute", "list", false)]
+    [Arguments("xmlAttribute", "map", false)]
+    [Arguments("xmlFlattened", "list", true)]
+    [Arguments("xmlFlattened", "map", true)]
+    [Arguments("xmlFlattened", "string", false)]
+    [Arguments("xmlFlattened", "blob", false)]
+    [Arguments("xmlFlattened", "integer", false)]
+    [Arguments("xmlFlattened", "structure", false)]
+    [Arguments("xmlFlattened", "union", false)]
+    [Arguments("xmlFlattened", "document", false)]
+    public async Task SmithyJsonXmlBindingTargetsFollowAttributeAndFlatteningSelectors(string trait, string kind, bool valid)
+    {
+        var document = SmithyEventBindingDocument(trait);
+        document["shapes"]!["example#Target"] = JsonNode.Parse(kind switch
+        {
+            "enum" => """{"type":"enum","members":{"one":{"target":"smithy.api#Unit"}}}""",
+            "intEnum" => """{"type":"intEnum","members":{"one":{"target":"smithy.api#Unit","traits":{"smithy.api#enumValue":1}}}}""",
+            "union" => """{"type":"union","members":{"one":{"target":"smithy.api#Unit"}}}""",
+            "list" => """{"type":"list","member":{"target":"smithy.api#String"}}""",
+            "map" => """{"type":"map","key":{"target":"smithy.api#String"},"value":{"target":"smithy.api#String"}}""",
+            _ => """{"type":"KIND"}""".Replace("KIND", kind, StringComparison.Ordinal)
+        });
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Event/members/data/traits/smithy.api#" + trait);
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("xmlAttribute", "structure", true)]
+    [Arguments("xmlAttribute", "union", false)]
+    [Arguments("xmlAttribute", "list", false)]
+    [Arguments("xmlAttribute", "map", false)]
+    [Arguments("xmlAttribute", "root", false)]
+    [Arguments("xmlFlattened", "structure", true)]
+    [Arguments("xmlFlattened", "union", true)]
+    [Arguments("xmlFlattened", "list", false)]
+    [Arguments("xmlFlattened", "map", false)]
+    [Arguments("xmlFlattened", "root", false)]
+    public async Task SmithyJsonXmlBindingsRestrictTheirContainingShapes(string trait, string container, bool valid)
+    {
+        var document = SmithyEventBindingDocument(trait);
+        document["shapes"]!["example#Stream"]!["traits"]!.AsObject().Clear();
+        if (trait == "xmlFlattened")
+        { document["shapes"]!["example#Target"] = JsonNode.Parse("""{"type":"list","member":{"target":"smithy.api#String"}}"""); }
+        var member = document["shapes"]!["example#Event"]!["members"]!["data"]!.DeepClone();
+        if (container == "root")
+        {
+            document["shapes"]!["example#Event"]!["traits"] = member["traits"]!.DeepClone();
+            document["shapes"]!["example#Event"]!["members"]!["data"]!.AsObject().Remove("traits");
+        }
+        else if (container == "union") { document["shapes"]!["example#Event"]!["type"] = "union"; }
+        else if (container == "list")
+        { document["shapes"]!["example#Event"] = new JsonObject { ["type"] = "list", ["member"] = member }; }
+        else if (container == "map")
+        {
+            document["shapes"]!["example#Event"] = new JsonObject
+            {
+                ["type"] = "map", ["key"] = JsonNode.Parse("""{"target":"smithy.api#String"}"""), ["value"] = member
+            };
+        }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("xmlName", "null")]
+    [Arguments("xmlName", "1")]
+    [Arguments("xmlName", "{}")]
+    [Arguments("xmlAttribute", "null")]
+    [Arguments("xmlAttribute", "true")]
+    [Arguments("xmlAttribute", "[]")]
+    [Arguments("xmlFlattened", "null")]
+    [Arguments("xmlFlattened", "\"true\"")]
+    [Arguments("xmlFlattened", "[]")]
+    public async Task SmithyJsonXmlBindingAnnotationsRequireTheirDeclaredNodeTypes(string trait, string value)
+    {
+        var document = SmithyEventBindingDocument(trait);
+        document["shapes"]!["example#Event"]!["members"]!["data"]!["traits"]!["smithy.api#" + trait] = JsonNode.Parse(value);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_value");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Event/members/data/traits/smithy.api#" + trait);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("xmlAttribute", "xmlNamespace")]
+    [Arguments("xmlNamespace", "xmlAttribute")]
+    public async Task SmithyJsonXmlAttributeAndNamespaceConflictInEitherPropertyOrder(string first, string second)
+    {
+        var document = SmithyEventBindingDocument(first);
+        var traits = document["shapes"]!["example#Event"]!["members"]!["data"]!["traits"]!;
+        traits["smithy.api#" + first] = first == "xmlNamespace" ? JsonNode.Parse("""{"uri":"urn:example"}""") : new JsonObject();
+        traits["smithy.api#" + second] = second == "xmlNamespace" ? JsonNode.Parse("""{"uri":"urn:example"}""") : new JsonObject();
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_conflict");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Event/members/data/traits/smithy.api#" + first);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("xmlName")]
+    [Arguments("xmlAttribute")]
+    [Arguments("xmlFlattened")]
+    public async Task SmithyJsonXmlBindingsPreserveMissingDependencySemantics(string trait)
+    {
+        var document = SmithyEventBindingDocument(trait);
+        if (trait == "xmlName")
+        { document["shapes"]!["example#Event"]!["members"]!["data"]!["traits"]!["smithy.api#xmlName"] = "Field"; }
+        document["shapes"]!.AsObject().Remove("example#Target");
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("XML member targets are not imports."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("dependency.unresolved");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Target");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("xmlAttribute", "smithy.api#String")]
+    [Arguments("xmlAttribute", "smithy.api#Integer")]
+    [Arguments("xmlAttribute", "smithy.api#Timestamp")]
+    [Arguments("xmlFlattened", "example#Target")]
+    public async Task SmithyJsonXmlBindingsAllowMultipleMembersWithoutInventingNameUniqueness(string trait, string target)
+    {
+        var document = SmithyEventBindingDocument(trait);
+        if (trait == "xmlFlattened")
+        { document["shapes"]!["example#Target"] = JsonNode.Parse("""{"type":"list","member":{"target":"smithy.api#String"}}"""); }
+        var member = document["shapes"]!["example#Event"]!["members"]!["data"]!;
+        member["target"] = target;
+        member["traits"]!["smithy.api#xmlName"] = "same";
+        document["shapes"]!["example#Event"]!["members"]!["second"] = member.DeepClone();
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+    }
+
+    [Test]
+    public async Task SmithyJsonXmlDeclarationsPreserveNativeMetadataWithoutSerializingOrScanningUnrelatedShapes()
+    {
+        var document = SmithyEventBindingDocument("xmlAttribute");
+        document["shapes"]!["example#Event"]!["traits"] = JsonNode.Parse("""{"smithy.api#xmlName":"p:Event"}""");
+        document["shapes"]!["example#Event"]!["members"]!["data"]!["traits"]!["smithy.api#xmlName"] = "p:value";
+        document["shapes"]!["example#Get"]!["traits"] = JsonNode.Parse("""
+            {"smithy.api#examples":[{"title":"literal","input":{"smithy.api#xmlName":"not a name","target":"example#Absent"}}]}
+            """);
+        document["shapes"]!["example#Unused"] = JsonNode.Parse("""{"type":"string","traits":{"smithy.api#xmlName":false}}""");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
     private static JsonNode SmithyEventBindingDocument(string trait)
     {
         var document = JsonNode.Parse(SmithyStreamingDocument())!;

@@ -506,6 +506,23 @@ string values. Separate containers can reuse a name. The selector preserves
 authored names without renaming model members or generating serialized objects.
 These checks do not qualify a protocol's complete property-name mapping.
 
+The `xmlName` trait requires a string on a structure or union root, or on a
+data member. Its value must follow the publisher's ASCII grammar: each
+identifier starts with a letter or underscore and continues with letters,
+digits, hyphens or underscores; one optional colon separates a prefix from a
+local identifier. Empty names, dots, whitespace and non-ASCII letters are
+invalid even when a general XML name parser would accept them.
+
+The object-valued `xmlAttribute` annotation applies only to structure members
+targeting Boolean, numeric, string or timestamp shapes, including enum
+specializations. It conflicts with `xmlNamespace` on the same member in either
+property order. The object-valued `xmlFlattened` annotation applies to structure
+or union members targeting lists or maps. Multiple attributes or flattened
+members are permitted; these checks do not impose XML-name uniqueness.
+Unresolved targets remain unresolved dependencies. Names and annotations stay
+in the native model; the resolver does not emit XML, bind namespace prefixes or
+qualify `xmlNamespace` declarations.
+
 The `timestampFormat` trait applies to a timestamp root or a member targeting
 a timestamp, including list, map-value and union members. Its exact string
 value must be `date-time`, `http-date` or `epoch-seconds`. Missing target

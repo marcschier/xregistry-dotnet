@@ -226,6 +226,15 @@ vocabulary/source mapping. It does not supply their implementation.
   timestamp root/member eligibility and the three declared serialization formats.
   Neither annotation rewrites the selected operation or changes default-node
   representations; protocol serialization and full name mapping remain open.
+  `xmlName` checks structure/union roots and data members against the
+  publisher's ASCII identifier or prefix:identifier grammar, rather than the
+  broader XML name grammar. `xmlAttribute` checks object-valued structure-member
+  annotations on Boolean/numeric/string/timestamp targets, including enum
+  specializations, and its conflict with `xmlNamespace` in either property order.
+  `xmlFlattened` checks object-valued structure/union members targeting lists
+  or maps. Multiple annotated members remain valid, without inferred name
+  uniqueness. No XML serialization, prefix binding or namespace declaration
+  qualification is added.
   Recognized prelude traits now check documentation/error values and the object
   shape of annotation, idempotent and trait-marker values throughout the
   selected closure. Explicit recognized prelude targets and their declared
