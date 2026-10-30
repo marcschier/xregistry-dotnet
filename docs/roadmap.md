@@ -161,6 +161,12 @@ vocabulary/source mapping. It does not supply their implementation.
   Link server overrides have the shared structural checks. Links and their
   parameter expressions are preserved without invocation; target-schema
   parameter validation remains open.
+  Example pairings and nested Example references use source-relative authorized
+  retrieval. Pairings require names and parameter arrays; examples require names
+  and embedded literal values, including null. Literal `$ref` payloads do not
+  cause acquisition, and missing example results retain notification semantics.
+  Malformed later examples and required reference failures prevent selection.
+  These checks do not validate example instances against method schemas.
   Smithy selection checks required operation/data/custom-trait dependencies in
   an already assembled non-mixin AST and rejects invalid recursion in that
   closure, invalid enum targets and duplicate or malformed enum values. Its

@@ -124,7 +124,7 @@ denied or cyclic dependencies prevent selection, including in a later method.
 The returned Method Object preserves its native references; resolution does not
 inline them. Descriptor schema objects, including their `$ref` values, remain
 opaque schema data and do not trigger retrieval. This checks method contracts,
-not every schema keyword, linked method, example or document metadata field.
+not every schema keyword or document metadata field.
 `SupportsApiDocumentValidation` remains false.
 
 Supplied method servers require a URL string; optional names and descriptions
@@ -156,6 +156,21 @@ and description values must be strings. A link can omit `method`; selection
 does not infer a target from its name, parameters or server. This does not
 validate parameter expressions against the target schema or execute a linked
 method.
+
+OpenRPC example pairings require a name string and a `params` array. Supplied
+parameter and result examples require name strings and embedded `value` members;
+JSON null is a value, not an absent member. Pairing descriptions and example
+summaries/descriptions retain their string types. An omitted example result
+remains absent as a notification example. `value` and `externalValue` cannot
+coexist; this profile requires the publisher's embedded literal form and never
+retrieves external example values.
+
+Pairing and Example references use their actual containing document's base URI
+and the shared caller-controlled retrieval budgets. Required reference failures
+and malformed examples in later methods prevent selection. Literal values,
+including objects with `$ref` members, are data rather than imports. The native
+method retains its example references and values. These structural checks do
+not validate example values against parameter/result schemas or execute requests.
 
 For `AvroProtocol/1.12.0`, `#operations/GetUser` selects the exact `GetUser`
 member of `messages`. An absent or empty `messages` object has no selectable

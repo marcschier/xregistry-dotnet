@@ -132,6 +132,67 @@ public static partial class ApiOperationDocumentResolver
                     "document.error_message", "An OpenRPC error requires a message string.");
             }
         }
+        return await ValidateOpenRpcExamplesAsync(location, references, budget, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async ValueTask<ApiOperationResolutionResult?> ValidateOpenRpcExamplesAsync(
+        OperationLocation location, ReferenceContext references, ValidationContext budget,
+        CancellationToken cancellationToken)
+    {
+        if (!location.Operation.TryGetProperty("examples", out var examples)) { return null; }
+        var path = location.Pointer + "/examples";
+        ValidationContext.Require(examples.ValueKind == JsonValueKind.Array, path,
+            "document.examples", "OpenRPC examples must be an array.");
+        var index = 0;
+        foreach (var example in examples.EnumerateArray())
+        {
+            budget.Work(path: path);
+            var resolved = await ResolveOperationAsync(example, location.Source,
+                path + "/" + (index++).ToString(CultureInfo.InvariantCulture), references,
+                new(StringComparer.Ordinal), cancellationToken).ConfigureAwait(false);
+            if (resolved.Failure is not null) { return resolved.Failure; }
+            var pairing = resolved.Operation!;
+            RequireOpenRpcString(pairing.Operation, "name", pairing.Pointer, "document.example_pairing_name");
+            ValidateOpenRpcOptionalString(pairing.Operation, "description", pairing.Pointer);
+            ValidationContext.Require(pairing.Operation.TryGetProperty("params", out var parameters) &&
+                parameters.ValueKind == JsonValueKind.Array, pairing.Pointer + "/params",
+                "document.example_params", "An OpenRPC example pairing requires a params array.");
+            var parameterIndex = 0;
+            foreach (var parameter in parameters.EnumerateArray())
+            {
+                var failure = await ValidateOpenRpcExampleAsync(parameter, pairing.Source,
+                    pairing.Pointer + "/params/" + (parameterIndex++).ToString(CultureInfo.InvariantCulture),
+                    references, budget, cancellationToken).ConfigureAwait(false);
+                if (failure is not null) { return failure; }
+            }
+            if (pairing.Operation.TryGetProperty("result", out var result))
+            {
+                var failure = await ValidateOpenRpcExampleAsync(result, pairing.Source, pairing.Pointer + "/result",
+                    references, budget, cancellationToken).ConfigureAwait(false);
+                if (failure is not null) { return failure; }
+            }
+        }
+        return null;
+    }
+
+    private static async ValueTask<ApiOperationResolutionResult?> ValidateOpenRpcExampleAsync(
+        JsonElement example, ReferencedDocument source, string path, ReferenceContext references,
+        ValidationContext budget, CancellationToken cancellationToken)
+    {
+        budget.Work(path: path);
+        var resolved = await ResolveOperationAsync(example, source, path, references,
+            new(StringComparer.Ordinal), cancellationToken).ConfigureAwait(false);
+        if (resolved.Failure is not null) { return resolved.Failure; }
+        var item = resolved.Operation!;
+        RequireOpenRpcString(item.Operation, "name", item.Pointer, "document.example_name");
+        ValidateOpenRpcOptionalString(item.Operation, "summary", item.Pointer);
+        ValidateOpenRpcOptionalString(item.Operation, "description", item.Pointer);
+        ValidationContext.Require(item.Operation.TryGetProperty("value", out _), item.Pointer + "/value",
+            "document.example_value", "An OpenRPC example requires an embedded literal value.");
+        ValidationContext.Require(!item.Operation.TryGetProperty("externalValue", out _),
+            item.Pointer + "/externalValue", "document.example_value_conflict",
+            "OpenRPC example value and externalValue are mutually exclusive.");
         return null;
     }
 
