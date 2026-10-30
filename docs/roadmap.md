@@ -282,6 +282,10 @@ vocabulary/source mapping. It does not supply their implementation.
   exposes `id` and authored `version` text. Other roots and members yield
   absence. Missing versions are absent; supplied non-string versions are invalid
   when accessed. This does not validate the service closure.
+  `:in` accepts exactly one supported same-shape selector and preserves the
+  selected identity only when the argument yields it. Model-wide membership
+  through variables, `:root` or graph traversal remains unsupported. Nesting
+  and repeated evaluation consume the existing depth and work budgets.
   Each application is checked independently. Type mismatches are invalid;
   unsupported grammar reports `Unsupported` at the application without changing
   unapplied declaration checks or masking earlier missing schema dependencies.

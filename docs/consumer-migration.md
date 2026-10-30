@@ -504,6 +504,13 @@ permits every shape; each reached application is checked independently.
 Type mismatches are invalid. Other selector expressions report `Unsupported`
 at the application, while unapplied definitions retain declaration-only checks.
 General selector evaluation remains open.
+The `:in` function accepts exactly one supported same-shape selector. It yields
+the current shape only when the argument yields that shape; nested type,
+attribute and Boolean predicates use the selected root or member identity.
+This does not implement model-wide membership. Arguments requiring variables,
+`:root` or graph traversal report `Unsupported`, including inside an otherwise
+matching branch. Nesting and repeated predicate evaluation consume the existing
+depth and work budgets.
 
 After schema-closure checks, each custom trait application is checked against
 its declared node types. Scalar checks cover Boolean/string values, base64
@@ -695,6 +702,8 @@ A type mismatch is invalid; an optional absent target does not require evaluatio
 Type-token sequences intersect their predicates. Type-only `:test` predicates
 match when any argument matches, and `:not` requires exactly one argument and
 negates its result. These functions can nest and compose with type tokens.
+The `:in` function also accepts a single supported same-shape predicate, with
+the same boundaries described for application selectors above.
 The `:is` function unions results from supported same-shape predicates, including
 trait-existence checks, and can compose with sequences or negation. Graph-yielding
 branches remain unsupported; they are not treated as Boolean tests on the

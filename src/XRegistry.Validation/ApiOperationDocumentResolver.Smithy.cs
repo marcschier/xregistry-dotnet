@@ -2598,7 +2598,7 @@ public static partial class ApiOperationDocumentResolver
                         SkipWhitespace();
                         var function = Identifier();
                         SkipWhitespace();
-                        if (function is not ("test" or "not" or "is") || position == text.Length || text[position++] != '(')
+                        if (function is not ("test" or "not" or "is" or "in") || position == text.Length || text[position++] != '(')
                         {
                             return null;
                         }
@@ -2611,7 +2611,7 @@ public static partial class ApiOperationDocumentResolver
                             if (position == text.Length) { return null; }
                             var delimiter = text[position++];
                             if (delimiter == ')') { break; }
-                            if (delimiter != ',' || function == "not") { return null; }
+                            if (delimiter != ',' || function is "not" or "in") { return null; }
                         }
                         current = function == "not" ? !any : any;
                     }
