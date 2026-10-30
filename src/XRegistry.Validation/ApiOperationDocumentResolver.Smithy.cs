@@ -2375,7 +2375,7 @@ public static partial class ApiOperationDocumentResolver
                         position++;
                         SkipWhitespace();
                         var attribute = Identifier();
-                        if (attribute is not ("trait" or "id")) { return null; }
+                        if (attribute is not ("trait" or "id" or "service")) { return null; }
                         SkipWhitespace();
                         var traitCollection = attribute == "trait" && (position == text.Length || text[position] != '|');
                         if (attribute == "trait" && !traitCollection) { position++; SkipWhitespace(); }
@@ -2498,6 +2498,7 @@ public static partial class ApiOperationDocumentResolver
                         var node = default(JsonElement);
                         int? nodeLength = countTraits ? 0 : null;
                         var idValue = attribute == "id" ? shapeId : null;
+                        var serviceValue = attribute == "service" && kind == "service";
                         string? textValue = null;
                         if (attribute == "trait" && shape.TryGetProperty("traits", out var traits))
                         {
@@ -2510,6 +2511,20 @@ public static partial class ApiOperationDocumentResolver
                         {
                             foreach (var property in properties)
                             {
+                                if (serviceValue)
+                                {
+                                    budget.Work(path: path);
+                                    if (!property.Length && property.Name == "id") { idValue = shapeId; }
+                                    else if (!property.Length && property.Name == "version" &&
+                                        shape.TryGetProperty("version", out var serviceVersion))
+                                    {
+                                        ValidationContext.Require(serviceVersion.ValueKind == JsonValueKind.String,
+                                            path, "document.service_version", "A Smithy service version must be a string.");
+                                        textValue = serviceVersion.GetString()!;
+                                    }
+                                    serviceValue = false;
+                                    continue;
+                                }
                                 if (idValue is not null)
                                 {
                                     budget.Work(idValue.Length, path);
@@ -2567,10 +2582,10 @@ public static partial class ApiOperationDocumentResolver
                         {
                             if (node.ValueKind == JsonValueKind.Number) { return null; }
                             current = false;
-                            if (traitCollection || idValue is not null || textValue is not null ||
+                            if (traitCollection || serviceValue || idValue is not null || textValue is not null ||
                                 nodeLength is not null || node.ValueKind != JsonValueKind.Undefined)
                             {
-                                var value = idValue ?? textValue ?? (nodeLength is { } countValue
+                                var value = (serviceValue ? shapeId : null) ?? idValue ?? textValue ?? (nodeLength is { } countValue
                                     ? countValue.ToString(System.Globalization.CultureInfo.InvariantCulture)
                                     : node.ValueKind switch
                                 {
@@ -2597,7 +2612,7 @@ public static partial class ApiOperationDocumentResolver
                         }
                         else if (numericOperands is null)
                         {
-                            current = traitCollection || idValue is not null || textValue is not null ||
+                            current = traitCollection || serviceValue || idValue is not null || textValue is not null ||
                                 nodeLength is not null || node.ValueKind != JsonValueKind.Undefined
                                 ? acceptsPresent : acceptsAbsent;
                         }
@@ -2605,6 +2620,7 @@ public static partial class ApiOperationDocumentResolver
                         {
                             var number = nodeLength is { } lengthValue
                                 ? new JsonNumber(false, lengthValue.ToString(System.Globalization.CultureInfo.InvariantCulture), 0)
+                                : serviceValue ? SelectorNumber(shapeId)
                                 : idValue is not null || textValue is not null ? SelectorNumber(idValue ?? textValue!)
                                 : node.ValueKind switch
                             {

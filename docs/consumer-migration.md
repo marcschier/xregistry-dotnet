@@ -472,6 +472,13 @@ member; `idRef` selectors inspect the referenced identity, including known
 implicit prelude shapes. Identity lookup neither traverses the referenced shape
 nor acquires it as a document. Property scans and comparisons consume the shared
 work budget.
+The `service` attribute exists only on a selected service shape and compares as
+that service's absolute identity. Its `id` property supports the identity
+properties above; `version` exposes the authored string with the supported text,
+numeric and length comparisons. Missing versions yield absence, while supplied
+non-string versions are invalid when accessed. On other roots and on members,
+the attribute and its properties are absent. These selector checks do not
+validate the service model or its operation/resource closure.
 A member is not matched as its target or container type. An omitted selector
 permits every shape; each reached application is checked independently.
 Type mismatches are invalid. Other selector expressions report `Unsupported`

@@ -266,6 +266,10 @@ vocabulary/source mapping. It does not supply their implementation.
   and `idRef` selectors inspect their respective selected identities, including
   known implicit prelude IDs, without treating those IDs as acquisition URLs.
   Identity property scans consume the shared work budget.
+  The service-only `service` attribute compares as its absolute identity and
+  exposes `id` and authored `version` text. Other roots and members yield
+  absence. Missing versions are absent; supplied non-string versions are invalid
+  when accessed. This does not validate the service closure.
   Each application is checked independently. Type mismatches are invalid;
   unsupported grammar reports `Unsupported` at the application without changing
   unapplied declaration checks or masking earlier missing schema dependencies.

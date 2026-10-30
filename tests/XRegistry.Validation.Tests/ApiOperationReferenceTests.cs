@@ -11112,7 +11112,7 @@ public class ApiOperationReferenceTests
     [Arguments("[trait|deprecated = true ii]")]
     [Arguments("[trait|deprecated|message|(values)]")]
     [Arguments("[trait|(values)]")]
-    [Arguments("[service|id|name]")]
+    [Arguments("[var|name]")]
     [Arguments("[trait|deprecated")]
     [Arguments("[trait|deprecated]]")]
     [Arguments(":test(operation,[trait|deprecated = true ii])")]
@@ -12920,6 +12920,136 @@ public class ApiOperationReferenceTests
         await Assert.That(control.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
         document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#idRef"]!["selector"] =
             string.Concat(Enumerable.Repeat("[id|namespace]", 9000));
+        var bounded = ResolveSmithy(document.ToJsonString());
+        await Assert.That(bounded.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(bounded.Diagnostic!.Code).IsEqualTo("limit.work");
+        await Assert.That(bounded.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("[service]", true)]
+    [Arguments("[service ?= true]", true)]
+    [Arguments("[service ?= false]", false)]
+    [Arguments("[service = example#Target]", true)]
+    [Arguments("[service = EXAMPLE#TARGET i]", true)]
+    [Arguments("[service != example#Target]", false)]
+    [Arguments("[service > 0]", false)]
+    [Arguments("[service|id = example#Target]", true)]
+    [Arguments("[service|id|namespace = example]", true)]
+    [Arguments("[service|id|name = Target]", true)]
+    [Arguments("[service|id|member ?= false]", true)]
+    [Arguments("[service|id|(length) = '14']", true)]
+    [Arguments("[service|version ^= '2026-']", true)]
+    [Arguments("[service|'version' $= '-30']", true)]
+    [Arguments("[service|version *= OCT i]", false)]
+    [Arguments("[service|version = '2026-10-30', other]", true)]
+    [Arguments("[service|version != '2026-10-30']", false)]
+    [Arguments("[service|version > 0]", false)]
+    [Arguments("[service|version|(length) = '10']", true)]
+    [Arguments("[service|version|name ?= false]", true)]
+    [Arguments("[service|id|name|(length) = '6']", true)]
+    [Arguments("[service|(length) ?= false]", true)]
+    [Arguments("[service|'id'|'namespace' = example]", true)]
+    [Arguments("[service|Version ?= false]", true)]
+    [Arguments("[service|name ?= false]", true)]
+    public async Task SmithyJsonServiceSelectorsExposeSelectedServiceIdentityAndVersion(string selector, bool matches)
+    {
+        var document = SmithyIdRefTraitDocument("example#Target", "{}");
+        document["shapes"]!["example#Target"] = JsonNode.Parse("""{"type":"service","version":"2026-10-30"}""");
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#idRef"]!["selector"] = selector;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(matches ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (matches)
+        {
+            await Assert.That(result.Diagnostic).IsNull();
+            await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_id_ref_selector");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("example#Target", "string")]
+    [Arguments("example#Target", "operation")]
+    [Arguments("smithy.api#String", "string")]
+    [Arguments("example#Target$value", "structure")]
+    public async Task SmithyJsonServiceSelectorsAreAbsentOnNonServiceRootsMembersAndPrelude(string identity, string kind)
+    {
+        var selector = ":not([service])[service ?= false][service|id ?= false]" +
+            "[service|version|(length) ?= false]:not([service != example#Other])";
+        var document = SmithyIdRefTraitDocument(identity, "{}");
+        var target = SmithyIdRefTarget(kind);
+        if (kind == "structure")
+        {
+            target["members"] = JsonNode.Parse("""{"value":{"target":"smithy.api#String"}}""");
+        }
+        document["shapes"]!["example#Target"] = target;
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#idRef"]!["selector"] = selector;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!["selector"] = selector;
+        var application = ResolveSmithy(document.ToJsonString());
+        await Assert.That(application.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(application.Diagnostic).IsNull();
+    }
+
+    [Test]
+    [Arguments("\"\"", "[service|version][service|version|(length) = '0']", true)]
+    [Arguments("\"12\"", "[service|version >= 12]", true)]
+    [Arguments("\"12\"", "[service|version > 12]", false)]
+    [Arguments("\"Oct\"", "[service|version = OCT i]", true)]
+    [Arguments("null", "[service|version]", false)]
+    [Arguments("12", "[service|version]", false)]
+    [Arguments("{}", "[service|version]", false)]
+    public async Task SmithyJsonServiceSelectorsKeepVersionTextAndMalformedValuesDistinct(string version, string selector, bool matches)
+    {
+        var document = SmithyIdRefTraitDocument("example#Target", "{}");
+        document["shapes"]!["example#Target"] = new JsonObject { ["type"] = "service", ["version"] = JsonNode.Parse(version) };
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#idRef"]!["selector"] = selector;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(matches ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (matches) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo(version.StartsWith('"')
+                ? "document.trait_id_ref_selector" : "document.service_version");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("service")]
+    [Arguments("string")]
+    public async Task SmithyJsonServiceSelectorsDoNotHideUnsupportedAlternativesOnPresentOrAbsentAttributes(string kind)
+    {
+        var document = SmithyIdRefTraitDocument("example#Target", "{}");
+        document["shapes"]!["example#Target"] = SmithyIdRefTarget(kind);
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#idRef"]!["selector"] =
+            ":is(*,[service|version = value, '\u00e9' i])";
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Unsupported);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("smithy.id_ref_selector");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonServiceSelectorsPreserveMissingVersionAbsenceAndBoundRepeatedWork()
+    {
+        var document = SmithyIdRefTraitDocument("example#Target", """{"selector":"[service][service|version ?= false]"}""");
+        document["shapes"]!["example#Target"] = JsonNode.Parse("""{"type":"service"}""");
+        var missing = ResolveSmithy(document.ToJsonString());
+        await Assert.That(missing.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        document["shapes"]!["example#Target"]!["version"] = new string('x', 1000);
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#idRef"]!["selector"] =
+            "[service|version *= X i]";
+        var control = ResolveSmithy(document.ToJsonString());
+        await Assert.That(control.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#idRef"]!["selector"] =
+            string.Concat(Enumerable.Repeat("[service|version *= X i]", 5000));
         var bounded = ResolveSmithy(document.ToJsonString());
         await Assert.That(bounded.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
         await Assert.That(bounded.Diagnostic!.Code).IsEqualTo("limit.work");
