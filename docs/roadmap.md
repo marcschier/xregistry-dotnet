@@ -286,6 +286,11 @@ vocabulary/source mapping. It does not supply their implementation.
   selected identity only when the argument yields it. Model-wide membership
   through variables, `:root` or graph traversal remains unsupported. Nesting
   and repeated evaluation consume the existing depth and work budgets.
+  Unknown functions yield no shapes after parsing supported argument syntax,
+  without evaluating their arguments. Malformed or unsupported syntax still
+  reports `Unsupported`, and parse-only nesting/scanning remains bounded.
+  Known unimplemented `:root`, `:recursive`, `:topdown` and optional `:each`
+  remain unsupported.
   Each application is checked independently. Type mismatches are invalid;
   unsupported grammar reports `Unsupported` at the application without changing
   unapplied declaration checks or masking earlier missing schema dependencies.

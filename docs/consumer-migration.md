@@ -511,6 +511,13 @@ This does not implement model-wide membership. Arguments requiring variables,
 `:root` or graph traversal report `Unsupported`, including inside an otherwise
 matching branch. Nesting and repeated predicate evaluation consume the existing
 depth and work budgets.
+Unknown function names yield no shapes when their arguments use supported
+selector syntax. Arguments are parsed but not evaluated, so trait lookups,
+comparison values and service versions do not affect that result. Empty,
+malformed or unsupported arguments still report `Unsupported`; parse-only
+nesting and token scanning retain the shared limits. Recognized but
+unimplemented functions such as `:root`, `:recursive` and `:topdown` remain
+unsupported, and the optional deprecated `:each` alias is not implemented.
 
 After schema-closure checks, each custom trait application is checked against
 its declared node types. Scalar checks cover Boolean/string values, base64

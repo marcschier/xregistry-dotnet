@@ -2356,7 +2356,7 @@ public static partial class ApiOperationDocumentResolver
             var result = Sequence(0);
             return position == text.Length ? result : null;
 
-            bool? Sequence(int depth)
+            bool? Sequence(int depth, bool evaluate = true)
             {
                 if (depth > Capabilities.MaxReferenceDepth)
                 {
@@ -2449,7 +2449,7 @@ public static partial class ApiOperationDocumentResolver
                                 SkipWhitespace();
                                 var operand = NumericOperand();
                                 if (operand is null) { return null; }
-                                numericOperands.Add(SelectorNumber(operand));
+                                numericOperands.Add(evaluate ? SelectorNumber(operand) : null);
                                 SkipWhitespace();
                                 if (position == text.Length || text[position] != ',') { break; }
                                 position++;
@@ -2483,13 +2483,20 @@ public static partial class ApiOperationDocumentResolver
                             SkipWhitespace();
                             foreach (var operand in stringOperands!)
                             {
-                                if (!AsciiText(operand)) { return null; }
+                                if (evaluate && !AsciiText(operand)) { return null; }
                             }
                         }
                         if (position == text.Length || text[position++] != ']' ||
-                            attribute == "trait" && shape.ValueKind != JsonValueKind.Object)
+                            evaluate && attribute == "trait" && shape.ValueKind != JsonValueKind.Object)
                         {
                             return null;
+                        }
+                        if (!evaluate)
+                        {
+                            matched = false;
+                            count++;
+                            SkipWhitespace();
+                            continue;
                         }
                         List<SmithyAttribute> values = [];
                         if (attribute == "trait" && shape.TryGetProperty("traits", out var traits))
@@ -2598,14 +2605,17 @@ public static partial class ApiOperationDocumentResolver
                         SkipWhitespace();
                         var function = Identifier();
                         SkipWhitespace();
-                        if (function is not ("test" or "not" or "is" or "in") || position == text.Length || text[position++] != '(')
+                        var known = function is "test" or "not" or "is" or "in";
+                        if (!IsSmithyShapeId("example#" + function) ||
+                            function is "root" or "recursive" or "topdown" or "each" ||
+                            position == text.Length || text[position++] != '(')
                         {
                             return null;
                         }
                         var any = false;
                         while (true)
                         {
-                            var argument = Sequence(depth + 1);
+                            var argument = Sequence(depth + 1, evaluate && known);
                             if (argument is null) { return null; }
                             any |= argument.Value;
                             if (position == text.Length) { return null; }
@@ -2613,7 +2623,7 @@ public static partial class ApiOperationDocumentResolver
                             if (delimiter == ')') { break; }
                             if (delimiter != ',' || function is "not" or "in") { return null; }
                         }
-                        current = function == "not" ? !any : any;
+                        current = evaluate && known && (function == "not" ? !any : any);
                     }
                     else
                     {
