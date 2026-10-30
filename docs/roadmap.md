@@ -181,7 +181,11 @@ vocabulary/source mapping. It does not supply their implementation.
   opaque. Complete OpenRPC document and JSON Schema validation remain open.
   Supplied method servers, server variables, tags and documentation declarations
   have structural checks. Tag references use the same authorized retrieval;
-  server and documentation URLs remain native strings without invocation.
+  documentation, terms-of-service, contact and license URLs also receive
+  absolute-URL syntax checks before selection. Whitespace, control characters
+  and malformed escapes fail at the authored field. Server templates remain
+  outside URL syntax validation; all metadata URLs remain native strings
+  without invocation.
   Supplied root servers, documentation, schema URI and Info/Contact/License
   metadata have structural checks before Method dependency acquisition. The
   root Info Object is required, including its title and document-version strings.

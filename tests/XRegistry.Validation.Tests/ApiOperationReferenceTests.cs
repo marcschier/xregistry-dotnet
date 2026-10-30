@@ -16761,6 +16761,100 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
+    [Arguments("terms", "relative/path")]
+    [Arguments("contact", "https://example.test/a b")]
+    [Arguments("license", "https://example.test/%xx")]
+    [Arguments("root", "https:\\example.test\\docs")]
+    [Arguments("method", "https://example.test/\n")]
+    [Arguments("tag", "not a URL")]
+    [Arguments("root", "")]
+    [Arguments("root", " https://example.test/docs")]
+    [Arguments("root", "https://example.test/docs\t")]
+    [Arguments("root", "https://example.test/\u0001")]
+    [Arguments("tag", "../docs")]
+    [Arguments("license", "https://example.test/{version}")]
+    public async Task OpenRpcMetadataUrlsRejectMalformedAuthoredReferences(string location, string authoredUrl)
+    {
+        var document = JsonNode.Parse("""
+            {"openrpc":"1.4.0","info":{"title":"API","version":"1"},
+             "methods":[{"name":"GetUser","params":[]}]}
+            """)!;
+        var expectedPath = "$/info/termsOfService";
+        switch (location)
+        {
+            case "terms":
+                document["info"]!["termsOfService"] = authoredUrl;
+                break;
+            case "contact":
+            case "license":
+                document["info"]![location] = new JsonObject { ["url"] = authoredUrl };
+                expectedPath = "$/info/" + location + "/url";
+                break;
+            case "root":
+                document["externalDocs"] = new JsonObject { ["url"] = authoredUrl };
+                expectedPath = "$/externalDocs/url";
+                break;
+            case "method":
+                document["methods"]![0]!["externalDocs"] = new JsonObject { ["url"] = authoredUrl };
+                expectedPath = "$/methods/0/externalDocs/url";
+                break;
+            case "tag":
+                document["methods"]![0]!["tags"] = JsonNode.Parse("""[{"name":"t","externalDocs":{}}]""");
+                document["methods"]![0]!["tags"]![0]!["externalDocs"]!["url"] = authoredUrl;
+                expectedPath = "$/methods/0/tags/0/externalDocs/url";
+                break;
+        }
+        var result = ApiOperationDocumentResolver.Resolve("OpenRPC/1.4", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/GetUser"));
+
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.url");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo(expectedPath);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("https://must-not-load.example/docs%20here?version=1#section")]
+    [Arguments("ftp://must-not-load.example/license")]
+    [Arguments("https://must-not-load.example:8443/path")]
+    public async Task OpenRpcMetadataUrlsPreserveValidAuthoredUrlsWithoutAcquisition(string authoredUrl)
+    {
+        var metadata = new JsonObject { ["url"] = authoredUrl };
+        var method = new JsonObject
+        {
+            ["name"] = "Target", ["params"] = new JsonArray(),
+            ["externalDocs"] = metadata.DeepClone(),
+            ["tags"] = new JsonArray((JsonNode)new JsonObject
+            {
+                ["name"] = "t", ["externalDocs"] = metadata.DeepClone()
+            })
+        };
+        var native = method.ToJsonString();
+        var document = new JsonObject
+        {
+            ["openrpc"] = "1.4.0", ["info"] = new JsonObject
+            {
+                ["title"] = "API", ["version"] = "1", ["termsOfService"] = authoredUrl,
+                ["contact"] = metadata.DeepClone(), ["license"] = metadata.DeepClone()
+            },
+            ["externalDocs"] = metadata.DeepClone(), ["methods"] = new JsonArray(method)
+        };
+        var calls = 0;
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenRPC/1.4", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+            resolveReference: (_, _) =>
+            {
+                calls++;
+                throw new InvalidOperationException("Metadata URLs must not be acquired.");
+            });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(native);
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
     [Arguments("""{}""")]
     [Arguments("""{"servers":[]}""")]
     [Arguments("""{"info":{"title":"","version":"release not SemVer","contact":{},"license":{}}}""")]
@@ -16871,6 +16965,9 @@ public class ApiOperationReferenceTests
     [Arguments("""{"info":{"title":"API","version":1}}""", "document.info_version", "$/info/version")]
     [Arguments("""{"info":{"title":"API","version":"x","description":[]}}""", "document.annotation", "$/info/description")]
     [Arguments("""{"info":{"title":"API","version":"x","termsOfService":true}}""", "document.annotation", "$/info/termsOfService")]
+    [Arguments("""{"info":{"title":"API","version":"x","termsOfService":"terms"}}""", "document.url", "$/info/termsOfService")]
+    [Arguments("""{"info":{"title":"API","version":"x","contact":{"url":"https://example.test/a b"}}}""", "document.url", "$/info/contact/url")]
+    [Arguments("""{"info":{"title":"API","version":"x","license":{"url":"https://example.test/%zz"}}}""", "document.url", "$/info/license/url")]
     [Arguments("""{"info":{"title":"API","version":"x","contact":null}}""", "document.info_metadata", "$/info/contact")]
     [Arguments("""{"info":{"title":"API","version":"x","contact":{"name":0}}}""", "document.annotation", "$/info/contact/name")]
     [Arguments("""{"info":{"title":"API","version":"x","contact":{"email":{}}}}""", "document.annotation", "$/info/contact/email")]
@@ -16882,6 +16979,7 @@ public class ApiOperationReferenceTests
     [Arguments("""{"externalDocs":null}""", "document.external_docs", "$/externalDocs")]
     [Arguments("""{"externalDocs":{}}""", "document.external_docs_url", "$/externalDocs/url")]
     [Arguments("""{"externalDocs":{"url":false}}""", "document.external_docs_url", "$/externalDocs/url")]
+    [Arguments("""{"externalDocs":{"url":"../docs"}}""", "document.url", "$/externalDocs/url")]
     [Arguments("""{"externalDocs":{"url":"https://example.test","description":0}}""", "document.annotation", "$/externalDocs/description")]
     [Arguments("""{"servers":null}""", "document.servers", "$/servers")]
     [Arguments("""{"servers":[0]}""", "document.server", "$/servers/0")]
@@ -17139,8 +17237,10 @@ public class ApiOperationReferenceTests
     [Arguments("""{"externalDocs":false}""", "document.external_docs", "/externalDocs")]
     [Arguments("""{"externalDocs":{}}""", "document.external_docs_url", "/externalDocs/url")]
     [Arguments("""{"externalDocs":{"url":null}}""", "document.external_docs_url", "/externalDocs/url")]
+    [Arguments("""{"externalDocs":{"url":"https://docs.example/bad path"}}""", "document.url", "/externalDocs/url")]
     [Arguments("""{"externalDocs":{"url":"https://docs.example","description":false}}""", "document.annotation", "/externalDocs/description")]
     [Arguments("""{"tags":[{"name":"t","externalDocs":{}}]}""", "document.external_docs_url", "/tags/0/externalDocs/url")]
+    [Arguments("""{"tags":[{"name":"t","externalDocs":{"url":"../docs"}}]}""", "document.url", "/tags/0/externalDocs/url")]
     public async Task OpenRpcMalformedMethodMetadataInLaterMethodsPreventsSelection(
         string metadata, string code, string suffix)
     {
@@ -17193,6 +17293,7 @@ public class ApiOperationReferenceTests
     [Arguments("unavailable", ApiOperationResolutionStatus.Indeterminate, "dependency.unresolved")]
     [Arguments("denied", ApiOperationResolutionStatus.Denied, "dependency.denied")]
     [Arguments("malformed", ApiOperationResolutionStatus.Invalid, "document.tag_name")]
+    [Arguments("url", ApiOperationResolutionStatus.Invalid, "document.url")]
     [Arguments("cycle", ApiOperationResolutionStatus.Indeterminate, "dependency.cycle")]
     public async Task OpenRpcTagDependencyFailuresCannotProducePartialSelections(
         string outcome, ApiOperationResolutionStatus expected, string code)
@@ -17208,12 +17309,17 @@ public class ApiOperationReferenceTests
                 return ValueTask.FromResult<ReadOnlyMemory<byte>?>(outcome switch
                 {
                     "malformed" => "{}"u8.ToArray(),
+                    "url" => """{"name":"t","externalDocs":{"url":"https://example.test/a b"}}"""u8.ToArray(),
                     "cycle" => """{"$ref":"#"}"""u8.ToArray(),
                     _ => (ReadOnlyMemory<byte>?)null
                 });
             });
         await Assert.That(result.Status).IsEqualTo(expected);
         await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        if (outcome == "url")
+        {
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/externalDocs/url");
+        }
         await Assert.That(calls).IsEqualTo(1);
         await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
     }

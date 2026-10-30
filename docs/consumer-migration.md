@@ -145,9 +145,16 @@ strings. Supplied contact and license declarations must be objects with string
 name/URL fields when present; contact email must also be a string.
 
 Missing `info` fails even when `methods` is empty or contains an otherwise
-selectable method. URL, email and template validity remain outside these
-structural checks. Root server defaults are not inserted into the selected
-native Method Object. These checks do not establish full-document validity.
+selectable method. Terms-of-service, contact and license URLs, and documentation
+URLs at the root, method or resolved tag, must be well-formed absolute URLs.
+These checks follow the URL fields in the
+[OpenRPC 1.4 specification](https://spec.open-rpc.org/#external-documentation-object).
+Malformed URLs report `Invalid` with `document.url` at the authored field;
+whitespace, control characters and malformed percent escapes are rejected
+without normalizing the input. URL reachability, email syntax and server-template
+validity remain outside these checks. Root server defaults are not inserted into
+the selected native Method Object. These checks do not establish full-document
+validity.
 
 Supplied method servers require a URL string; optional names and descriptions
 retain their string types. Server-variable entries require string defaults and,
@@ -160,7 +167,7 @@ Method tags can use caller-authorized references, with the same containing-sourc
 base and failure behavior as descriptor references. Resolved tags require name
 strings and valid description types. Method and tag `externalDocs` values
 require objects with URL strings and optional descriptions; documentation URLs
-are not retrieved. URL-string shape checks do not establish URL validity.
+are syntax-checked but not retrieved.
 Malformed metadata in a later method prevents an earlier selection.
 
 OpenRPC links are resolved as declarations, not executed. A supplied `method`

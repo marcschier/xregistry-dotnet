@@ -20,6 +20,7 @@ public static partial class ApiOperationDocumentResolver
         RequireOpenRpcString(info, "version", "$/info", "document.info_version");
         ValidateOpenRpcOptionalString(info, "description", "$/info");
         ValidateOpenRpcOptionalString(info, "termsOfService", "$/info");
+        ValidateOpenRpcUrl(info, "termsOfService", "$/info");
         foreach (var member in new[] { "contact", "license" })
         {
             if (!info.TryGetProperty(member, out var metadata)) { continue; }
@@ -28,6 +29,7 @@ public static partial class ApiOperationDocumentResolver
                 "document.info_metadata", "OpenRPC contact and license must be objects.");
             ValidateOpenRpcOptionalString(metadata, "name", path);
             ValidateOpenRpcOptionalString(metadata, "url", path);
+            ValidateOpenRpcUrl(metadata, "url", path);
             if (member == "contact") { ValidateOpenRpcOptionalString(metadata, "email", path); }
         }
     }
@@ -318,6 +320,16 @@ public static partial class ApiOperationDocumentResolver
         ValidationContext.Require(documentation.ValueKind == JsonValueKind.Object, documentationPath,
             "document.external_docs", "OpenRPC externalDocs must be an object.");
         RequireOpenRpcString(documentation, "url", documentationPath, "document.external_docs_url");
+        ValidateOpenRpcUrl(documentation, "url", documentationPath);
         ValidateOpenRpcOptionalString(documentation, "description", documentationPath);
+    }
+
+    private static void ValidateOpenRpcUrl(JsonElement value, string member, string path)
+    {
+        if (!value.TryGetProperty(member, out var url)) { return; }
+        var text = url.GetString()!;
+        ValidationContext.Require(!text.Any(character => char.IsWhiteSpace(character) || char.IsControl(character)) &&
+            Uri.IsWellFormedUriString(text, UriKind.Absolute),
+            path + "/" + member, "document.url", "An OpenRPC metadata URL must be a well-formed absolute URL.");
     }
 }
