@@ -134,6 +134,9 @@ vocabulary/source mapping. It does not supply their implementation.
   Avro IDL, GraphQL, WSDL or Smithy IDL/model-assembly support. Avro message
   selection preserves the declared native message but does not check all schema
   definitions, name binding or defaults.
+  OpenAPI 3.1 selection includes webhook operation IDs and inline webhook method
+  pointers, with ambiguity checking across paths and webhooks. Callback operation
+  selection remains open.
   Smithy selection checks required operation/data/custom-trait dependencies in
   an already assembled non-mixin AST and rejects invalid recursion in that
   closure, invalid enum targets and duplicate or malformed enum values. Its

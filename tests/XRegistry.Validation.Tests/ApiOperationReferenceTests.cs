@@ -223,7 +223,7 @@ public class ApiOperationReferenceTests
     [Arguments("""{"components":{}}""", "operations/GetUser")]
     [Arguments("""{"webhooks":{}}""", "operations/GetUser")]
     [Arguments("""{"components":{},"webhooks":{}}""", "operations/GetUser")]
-    [Arguments("""{"webhooks":{"event":{"post":{"operationId":"GetUser"}}}}""", "operations/GetUser")]
+    [Arguments("""{"webhooks":{"event":{"post":{"operationId":"Other"}}}}""", "operations/GetUser")]
     [Arguments("""{"components":{}}""", "/paths/~1users/get")]
     [Arguments("""{"webhooks":{}}""", "/paths/~1users/get")]
     public async Task OpenApi31DocumentsWithoutPathsReportNoPathOperation(string content, string selector)
@@ -243,7 +243,6 @@ public class ApiOperationReferenceTests
     [Arguments("Swagger/2.0", """{"swagger":"2.0","components":{}}""")]
     [Arguments("OpenAPI/3.1", """{"openapi":"3.1.1"}""")]
     [Arguments("OpenAPI/3.1", """{"openapi":"3.1.1","components":null}""")]
-    [Arguments("OpenAPI/3.1", """{"openapi":"3.1.1","webhooks":[]}""")]
     [Arguments("OpenAPI/3.1", """{"openapi":"3.1.1","paths":null,"components":{}}""")]
     [Arguments("OpenAPI/3.1", """{"openapi":"3.1.1","paths":[],"webhooks":{}}""")]
     public async Task OptionalOpenApi31PathsDoNotRelaxOtherRootRequirements(string format, string document)
@@ -254,6 +253,138 @@ public class ApiOperationReferenceTests
         await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
         await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.paths");
         await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("event", "operations/Notify", "$/webhooks/event/post")]
+    [Arguments("event", "/webhooks/event/post", "$/webhooks/event/post")]
+    [Arguments("x-event", "operations/Notify", "$/webhooks/x-event/post")]
+    [Arguments("x-event", "/webhooks/x-event/post", "$/webhooks/x-event/post")]
+    [Arguments("a/~b", "/webhooks/a~1~0b/post", "$/webhooks/a~1~0b/post")]
+    [Arguments("", "operations/Notify", "$/webhooks//post")]
+    public async Task OpenApi31SelectsNativeWebhookOperationsWithTheirDocumentProvenance(
+        string webhook, string selector, string expectedPath)
+    {
+        var source = new Uri("https://registry.example/apis/hooks");
+        var operation = System.Text.Json.Nodes.JsonNode.Parse("""
+            {"operationId":"Notify","requestBody":{"content":{"application/json":{"schema":{"type":"string"}}}},
+             "responses":{"200":{"description":"Accepted"}},"x-native":{"streaming":true}}
+            """)!;
+        var expected = operation.ToJsonString();
+        var document = new System.Text.Json.Nodes.JsonObject
+        {
+            ["openapi"] = "3.1.1",
+            ["webhooks"] = new System.Text.Json.Nodes.JsonObject
+            {
+                [webhook] = new System.Text.Json.Nodes.JsonObject { ["post"] = operation }
+            }
+        };
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenAPI/3.1", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector), source);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.DocumentPath).IsEqualTo(expectedPath);
+        await Assert.That(result.DocumentUri).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(expected);
+    }
+
+    [Test]
+    [Arguments("""{"event":{"post":{"operationId":"Notify"}},"other":{"get":{"operationId":"Notify"}}}""", "{}", ApiOperationResolutionStatus.Ambiguous, "selection.ambiguous")]
+    [Arguments("""{"event":{"post":{"operationId":"Notify"}}}""", """{"/users":{"get":{"operationId":"Notify"}}}""", ApiOperationResolutionStatus.Ambiguous, "selection.ambiguous")]
+    [Arguments("""{"event":{"post":{"operationId":"notify"}}}""", "{}", ApiOperationResolutionStatus.NotFound, "selection.not_found")]
+    [Arguments("""{"event":null}""", "{}", ApiOperationResolutionStatus.Invalid, "document.path_item")]
+    [Arguments("""{"event":{"post":true}}""", "{}", ApiOperationResolutionStatus.Invalid, "document.operation")]
+    [Arguments("""{"event":{"post":{"operationId":1}}}""", "{}", ApiOperationResolutionStatus.Invalid, "document.operation_id")]
+    [Arguments("[]", "{}", ApiOperationResolutionStatus.Invalid, "document.webhooks")]
+    [Arguments("null", "{}", ApiOperationResolutionStatus.Invalid, "document.webhooks")]
+    [Arguments("""{"good":{"post":{"operationId":"Notify"}},"unavailable":{"$ref":"./missing.json"}}""", "{}", ApiOperationResolutionStatus.Indeterminate, "dependency.unresolved")]
+    [Arguments("""{"unavailable":{"$ref":"./missing.json"}}""", """{"/users":{"get":{"operationId":"Notify"}}}""", ApiOperationResolutionStatus.Indeterminate, "dependency.unresolved")]
+    public async Task OpenApi31WebhookSelectionRejectsAmbiguousMalformedAndUnavailableDefinitions(
+        string webhooks, string paths, ApiOperationResolutionStatus status, string code)
+    {
+        var document = """{"openapi":"3.1.1","paths":PATHS,"webhooks":HOOKS}"""
+            .Replace("PATHS", paths, StringComparison.Ordinal).Replace("HOOKS", webhooks, StringComparison.Ordinal);
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenAPI/3.1", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Notify"),
+            new Uri("https://registry.example/apis/hooks"));
+        await Assert.That(result.Status).IsEqualTo(status);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task OpenApi31WebhookOperationIdsFollowOnlyCallerSuppliedReferences(bool operationReference)
+    {
+        var calls = 0;
+        var document = operationReference
+            ? """{"openapi":"3.1.1","webhooks":{"event":{"post":{"$ref":"./shared.json#/operation"}}}}"""
+            : """{"openapi":"3.1.1","webhooks":{"event":{"$ref":"./shared.json#/item"}}}""";
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenAPI/3.1", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Notify"),
+            new Uri("https://registry.example/apis/hooks"),
+            (uri, _) =>
+            {
+                calls++;
+                if (uri != "https://registry.example/apis/shared.json") { throw new InvalidOperationException(uri); }
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+                    """{"item":{"post":{"operationId":"Notify"}},"operation":{"operationId":"Notify"}}"""u8.ToArray());
+            });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.DocumentPath).IsEqualTo(operationReference ? "$/operation" : "$/item/post");
+        await Assert.That(result.DocumentUri).IsEqualTo(new Uri("https://registry.example/apis/shared.json"));
+        await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("Notify");
+        await Assert.That(calls).IsEqualTo(1);
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "openapi", "3.0.4")]
+    [Arguments("Swagger/2.0", "swagger", "2.0")]
+    public async Task OlderFormatsDoNotAcquireOrSelectOpenApi31Webhooks(string format, string field, string version)
+    {
+        var document = """{"FIELD":"VERSION","paths":{},"webhooks":{"event":{"post":{"operationId":"Notify"}}}}"""
+            .Replace("FIELD", field, StringComparison.Ordinal).Replace("VERSION", version, StringComparison.Ordinal);
+        var result = ApiOperationDocumentResolver.Resolve(format, "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Notify"));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.NotFound);
+        var pointer = ApiOperationDocumentResolver.Resolve(format, "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#/webhooks/event/post"));
+        await Assert.That(pointer.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(pointer.Diagnostic!.Code).IsEqualTo("selection.operation_pointer");
+    }
+
+    [Test]
+    [Arguments("""{"event":{"$ref":"./shared.json#/item"}}""", ApiOperationResolutionStatus.NotFound)]
+    [Arguments("""{"event":{"post":{"$ref":"./shared.json#/operation"}}}""", ApiOperationResolutionStatus.Invalid)]
+    [Arguments("""{}""", ApiOperationResolutionStatus.NotFound)]
+    public async Task WebhookJsonPointersDoNotTraverseReferences(string webhooks, ApiOperationResolutionStatus status)
+    {
+        var calls = 0;
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenAPI/3.1", "application/json",
+            System.Text.Encoding.UTF8.GetBytes("""{"openapi":"3.1.1","webhooks":""" + webhooks + "}"),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#/webhooks/event/post"),
+            new Uri("https://registry.example/apis/hooks"),
+            (_, _) => { calls++; throw new InvalidOperationException("Pointers do not dereference."); });
+        await Assert.That(result.Status).IsEqualTo(status);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task WebhookJsonPointerSelectsAnOperationWithoutAnOperationId()
+    {
+        var result = ApiOperationDocumentResolver.Resolve("OpenAPI/3.1", "application/json",
+            """{"openapi":"3.1.1","webhooks":{"event":{"post":{"summary":"Receive an event"}}}}"""u8.ToArray(),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#/webhooks/event/post"));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.DocumentPath).IsEqualTo("$/webhooks/event/post");
+        await Assert.That(result.Operation.GetProperty("summary").GetString()).IsEqualTo("Receive an event");
+        await Assert.That(result.Operation.TryGetProperty("operationId", out _)).IsFalse();
     }
 
     [Test]

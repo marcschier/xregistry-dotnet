@@ -252,7 +252,7 @@ public static partial class ApiOperationDocumentResolver
 
             if (reference.Selector.Kind == ApiOperationSelectorKind.JsonPointer)
             {
-                return ResolvePointer(root, reference.Selector.Tokens, cancellationToken);
+                return ResolvePointer(format, root, reference.Selector.Tokens, cancellationToken);
             }
             if (format == "AvroProtocol/1.12.0")
             {
@@ -264,7 +264,7 @@ public static partial class ApiOperationDocumentResolver
                 return await ResolveOpenRpcMethodAsync(root, reference.Selector.Tokens[^1], references,
                     cancellationToken).ConfigureAwait(false);
             }
-            return await ResolveOperationIdAsync(root, reference.Selector.Tokens[^1], references,
+            return await ResolveOperationIdAsync(format, root, reference.Selector.Tokens[^1], references,
                 cancellationToken).ConfigureAwait(false);
         }
     }
@@ -331,6 +331,12 @@ public static partial class ApiOperationDocumentResolver
                 "The root swagger value must be '2.0'.", "$/swagger");
         }
 
+        if (format == "OpenAPI/3.1" && root.TryGetProperty("webhooks", out var webhookMap) &&
+            webhookMap.ValueKind != JsonValueKind.Object)
+        {
+            return Failure(ApiOperationResolutionStatus.Invalid, "document.webhooks",
+                "The webhooks value must be an object.", "$/webhooks");
+        }
         if (!root.TryGetProperty("paths", out var paths))
         {
             if (format == "OpenAPI/3.1" &&
@@ -449,52 +455,51 @@ public static partial class ApiOperationDocumentResolver
         };
     }
 
-    private static async ValueTask<ApiOperationResolutionResult> ResolveOperationIdAsync(JsonElement root,
+    private static async ValueTask<ApiOperationResolutionResult> ResolveOperationIdAsync(string format, JsonElement root,
         string operationId, ReferenceContext references, CancellationToken cancellationToken)
     {
         var matches = new List<OperationLocation>();
-        if (!root.TryGetProperty("paths", out var paths))
+        foreach (var collectionName in format == "OpenAPI/3.1" ? new[] { "paths", "webhooks" } : new[] { "paths" })
         {
-            return Failure(ApiOperationResolutionStatus.NotFound, "selection.not_found",
-                "The API document has no path operations.");
-        }
-        foreach (var path in paths.EnumerateObject())
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (path.Name.StartsWith("x-", StringComparison.Ordinal)) { continue; }
-            if (!path.Name.StartsWith('/'))
+            if (!root.TryGetProperty(collectionName, out var paths)) { continue; }
+            foreach (var path in paths.EnumerateObject())
             {
-                return Failure(ApiOperationResolutionStatus.Invalid, "document.path",
-                    "A paths entry must start with '/' or be an x- specification extension.",
-                    "$/paths/" + Escape(path.Name));
-            }
-            if (path.Value.ValueKind != JsonValueKind.Object)
-            {
-                return Failure(ApiOperationResolutionStatus.Invalid, "document.path_item",
-                    "Every paths entry must be an object.", "$/paths/" + Escape(path.Name));
-            }
-
-            var pathPointer = "$/paths/" + Escape(path.Name);
-            var pathItem = await ResolvePathItemAsync(path.Value, references.Root, pathPointer, references,
-                new(StringComparer.Ordinal), cancellationToken).ConfigureAwait(false);
-            if (pathItem.Failure is not null)
-            {
-                return pathItem.Failure;
-            }
-
-            foreach (var operation in pathItem.Operations)
-            {
-                if (operation.Value.Operation.TryGetProperty("operationId", out var id))
+                cancellationToken.ThrowIfCancellationRequested();
+                if (collectionName == "paths" && path.Name.StartsWith("x-", StringComparison.Ordinal)) { continue; }
+                if (collectionName == "paths" && !path.Name.StartsWith('/'))
                 {
-                    if (id.ValueKind != JsonValueKind.String)
+                    return Failure(ApiOperationResolutionStatus.Invalid, "document.path",
+                        "A paths entry must start with '/' or be an x- specification extension.",
+                        "$/paths/" + Escape(path.Name));
+                }
+                if (path.Value.ValueKind != JsonValueKind.Object)
+                {
+                    return Failure(ApiOperationResolutionStatus.Invalid, "document.path_item",
+                        "Every operation-map entry must be an object.", "$/" + collectionName + "/" + Escape(path.Name));
+                }
+
+                var pathPointer = "$/" + collectionName + "/" + Escape(path.Name);
+                var pathItem = await ResolvePathItemAsync(path.Value, references.Root, pathPointer, references,
+                    new(StringComparer.Ordinal), cancellationToken).ConfigureAwait(false);
+                if (pathItem.Failure is not null)
+                {
+                    return pathItem.Failure;
+                }
+
+                foreach (var operation in pathItem.Operations)
+                {
+                    if (operation.Value.Operation.TryGetProperty("operationId", out var id))
                     {
-                        return Failure(ApiOperationResolutionStatus.Invalid, "document.operation_id",
-                            "An operationId must be a string.",
-                            operation.Value.Pointer + "/operationId");
-                    }
-                    if (string.Equals(id.GetString(), operationId, StringComparison.Ordinal))
-                    {
-                        matches.Add(operation.Value);
+                        if (id.ValueKind != JsonValueKind.String)
+                        {
+                            return Failure(ApiOperationResolutionStatus.Invalid, "document.operation_id",
+                                "An operationId must be a string.",
+                                operation.Value.Pointer + "/operationId");
+                        }
+                        if (string.Equals(id.GetString(), operationId, StringComparison.Ordinal))
+                        {
+                            matches.Add(operation.Value);
+                        }
                     }
                 }
             }
@@ -656,19 +661,21 @@ public static partial class ApiOperationDocumentResolver
         return inherited;
     }
 
-    private static ApiOperationResolutionResult ResolvePointer(JsonElement root, IReadOnlyList<string> tokens,
+    private static ApiOperationResolutionResult ResolvePointer(string format, JsonElement root, IReadOnlyList<string> tokens,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (tokens.Count != 3 || tokens[0] != "paths" ||
-            !tokens[1].StartsWith('/') ||
+        if (tokens.Count != 3 ||
+            !(tokens[0] == "paths" && tokens[1].StartsWith('/') ||
+              format == "OpenAPI/3.1" && tokens[0] == "webhooks") ||
             !s_methods.Contains(tokens[2], StringComparer.Ordinal))
         {
             return Failure(ApiOperationResolutionStatus.Invalid, "selection.operation_pointer",
-                "An OpenAPI or Swagger operation pointer must select paths/{path}/{http-method}.");
+                "An operation pointer must select paths/{path}/{http-method} or an OpenAPI 3.1 webhook method.");
         }
 
-        if (!root.TryGetProperty("paths", out var paths) || !paths.TryGetProperty(tokens[1], out var pathItem))
+        var pathPointer = "$/" + tokens[0] + "/" + Escape(tokens[1]);
+        if (!root.TryGetProperty(tokens[0], out var paths) || !paths.TryGetProperty(tokens[1], out var pathItem))
         {
             return Failure(ApiOperationResolutionStatus.NotFound, "selection.not_found",
                 "The selected path does not exist.");
@@ -682,7 +689,7 @@ public static partial class ApiOperationDocumentResolver
         {
             return Failure(ApiOperationResolutionStatus.NotFound, "selection.not_found",
                 "The pointer does not traverse a Path Item reference.",
-                "$/paths/" + Escape(tokens[1]));
+                pathPointer);
         }
         if (!pathItem.TryGetProperty(tokens[2], out var operation))
         {
@@ -698,9 +705,9 @@ public static partial class ApiOperationDocumentResolver
         {
             return Failure(ApiOperationResolutionStatus.Invalid, "selection.not_operation",
                 "The pointer selects a reference object, not an inline Operation Object.",
-                "$/paths/" + Escape(tokens[1]) + "/" + tokens[2]);
+                pathPointer + "/" + tokens[2]);
         }
-        return Selected(operation, "$/paths/" + Escape(tokens[1]) + "/" + tokens[2]);
+        return Selected(operation, pathPointer + "/" + tokens[2]);
     }
 
     private static ApiOperationResolutionResult Selected(JsonElement operation, string pointer, Uri? documentUri = null) =>

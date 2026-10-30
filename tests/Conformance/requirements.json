@@ -112619,13 +112619,24 @@
       ],
       "text": "For OpenAPI, `operations/{operationId}` resolves an Operation Object with that `operationId` in the API described by the entry document, including referenced path items and operations. Publishers SHOULD supply `operationId`; when present it MUST be unique as specified by the native specification. An ambiguous match MUST fail.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The bounded JSON selector scans path operations and OpenAPI 3.1 webhook operations with exact case-sensitive operation IDs, resolving caller-supplied Path Item and Operation references. Duplicate matches across paths and webhooks are ambiguous; malformed operations and unavailable required references fail even after an earlier match. Webhook names, including x- names, remain native map keys. Callback operation traversal and YAML remain unsupported, so this obligation stays pending without native qualification.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.ResolvesExactOpenApiOperationIdAndAdvertisesTheFeature",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.OperationIdSelectionIsExactAndReportsMissingOperations",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.OperationIdSelectionLoadsExternalPathItemsOnlyThroughTheSuppliedResolver",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.OperationIdSelectionLoadsExternalOperationReferencesOnlyThroughTheSuppliedResolver",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenApi31SelectsNativeWebhookOperationsWithTheirDocumentProvenance",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenApi31WebhookSelectionRejectsAmbiguousMalformedAndUnavailableDefinitions",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenApi31WebhookOperationIdsFollowOnlyCallerSuppliedReferences",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.OlderFormatsDoNotAcquireOrSelectOpenApi31Webhooks"
+        ],
         "nativeEvidence": []
       }
     },

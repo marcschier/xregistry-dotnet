@@ -52,12 +52,21 @@ on `info.version`. Malformed root versions fail before dependency acquisition,
 including when selection uses a JSON Pointer.
 OpenAPI and Swagger `paths` entries must start with `/`; `x-` entries are
 specification extensions. Operation-ID selection ignores extension payloads,
-including apparent operations or references inside them. A JSON Pointer must
-select an HTTP method beneath a slash-prefixed path, not extension data.
+including apparent operations or references inside them. Under `paths`, a JSON
+Pointer must select an HTTP method beneath a slash-prefixed path, not extension data.
+OpenAPI 3.1 operation-ID selection also searches `webhooks`, including referenced
+Path Items. Webhook names are exact strings, not slash-prefixed paths; an `x-`
+name in this map is a webhook, not a Paths specification extension. Duplicate
+IDs across paths and webhooks are ambiguous. A required unavailable webhook
+reference prevents selection, even if a path operation matched first.
+An inline webhook method can be selected with `/webhooks/{name}/{http-method}`;
+JSON Pointers do not traverse Path Item or operation references. Results retain
+the native operation JSON and the referenced source URI when applicable.
 OpenAPI 3.1 documents can omit `paths` when they contain `components` or
-`webhooks`; path-operation selection then reports `NotFound`. Webhook operation
-IDs are not path operations. OpenAPI 3.0 and Swagger still require `paths`,
-and an explicitly malformed `paths` value is rejected in every supported version.
+`webhooks`. With no matching path or webhook operation, selection reports `NotFound`.
+OpenAPI 3.0 and Swagger still require `paths` and do not select webhooks. Malformed `paths`
+values fail in every supported version; malformed `webhooks` fail in 3.1.
+Callback operation selection and full OpenAPI validation remain unsupported.
 
 For `AvroProtocol/1.12.0`, `#operations/GetUser` selects the exact `GetUser`
 member of `messages`. An absent or empty `messages` object has no selectable
