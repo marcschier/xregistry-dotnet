@@ -196,6 +196,10 @@ vocabulary/source mapping. It does not supply their implementation.
   with `sparse`. Its transitive data graph cannot contain float, double or
   document shapes; recursive traversal excludes trait-definition dependencies.
   Instance uniqueness and value equality are not evaluated.
+  Private shapes reject reached data/custom-trait references from other exact
+  namespaces, including repeated references after a permitted visit. Private
+  member markings do not change target accessibility; literal values and
+  unrelated model references remain outside the selected-closure check.
   Idempotent `exists`/`notFound` declarations are mutually exclusive
   arrays of absolute IDs whose targets must occur in the operation's own errors.
   Their native hints are retained without execution or fallback to service errors.

@@ -2105,6 +2105,10 @@ public class ApiOperationReferenceTests
     [Arguments("member", "clientOptional", "null")]
     [Arguments("member", "clientOptional", "false")]
     [Arguments("member", "clientOptional", "[]")]
+    [Arguments("operation", "private", "null")]
+    [Arguments("structure", "private", "false")]
+    [Arguments("member", "private", "[]")]
+    [Arguments("definition", "private", "\"private\"")]
     [Arguments("member", "documentation", "{}")]
     [Arguments("payload", "error", "\"Client\"")]
     [Arguments("payload", "error", "\"service\"")]
@@ -3027,6 +3031,165 @@ public class ApiOperationReferenceTests
         await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
         await Assert.That(result.Diagnostic).IsNull();
         await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+    }
+
+    [Test]
+    [Arguments("example", true)]
+    [Arguments("Example", false)]
+    [Arguments("example.child", false)]
+    [Arguments("other", false)]
+    public async Task SmithyJsonPrivateTargetsRequireTheExactDeclaringNamespace(string targetNamespace, bool valid)
+    {
+        var result = ResolveSmithy("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"NAMESPACE#Input"}},
+              "NAMESPACE#Input":{"type":"structure","traits":{"smithy.api#private":{}}}}}
+            """.Replace("NAMESPACE", targetNamespace, StringComparison.Ordinal));
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.private_access");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/input");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("structure", "members/value")]
+    [Arguments("union", "members/value")]
+    [Arguments("list", "member")]
+    [Arguments("map", "key")]
+    [Arguments("map", "value")]
+    public async Task SmithyJsonPrivateAccessChecksAllReachedDataMemberKinds(string kind, string position)
+    {
+        var document = JsonNode.Parse("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"example#Input"}},
+              "example#Input":{"type":"structure","members":{"value":{"target":"example#Container"}}},
+              "other#Secret":{"type":"string","traits":{"smithy.api#private":{}}}}}
+            """)!;
+        var member = JsonNode.Parse("""{"target":"other#Secret"}""");
+        var container = new JsonObject { ["type"] = kind };
+        if (kind == "list") { container["member"] = member; }
+        else if (kind == "map")
+        {
+            container["key"] = position == "key" ? member : JsonNode.Parse("""{"target":"smithy.api#String"}""");
+            container["value"] = position == "value" ? member : JsonNode.Parse("""{"target":"smithy.api#String"}""");
+        }
+        else { container["members"] = new JsonObject { ["value"] = member }; }
+        document["shapes"]!["example#Container"] = container;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.private_access");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Container/" + position);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task SmithyJsonPrivateAccessIsCheckedAgainAfterAnAllowedReference(bool reverse)
+    {
+        var document = JsonNode.Parse("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"example#Input"}},
+              "example#Input":{"type":"structure","members":{}},
+              "example#Secret":{"type":"string","traits":{"smithy.api#private":{}}},
+              "other#Container":{"type":"structure","members":{"secret":{"target":"example#Secret"}}}}}
+            """)!;
+        var members = document["shapes"]!["example#Input"]!["members"]!.AsObject();
+        if (!reverse) { members["own"] = JsonNode.Parse("""{"target":"example#Secret"}"""); }
+        members["foreign"] = JsonNode.Parse("""{"target":"other#Container"}""");
+        if (reverse) { members["own"] = JsonNode.Parse("""{"target":"example#Secret"}"""); }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.private_access");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/other#Container/members/secret");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("example", true)]
+    [Arguments("other", false)]
+    public async Task SmithyJsonPrivateCustomTraitsRespectTheApplyingShapesNamespace(string targetNamespace, bool valid)
+    {
+        var result = ResolveSmithy("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","traits":{"NAMESPACE#Custom":{}}},
+              "NAMESPACE#Custom":{"type":"structure","traits":{"smithy.api#trait":{},"smithy.api#private":{}}}}}
+            """.Replace("NAMESPACE", targetNamespace, StringComparison.Ordinal));
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.private_access");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/other#Custom");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    public async Task SmithyJsonPrivateMemberMarkingsAndLiteralDataDoNotPrivatizeTheirTargets()
+    {
+        var document = """
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"other#Input"},
+                "traits":{"smithy.api#private":{},"example#Custom":{"target":"secret#Missing"}}},
+              "other#Input":{"type":"structure","members":{"value":{"target":"smithy.api#String","traits":{"smithy.api#private":{}}}}},
+              "example#Custom":{"type":"document","traits":{"smithy.api#trait":{}}},
+              "unused#Operation":{"type":"operation","input":{"target":"secret#Value"}},
+              "secret#Value":{"type":"structure","traits":{"smithy.api#private":{}}}}}
+            """;
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Private shape IDs are not imports."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        using var original = JsonDocument.Parse(document);
+        await Assert.That(result.Operation.GetRawText())
+            .IsEqualTo(original.RootElement.GetProperty("shapes").GetProperty("example#Get").GetRawText());
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
+    [Test]
+    [Arguments("output")]
+    [Arguments("errors")]
+    public async Task SmithyJsonPrivateAccessChecksOperationOutputAndErrorReferences(string position)
+    {
+        var document = JsonNode.Parse("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation"},
+              "other#Payload":{"type":"structure","traits":{"smithy.api#private":{},"smithy.api#error":"server"}}}}
+            """)!;
+        var reference = JsonNode.Parse("""{"target":"other#Payload"}""");
+        document["shapes"]!["example#Get"]![position] = position == "errors" ? new JsonArray(reference) : reference;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.private_access");
+        await Assert.That(result.Diagnostic.Path)
+            .IsEqualTo("$/shapes/example#Get/" + position + (position == "errors" ? "/0" : ""));
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonPrivateMemberTraitUsesTheMembersDeclaringNamespaceNotItsTargetNamespace()
+    {
+        var result = ResolveSmithy("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"other#Input"}},
+              "other#Input":{"type":"structure","members":{"value":{"target":"example#String","traits":{"example#Custom":{}}}}},
+              "example#String":{"type":"string"},
+              "example#Custom":{"type":"structure","traits":{"smithy.api#trait":{},"smithy.api#private":{}}}}}
+            """);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.private_access");
+        await Assert.That(result.Diagnostic.Path)
+            .IsEqualTo("$/shapes/other#Input/members/value/traits/example#Custom");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
     }
 
     private static string SmithyDefaultDocument(string kind, string value, bool rootDefault)

@@ -108,7 +108,8 @@ public static partial class ApiOperationDocumentResolver
     {
         private readonly Dictionary<string, JsonElement> _visited = new(StringComparer.Ordinal);
 
-        internal void Visit(string id, int depth, string? expected = null, bool error = false, bool traitDefinition = false)
+        internal void Visit(string id, int depth, string? expected = null, bool error = false, bool traitDefinition = false,
+            string? sourceId = null, string? referencePath = null)
         {
             budget.Work();
             var path = "$/shapes/" + Escape(id);
@@ -129,6 +130,14 @@ public static partial class ApiOperationDocumentResolver
                     path, "document.target_type", "A Smithy reference targets the wrong shape type.");
                 return;
             }
+            if (sourceId is not null && shape.TryGetProperty("traits", out var accessTraits) &&
+                accessTraits.ValueKind == JsonValueKind.Object && accessTraits.TryGetProperty("smithy.api#private", out _))
+            {
+                ValidationContext.Require(sourceId.AsSpan(0, sourceId.IndexOf('#'))
+                    .SequenceEqual(id.AsSpan(0, id.IndexOf('#'))),
+                    referencePath ?? path, "document.private_access",
+                    "A private Smithy shape can only be referenced from its own namespace.");
+            }
             var kind = shape.GetProperty("type").GetString();
             ValidationContext.Require(expected is null ? kind is not ("operation" or "service" or "resource") :
                 kind == expected || expected == "string" && kind == "enum",
@@ -144,7 +153,7 @@ public static partial class ApiOperationDocumentResolver
                     path, "document.error_trait", "A declared Smithy error must be a structure marked with an error trait.");
             }
             if (!_visited.TryAdd(id, shape)) { return; }
-            Traits(shape, path, depth, kind);
+            Traits(shape, path, depth, id, kind);
             switch (kind)
             {
                 case "operation":
@@ -152,7 +161,7 @@ public static partial class ApiOperationDocumentResolver
                     {
                         if (shape.TryGetProperty(name, out var target))
                         {
-                            Reference(target, path + "/" + name, depth, "structure");
+                            Reference(target, path + "/" + name, depth, id, "structure");
                         }
                     }
                     if (shape.TryGetProperty("errors", out var errors))
@@ -164,7 +173,7 @@ public static partial class ApiOperationDocumentResolver
                         {
                             Reference(target, path + "/errors/" +
                                 (index++).ToString(System.Globalization.CultureInfo.InvariantCulture),
-                                depth, "structure", error: true);
+                                depth, id, "structure", error: true);
                         }
                     }
                     break;
@@ -186,7 +195,7 @@ public static partial class ApiOperationDocumentResolver
                             ValidationContext.Require(IsSmithyShapeId("example#" + member.Name) && names.Add(member.Name),
                                 path + "/members", "document.member_name", "Smithy member names must be valid and case-insensitively unique.");
                             var memberPath = path + "/members/" + Escape(member.Name);
-                            Reference(member.Value, memberPath, depth, memberContainer: kind);
+                            Reference(member.Value, memberPath, depth, id, memberContainer: kind);
                             if (kind is "enum" or "intEnum")
                             {
                                 ValidationContext.Require(member.Value.GetProperty("target").GetString() == "smithy.api#Unit",
@@ -226,11 +235,11 @@ public static partial class ApiOperationDocumentResolver
                     }
                     break;
                 case "list":
-                    RequiredReference(shape, "member", path, depth);
+                    RequiredReference(shape, "member", path, depth, id);
                     break;
                 case "map":
-                    RequiredReference(shape, "key", path, depth, "string");
-                    RequiredReference(shape, "value", path, depth);
+                    RequiredReference(shape, "key", path, depth, id, "string");
+                    RequiredReference(shape, "value", path, depth, id);
                     break;
                 case "blob": case "boolean": case "document": case "string": case "byte": case "short":
                 case "integer": case "long": case "float": case "double": case "bigInteger":
@@ -677,15 +686,17 @@ public static partial class ApiOperationDocumentResolver
             }
         }
 
-        private void RequiredReference(JsonElement shape, string name, string path, int depth, string? expected = null)
+        private void RequiredReference(JsonElement shape, string name, string path, int depth, string sourceId,
+            string? expected = null)
         {
             ValidationContext.Require(shape.TryGetProperty(name, out var value), path + "/" + name,
                 "document.target", "The Smithy shape is missing a required member reference.");
-            Reference(value, path + "/" + name, depth, expected,
+            Reference(value, path + "/" + name, depth, sourceId, expected,
                 memberContainer: shape.GetProperty("type").GetString());
         }
 
-        private void Reference(JsonElement value, string path, int depth, string? expected = null, bool error = false,
+        private void Reference(JsonElement value, string path, int depth, string sourceId,
+            string? expected = null, bool error = false,
             string? memberContainer = null)
         {
             budget.Work();
@@ -702,11 +713,12 @@ public static partial class ApiOperationDocumentResolver
                     propertyPath, "document.reference_property",
                     "A Smithy shape reference permits only target; a member can also declare traits.");
             }
-            if (memberContainer is not null) { Traits(value, path, depth, memberContainer: memberContainer); }
-            Visit(value.GetProperty("target").GetString()!, depth + 1, expected, error);
+            if (memberContainer is not null) { Traits(value, path, depth, sourceId, memberContainer: memberContainer); }
+            Visit(value.GetProperty("target").GetString()!, depth + 1, expected, error,
+                sourceId: sourceId, referencePath: path);
         }
 
-        private void Traits(JsonElement shape, string path, int depth, string? kind = null,
+        private void Traits(JsonElement shape, string path, int depth, string sourceId, string? kind = null,
             string? memberContainer = null)
         {
             if (!shape.TryGetProperty("traits", out var traits)) { return; }
@@ -766,6 +778,7 @@ public static partial class ApiOperationDocumentResolver
                     case "smithy.api#addedDefault":
                     case "smithy.api#sparse":
                     case "smithy.api#uniqueItems":
+                    case "smithy.api#private":
                     case "smithy.api#input":
                     case "smithy.api#output":
                     case "smithy.api#readonly":
@@ -808,7 +821,7 @@ public static partial class ApiOperationDocumentResolver
                         }
                     }
                 }
-                Visit(trait.Name, depth + 1, traitDefinition: true);
+                Visit(trait.Name, depth + 1, traitDefinition: true, sourceId: sourceId, referencePath: traitPath);
             }
         }
 

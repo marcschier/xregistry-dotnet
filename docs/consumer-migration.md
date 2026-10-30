@@ -283,7 +283,7 @@ The implicit prelude support covers `Blob`, `Boolean`, `Document`, `String`,
 `PrimitiveShort`, `PrimitiveInteger`, `PrimitiveLong`, `PrimitiveFloat`,
 `PrimitiveDouble`, and the traits
 `error`, `documentation`, `required`, `clientOptional`, `addedDefault`, `sparse`,
-`uniqueItems`, `input`, `output`, `readonly`, `idempotent`, `default`, `enumValue` and `trait`
+`uniqueItems`, `private`, `input`, `output`, `readonly`, `idempotent`, `default`, `enumValue` and `trait`
 in `smithy.api`. Other required definitions
 must be supplied in the AST. These checks do not validate every Smithy shape
 constraint, trait value or selector. Full Smithy validation and model assembly
@@ -319,6 +319,15 @@ list/map members, terminates on repeated targets, and excludes applied trait
 definitions and payloads from the data graph. Unmarked lists retain those value
 kinds. This checks model eligibility, not equality or uniqueness of instances.
 Unrelated lists outside the selected closure remain unchecked.
+
+The `private` annotation requires an object value. Reached data references and
+custom-trait applications cannot target a private shape in another namespace.
+Namespace comparison is exact; a child namespace does not grant access.
+Every reference is checked, including references to an already visited target.
+A member's trait application uses its declaring shape's namespace, not the
+namespace of the member's target. A private member does not make its target
+private, and direct operation selection is not a model reference. Unrelated
+references and literal trait values remain outside this check.
 
 Reachable trait definitions require a string `selector`, when supplied, and
 restrict `structurallyExclusive` to `member` or `target`. These are property
