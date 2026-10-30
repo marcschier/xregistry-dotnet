@@ -283,7 +283,7 @@ The implicit prelude support covers `Blob`, `Boolean`, `Document`, `String`,
 `PrimitiveShort`, `PrimitiveInteger`, `PrimitiveLong`, `PrimitiveFloat`,
 `PrimitiveDouble`, and the traits
 `error`, `documentation`, `required`, `clientOptional`, `addedDefault`, `sparse`,
-`uniqueItems`, `private`, `length`, `range`, `input`, `output`, `readonly`, `idempotent`,
+`uniqueItems`, `private`, `length`, `range`, `pattern`, `input`, `output`, `readonly`, `idempotent`,
 `default`, `enumValue` and `trait`
 in `smithy.api`. Other required definitions
 must be supplied in the AST. These checks do not validate every Smithy shape
@@ -350,6 +350,15 @@ bounds. A member's range replaces its target's entire range; null member
 overrides remain valid. String-encoded bounds and range checks on special
 floating-point defaults report `Unsupported`. Instance range validation remains
 outside the selected-operation resolver.
+
+The `pattern` trait requires a string value on a string or enum root, or on a
+member targeting one. Declarations use the shared bounded ECMA-262 syntax
+checker. Malformed supported syntax reports `Invalid`; constructs outside
+that subset, including lookaround and back-references, report `Unsupported`.
+Patterns are retained without adding anchors. Non-null defaults requiring
+pattern matching also report `Unsupported`, even when the pattern appears
+simple; the resolver does not substitute .NET regular-expression semantics.
+Null member overrides need no matching.
 
 Reachable trait definitions require a string `selector`, when supplied, and
 restrict `structurallyExclusive` to `member` or `target`. These are property

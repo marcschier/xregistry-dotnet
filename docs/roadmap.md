@@ -210,6 +210,10 @@ vocabulary/source mapping. It does not supply their implementation.
   inclusive effective bounds, with member traits replacing target traits.
   Null overrides remain valid. String-encoded bounds and special floating
   defaults with ranges report unsupported; instance range checks remain open.
+  `pattern` declarations check string/enum targets and string values through
+  the shared bounded ECMA-262 syntax checker. Unsupported syntax and non-null
+  defaults requiring matching report unsupported; no anchors or .NET matching
+  semantics are substituted. Pattern matching remains open.
   Idempotent `exists`/`notFound` declarations are mutually exclusive
   arrays of absolute IDs whose targets must occur in the operation's own errors.
   Their native hints are retained without execution or fallback to service errors.

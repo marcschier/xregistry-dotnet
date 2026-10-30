@@ -682,6 +682,12 @@ public static partial class ApiOperationDocumentResolver
                 ValidationContext.Require(found, path, "document.default_value",
                     "A Smithy enum default must match a declared value.");
             }
+            if (kind is "string" or "enum" &&
+                (TryTrait(memberShape, "smithy.api#pattern", out _) || TryTrait(target, "smithy.api#pattern", out _)))
+            {
+                ValidationContext.Fail(DocumentValidationStatus.Unsupported, path, "smithy.pattern_default",
+                    "Pattern matching on Smithy defaults is not supported.");
+            }
             if (kind is "string" or "enum" or "blob" or "list" or "map")
             {
                 var hasLength = TryTrait(memberShape, "smithy.api#length", out var constraint) ||
@@ -832,6 +838,21 @@ public static partial class ApiOperationDocumentResolver
                     "Conflicting Smithy prelude traits cannot be applied to the same shape.");
                 switch (trait.Name)
                 {
+                    case "smithy.api#pattern":
+                        var patternKind = kind;
+                        if (memberContainer is not null)
+                        {
+                            var targetId = shape.GetProperty("target").GetString()!;
+                            patternKind = shapes.TryGetProperty(targetId, out var patternTarget)
+                                ? patternTarget.GetProperty("type").GetString() : SmithyPreludeKind(targetId);
+                        }
+                        ValidationContext.Require(memberContainer is not null && patternKind is null ||
+                            patternKind is "string" or "enum", traitPath, "document.trait_target",
+                            "Smithy pattern requires a string or a member targeting a string.");
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.String, traitPath,
+                            "document.trait_value", "The Smithy pattern trait requires a string value.");
+                        SchemaPattern.Validate(trait.Value.GetString()!, budget, traitPath);
+                        continue;
                     case "smithy.api#range":
                         var rangeKind = kind;
                         if (memberContainer is not null)
