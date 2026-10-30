@@ -43,13 +43,18 @@ Their source inventories,
 native binaries, reports, proofs and receipts were also checked, including
 complete managed/native case parity and rejection of managed proofs.
 This closes the artifact-retention check, not the native matrix or requirement
-qualification. The Windows x64 and Linux x64/ARM64 .NET 8 cells still fail the
-four framework JSON warning gates, while Windows ARM64/.NET 8 failed SDK setup
-before any harness ran; its isolated retry remains unresolved.
+qualification. All four .NET 8 cells fail the same four framework JSON warning
+gates. Windows ARM64 initially failed SDK setup; its isolated retry reached the
+harness and passed the other nine suites and 7,675 cases. Its retained source,
+hashes, receipts, managed parity and rejected controls were audited.
 The complete Validation suite also passed at later selector source `f72e125`
 on Windows x64 under both frameworks: 4,820 native cases and 845 methods each,
 with complete managed parity, exact hashes and rejected managed proofs.
 That selected-project evidence does not refresh the complete native matrix.
+The Models suite at `d2fafe7` also passed on Windows x64 under both frameworks:
+1,032 native cases and 336 methods each, including all canonical Media vector
+checks. Its source, artifacts, case parity and rejected controls were audited;
+provider media accuracy and receiver compatibility remain unqualified.
 Full native TUnit requirement receipts remain incomplete. All four .NET 8
 complete-suite summaries at `1bdfa6f` failed for AspNetCore, HTTP, Federation and Git
 test-host IL warnings. Their other nine suites passed, but those partial

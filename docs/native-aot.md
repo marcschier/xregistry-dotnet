@@ -150,17 +150,33 @@ under `D:\temp\xregistry-native-41133118088-<rid>-net10` for each corresponding
 RID; the Linux ARM64 run directory is `native-suites-68p2vdvt`.
 This demonstrates the managed-assembly retention rule for all thirteen suites.
 
-At the same source, the downloaded Windows x64 and Linux x64/ARM64 .NET 8 cells
+At the same source, the downloaded Windows/Linux x64 and ARM64 .NET 8 cells
 each passed nine suites and 7,675 cases, including all 4,563 Validation cases.
 Their retained managed controls, proofs and receipts match their recorded hashes.
 AspNetCore, HTTP, Federation and Git still fail publication with IL2026/IL3050 diagnostics from
-`JsonOptions.CreateDefaultTypeResolver`. The Windows ARM64/.NET 8 job failed
-earlier, during SDK installation, with an internal CLR error; no suite harness
-ran in that job. An isolated retry was accepted after the initial workflow
-attempt completed; its result remains unresolved at this inspection checkpoint.
+`JsonOptions.CreateDefaultTypeResolver`. The first Windows ARM64/.NET 8 job
+failed during SDK installation with an internal CLR error, before any harness
+ran. Its isolated retry completed all suite publications and has the same nine
+passed suites and four JSON-host failures as the other .NET 8 cells. The retry's
+retained artifacts were audited for exact binary/control/report/proof/receipt
+hashes, complete case parity, rejected managed proofs, unchanged source and the
+two specific IL diagnostics in each failed publication. Its evidence is retained
+at `D:\temp\xregistry-native-41133118088-win-arm64-net8\native-suites-fa8tjf8s`.
 These results belong to `e502e5d`, before the subsequent scoped-selector
 changes. They remain development evidence with `releaseQualified: false`;
 no per-requirement native qualification has been promoted.
+
+The Models suite at `d2fafe7e95b3716d568efbe0c8630cb0ab619d85` passed on
+Windows x64 under both frameworks: 1,032 cases and 336 methods per framework.
+All four canonical Media validation methods ran, including the byte/hash-checked
+embedded publisher vectors and model. Complete native/managed inventories,
+binary/control/report/proof/receipt hashes, regenerated receipts, unchanged
+source and rejection of managed proofs were verified; neither publication
+emitted IL diagnostics. Evidence is retained at
+`D:\temp\xregistry-models-d2fafe7-net8\native-suites-3j4_btqw` and
+`D:\temp\xregistry-models-d2fafe7-net10\native-suites-t00sbyja`.
+These selected-project runs do not establish provider media accuracy, receiver
+compatibility or full model-type coverage.
 
 The later selector source at `f72e125cbe71fd82a03d45cc75b55777c83a13df`
 passed the complete Validation suite on Windows x64 under both .NET 8 and
