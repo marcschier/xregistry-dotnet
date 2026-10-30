@@ -2374,17 +2374,21 @@ public static partial class ApiOperationDocumentResolver
                         SkipWhitespace();
                         if (position == text.Length || text[position++] != '|') { return null; }
                         SkipWhitespace();
-                        var start = position;
-                        while (position < text.Length && (char.IsAsciiLetterOrDigit(text[position]) ||
-                            text[position] is '_' or '.' or '#'))
-                        {
-                            budget.Work(path: path);
-                            position++;
-                        }
-                        var traitId = text[start..position];
+                        var traitId = AttributeName();
+                        if (traitId is null) { return null; }
                         if (!traitId.Contains('#', StringComparison.Ordinal)) { traitId = "smithy.api#" + traitId; }
                         if (!IsSmithyShapeId(traitId)) { return null; }
                         SkipWhitespace();
+                        List<string>? properties = null;
+                        while (position < text.Length && text[position] == '|')
+                        {
+                            position++;
+                            SkipWhitespace();
+                            var property = AttributeName();
+                            if (property is null) { return null; }
+                            (properties ??= []).Add(property);
+                            SkipWhitespace();
+                        }
                         var expectedPresence = true;
                         if (position < text.Length && text[position] == '?')
                         {
@@ -2401,18 +2405,18 @@ public static partial class ApiOperationDocumentResolver
                         {
                             return null;
                         }
-                        current = false;
+                        var node = default(JsonElement);
                         if (shape.TryGetProperty("traits", out var traits))
                         {
                             ValidationContext.Require(traits.ValueKind == JsonValueKind.Object,
                                 path, "document.traits", "Smithy traits must be an object.");
-                            foreach (var trait in traits.EnumerateObject())
-                            {
-                                budget.Work(trait.Name.Length + 1L, path);
-                                if (trait.Name == traitId) { current = true; break; }
-                            }
+                            node = Property(traits, traitId);
                         }
-                        current = current.Value == expectedPresence;
+                        if (properties is not null)
+                        {
+                            foreach (var property in properties) { node = Property(node, property); }
+                        }
+                        current = (node.ValueKind != JsonValueKind.Undefined) == expectedPresence;
                     }
                     else if (text[position] == ':')
                     {
@@ -2459,6 +2463,53 @@ public static partial class ApiOperationDocumentResolver
                     position++;
                 }
                 return text[start..position];
+            }
+
+            string? AttributeName()
+            {
+                if (position == text.Length) { return null; }
+                if (text[position] is '\'' or '"')
+                {
+                    var quote = text[position++];
+                    var start = position;
+                    while (position < text.Length && text[position] != quote)
+                    {
+                        budget.Work(path: path);
+                        if (text[position] < ' ' || text[position] == '\\') { return null; }
+                        position++;
+                    }
+                    if (position == text.Length || position == start) { return null; }
+                    var name = text[start..position];
+                    position++;
+                    return name;
+                }
+                else
+                {
+                    var start = position;
+                    while (position < text.Length && (char.IsAsciiLetterOrDigit(text[position]) ||
+                        text[position] is '_' or '.' or '#'))
+                    {
+                        budget.Work(path: path);
+                        position++;
+                    }
+                    var name = text[start..position];
+                    return IsSmithyShapeId(name.Contains('#', StringComparison.Ordinal) ? name : "smithy.api#" + name)
+                        ? name : null;
+                }
+            }
+
+            JsonElement Property(JsonElement node, string name)
+            {
+                budget.Work(path: path);
+                if (node.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var property in node.EnumerateObject())
+                    {
+                        budget.Work(property.Name.Length + 1L, path);
+                        if (property.Name == name) { return property.Value; }
+                    }
+                }
+                return default;
             }
 
             void SkipWhitespace()

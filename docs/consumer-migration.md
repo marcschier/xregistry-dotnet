@@ -410,6 +410,14 @@ traits, respectively. A present null, false or empty value still exists. These
 checks use the selected shape's own traits and compose with the supported
 Boolean functions. Other operand forms, value lists and comparison modifiers
 remain unsupported.
+Literal object properties can be selected with additional `|name` segments.
+Trait names and property names may use single or double quotes; quoted names
+cannot be empty or contain backslashes or control characters below U+0020.
+Names match exactly without Unicode normalization or JSON Pointer decoding.
+Missing properties and descent through scalars or arrays yield absence; a
+property containing null still exists. Unquoted numeric keys, projections and
+function properties remain unsupported. Property scans consume the shared work
+budget.
 A member is not matched as its target or container type. An omitted selector
 permits every shape; each reached application is checked independently.
 Type mismatches are invalid. Other selector expressions report `Unsupported`

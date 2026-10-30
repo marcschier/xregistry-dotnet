@@ -227,6 +227,11 @@ vocabulary/source mapping. It does not supply their implementation.
   Trait `?= true`/`?= false` predicates test presence/absence independently of
   payload truthiness, including on selected reference members. Other operand
   forms, value lists and comparison modifiers remain unsupported.
+  Literal nested object paths and quoted trait/property names use exact
+  matching. Missing properties and descent through scalars or arrays yield
+  absence; present nulls still exist. Property scans consume the shared work
+  budget. Unquoted numeric path tokens, projections and function properties remain
+  unsupported.
   Each application is checked independently. Type mismatches are invalid;
   unsupported grammar reports `Unsupported` at the application without changing
   unapplied declaration checks or masking earlier missing schema dependencies.
