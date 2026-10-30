@@ -451,6 +451,11 @@ An omitted or empty traits object has a present count of zero. Container and
 target traits are not inherited. Counting uses the same work budget as node
 object lengths; malformed traits objects remain invalid, and unknown implicit
 prelude trait sets remain unsupported.
+The bare `[trait]` attribute exposes the trait collection itself. It is present
+even when the shape omits its traits object. The collection compares as an
+empty string with string comparators and has no numeric representation;
+`[trait|name]` still tests an individual trait. Malformed traits objects remain
+invalid, and unmaterialized implicit prelude shapes remain unsupported.
 A member is not matched as its target or container type. An omitted selector
 permits every shape; each reached application is checked independently.
 Type mismatches are invalid. Other selector expressions report `Unsupported`

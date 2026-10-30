@@ -2372,9 +2372,9 @@ public static partial class ApiOperationDocumentResolver
                         SkipWhitespace();
                         if (Identifier() != "trait") { return null; }
                         SkipWhitespace();
-                        if (position == text.Length || text[position++] != '|') { return null; }
-                        SkipWhitespace();
-                        var countTraits = position < text.Length && text[position] == '(';
+                        var traitCollection = position == text.Length || text[position] != '|';
+                        if (!traitCollection) { position++; SkipWhitespace(); }
+                        var countTraits = !traitCollection && position < text.Length && text[position] == '(';
                         string? traitId = null;
                         if (countTraits)
                         {
@@ -2384,7 +2384,7 @@ public static partial class ApiOperationDocumentResolver
                             SkipWhitespace();
                             if (position == text.Length || text[position++] != ')') { return null; }
                         }
-                        else
+                        else if (!traitCollection)
                         {
                             traitId = AttributeName();
                             if (traitId is null) { return null; }
@@ -2486,7 +2486,7 @@ public static partial class ApiOperationDocumentResolver
                             ValidationContext.Require(traits.ValueKind == JsonValueKind.Object,
                                 path, "document.traits", "Smithy traits must be an object.");
                             if (countTraits) { nodeLength = ObjectLength(traits); }
-                            else { node = Property(traits, traitId!); }
+                            else if (!traitCollection) { node = Property(traits, traitId!); }
                         }
                         if (properties is not null)
                         {
@@ -2515,7 +2515,7 @@ public static partial class ApiOperationDocumentResolver
                         {
                             if (node.ValueKind == JsonValueKind.Number) { return null; }
                             current = false;
-                            if (nodeLength is not null || node.ValueKind != JsonValueKind.Undefined)
+                            if (traitCollection || nodeLength is not null || node.ValueKind != JsonValueKind.Undefined)
                             {
                                 var value = nodeLength is { } countValue
                                     ? countValue.ToString(System.Globalization.CultureInfo.InvariantCulture)
@@ -2542,7 +2542,7 @@ public static partial class ApiOperationDocumentResolver
                         }
                         else if (numericOperands is null)
                         {
-                            current = nodeLength is not null || node.ValueKind != JsonValueKind.Undefined
+                            current = traitCollection || nodeLength is not null || node.ValueKind != JsonValueKind.Undefined
                                 ? acceptsPresent : acceptsAbsent;
                         }
                         else

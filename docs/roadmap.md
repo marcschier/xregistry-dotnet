@@ -249,6 +249,9 @@ vocabulary/source mapping. It does not supply their implementation.
   a present zero when its traits object is omitted or empty. Payload truthiness
   does not affect the count. Malformed traits objects remain invalid; implicit
   prelude trait counts remain unsupported. Counting consumes the work budget.
+  Bare `[trait]` exposes a present trait collection even when its object is
+  omitted. The collection compares as an empty string and has no numeric
+  representation. Named trait lookups retain their separate presence rules.
   String trait/node predicates support ordinal `=`, `!=`, `^=`, `$=` and `*=`
   with operand alternatives. Booleans use their lowercase text; present nulls
   and aggregates compare as empty strings, while missing attributes never
