@@ -184,7 +184,7 @@ public static partial class ApiOperationDocumentResolver
     private sealed class SmithyClosure(JsonElement shapes, ValidationContext budget)
     {
         private readonly Dictionary<string, JsonElement> _visited = new(StringComparer.Ordinal);
-        private readonly List<(string Id, JsonElement Value, string Path)> _traitNodes = [];
+        private readonly List<(string Id, JsonElement Value, string Path, string Kind)> _traitNodes = [];
 
         internal void Visit(string id, int depth, string? expected = null, bool error = false, bool traitDefinition = false,
             string? sourceId = null, string? referencePath = null)
@@ -1956,14 +1956,29 @@ public static partial class ApiOperationDocumentResolver
                     }
                 }
                 Visit(trait.Name, depth + 1, traitDefinition: true, sourceId: sourceId, referencePath: traitPath);
-                _traitNodes.Add((trait.Name, trait.Value, traitPath));
+                _traitNodes.Add((trait.Name, trait.Value, traitPath, memberContainer is null ? kind! : "member"));
             }
         }
 
         internal void ValidateTraitNodes()
         {
-            foreach (var (id, value, path) in _traitNodes)
+            foreach (var (id, value, path, kind) in _traitNodes)
             {
+                var definition = shapes.GetProperty(id);
+                if (TryTrait(definition, "smithy.api#trait", out var marker) &&
+                    marker.TryGetProperty("selector", out var selector))
+                {
+                    var text = selector.GetString()!;
+                    budget.Work(text.Length, path);
+                    var matches = MatchSmithySelector(text, kind, path);
+                    if (matches is null)
+                    {
+                        ValidationContext.Fail(DocumentValidationStatus.Unsupported, path, "smithy.trait_selector",
+                            "This custom Smithy trait requires unsupported selector evaluation.");
+                    }
+                    ValidationContext.Require(matches.Value, path, "document.trait_selector_target",
+                        "A custom Smithy trait must be applied to a shape matching its selector.");
+                }
                 ValidateTraitNode(id, value, path, 0);
             }
         }
@@ -2309,7 +2324,7 @@ public static partial class ApiOperationDocumentResolver
             if (found && !wildcard)
             {
                 var kind = member is not null ? "member" : implicitKind ?? target.GetProperty("type").GetString()!;
-                var matches = MatchSmithyReferenceSelector(selectorText, kind, path);
+                var matches = MatchSmithySelector(selectorText, kind, path);
                 if (matches is null)
                 {
                     ValidationContext.Fail(DocumentValidationStatus.Unsupported, path, "smithy.id_ref_selector",
@@ -2320,7 +2335,7 @@ public static partial class ApiOperationDocumentResolver
             }
         }
 
-        private bool? MatchSmithyReferenceSelector(string text, string kind, string path)
+        private bool? MatchSmithySelector(string text, string kind, string path)
         {
             var position = 0;
             var result = Sequence(0);
@@ -2331,7 +2346,7 @@ public static partial class ApiOperationDocumentResolver
                 if (depth > Capabilities.MaxReferenceDepth)
                 {
                     ValidationContext.Fail(DocumentValidationStatus.Indeterminate, path, "limit.reference_depth",
-                        "The Smithy reference selector nesting limit was exceeded.");
+                        "The Smithy selector nesting limit was exceeded.");
                 }
                 var matched = true;
                 var count = 0;

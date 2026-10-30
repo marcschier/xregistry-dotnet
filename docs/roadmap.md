@@ -219,6 +219,11 @@ vocabulary/source mapping. It does not supply their implementation.
   schemas remain unvalidated.
   Custom trait applications now check scalar node kinds, base64, exact numeric
   type bounds and supported string timestamps after schema-closure validation.
+  Their application sites also check type-token selectors and supported
+  sequence/`:test`/`:not` compositions against the actual root or member shape.
+  Each application is checked independently. Type mismatches are invalid;
+  unsupported grammar reports `Unsupported` at the application without changing
+  unapplied declaration checks or masking earlier missing schema dependencies.
   Numeric timestamps share the exact default epoch range and millisecond
   resolution checks, including nested implicit prelude targets.
   Recursive list/map values, sparse nulls, required/declared structure members

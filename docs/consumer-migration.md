@@ -397,8 +397,14 @@ behavior or modifying default validation. Diagnostics do not include sensitive
 default values.
 
 Reachable trait definitions require a string `selector`, when supplied, and
-restrict `structurallyExclusive` to `member` or `target`. These are property
-checks; general selector evaluation remains open.
+restrict `structurallyExclusive` to `member` or `target`. After schema-closure
+checks, custom applications evaluate type-token selectors and their supported
+sequence/`:test`/`:not` compositions against the actual root or member shape.
+A member is not matched as its target or container type. An omitted selector
+permits every shape; each reached application is checked independently.
+Type mismatches are invalid. Other selector expressions report `Unsupported`
+at the application, while unapplied definitions retain declaration-only checks.
+General selector evaluation remains open.
 
 After schema-closure checks, each custom trait application is checked against
 its declared node types. Scalar checks cover Boolean/string values, base64
