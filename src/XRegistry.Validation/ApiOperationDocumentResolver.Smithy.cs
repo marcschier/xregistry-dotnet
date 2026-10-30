@@ -2444,10 +2444,31 @@ public static partial class ApiOperationDocumentResolver
                                     while (true)
                                     {
                                         SkipWhitespace();
-                                        var expected = AttributeName();
-                                        if (expected is not ("true" or "false")) { return null; }
-                                        acceptsPresent |= expected == "true";
-                                        acceptsAbsent |= expected == "false";
+                                        List<string> expectedValues = [];
+                                        if (scoped && position < text.Length && text[position] == '@')
+                                        {
+                                            var operands = ContextValues(evaluateAssertion, context, contexts is not null);
+                                            if (operands is null) { return null; }
+                                            foreach (var operand in operands)
+                                            {
+                                                budget.Work(path: path);
+                                                var expected = AttributeText(operand);
+                                                if (expected is null) { return null; }
+                                                expectedValues.Add(expected);
+                                            }
+                                        }
+                                        else
+                                        {
+                                            var expected = AttributeName();
+                                            if (expected is not ("true" or "false")) { return null; }
+                                            expectedValues.Add(expected);
+                                        }
+                                        foreach (var expected in expectedValues)
+                                        {
+                                            budget.Work(expected.Length + 1L, path);
+                                            acceptsPresent |= expected == "true";
+                                            acceptsAbsent |= expected == "false";
+                                        }
                                         SkipWhitespace();
                                         if (position == text.Length || text[position] != ',') { break; }
                                         position++;

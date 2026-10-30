@@ -14031,7 +14031,7 @@ public class ApiOperationReferenceTests
     [Arguments("[@: a = @{id|(keys)}]")]
     [Arguments("[@: a = @{trait|example#Custom|(first)}]")]
     [Arguments("[@: a = @{id},]")]
-    [Arguments("[@: a ?= @{id}]")]
+    [Arguments("[@: a ?= @{id|}]")]
     [Arguments("[@: @{id} {=} @{id}]")]
     [Arguments("[id = @{id}]")]
     public async Task SmithyJsonScopedContextOperandsRejectMalformedAndUnsupportedPaths(string selector)
@@ -14361,6 +14361,141 @@ public class ApiOperationReferenceTests
             await Assert.That(result.Diagnostic!.Code).IsEqualTo("limit.reference_depth");
             await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
         }
+    }
+
+    [Test]
+    [Arguments("""{"value":null,"expected":true}""", "[@: @{trait|example#Custom|value} ?= @{trait|example#Custom|expected}]", true)]
+    [Arguments("""{"value":false,"expected":"true"}""", "[@: @{trait|example#Custom|value} ?= @{trait|example#Custom|expected}]", true)]
+    [Arguments("""{"value":[],"expected":false}""", "[@trait|example#Custom: @{value} ?= @{expected}]", false)]
+    [Arguments("""{"expected":false}""", "[@trait|example#Custom: @{value} ?= @{expected}]", true)]
+    [Arguments("""{"expected":"false"}""", "[@trait|example#Custom: @{value} ?= @{expected}]", true)]
+    [Arguments("""{"expected":true}""", "[@trait|example#Custom: @{value} ?= @{expected}]", false)]
+    [Arguments("""{"value":{},"expected":null}""", "[@trait|example#Custom: @{value} ?= @{expected}]", false)]
+    [Arguments("""{"value":"x","expected":"TRUE"}""", "[@trait|example#Custom: @{value} ?= @{expected}]", false)]
+    [Arguments("""{"value":"x","expected":"other"}""", "[@trait|example#Custom: @{value} ?= @{expected},true]", true)]
+    [Arguments("""{"value":"x"}""", "[@trait|example#Custom: @{value} ?= @{expected}]", false)]
+    [Arguments("{}", "[@trait|example#Custom: @{value} ?= @{expected}]", false)]
+    [Arguments("""{"value":0,"expected":[false,true]}""", "[@trait|example#Custom: @{value} ?= @{expected|(values)}]", true)]
+    [Arguments("""{"expected":[true,false]}""", "[@trait|example#Custom: @{value} ?= true,@{expected|(values)}]", true)]
+    [Arguments("""{"value":[],"expected":[]}""", "[@trait|example#Custom: @{value|(values)} ?= @{expected|(values)}]", false)]
+    [Arguments("""{"value":[],"expected":[false]}""", "[@trait|example#Custom: @{value|(values)} ?= @{expected|(values)}]", true)]
+    [Arguments("""{"value":[null],"expected":[true]}""", "[@trait|example#Custom: @{value|(values)} ?= @{expected|(values)}]", true)]
+    [Arguments("""{"value":[null],"expected":[false]}""", "[@trait|example#Custom: @{value|(values)} ?= @{expected|(values)}]", false)]
+    [Arguments("""[{"value":1,"expected":false},{"expected":true}]""", "[@trait|example#Custom|(values): @{value} ?= @{expected}]", false)]
+    [Arguments("""[{"value":1,"expected":false},{"expected":false}]""", "[@trait|example#Custom|(values): @{value} ?= @{expected}]", true)]
+    [Arguments("[]", "[@trait|example#Custom|(values): true ?= true,@{expected}]", false)]
+    public async Task SmithyJsonScopedPresenceContextsCompareExistenceWithBooleanTextAlternatives(
+        string json, string selector, bool matches)
+    {
+        var document = SmithyCustomNodeDocument("document", json);
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!["selector"] = selector;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(matches ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (matches)
+        {
+            await Assert.That(result.Diagnostic).IsNull();
+            await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_selector_target");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("example#Target", "service", "[@: @{service|id} ?= true,@{id|missing}]")]
+    [Arguments("example#Target", "service", "[@service: @{id|member} ?= @{id|missing},false]")]
+    [Arguments("example#Target$VALUE", "enum", "[@: @{id|member} ?= @{id|missing},true]")]
+    [Arguments("smithy.api#String", "string", "[@: @{id|member} ?= @{id|missing},false]")]
+    public async Task SmithyJsonScopedPresenceContextsRetainReferencedServiceMemberAndPreludeIdentity(
+        string identity, string kind, string selector)
+    {
+        var document = SmithyIdRefTraitDocument(identity, "{}");
+        document["shapes"]!["example#Target"] = SmithyIdRefTarget(kind);
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#idRef"]!["selector"] = selector;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+    }
+
+    [Test]
+    [Arguments("""{"expected":[true,1]}""", false)]
+    [Arguments("""{"expected":[false,1]}""", false)]
+    [Arguments("""{"expected":[true,1]}""", true)]
+    [Arguments("""{"expected":[false,1]}""", true)]
+    public async Task SmithyJsonScopedPresenceContextsCheckAllRightValuesEvenWhenLeftIsAbsentUnlessOnlyParsing(
+        string json, bool parseOnly)
+    {
+        var document = SmithyCustomNodeDocument("document", json);
+        var selector = "[@trait|example#Custom: @{missing} ?= false,@{expected|(values)}]";
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!["selector"] =
+            parseOnly ? ":not(:future(" + selector + "))" : selector;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(parseOnly ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Unsupported);
+        if (parseOnly) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("smithy.trait_selector");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("[@: @{id} ?= @{id|}]")]
+    [Arguments("[@: @{id} ?= @{id},]")]
+    [Arguments("[@: @{id} ?= @{id},@{}]")]
+    [Arguments("[@: @{id} ?= @{id} ii]")]
+    [Arguments("[@: @{id} ?= @{var|x}]")]
+    [Arguments("[@trait|missing: @{value} ?= @{expected|}]")]
+    public async Task SmithyJsonScopedPresenceContextsParseEveryAlternativeAndAbsentScope(string selector)
+    {
+        var document = SmithyCustomNodeDocument("document", "{}");
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!["selector"] = ":is(*," + selector + ")";
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Unsupported);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("smithy.trait_selector");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task SmithyJsonScopedPresenceContextsValidateAccessedServiceVersionUnlessOnlyParsing(bool parseOnly)
+    {
+        var document = SmithyIdRefTraitDocument("example#Target", "{}");
+        document["shapes"]!["example#Target"] = new JsonObject { ["type"] = "service", ["version"] = 1 };
+        var selector = "[@: @{id} ?= true,@{service|version}]";
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#idRef"]!["selector"] =
+            parseOnly ? ":not(:future(" + selector + "))" : selector;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(parseOnly ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (parseOnly) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.service_version");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    public async Task SmithyJsonScopedPresenceContextsChargeRepeatedTextAlternativeWork()
+    {
+        var document = SmithyCustomNodeDocument("document", "{}");
+        document["shapes"]!["example#Get"]!["traits"]!["example#Custom"]!["expected"] = new string('x', 100_000);
+        const string assertion = "true ?= @{expected}";
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!["selector"] =
+            "[@trait|example#Custom: " + assertion + "]";
+        var single = ResolveSmithy(document.ToJsonString());
+        await Assert.That(single.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(single.Diagnostic!.Code).IsEqualTo("document.trait_selector_target");
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!["selector"] =
+            "[@trait|example#Custom: " + string.Join(" && ", Enumerable.Repeat(assertion, 100)) + "]";
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("limit.work");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
     }
 
     private static JsonNode SmithyIdRefTarget(string kind)

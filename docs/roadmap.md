@@ -308,8 +308,12 @@ vocabulary/source mapping. It does not supply their implementation.
   `!=`; absent values produce no pairs. Both sides share attribute paths and
   numeric limits, and every right-hand value is checked even after a match or
   against an absent left side. Unknown functions parse the paths without
-  accessing their values. Right-hand contexts for `?=` and projection set
-  operators remain unsupported.
+  accessing their values. Presence comparisons accept right-hand contexts mixed
+  with literal Boolean alternatives. Exact `true`/`false` text tests presence/
+  absence; other text and empty right projections do not match. All supplied
+  context values are checked after a match and against an absent left side.
+  Numeric JSON rendering and the presence comparator's `i` modifier remain
+  unsupported, as do projection set operators.
   Named scopes resolve one attribute and use relative context paths on both
   sides of comparisons. Projected scopes require one flattened element to
   satisfy every assertion; assertions cannot combine different elements.

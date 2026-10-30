@@ -546,8 +546,14 @@ alternatives after a match and values compared against an absent left side.
 Numeric JSON values remain unsupported in string comparisons; numeric
 comparisons retain exact decimal values and numeric limits on both sides.
 Unknown functions parse context paths without accessing their values.
-Right-hand context expressions for `?=` and projection set operators remain
-unsupported.
+Presence comparisons also accept right-hand context paths and literal Boolean
+alternatives. Exact text `true` tests for presence, and `false` tests for absence;
+other context text does not match. A missing right value or empty right
+projection supplies no alternatives, so it cannot make an absence check match.
+Every supplied context value is checked, even after a matching Boolean
+alternative or when the left side is absent. Numeric JSON rendering remains
+unsupported, and the ASCII `i` modifier remains limited to ordinary string
+comparisons. Projection set operators remain unsupported.
 Named scopes resolve an attribute once, then evaluate relative context paths
 against that value; for example, `[@trait|example#Custom: @{min} < @{max}]`.
 This also applies to the `id` and `service` attributes and trait-key identities.
