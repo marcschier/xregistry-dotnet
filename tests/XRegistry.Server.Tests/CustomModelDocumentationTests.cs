@@ -58,12 +58,12 @@ public class CustomModelDocumentationTests
         using var content = stored.Document!.OpenRead();
         using var copy = new MemoryStream();
         await content.CopyToAsync(copy);
-        await Assert.That(copy.ToArray()).IsEquivalentTo(bytes);
+        await Assert.That(copy.ToArray().SequenceEqual(bytes)).IsTrue();
         var version = await Send(engine, RegistryAction.Read, "/proxygroups/github/proxies/api/versions/1");
         using var versionContent = version.Document!.OpenRead();
         using var versionCopy = new MemoryStream();
         await versionContent.CopyToAsync(versionCopy);
-        await Assert.That(versionCopy.ToArray()).IsEquivalentTo(bytes);
+        await Assert.That(versionCopy.ToArray().SequenceEqual(bytes)).IsTrue();
 
         var policy = await Send(engine, RegistryAction.Replace, "/proxygroups/github/policies/default",
             """{"mode":"allow"}""");
