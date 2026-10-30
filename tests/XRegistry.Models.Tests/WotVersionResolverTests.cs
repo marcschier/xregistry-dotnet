@@ -318,6 +318,159 @@ public class WotVersionResolverTests
         await Assert.That(selected.VersionId).IsEqualTo("0.0.0-10");
     }
 
+    [Test]
+    [Arguments("")]
+    [Arguments("1.0")]
+    [Arguments("01.2.3")]
+    [Arguments("1.0.0+build")]
+    [Arguments("0.0.0-1")]
+    [Arguments(">=1.0.0")]
+    [Arguments("\u0661.0.0")]
+    [Arguments("1.0.0-01")]
+    [Arguments("1.0.0-")]
+    public async Task InvalidExplicitFloorReportsInvalidVersion(string floor)
+    {
+        var failure = await Assert.That(() => WotVersionResolver.Resolve(Resource(("1.0.0", "sha256:a")),
+            Request(WotReferenceTargetKind.ThingModel, WotReferenceOperator.ThingModel,
+                minimumVersion: floor, minimumVersionKind: WotMinimumVersionKind.ThingModel)))
+            .Throws<RegistryException>() ?? throw new InvalidOperationException("Expected an invalid-version diagnostic.");
+
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo("invalid-version");
+    }
+
+    [Test]
+    public async Task ZeroNumericPrereleaseIsNotAPositiveGeneratedFloor()
+    {
+        var selected = WotVersionResolver.Resolve(Resource(("0.0.0-1", "sha256:a")),
+            Request(WotReferenceTargetKind.ThingModel, WotReferenceOperator.ThingModel,
+                minimumVersion: "0.0.0-0", minimumVersionKind: WotMinimumVersionKind.ThingModel));
+
+        await Assert.That(selected.VersionId).IsEqualTo("0.0.0-1");
+    }
+
+    [Test]
+    [Arguments(127)]
+    [Arguments(128)]
+    [Arguments(129)]
+    public async Task FloorLengthIncludesTheCoreIdBoundary(int length)
+    {
+        var floor = "1.0.0-" + new string('a', length - 6);
+        var resource = Resource(("1.0.0", "sha256:a"));
+        var request = Request(WotReferenceTargetKind.ThingModel, WotReferenceOperator.ThingModel,
+            minimumVersion: floor, minimumVersionKind: WotMinimumVersionKind.ThingModel);
+        if (length <= 128)
+        {
+            var selected = WotVersionResolver.Resolve(resource, request);
+            await Assert.That(selected.VersionId).IsEqualTo("1.0.0");
+        }
+        else
+        {
+            var failure = await Assert.That(() => WotVersionResolver.Resolve(resource, request))
+                .Throws<RegistryException>() ?? throw new InvalidOperationException("Expected an overlong floor failure.");
+            await Assert.That(failure.Diagnostic.Code).IsEqualTo("invalid-version");
+        }
+    }
+
+    [Test]
+    [Arguments("not-semver")]
+    [Arguments("1.2.3+build")]
+    [Arguments("0.0.0-1")]
+    public async Task InvalidImplicitTypeLinkFloorReportsInvalidVersion(string modelVersion)
+    {
+        var failure = await Assert.That(() => WotVersionResolver.Resolve(Resource(("1.0.0", "sha256:a")),
+            Request(WotReferenceTargetKind.ThingModel, WotReferenceOperator.ThingModelTypeLink,
+                referencingThingDescriptionModelVersion: modelVersion)))
+            .Throws<RegistryException>() ?? throw new InvalidOperationException("Expected an invalid implicit-floor failure.");
+
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo("invalid-version");
+    }
+
+    [Test]
+    [Arguments(WotReferenceTargetKind.ThingModel, WotReferenceOperator.ThingModel, WotMinimumVersionKind.ThingDescription)]
+    [Arguments(WotReferenceTargetKind.ThingDescription, WotReferenceOperator.ThingDescription, WotMinimumVersionKind.ThingModel)]
+    public async Task ExplicitFloorTermMustMatchTheTargetKind(WotReferenceTargetKind kind,
+        WotReferenceOperator operation, WotMinimumVersionKind floorKind)
+    {
+        var failure = await Assert.That(() => WotVersionResolver.Resolve(Resource(kind, ("1.2.0", "sha256:a")),
+            Request(kind, operation, minimumVersion: "1.0.0", minimumVersionKind: floorKind)))
+            .Throws<RegistryException>() ?? throw new InvalidOperationException("Expected an invalid-floor diagnostic.");
+
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo("invalid-floor");
+    }
+
+    [Test]
+    [Arguments("1.3.0", "1.1.0")]
+    [Arguments("1.1.0", "1.3.0")]
+    public async Task StickyTypeLinkEnforcesWhicheverFloorIsGreater(string explicitFloor, string implicitFloor)
+    {
+        var resource = ResourceWithDefault(WotReferenceTargetKind.ThingModel, "1.2.0", true,
+            ("1.2.0", "sha256:a"), ("1.4.0", "sha256:b"));
+        var failure = await Assert.That(() => WotVersionResolver.Resolve(resource,
+            Request(WotReferenceTargetKind.ThingModel, WotReferenceOperator.ThingModelTypeLink,
+                minimumVersion: explicitFloor, minimumVersionKind: WotMinimumVersionKind.ThingModel,
+                referencingThingDescriptionModelVersion: implicitFloor)))
+            .Throws<RegistryException>() ?? throw new InvalidOperationException("Expected the sticky choice to fail.");
+
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo("unsatisfied");
+    }
+
+    [Test]
+    [Arguments(null, "1.3.0")]
+    [Arguments("1.3.0", null)]
+    public async Task StickyTypeLinkEnforcesTheOnlySuppliedFloor(string? explicitFloor, string? implicitFloor)
+    {
+        var resource = ResourceWithDefault(WotReferenceTargetKind.ThingModel, "1.2.0", true,
+            ("1.2.0", "sha256:a"), ("1.4.0", "sha256:b"));
+        var failure = await Assert.That(() => WotVersionResolver.Resolve(resource,
+            Request(WotReferenceTargetKind.ThingModel, WotReferenceOperator.ThingModelTypeLink,
+                minimumVersion: explicitFloor, minimumVersionKind: WotMinimumVersionKind.ThingModel,
+                referencingThingDescriptionModelVersion: implicitFloor)))
+            .Throws<RegistryException>() ?? throw new InvalidOperationException("Expected the sole floor to apply.");
+
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo("unsatisfied");
+    }
+
+    [Test]
+    public async Task MultipleTypeLinksWithoutModelVersionDoNotRequireFloors()
+    {
+        var selected = WotVersionResolver.Resolve(Resource(("1.0.0", "sha256:a"), ("1.4.0", "sha256:b")),
+            Request(WotReferenceTargetKind.ThingModel, WotReferenceOperator.ThingModelTypeLink,
+                thingModelTypeLinkCount: 2, allThingModelTypeLinksHaveMinimumVersion: false));
+
+        await Assert.That(selected.VersionId).IsEqualTo("1.4.0");
+    }
+
+    [Test]
+    public async Task MultipleTypeLinksWithoutModelVersionStillEnforceTheirExplicitFloor()
+    {
+        var resource = Resource(("1.0.0", "sha256:a"), ("1.4.0", "sha256:b"));
+        var request = Request(WotReferenceTargetKind.ThingModel, WotReferenceOperator.ThingModelTypeLink,
+            minimumVersion: "1.2.0", minimumVersionKind: WotMinimumVersionKind.ThingModel,
+            thingModelTypeLinkCount: 2, allThingModelTypeLinksHaveMinimumVersion: false);
+        var selected = WotVersionResolver.Resolve(resource, request);
+        var failure = await Assert.That(() =>
+                WotVersionResolver.Resolve(resource, request with { MinimumVersion = "1.5.0" }))
+            .Throws<RegistryException>() ?? throw new InvalidOperationException("Expected the explicit floor to apply.");
+
+        await Assert.That(selected.VersionId).IsEqualTo("1.4.0");
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo("unsatisfied");
+    }
+
+    [Test]
+    [Arguments("1.0.0", "1.2.0")]
+    [Arguments("not-semver", "also-not-semver")]
+    public async Task AmbiguousTypeLinksTakePrecedenceOverInvalidFloors(string explicitFloor, string implicitFloor)
+    {
+        var failure = await Assert.That(() => WotVersionResolver.Resolve(Resource(("1.0.0", "sha256:a")),
+            Request(WotReferenceTargetKind.ThingModel, WotReferenceOperator.ThingModelTypeLink,
+                minimumVersion: explicitFloor, minimumVersionKind: WotMinimumVersionKind.ThingModel,
+                referencingThingDescriptionModelVersion: implicitFloor, thingModelTypeLinkCount: 2,
+                allThingModelTypeLinksHaveMinimumVersion: false)))
+            .Throws<RegistryException>() ?? throw new InvalidOperationException("Expected ambiguity before floor validation.");
+
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo("ambiguous-floor");
+    }
+
     private static WotVersionResource Resource(params (string VersionId, string Digest)[] versions) =>
         ResourceWithDefault(WotReferenceTargetKind.ThingModel, null, false, versions);
 

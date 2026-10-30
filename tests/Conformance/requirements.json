@@ -114116,13 +114116,21 @@
       ],
       "text": "A floor MUST be a SemVer 2.0.0 string without build metadata and within Core's 128-character [id limit][Core id constraints]. It MUST NOT have the generated `0.0.0-N` form. Invalid syntax or a generated floor MUST produce `invalid-version`. `td:minVersion` on a TM reference and `tm:minVersion` on a TD-to-TD reference MUST produce `invalid-floor`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The public selection helper validates parsed floor syntax, the Core length boundary and the target-kind discriminator. Section 1.3 defines generated N as positive, so 0.0.0-0 remains an authored prerelease rather than a generated floor. Reference extraction and provider acquisition are separate obligations.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "XRegistry.Models.Tests.WotVersionResolverTests.InvalidExplicitFloorReportsInvalidVersion",
+          "XRegistry.Models.Tests.WotVersionResolverTests.FloorLengthIncludesTheCoreIdBoundary",
+          "XRegistry.Models.Tests.WotVersionResolverTests.ExplicitFloorTermMustMatchTheTargetKind",
+          "XRegistry.Models.Tests.WotVersionResolverTests.GeneratedVersionIdCannotBeUsedAsFloor",
+          "XRegistry.Models.Tests.WotVersionResolverTests.ZeroNumericPrereleaseIsNotAPositiveGeneratedFloor"
+        ],
         "nativeEvidence": []
       }
     },
@@ -114147,13 +114155,19 @@
       ],
       "text": "For a TD with exactly one `rel: \"type\"` link, its `version.model`, when present, is the implicit floor of that link. If the link also has an explicit `tm:minVersion`, the greater value by SemVer precedence is the effective floor. An explicit lower value MUST NOT weaken the implicit floor. If only one floor is present, that floor applies.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "For an already identified TM type link, selection derives the greater parsed implicit/explicit floor and preserves either floor when supplied alone. Sticky-default failures distinguish floor enforcement from merely choosing the highest Version. URI/context parsing and link extraction remain separate.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "XRegistry.Models.Tests.WotVersionResolverTests.ThingModelTypeLinkUsesTheGreaterImplicitAndExplicitFloor",
+          "XRegistry.Models.Tests.WotVersionResolverTests.StickyTypeLinkEnforcesWhicheverFloorIsGreater",
+          "XRegistry.Models.Tests.WotVersionResolverTests.StickyTypeLinkEnforcesTheOnlySuppliedFloor"
+        ],
         "nativeEvidence": []
       }
     },
@@ -114178,13 +114192,19 @@
       ],
       "text": "For a TD with several type links and `version.model`, every type link MUST carry its own `tm:minVersion`. Otherwise, resolution MUST fail as `ambiguous-floor`, including when resolving a different, fully specified link. When every link has a floor, each link MUST use the greater of its own floor and `version.model`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The selection request carries the parsed total link count and whether every link has a floor. The helper reports ambiguity even for a specified link, before malformed individual floors, and raises complete links to version.model. Deriving these inputs from customer documents is not claimed.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "XRegistry.Models.Tests.WotVersionResolverTests.MultipleThingModelTypeLinksRequireEveryExplicitFloor",
+          "XRegistry.Models.Tests.WotVersionResolverTests.AmbiguousTypeLinksTakePrecedenceOverInvalidFloors",
+          "XRegistry.Models.Tests.WotVersionResolverTests.MultipleTypeLinksRaiseEveryExplicitFloorToTheTdModelVersion"
+        ],
         "nativeEvidence": []
       }
     },
@@ -114209,13 +114229,18 @@
       ],
       "text": "For several type links without `version.model`, each link uses its own floor if present. An omitted floor MUST NOT produce `ambiguous-floor`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "With no parsed TD model version, missing floors on other type links do not cause ambiguity. A supplied floor still constrains selection and fails when unmet. Document parsing and provider integration remain separate.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "XRegistry.Models.Tests.WotVersionResolverTests.MultipleTypeLinksWithoutModelVersionDoNotRequireFloors",
+          "XRegistry.Models.Tests.WotVersionResolverTests.MultipleTypeLinksWithoutModelVersionStillEnforceTheirExplicitFloor"
+        ],
         "nativeEvidence": []
       }
     },
@@ -114240,13 +114265,18 @@
       ],
       "text": "A non-SemVer implicit floor MUST produce `invalid-version`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "An unpinned type-link request validates its parsed implicit floor and reports invalid-version for malformed syntax. Pins bypass floor derivation as required by the resolver algorithm. This mapping does not include extracting version.model from a document.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "XRegistry.Models.Tests.WotVersionResolverTests.InvalidImplicitTypeLinkFloorReportsInvalidVersion",
+          "XRegistry.Models.Tests.WotVersionResolverTests.VersionPinBypassesAmbiguousTypeLinksAndInvalidImplicitFloor"
+        ],
         "nativeEvidence": []
       }
     },

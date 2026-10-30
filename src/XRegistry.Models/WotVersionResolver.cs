@@ -381,7 +381,7 @@ public static class WotVersionResolver
         private BigInteger Patch { get; }
         internal bool IsPrerelease => _prerelease is not null;
         internal bool IsGeneratedId => Major.IsZero && Minor.IsZero && Patch.IsZero &&
-            _prerelease is [{ } identifier] && IsNumeric(identifier);
+            _prerelease is [{ } identifier] && identifier != "0" && IsNumeric(identifier);
 
         internal static bool TryParse(string value, out WotSemanticVersion version)
         {

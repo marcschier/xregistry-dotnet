@@ -57,7 +57,7 @@ it does not transfer historical qualification to a successor.
 | publication | 65 | 0 | 0 |
 | registry | 143 | 0 | 0 |
 | schema | 45 | 21 | 0 |
-| wot | 110 | 0 | 0 |
+| wot | 110 | 5 | 0 |
 
 ## Artifacts and procedural coverage
 

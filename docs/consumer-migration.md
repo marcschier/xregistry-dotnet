@@ -15,6 +15,7 @@ complete xRegistry conformance.
 | --- | --- | --- |
 | Endpoint/value/model/path/codec concerns | `XRegistry`: `RegistryJson`, `RegistryModel`, `RegistryId`, `RegistryPath`, `RegistryHeaderEncoding`, `RegistryHeaderMetadata`; `XRegistry.Models` for packaged model sources | A domain Endpoint Definition is not an HTTP route. IDs follow the standalone Core grammar; native identifiers require explicit mapping. |
 | Media Endpoint definitions | `XRegistry.Models.EndpointDefinition.MaterializeMedia` and `RegistryDomainRules.ValidateMediaEndpointMetadata` | Validates the working-draft producer/consumer and protocol-option rules. Codec identifiers remain open and case-sensitive; the validator rejects recognized codecs assigned to the other media kind. The draft defines no codec/format compatibility matrix. |
+| WoT Version selection | `XRegistry.Models.WotVersionResolver.Resolve` | Selects from caller-captured Resource Versions using typed floors, pins, sticky defaults and prerelease policy. URI/context parsing, authorized Resource lookup, byte acquisition and digest verification remain caller responsibilities; this helper does not provide an integrated reference resolver. |
 | Generic operation dispatch | `RegistryEngine.ExecuteAsync(RegistryOperation, RegistryOperationContext, CancellationToken)` in `XRegistry.Server` | The engine owns model, lifecycle, versions, validation and atomic change preparation. |
 | HTTP client | `XRegistry.Client.XRegistryHttpClient` | One explicit HTTP operation, unchanged status/headers and bounded metadata/Document consumption. |
 | HTTP serving | `XRegistry.AspNetCore.MapXRegistry` | Maps a concrete `RegistryEngine`; it does not start or secure a host. |
@@ -37,6 +38,14 @@ reports an unavailable dependency; throwing `UnauthorizedAccessException`
 reports `Denied`. A required dependency failure prevents selection even if an
 earlier method matched. Caller cancellation propagates; deadline expiry reports
 `Indeterminate`. Resolution never invokes an API.
+
+WoT minimum-version floors use SemVer without build metadata and fit the
+128-character Core id limit. Generated `0.0.0-N` floors are forbidden, with
+positive `N` as defined by the draft's assignment rule; `0.0.0-0` is an
+authored prerelease and remains a valid floor. A type link uses the greater
+of its explicit floor and the TD's model version. Several type links require
+every explicit floor only when that model version is present. The selection
+helper receives those parsed values; it does not extract links from JSON-LD.
 
 ## Choose the real seam
 
