@@ -11,10 +11,11 @@ namespace XRegistry.Federation;
 /// <summary>One selected WoT Version and the exact bytes used to compute its digest.</summary>
 public sealed class WotResolvedDocument
 {
-    internal WotResolvedDocument(string resourceXid, WotResolvedVersion version,
+    internal WotResolvedDocument(string resourceXid, WotReferenceTargetKind kind, WotResolvedVersion version,
         NativeRegistryContext context, FederationDocument document)
     {
         ResourceXid = resourceXid;
+        Kind = kind;
         Version = version;
         Context = context;
         Document = document;
@@ -22,6 +23,8 @@ public sealed class WotResolvedDocument
 
     /// <summary>Gets the Resource selected within the caller's Group.</summary>
     public string ResourceXid { get; }
+    /// <summary>Gets the WoT kind established by the captured source model.</summary>
+    public WotReferenceTargetKind Kind { get; }
     /// <summary>Gets the identity, Version id, SHA-256 digest and Registry origin.</summary>
     public WotResolvedVersion Version { get; }
     /// <summary>Gets the retained source context, without asserting snapshot isolation.</summary>
@@ -30,9 +33,91 @@ public sealed class WotResolvedDocument
     public FederationDocument Document { get; }
 }
 
-/// <summary>Looks up and acquires a SemVer WoT reference through one authorized native source.</summary>
+/// <summary>Resolves parsed SemVer WoT references through a selected native source or retained revision.</summary>
 public static class WotRegistryResolver
 {
+    /// <summary>Resolves a parsed document-local reference against an already acquired containing revision.</summary>
+    /// <remarks>
+    /// The caller establishes locality through URI/base/context processing. This method never opens
+    /// a source or selects a different Version. Authored version fields come from the retained bytes,
+    /// not request.ContainingRevision. Parsing consumes work and checks object/result limits without
+    /// recharging the already acquired input bytes, object or source requests.
+    /// </remarks>
+    public static async ValueTask<WotResolvedDocument> ResolveLocalAsync(WotResolvedDocument containingRevision,
+        WotVersionResolutionRequest request, FederationReadBudget? budget = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(containingRevision);
+        ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!request.IsDocumentLocal || request.Operator == WotReferenceOperator.ThingModelTypeLink)
+        {
+            throw new ArgumentException("A parsed document-local tm:ref or td:ref is required.", nameof(request));
+        }
+        if (request.TargetWotId != containingRevision.Version.WotId)
+        {
+            throw new RegistryException(new("not-found", "", "The local target is not the containing WoT revision."));
+        }
+        if (request.TargetKind != containingRevision.Kind)
+        {
+            throw new RegistryException(new("invalid-floor", "", "The local reference has a different WoT kind."));
+        }
+
+        var captured = containingRevision.Version;
+        var revision = new WotVersionCandidate(captured.VersionId, captured.ContentDigest, captured.Origin);
+        if (request.VersionIdPin is not null || request.DigestPin is not null)
+        {
+            throw new RegistryException(new("invalid-pin", "",
+                "A document-local reference cannot carry a Registry Version pin."));
+        }
+
+        budget ??= new();
+        budget.CheckObjectBytes(containingRevision.Document.Length);
+        RegistryJson parsed;
+        using (var stream = containingRevision.Document.OpenRead())
+        {
+            try
+            {
+                parsed = await RegistryJson.ParseAsync(stream, new RegistryJsonLimits
+                {
+                    MaxBytes = budget.Limits.MaxObjectBytes,
+                    MaxDepth = budget.Limits.MaxJsonDepth,
+                    MaxNodes = (int)Math.Min(int.MaxValue, budget.Limits.MaxWork)
+                }, cancellationToken).ConfigureAwait(false);
+            }
+            catch (RegistryException exception)
+            {
+                throw FederationJson.FromCore(exception);
+            }
+        }
+        var root = parsed.RootElement;
+        FederationJson.CountWork(root, budget, cancellationToken);
+        FederationJson.RequireObject(root);
+        if (FederationJson.String(root, "id") != captured.WotId)
+        {
+            throw FederationJson.Invalid("The containing document's id differs from its acquired WoT identity.");
+        }
+
+        if (request.MinimumVersion is not null && root.TryGetProperty("version", out var version))
+        {
+            FederationJson.RequireObject(version);
+            var field = containingRevision.Kind == WotReferenceTargetKind.ThingModel ? "model" : "instance";
+            if (version.TryGetProperty(field, out var authored))
+            {
+                if (authored.ValueKind != JsonValueKind.String)
+                {
+                    throw new RegistryException(new("invalid-version", "/version/" + field,
+                        "A local floor requires an authored SemVer string."));
+                }
+                revision = revision with { AuthoredVersion = authored.GetString() };
+            }
+        }
+        WotVersionResolver.Resolve(null, request with { ContainingRevision = revision });
+        budget.CheckResultBytes(containingRevision.Document.Length);
+        cancellationToken.ThrowIfCancellationRequested();
+        return containingRevision;
+    }
+
     /// <summary>Resolves a parsed, nonlocal reference within one explicitly selected Resource collection.</summary>
     /// <remarks>
     /// The caller owns source authorization and URI/base/context processing. The source must expose
@@ -198,7 +283,8 @@ public static class WotRegistryResolver
             _budget.CheckResultBytes(document.Length);
             CheckContext();
             _token.ThrowIfCancellationRequested();
-            return new(resourceXid, new(_request.TargetWotId, selected, digest, _context.Source), _context, document);
+            return new(resourceXid, _request.TargetKind,
+                new(_request.TargetWotId, selected, digest, _context.Source), _context, document);
         }
 
         private async ValueTask<(FederationDocument Document, string Digest)> AcquireAsync(string versionsPath, string id)

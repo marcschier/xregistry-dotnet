@@ -14,6 +14,304 @@ namespace XRegistry.Federation.Tests;
 public class WotRegistryResolverTests
 {
     [Test]
+    public async Task LocalRevisionSurvivesNativeSourceDisposalWithoutReopeningOrRechargingBytes()
+    {
+        var bytes = LocalBytes("""{"model":"2.0.0"}""");
+        var tree = CreateDirectoryTree(bytes);
+        var budget = new FederationReadBudget(new(maxSources: 1));
+        await using var mapping = await DirectoryMapping.OpenAsync(tree, budget);
+        var request = new WotVersionResolutionRequest(Source.Identity,
+            WotReferenceTargetKind.ThingModel, WotReferenceOperator.ThingModel);
+        var containing = await WotRegistryResolver.ResolveAsync(mapping, "/gs/tenant/models", request, budget);
+        await mapping.DisposeAsync();
+        var bytesBefore = budget.BytesRead;
+        var requestsBefore = budget.Requests;
+        var objectsBefore = budget.ObjectsRead;
+        var workBefore = budget.Work;
+        var readsBefore = tree.Reads.Count;
+        var local = await WotRegistryResolver.ResolveLocalAsync(containing,
+            request with { IsDocumentLocal = true, MinimumVersion = "1.0.0" }, budget);
+
+        await Assert.That(ReferenceEquals(local, containing)).IsTrue();
+        await Assert.That(local.Kind).IsEqualTo(WotReferenceTargetKind.ThingModel);
+        await Assert.That(local.Version.ContentDigest).IsEqualTo(Digest(bytes));
+        await Assert.That(budget.BytesRead).IsEqualTo(bytesBefore);
+        await Assert.That(budget.Requests).IsEqualTo(requestsBefore);
+        await Assert.That(budget.ObjectsRead).IsEqualTo(objectsBefore);
+        await Assert.That(budget.Work).IsEqualTo(workBefore + 4);
+        await Assert.That(tree.Reads.Count).IsEqualTo(readsBefore);
+    }
+
+    [Test]
+    [Arguments(false, "2.0.0", null)]
+    [Arguments(false, "1.0.0", null)]
+    [Arguments(false, "0.1.0", null)]
+    [Arguments(false, "2.0.0-alpha", null)]
+    [Arguments(false, "2.0.1", "unsatisfied")]
+    [Arguments(true, "2.0.0", null)]
+    [Arguments(true, "2.0.0-alpha", null)]
+    [Arguments(true, "1.0.0", "unsatisfied")]
+    [Arguments(true, "0.1.0", "unsatisfied")]
+    [Arguments(true, "2.0.1", "unsatisfied")]
+    public async Task LocalFloorsReadTheKindSpecificAuthoredVersionAndKeepTheTdMajorCap(
+        bool description, string floor, string? expectedError)
+    {
+        var source = new Source(description)
+        {
+            SecondBytes = LocalBytes(description
+                ? """{"instance":"2.0.0","model":"invalid"}"""
+                : """{"model":"2.0.0","instance":"invalid"}""")
+        };
+        var containing = await WotRegistryResolver.ResolveAsync(source, source.Collection,
+            source.Request with { VersionIdPin = "2.0.0" });
+        var request = source.Request with { IsDocumentLocal = true, MinimumVersion = floor };
+        var reads = source.Reads.Count;
+        if (expectedError is null)
+        {
+            var result = await WotRegistryResolver.ResolveLocalAsync(containing, request);
+            await Assert.That(ReferenceEquals(result, containing)).IsTrue();
+            await Assert.That(result.Version.VersionId).IsEqualTo("2.0.0");
+        }
+        else
+        {
+            var failure = await Assert.That(async () =>
+                await WotRegistryResolver.ResolveLocalAsync(containing, request)).Throws<RegistryException>()
+                ?? throw new InvalidOperationException("Expected a local floor failure.");
+            await Assert.That(failure.Diagnostic.Code).IsEqualTo(expectedError);
+        }
+        await Assert.That(source.Reads.Count).IsEqualTo(reads);
+    }
+
+    [Test]
+    public async Task LocalReferencesCannotSelectAnotherVersionOrTrustCallerAuthoredVersionClaims()
+    {
+        var source = new Source
+        {
+            FirstBytes = LocalBytes("""{"model":"1.0.0","instance":"9.0.0"}"""),
+            SecondBytes = LocalBytes("""{"model":"2.0.0"}""")
+        };
+        var containing = await WotRegistryResolver.ResolveAsync(source, source.Collection,
+            source.Request with { VersionIdPin = "1.0.0" });
+        var request = source.Request with
+        {
+            IsDocumentLocal = true,
+            MinimumVersion = "2.0.0",
+            ContainingRevision = new("9.0.0", "sha256:forged", "urn:forged", "9.0.0")
+        };
+        var reads = source.Reads.Count;
+        var failure = await Assert.That(async () =>
+            await WotRegistryResolver.ResolveLocalAsync(containing, request)).Throws<RegistryException>()
+            ?? throw new InvalidOperationException("Expected the retained revision to fail its floor.");
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo("unsatisfied");
+        var withoutFloor = await WotRegistryResolver.ResolveLocalAsync(containing, request with { MinimumVersion = null });
+        await Assert.That(ReferenceEquals(withoutFloor, containing)).IsTrue();
+        await Assert.That(withoutFloor.Version.VersionId).IsEqualTo("1.0.0");
+        await Assert.That(withoutFloor.Version.ContentDigest).IsEqualTo(Digest(source.FirstBytes));
+        await Assert.That(source.Reads.Count).IsEqualTo(reads);
+        await Assert.That(source.Reads.Any(read => read.Operation == FederationOperation.Document &&
+            read.Target.EndsWith("/2.0.0", StringComparison.Ordinal))).IsFalse();
+    }
+
+    [Test]
+    [Arguments(null, "unsatisfied")]
+    [Arguments("{}", "unsatisfied")]
+    [Arguments("""{"instance":"2.0.0"}""", "unsatisfied")]
+    [Arguments("""{"model":"vendor-release"}""", "invalid-version")]
+    [Arguments("""{"model":""}""", "invalid-version")]
+    [Arguments("""{"model":2}""", "invalid-version")]
+    [Arguments("""{"model":null}""", "invalid-version")]
+    public async Task LocalFloorsRejectMissingOrInvalidAuthoredVersions(string? version, string error)
+    {
+        var source = new Source { SecondBytes = LocalBytes(version) };
+        var containing = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var failure = await Assert.That(async () => await WotRegistryResolver.ResolveLocalAsync(containing,
+            source.Request with { IsDocumentLocal = true, MinimumVersion = "1.0.0" })).Throws<RegistryException>()
+            ?? throw new InvalidOperationException("Expected an authored-version failure.");
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo(error);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task LocalFloorsPreserveWrongKindAndInvalidFloorDiagnostics(bool description)
+    {
+        var source = new Source(description)
+        {
+            SecondBytes = LocalBytes("""{"model":"2.0.0","instance":"2.0.0"}""")
+        };
+        var containing = await WotRegistryResolver.ResolveAsync(source, source.Collection,
+            source.Request with { VersionIdPin = "2.0.0" });
+        var request = source.Request with
+        {
+            IsDocumentLocal = true, MinimumVersion = "1.0.0",
+            MinimumVersionKind = description ? WotMinimumVersionKind.ThingModel : WotMinimumVersionKind.ThingDescription
+        };
+        var wrongKind = await Assert.That(async () =>
+            await WotRegistryResolver.ResolveLocalAsync(containing, request)).Throws<RegistryException>()
+            ?? throw new InvalidOperationException("Expected a wrong-kind floor.");
+        await Assert.That(wrongKind.Diagnostic.Code).IsEqualTo("invalid-floor");
+        foreach (var floor in new[] { ">=1.0.0", "1.0.0+build", "0.0.0-1" })
+        {
+            var invalid = await Assert.That(async () => await WotRegistryResolver.ResolveLocalAsync(containing,
+                request with { MinimumVersion = floor, MinimumVersionKind = null })).Throws<RegistryException>()
+                ?? throw new InvalidOperationException("Expected invalid floor syntax.");
+            await Assert.That(invalid.Diagnostic.Code).IsEqualTo("invalid-version");
+        }
+    }
+
+    [Test]
+    [Arguments(null)]
+    [Arguments("""{"model":"vendor-release"}""")]
+    public async Task LocalReferencesWithoutFloorsDoNotRequireAnAuthoredSemVer(string? version)
+    {
+        var source = new Source { SecondBytes = LocalBytes(version) };
+        var containing = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var result = await WotRegistryResolver.ResolveLocalAsync(containing,
+            source.Request with { IsDocumentLocal = true });
+        await Assert.That(ReferenceEquals(result, containing)).IsTrue();
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task LocalPinsAreRejectedBeforeParsingOrReturningAnyDocument(bool digest)
+    {
+        var source = new Source { SecondBytes = [] };
+        var containing = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var budget = new FederationReadBudget();
+        var failure = await Assert.That(async () => await WotRegistryResolver.ResolveLocalAsync(containing,
+            source.Request with
+            {
+                IsDocumentLocal = true,
+                MinimumVersion = "invalid",
+                VersionIdPin = digest ? null : "2.0.0",
+                DigestPin = digest ? containing.Version.ContentDigest : null
+            }, budget)).Throws<RegistryException>()
+            ?? throw new InvalidOperationException("Expected a forbidden local pin.");
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo("invalid-pin");
+        await Assert.That(budget.Work).IsEqualTo(0L);
+    }
+
+    [Test]
+    [Arguments("[]")]
+    [Arguments("{}")]
+    [Arguments("""{"id":"urn:other"}""")]
+    [Arguments("""{"id":"urn:test:device:v1","id":"urn:test:device:v1"}""")]
+    [Arguments("""{"id":"urn:test:device:v1","version":{"model":"2.0.0","model":"3.0.0"}}""")]
+    [Arguments("""{"id":"urn:test:device:v1","version":null}""")]
+    [Arguments("{")]
+    public async Task LocalParsingRejectsMalformedOrMisidentifiedContainingDocuments(string document)
+    {
+        var source = new Source { SecondBytes = Encoding.UTF8.GetBytes(document) };
+        var containing = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var failure = await Assert.That(async () => await WotRegistryResolver.ResolveLocalAsync(containing,
+            source.Request with { IsDocumentLocal = true, MinimumVersion = "1.0.0" }))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected invalid retained JSON.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    [Arguments(0, -1)]
+    [Arguments(0, 0)]
+    [Arguments(0, 1)]
+    [Arguments(1, -1)]
+    [Arguments(1, 0)]
+    [Arguments(1, 1)]
+    [Arguments(2, -1)]
+    [Arguments(2, 0)]
+    [Arguments(2, 1)]
+    [Arguments(3, -1)]
+    [Arguments(3, 0)]
+    [Arguments(3, 1)]
+    public async Task LocalParsingAndOutputBudgetsHaveInclusiveExactBoundaries(int bound, int delta)
+    {
+        var bytes = LocalBytes("""{"model":"2.0.0"}""");
+        var source = new Source { SecondBytes = bytes };
+        var containing = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var limits = bound switch
+        {
+            0 => new FederationReadLimits(maxObjectBytes: bytes.Length + delta),
+            1 => new FederationReadLimits(maxResultBytes: bytes.Length + delta),
+            2 => new FederationReadLimits(maxWork: 4 + delta),
+            _ => new FederationReadLimits(maxJsonDepth: 2 + delta)
+        };
+        var budget = new FederationReadBudget(limits);
+        var request = source.Request with { IsDocumentLocal = true, MinimumVersion = "2.0.0" };
+        if (delta < 0)
+        {
+            var failure = await Assert.That(async () =>
+                await WotRegistryResolver.ResolveLocalAsync(containing, request, budget)).Throws<FederationException>()
+                ?? throw new InvalidOperationException("Expected the exhausted local bound to fail.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        }
+        else
+        {
+            var result = await WotRegistryResolver.ResolveLocalAsync(containing, request, budget);
+            await Assert.That(ReferenceEquals(result, containing)).IsTrue();
+            await Assert.That(budget.Work).IsEqualTo(4L);
+        }
+        await Assert.That(budget.Requests).IsEqualTo(0L);
+        await Assert.That(budget.BytesRead).IsEqualTo(0L);
+    }
+
+    [Test]
+    public async Task RepeatedLocalParsingChargesCumulativeWorkAndCancellationPrecedesParsing()
+    {
+        var source = new Source { SecondBytes = LocalBytes("""{"model":"2.0.0"}""") };
+        var containing = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var request = source.Request with { IsDocumentLocal = true };
+        var budget = new FederationReadBudget(new(maxWork: 4));
+        var first = await WotRegistryResolver.ResolveLocalAsync(containing, request, budget);
+        await Assert.That(ReferenceEquals(first, containing)).IsTrue();
+        var failure = await Assert.That(async () =>
+            await WotRegistryResolver.ResolveLocalAsync(containing, request, budget)).Throws<FederationException>()
+            ?? throw new InvalidOperationException("Expected cumulative work exhaustion.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        var cancelledBudget = new FederationReadBudget();
+        await Assert.That(async () => await WotRegistryResolver.ResolveLocalAsync(containing, request,
+            cancelledBudget, new CancellationToken(true))).Throws<OperationCanceledException>();
+        await Assert.That(cancelledBudget.Work).IsEqualTo(0L);
+    }
+
+    [Test]
+    [Arguments(0)]
+    [Arguments(1)]
+    [Arguments(2)]
+    [Arguments(3)]
+    public async Task LocalResolutionRequiresTheContainingIdentityKindAndParsedLocalOperator(int change)
+    {
+        var source = new Source { SecondBytes = LocalBytes(null) };
+        var containing = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var request = source.Request with { IsDocumentLocal = true };
+        request = change switch
+        {
+            0 => request with { IsDocumentLocal = false },
+            1 => request with { Operator = WotReferenceOperator.ThingModelTypeLink },
+            2 => request with { TargetWotId = "urn:other" },
+            _ => request with
+            {
+                TargetKind = WotReferenceTargetKind.ThingDescription,
+                Operator = WotReferenceOperator.ThingDescription
+            }
+        };
+        if (change < 2)
+        {
+            await Assert.That(async () =>
+                await WotRegistryResolver.ResolveLocalAsync(containing, request)).Throws<ArgumentException>();
+        }
+        else
+        {
+            var failure = await Assert.That(async () =>
+                await WotRegistryResolver.ResolveLocalAsync(containing, request)).Throws<RegistryException>()
+                ?? throw new InvalidOperationException("Expected an incompatible local target.");
+            await Assert.That(failure.Diagnostic.Code).IsEqualTo(change == 2 ? "not-found" : "invalid-floor");
+        }
+    }
+
+    private static byte[] LocalBytes(string? version) => Encoding.UTF8.GetBytes(
+        "{\"id\":\"" + Source.Identity + "\"" + (version is null ? "" : ",\"version\":" + version) + "}");
+
+    [Test]
     public async Task NativeDirectoryMappingResolvesWithoutInventingAResourceProjection()
     {
         var tree = CreateDirectoryTree();
@@ -446,7 +744,7 @@ public class WotRegistryResolverTests
         return RegistryModel.Compile(RegistryJson.FromElement(document.RootElement));
     }
 
-    private static MemoryTreeReader CreateDirectoryTree()
+    private static MemoryTreeReader CreateDirectoryTree(byte[]? secondBytes = null)
     {
         var tree = new MemoryTreeReader();
         const string resource = "/gs/tenant/models/assigned";
@@ -470,7 +768,7 @@ public class WotRegistryResolverTests
             ["createdat"] = "2026-09-04T00:00:00Z", ["modifiedat"] = "2026-09-04T00:00:00Z"
         };
         var versionReferences = new JsonArray();
-        foreach (var (id, file, bytes) in new[] { ("1.0.0", "first.bin", Source.First), ("2.0.0", "second.bin", Source.Second) })
+        foreach (var (id, file, bytes) in new[] { ("1.0.0", "first.bin", Source.First), ("2.0.0", "second.bin", secondBytes ?? Source.Second) })
         {
             tree.Files.Add(file, bytes);
             var entity = Entity(resource + "/versions/" + id, "thingmodelid", "assigned");
@@ -554,6 +852,7 @@ public class WotRegistryResolverTests
         internal string Resource => Collection + "/assigned";
         internal WotVersionResolutionRequest Request { get; }
         internal List<FederationReadRequest> Reads { get; } = [];
+        internal byte[] FirstBytes { get; init; } = First;
         internal byte[] SecondBytes { get; init; } = Second;
         internal Action<FederationReadRequest, JsonObject>? Change { get; set; }
         internal Action? AfterRead { get; set; }
@@ -578,7 +877,7 @@ public class WotRegistryResolverTests
                 result = External ? FederationReadResult.FromExternalDocument(target, context,
                     RegistryJson.Parse("""{"kind":"external","uri":"https://untrusted.invalid/document"}""").RootElement)
                     : FederationReadResult.FromDocument(target, context, new FederationDocument(
-                        request.Target.EndsWith("/1.0.0", StringComparison.Ordinal) ? First : SecondBytes,
+                        request.Target.EndsWith("/1.0.0", StringComparison.Ordinal) ? FirstBytes : SecondBytes,
                         "application/json", documentOrigin: "urn:test:advisory-original-location"));
             }
             else

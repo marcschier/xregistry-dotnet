@@ -17,6 +17,7 @@ complete xRegistry conformance.
 | Media Endpoint definitions | `XRegistry.Models.EndpointDefinition.MaterializeMedia` and `RegistryDomainRules.ValidateMediaEndpointMetadata` | Validates the working-draft producer/consumer and protocol-option rules. Codec identifiers remain open and case-sensitive; the validator rejects recognized codecs assigned to the other media kind. The draft defines no codec/format compatibility matrix. |
 | WoT Version selection | `XRegistry.Models.WotVersionResolver.Resolve` and `SelectVersionId` | Applies typed floors, pins, sticky defaults and prerelease policy to caller-captured Resource Versions. `SelectVersionId` returns a selection without asserting byte provenance; `Resolve` requires the caller's captured digest and origin. Neither method parses reference URIs or acquires documents. |
 | WoT Registry acquisition | `XRegistry.Federation.WotRegistryResolver.ResolveAsync` | Resolves a parsed, nonlocal reference within one authorized source and Group Resource collection. Requires the source's captured SemVer WoT model, rejects competing Resources, and returns exact bytes with their computed SHA-256 digest and retained Registry origin. |
+| WoT containing-revision resolution | `XRegistry.Federation.WotRegistryResolver.ResolveLocalAsync` | Resolves a parsed local reference against an already acquired `WotResolvedDocument`. Uses its retained bytes and kind, applies local floors to the authored version, and cannot select another Registry Version. |
 | Generic operation dispatch | `RegistryEngine.ExecuteAsync(RegistryOperation, RegistryOperationContext, CancellationToken)` in `XRegistry.Server` | The engine owns model, lifecycle, versions, validation and atomic change preparation. |
 | HTTP client | `XRegistry.Client.XRegistryHttpClient` | One explicit HTTP operation, unchanged status/headers and bounded metadata/Document consumption. |
 | HTTP serving | `XRegistry.AspNetCore.MapXRegistry` | Maps a concrete `RegistryEngine`; it does not start or secure a host. |
@@ -57,13 +58,23 @@ Version. A digest pin hashes candidate bytes and selects the highest matching
 Version, ignoring advisory digest fields. Denied, unavailable or inconsistent
 reads fail without trying another Version or source.
 
-The caller still processes URI references, document bases and JSON-LD contexts.
-Document-local references require the containing revision rather than a Registry
-lookup; this acquisition method rejects them. Resource aliases must first be
-resolved to an authorized source, and external document descriptors are not
-dereferenced. Incremental-profile selection and publication closure remain
-unimplemented. The acquisition cases have managed execution evidence; the native
-package-consumer fixture does not yet exercise this resolver.
+`ResolveLocalAsync` retains the containing revision even after its source is
+disposed. It checks the stored document's identity, parses its exact bytes with
+duplicate-name rejection, and reads `version.model` for a TM floor or
+`version.instance` for a TD floor. Caller-supplied revision claims cannot replace
+those fields. A failed floor does not reopen the source to select a different
+Version. Parsing consumes cumulative work but does not recharge input bytes,
+objects or requests already consumed by acquisition. Object, JSON-depth, work
+and output limits remain finite; cancellation propagates.
+
+The caller still processes URI references, document bases and JSON-LD contexts
+to establish locality, then names the containing WoT identity in a local
+request. `ResolveAsync` rejects local requests; `ResolveLocalAsync` rejects
+Registry pins. Resource aliases must first be resolved to an authorized source,
+and external document descriptors are not dereferenced. Incremental-profile
+selection and publication closure remain unimplemented. These resolver cases
+have managed execution evidence; the native package-consumer fixture does not
+yet exercise them.
 
 ## Choose the real seam
 
