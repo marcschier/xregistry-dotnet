@@ -26,6 +26,9 @@ release safeguards remain in their subject guides.
   structural/hash/native check in `release_check` up to the still-missing
   seven remaining framework/RID cells.   All 16 test projects now share the proof test through the common build targets;
   that inclusion does not qualify their native execution.
+  At `c7ff014`, the complete Core suite passed 756 native cases on each of
+  .NET 8 and .NET 10/Windows x64, with zero IL/JIT and rejected managed controls.
+  Each Core receipt covers 268 distinct methods.
   The complete Federation suite passed 626 native cases on
   .NET 10/Windows x64 at `6d143c4`, with zero IL diagnostics and zero JIT-compiled
   methods. Its receipt covers 242 distinct methods, not 626 independent methods.

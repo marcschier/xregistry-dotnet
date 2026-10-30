@@ -179,6 +179,23 @@ This extends the tested HTTP path to orderly file-store close/reopen; it does
 not qualify crash or power-loss behavior, other platforms, refreshed package
 consumers or complete execution of the other module suites at this source.
 
+After common proof inclusion at
+`c7ff0146084dd85272e13073a00f5706a276139f`, the complete Core suite passed
+756 native cases on each of .NET 8 and .NET 10/Windows x64. Both publications
+ran ILC without IL diagnostics; both same-process proofs reported native
+execution with zero JIT compilations. Managed controls reported false/4,005
+and false/3,999 respectively and were rejected without creating receipts.
+
+Evidence directories are `D:\temp\xregistry-core-native-c7ff014-net8` and
+`D:\temp\xregistry-core-native-c7ff014`, with publish/run logs beside them.
+Each receipt aggregates 268 distinct passed methods, zero failed and zero
+skipped. Executable SHA-256 values:
+`7ded8561d97ebc401a37f876cf974f4fd1475ddd087cb72e61f62d2f7bc855e5`
+for .NET 8 and
+`f1903e361214ee771213945c2cb5b579f8d0a00158b452d223ce223666af90df`
+for .NET 10. These two Core cells do not qualify other module suites, the
+remaining platforms or reviewed specification requirements.
+
 The module-level receipts below are historical and have not been refreshed
 against the complete successor source set. Do not treat their counts as
 qualification of the current implementation.
