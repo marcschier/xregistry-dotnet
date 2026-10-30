@@ -162,14 +162,15 @@ These results belong to `e502e5d`, before the subsequent scoped-selector
 changes. They remain development evidence with `releaseQualified: false`;
 no per-requirement native qualification has been promoted.
 
-The later selector source at `b09fd42df28f331a9f5955688090dbe9b4b12627`
+The later selector source at `f72e125cbe71fd82a03d45cc75b55777c83a13df`
 passed the complete Validation suite on Windows x64 under both .NET 8 and
-.NET 10: 4,745 cases and 838 methods per framework. Both publications ran ILC
+.NET 10: 4,820 cases and 845 methods per framework, including presence-text
+comparisons and unquoted numeric left operands. Both publications ran ILC
 without IL diagnostics, complete native/managed case inventories agree, and
 managed proofs are rejected. Native executable, managed control, TRX, proof and
 receipt hashes match; source inventories remain unchanged. Evidence is retained
-at `D:\temp\xregistry-validation-b09fd42-net8\native-suites-e481dfqb` and
-`D:\temp\xregistry-validation-b09fd42-net10\native-suites-e33jus9b`.
+at `D:\temp\xregistry-validation-f72e125-net8\native-suites-kohfj26m` and
+`D:\temp\xregistry-validation-f72e125-net10\native-suites-8yvy_pmc`.
 These selected Validation runs do not qualify complete thirteen-suite cells or
 promote requirement-level evidence.
 
