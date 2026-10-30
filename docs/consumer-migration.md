@@ -15,12 +15,12 @@ complete xRegistry conformance.
 | --- | --- | --- |
 | Endpoint/value/model/path/codec concerns | `XRegistry`: `RegistryJson`, `RegistryModel`, `RegistryId`, `RegistryPath`, `RegistryHeaderEncoding`, `RegistryHeaderMetadata`; `XRegistry.Models` for packaged model sources | A domain Endpoint Definition is not an HTTP route. IDs follow the standalone Core grammar; native identifiers require explicit mapping. |
 | Media Endpoint definitions | `XRegistry.Models.EndpointDefinition.MaterializeMedia` and `RegistryDomainRules.ValidateMediaEndpointMetadata` | Validates the working-draft producer/consumer and protocol-option rules. Codec identifiers remain open and case-sensitive; the validator rejects recognized codecs assigned to the other media kind. The draft defines no codec/format compatibility matrix. |
-| WoT Version selection | `XRegistry.Models.WotVersionResolver.Resolve` and `SelectVersionId` | Applies typed floors, pins, sticky defaults and prerelease policy to caller-captured Resource Versions. `SelectVersionId` returns a selection without asserting byte provenance; `Resolve` requires the caller's captured digest and origin. Neither method parses reference URIs or acquires documents. |
-| WoT Registry acquisition | `XRegistry.Federation.WotRegistryResolver.ResolveAsync` | Resolves a parsed, nonlocal reference within one authorized source and Group Resource collection. Requires the source's captured SemVer WoT model, rejects competing Resources, and returns exact bytes with their computed SHA-256 digest and retained Registry origin. |
-| WoT containing-revision resolution | `XRegistry.Federation.WotRegistryResolver.ResolveLocalAsync` | Resolves a parsed local reference against an already acquired `WotResolvedDocument`. Uses its retained bytes and kind, applies local floors to the authored version, and cannot select another Registry Version. |
+| WoT Version selection | `XRegistry.Models.WotVersionResolver.Resolve` and `SelectVersionId` | Applies the captured Resource's explicit profile, floors, pins and sticky defaults. SemVer retains prerelease policy; incremental selection requires an exact compatibility line and optional numeric floor. `SelectVersionId` does not assert byte provenance; `Resolve` requires the captured digest and origin. Neither method parses reference URIs or acquires documents. |
+| WoT Registry acquisition | `XRegistry.Federation.WotRegistryResolver.ResolveAsync` | Resolves a parsed, nonlocal reference within one authorized source and Group Resource collection. Requires a captured WoT model with supported profile controls, rejects competing Resources, and returns exact bytes with their computed SHA-256 digest, effective line and Registry origin. |
+| WoT containing-revision resolution | `XRegistry.Federation.WotRegistryResolver.ResolveLocalAsync` | Resolves a parsed local reference against an already acquired `WotResolvedDocument`. Uses its retained bytes and kind. SemVer floors check the authored version; incremental requirements check the captured revision number and line. It cannot select another Registry Version. |
 | WoT JSON Pointer selection | `XRegistry.Federation.WotRegistryResolver.SelectFragmentAsync` | Applies an RFC 6901 URI-fragment pointer to the acquired document after Version or local-revision selection. Returns the selected JSON value with the containing document's full-byte digest and origin. |
 | WoT incremental assignment calculation | `XRegistry.Models.WotIncrementalVersionAllocator.Assign` | Calculates a new integer revision from explicit durable high-water state. It does not publish, persist a counter, activate an incremental endpoint or implement compatibility-line selection. |
-| WoT incremental publication | `XRegistry.Models.WotRegistryProfiles.Compile(WotVersionProfile.Incremental)` with `RegistryEngine` | Provisions a separate fixed-profile model. Publication commits the counter with Documents, metadata and Core state; revision bytes and compatibility lines cannot change. Reference selection remains unsupported. |
+| WoT incremental publication | `XRegistry.Models.WotRegistryProfiles.Compile(WotVersionProfile.Incremental)` with `RegistryEngine` | Provisions a separate fixed-profile model. Publication commits the counter with Documents, metadata and Core state; revision bytes and compatibility lines cannot change. |
 | Generic operation dispatch | `RegistryEngine.ExecuteAsync(RegistryOperation, RegistryOperationContext, CancellationToken)` in `XRegistry.Server` | The engine owns model, lifecycle, versions, validation and atomic change preparation. |
 | HTTP client | `XRegistry.Client.XRegistryHttpClient` | One explicit HTTP operation, unchanged status/headers and bounded metadata/Document consumption. |
 | HTTP serving | `XRegistry.AspNetCore.MapXRegistry` | Maps a concrete `RegistryEngine`; it does not start or secure a host. |
@@ -44,7 +44,7 @@ reports `Denied`. A required dependency failure prevents selection even if an
 earlier method matched. Caller cancellation propagates; deadline expiry reports
 `Indeterminate`. Resolution never invokes an API.
 
-WoT minimum-version floors use SemVer without build metadata and fit the
+SemVer-profile WoT minimum-version floors exclude build metadata and fit the
 128-character Core id limit. Generated `0.0.0-N` floors are forbidden, with
 positive `N` as defined by the draft's assignment rule; `0.0.0-0` is an
 authored prerelease and remains a valid floor. A type link uses the greater
@@ -62,7 +62,7 @@ Version, ignoring advisory digest fields. Denied, unavailable or inconsistent
 reads fail without trying another Version or source.
 
 `ResolveLocalAsync` retains the containing revision even after its source is
-disposed. It checks the stored document's identity, parses its exact bytes with
+disposed. For SemVer, it checks the stored document's identity, parses exact bytes with
 duplicate-name rejection, and reads `version.model` for a TM floor or
 `version.instance` for a TD floor. Caller-supplied revision claims cannot replace
 those fields. A failed floor does not reopen the source to select a different
@@ -86,8 +86,8 @@ The caller still processes URI references, document bases and JSON-LD contexts
 to establish locality, then names the containing WoT identity in a local
 request. `ResolveAsync` rejects local requests; `ResolveLocalAsync` rejects
 Registry pins. Resource aliases must first be resolved to an authorized source,
-and external document descriptors are not dereferenced. Incremental-profile
-selection and publication closure remain unimplemented. Acquisition, local
+and external document descriptors are not dereferenced. Publication closure
+remains unimplemented. SemVer acquisition, local
 resolution and fragment cases passed managed execution on both frameworks and
 native execution in the complete Federation suite on .NET 10/Windows x64 at
 `6d143c4`. Other native cells remain unqualified; the package-consumer fixture
@@ -125,12 +125,35 @@ creation. Authorized metadata can supply an absolute URI; a document declaration
 using the expanded `http://opcfoundation.org/UA/WoT-Binding/compatibilityLine`
 IRI must agree exactly. Compact JSON-LD terms are rejected until context
 processing is implemented. A lineless revision can be stored and read directly,
-but automatic line selection and its publication diagnostic remain open.
+but cannot satisfy automatic line selection; its publication diagnostic remains
+open.
 The full managed gate passed 10,666 cases and 283 tooling tests for this
 publication slice at `7e84cad`. Complete Server and Storage.File suites also
 passed native execution on .NET 10/Windows x64 at `f97af1b`, including all 28
 incremental publication cases and all three file-backed deletion/restart cases.
 Other native cells and complete incremental-profile qualification remain open.
+
+For incremental selection, set the captured `WotVersionResource.Profile` to
+`Incremental` and supply each candidate's authorized `CompatibilityLine`. An
+unpinned request requires its own `CompatibilityLine`; no root line or authored
+TD model version is inherited. An optional `MinimumVersion` uses canonical
+positive integer syntax within Core's 128-character id limit. Selection uses
+the highest numeric revision in that exact line, unless a sticky Core default
+must be checked instead. A conflicting sticky default fails without falling
+forward. Incremental TDs have no SemVer major cap or prerelease filter.
+
+Version-id pins override line/floor selection; digest pins compute actual byte
+digests and choose the highest numeric matching revision, regardless of line.
+Neither falls back to unpinned selection. The result retains the effective line
+and profile with the revision, full-byte digest and origin. Equal numbers from
+different origins are different revision identities. `ResolveLocalAsync` uses
+that retained number and line, ignores forged containing-revision inputs, and
+never substitutes another Version or reads the source again. URI/base/JSON-LD
+processing is still caller-owned; the new tests use parsed references and
+trusted provider metadata rather than claiming complete reference processing.
+The full managed gate for this selection/acquisition slice passed 10,748 cases
+and 283 tooling tests. Native evidence for the new selection paths is not yet
+qualified.
 
 ## Choose the real seam
 

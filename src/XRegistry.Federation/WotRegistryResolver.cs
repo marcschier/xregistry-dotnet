@@ -49,7 +49,7 @@ public sealed class WotResolvedFragment
     public JsonElement Value { get; }
 }
 
-/// <summary>Resolves parsed SemVer WoT references through a selected native source or retained revision.</summary>
+/// <summary>Resolves parsed profile-aware WoT references through a selected native source or retained revision.</summary>
 public static class WotRegistryResolver
 {
     /// <summary>Applies an RFC 6901 URI-fragment pointer after Version or local-revision selection.</summary>
@@ -132,7 +132,10 @@ public static class WotRegistryResolver
         }
 
         var captured = containingRevision.Version;
-        var revision = new WotVersionCandidate(captured.VersionId, captured.ContentDigest, captured.Origin);
+        var revision = new WotVersionCandidate(captured.VersionId, captured.ContentDigest, captured.Origin)
+        {
+            Profile = captured.Profile, CompatibilityLine = captured.CompatibilityLine
+        };
         if (request.VersionIdPin is not null || request.DigestPin is not null)
         {
             throw new RegistryException(new("invalid-pin", "",
@@ -142,7 +145,8 @@ public static class WotRegistryResolver
         budget ??= new();
         var root = await ParseAcquiredDocumentAsync(containingRevision, budget, cancellationToken).ConfigureAwait(false);
 
-        if (request.MinimumVersion is not null && root.TryGetProperty("version", out var version))
+        if (captured.Profile == WotVersionProfile.SemVer && request.MinimumVersion is not null &&
+            root.TryGetProperty("version", out var version))
         {
             FederationJson.RequireObject(version);
             var field = containingRevision.Kind == WotReferenceTargetKind.ThingModel ? "model" : "instance";
@@ -264,7 +268,7 @@ public static class WotRegistryResolver
     /// <summary>Resolves a parsed, nonlocal reference within one explicitly selected Resource collection.</summary>
     /// <remarks>
     /// The caller owns source authorization and URI/base/context processing. The source must expose
-    /// its captured SemVer WoT model. Lookup uses exact wotid equality, rejects competing Resources,
+    /// its captured WoT model and fixed profile. Lookup uses exact wotid equality, rejects competing Resources,
     /// and never follows successors, document URLs or another source. Digest pins are compared with
     /// hashes of acquired bytes, not advisory metadata. All reads share the supplied finite budget.
     /// </remarks>
@@ -292,6 +296,7 @@ public static class WotRegistryResolver
         private readonly CancellationToken _token;
         private readonly NativeRegistryContext _context;
         private readonly RegistryModel _model;
+        private readonly WotVersionProfile _profile;
         private readonly FederationResolutionOwner _owner;
 
         internal Resolution(IFederationReadSource source, FederationReadRequest collection,
@@ -307,6 +312,12 @@ public static class WotRegistryResolver
             _owner = FederationCapabilities.GetResolutionOwner(source.Capabilities);
             _model = source.Model ?? throw new FederationException(FederationErrorCode.UnsupportedOperation,
                 "WoT acquisition requires the source's captured model.");
+            try { _profile = WotRegistryProfiles.Read(_model); }
+            catch (RegistryException exception)
+            {
+                throw new FederationException(FederationErrorCode.UnsupportedVersion,
+                    "The source has no supported fixed WoT profile.", exception.Diagnostic.Code, exception);
+            }
             var singular = request.TargetKind switch
             {
                 WotReferenceTargetKind.ThingModel => "thingmodel",
@@ -316,17 +327,11 @@ public static class WotRegistryResolver
             if (!_model.Groups.TryGetValue(collection.Parts[0], out var group) ||
                 !group.Resources.TryGetValue(collection.Parts[2], out var resource) ||
                 resource.Singular != singular || !resource.HasDocument ||
-                resource.VersionMode != "semver")
+                resource.VersionMode != (_profile == WotVersionProfile.Incremental ? "manual" : "semver") ||
+                _profile == WotVersionProfile.Incremental && resource.SingleVersionRoot)
             {
                 throw new FederationException(FederationErrorCode.UnsupportedOperation,
-                    "The selected collection is not a captured SemVer WoT Resource type.");
-            }
-            if (_model.Attributes.TryGetValue("wotversionprofile", out var profile) &&
-                (!profile.ReadOnly || profile.DefaultValue.ValueKind != JsonValueKind.String ||
-                    profile.DefaultValue.GetString() != "semver"))
-            {
-                throw new FederationException(FederationErrorCode.UnsupportedVersion,
-                    "This resolver requires a fixed SemVer WoT profile.");
+                    "The selected collection is not a captured WoT Resource type with matching profile controls.");
             }
         }
 
@@ -391,11 +396,16 @@ public static class WotRegistryResolver
                 {
                     throw FederationJson.Invalid("A WoT Version has a different identity from its selected Resource.");
                 }
-                candidates.Add(new(id, "", _context.Source));
+                candidates.Add(new(id, "", _context.Source)
+                {
+                    Profile = _profile,
+                    CompatibilityLine = member.Value.TryGetProperty("compatibilityline", out _)
+                        ? FederationJson.String(member.Value, "compatibilityline") : null
+                });
             }
 
             var captured = new WotVersionResource(_request.TargetWotId, _request.TargetKind,
-                defaultId, sticky, candidates);
+                defaultId, sticky, candidates) { Profile = _profile };
             var matchingDocuments = new Dictionary<string, FederationDocument>(StringComparer.Ordinal);
             if (_request.DigestPin is not null && _request.VersionIdPin is null)
             {
@@ -427,7 +437,11 @@ public static class WotRegistryResolver
             CheckContext();
             _token.ThrowIfCancellationRequested();
             return new(resourceXid, _request.TargetKind,
-                new(_request.TargetWotId, selected, digest, _context.Source), _context, document);
+                new(_request.TargetWotId, selected, digest, _context.Source)
+                {
+                    Profile = _profile,
+                    CompatibilityLine = candidates.First(candidate => candidate.VersionId == selected).CompatibilityLine
+                }, _context, document);
         }
 
         private async ValueTask<(FederationDocument Document, string Digest)> AcquireAsync(string versionsPath, string id)

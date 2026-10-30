@@ -40,7 +40,13 @@ public sealed record WotVersionCandidate(
     string VersionId,
     string ContentDigest,
     string Origin,
-    string? AuthoredVersion = null);
+    string? AuthoredVersion = null)
+{
+    /// <summary>Gets the authorized effective line, including an absent declaration.</summary>
+    public string? CompatibilityLine { get; init; }
+    /// <summary>Gets the captured containing profile for document-local resolution.</summary>
+    public WotVersionProfile Profile { get; init; } = WotVersionProfile.SemVer;
+}
 
 /// <summary>The selected WoT Resource and its captured Core Version state.</summary>
 public sealed record WotVersionResource(
@@ -48,7 +54,11 @@ public sealed record WotVersionResource(
     WotReferenceTargetKind Kind,
     string? DefaultVersionId,
     bool DefaultVersionSticky,
-    IReadOnlyList<WotVersionCandidate> Versions);
+    IReadOnlyList<WotVersionCandidate> Versions)
+{
+    /// <summary>Gets the profile established by the selected endpoint model.</summary>
+    public WotVersionProfile Profile { get; init; } = WotVersionProfile.SemVer;
+}
 
 /// <summary>Inputs to the WoT Version selection algorithm after reference parsing and Resource lookup.</summary>
 public sealed record WotVersionResolutionRequest(
@@ -64,22 +74,39 @@ public sealed record WotVersionResolutionRequest(
     string? DigestPin = null,
     bool AllowPrerelease = false,
     bool IsDocumentLocal = false,
-    WotVersionCandidate? ContainingRevision = null);
+    WotVersionCandidate? ContainingRevision = null)
+{
+    /// <summary>Gets the explicit target compatibility line; no containing line is inherited.</summary>
+    public string? CompatibilityLine { get; init; }
+}
 
 /// <summary>The immutable identity and byte provenance of one resolved WoT Version.</summary>
 public sealed record WotResolvedVersion(
     string WotId,
     string VersionId,
     string ContentDigest,
-    string Origin);
+    string Origin)
+{
+    /// <summary>Gets the captured profile under which this revision was selected.</summary>
+    public WotVersionProfile Profile { get; init; } = WotVersionProfile.SemVer;
+    /// <summary>Gets the selected revision's effective line, independent of pin selectors.</summary>
+    public string? CompatibilityLine { get; init; }
+}
 
-/// <summary>Applies WoT floor, pin, sticky-default and prerelease rules to a selected Resource.</summary>
+/// <summary>Applies the selected WoT profile's floor, pin, default and compatibility-line rules.</summary>
 /// <remarks>
 /// The caller resolves the reference URI, selects one Registry and Group scope, and supplies the
 /// captured Resource Versions. This class does not acquire documents or resolve Registry bindings.
 /// </remarks>
 public static class WotVersionResolver
 {
+    private static readonly IReadOnlyDictionary<string, RegistryAttributeDefinition> LineAttributes =
+        new Dictionary<string, RegistryAttributeDefinition>
+        {
+            ["compatibilityline"] = RegistryModel.Compile(RegistryJson.Parse(
+                """{"attributes":{"compatibilityline":{"type":"uriabsolute"}}}""")).Attributes["compatibilityline"]
+        };
+
     /// <summary>Selects the Version required by a WoT reference from one captured Resource.</summary>
     /// <param name="resource">The Resource selected by the caller, or null when lookup found none.</param>
     /// <param name="request">The parsed reference and caller selection options.</param>
@@ -117,7 +144,11 @@ public static class WotVersionResolver
         }
 
         ValidateResource(resource);
+        return SelectResource(resource, request) with { Profile = resource.Profile };
+    }
 
+    private static WotVersionCandidate SelectResource(WotVersionResource resource, WotVersionResolutionRequest request)
+    {
         if (request.VersionIdPin is not null && request.DigestPin is not null)
         {
             throw Error("invalid-pin", "A request cannot contain both a versionid pin and a content-digest pin.");
@@ -141,10 +172,16 @@ public static class WotVersionResolver
                 throw Error("pin-mismatch", "The selected Resource has no Version with the pinned content digest.");
             }
 
-            var selected = Highest(matching);
+            var selected = resource.Profile == WotVersionProfile.Incremental
+                ? matching.MaxBy(version => ParseRevision(version.VersionId))! : Highest(matching);
             return selected;
         }
 
+        if (resource.Profile == WotVersionProfile.Incremental)
+        {
+            return SelectIncremental(resource, request);
+        }
+        RejectSemVerLine(request);
         var floor = DeriveFloor(request);
         if (resource.DefaultVersionSticky)
         {
@@ -227,6 +264,10 @@ public static class WotVersionResolver
 
     private static void ValidateResource(WotVersionResource resource)
     {
+        if (!Enum.IsDefined(resource.Profile))
+        {
+            throw Error("unknown-profile", "The selected WoT endpoint has an unknown Version profile.");
+        }
         if (!Enum.IsDefined(resource.Kind) || resource.Versions is null)
         {
             throw Error("invalid-version", "The selected WoT Resource has an invalid captured version set.");
@@ -237,7 +278,9 @@ public static class WotVersionResolver
         {
             if (candidate is null || string.IsNullOrEmpty(candidate.VersionId) ||
                 !versionIds.Add(candidate.VersionId) ||
-                !WotSemanticVersion.TryParse(candidate.VersionId, out _))
+                (resource.Profile == WotVersionProfile.Incremental
+                    ? !WotIncrementalVersionAllocator.TryParseRevision(candidate.VersionId, out _)
+                    : !WotSemanticVersion.TryParse(candidate.VersionId, out _)))
             {
                 throw Error("invalid-version", "The selected WoT Resource contains an invalid or duplicate Version id.");
             }
@@ -253,6 +296,17 @@ public static class WotVersionResolver
 
         var revision = request.ContainingRevision ??
             throw Error("not-found", "The containing WoT revision is unavailable.");
+        if (revision.Profile == WotVersionProfile.Incremental)
+        {
+            var floor = IncrementalFloor(request);
+            CheckIncremental(revision, request.CompatibilityLine!, floor);
+            return revision;
+        }
+        if (revision.Profile != WotVersionProfile.SemVer)
+        {
+            throw Error("unknown-profile", "The containing WoT revision has an unknown Version profile.");
+        }
+        RejectSemVerLine(request);
         if (request.MinimumVersion is not null)
         {
             ValidateMinimumVersionKind(request);
@@ -267,6 +321,85 @@ public static class WotVersionResolver
         }
 
         return revision;
+    }
+
+    private static WotVersionCandidate SelectIncremental(WotVersionResource resource, WotVersionResolutionRequest request)
+    {
+        var floor = IncrementalFloor(request);
+        if (resource.DefaultVersionSticky)
+        {
+            var sticky = resource.Versions.FirstOrDefault(version => version.VersionId == resource.DefaultVersionId)
+                ?? throw Error("not-found", "The sticky default Version is absent from the selected Resource.");
+            CheckIncremental(sticky, request.CompatibilityLine!, floor);
+            return sticky;
+        }
+
+        WotVersionCandidate? selected = null;
+        var maximum = BigInteger.Zero;
+        foreach (var candidate in resource.Versions)
+        {
+            if (candidate.CompatibilityLine is { } line) { ValidateLine(line); }
+            if (candidate.CompatibilityLine != request.CompatibilityLine) { continue; }
+            var number = ParseRevision(candidate.VersionId);
+            if (number >= floor && number > maximum)
+            {
+                selected = candidate;
+                maximum = number;
+            }
+        }
+        return selected ?? throw Error("unsatisfied",
+            "The selected Resource has no incremental revision satisfying the explicit line and optional floor.");
+    }
+
+    private static BigInteger IncrementalFloor(WotVersionResolutionRequest request)
+    {
+        if (request.CompatibilityLine is null)
+        {
+            throw Error("compatibility-required", "An unpinned incremental reference requires an explicit compatibility line.");
+        }
+        ValidateLine(request.CompatibilityLine);
+        if (request.MinimumVersion is null) { return BigInteger.Zero; }
+        ValidateMinimumVersionKind(request);
+        return ParseRevision(request.MinimumVersion);
+    }
+
+    private static void CheckIncremental(WotVersionCandidate candidate, string line, BigInteger floor)
+    {
+        var number = ParseRevision(candidate.VersionId);
+        if (candidate.CompatibilityLine is { } declaration) { ValidateLine(declaration); }
+        if (candidate.CompatibilityLine != line || number < floor)
+        {
+            throw Error("unsatisfied", "The fixed incremental revision does not satisfy the line and optional floor.");
+        }
+    }
+
+    private static BigInteger ParseRevision(string value) =>
+        WotIncrementalVersionAllocator.TryParseRevision(value, out var number) ? number :
+            throw Error("invalid-version", "An incremental revision or floor must be a canonical positive integer within the Core id limit.");
+
+    private static void ValidateLine(string line)
+    {
+        try
+        {
+            _ = RegistryMetadataValidator.Validate(RegistryJson.Create(writer =>
+            {
+                writer.WriteStartObject();
+                writer.WriteString("compatibilityline", line);
+                writer.WriteEndObject();
+            }), LineAttributes);
+        }
+        catch (RegistryException exception)
+        {
+            throw new RegistryException(new("invalid-line", "", "The compatibility line must be an absolute URI."), exception);
+        }
+    }
+
+    private static void RejectSemVerLine(WotVersionResolutionRequest request)
+    {
+        if (request.CompatibilityLine is not null)
+        {
+            throw Error("invalid-line", "A compatibility-line selector cannot be used with a SemVer endpoint.");
+        }
     }
 
     private static WotSemanticVersion? DeriveFloor(WotVersionResolutionRequest request)
@@ -374,7 +507,10 @@ public static class WotVersionResolver
             throw Error("invalid-version", "The selected Version has no content digest or byte origin.");
         }
 
-        return new(wotId, candidate.VersionId, candidate.ContentDigest, candidate.Origin);
+        return new(wotId, candidate.VersionId, candidate.ContentDigest, candidate.Origin)
+        {
+            Profile = candidate.Profile, CompatibilityLine = candidate.CompatibilityLine
+        };
     }
 
     private static RegistryException Error(string code, string message) => new(new(code, "", message));

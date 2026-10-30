@@ -113,9 +113,12 @@ native cell, without qualifying the other platforms.
   managed publication evidence, including concurrent conflicts and deletion
   across file-store restarts. The full managed gate passed 10,666 cases and 283
   tooling tests at `7e84cad`; complete Server and Storage.File native suites
-  passed on .NET 10/Windows x64 at `f97af1b`. Other native cells, origin-scoped
-  incremental selection, line eligibility diagnostics and complete workflow
-  evidence remain open.
+  passed on .NET 10/Windows x64 at `f97af1b`. Parsed incremental selection now
+  uses exact lines, numeric floors/ranking, sticky defaults and origin-scoped
+  acquisition; retained local references use the captured revision and line.
+  Its full managed gate passed 10,748 cases and 283 tooling tests.
+  Other native cells, refreshed selection evidence, URI/context mapping, line
+  eligibility diagnostics and complete workflow evidence remain open.
   SemVer provider acquisition now
   performs scoped native-source lookup and verifies acquired byte digests.
   Parsed local references use the retained containing revision and its authored

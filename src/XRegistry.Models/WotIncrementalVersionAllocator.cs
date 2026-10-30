@@ -73,6 +73,13 @@ public static class WotIncrementalVersionAllocator
 
     private static bool IsRevision(string value) => value.Length <= 128 && HasCanonicalDigits(value);
 
+    internal static bool TryParseRevision(string? value, out BigInteger revision)
+    {
+        revision = BigInteger.Zero;
+        return value is not null && IsRevision(value) &&
+            BigInteger.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out revision);
+    }
+
     private static bool HasCanonicalDigits(string? value) =>
         !string.IsNullOrEmpty(value) && value[0] is >= '1' and <= '9' && value.All(char.IsAsciiDigit);
 
