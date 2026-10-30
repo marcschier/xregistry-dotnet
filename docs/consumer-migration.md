@@ -290,6 +290,14 @@ or establish the complete input/output usage constraints across the model.
 Unreachable declarations are not validated, and literal members inside trait payloads do
 not become dependency references.
 
+For the structured `idempotent` trait, `exists` and `notFound` cannot both be
+present. Each supplied property must be an array of absolute root shape IDs,
+and each ID must exactly match an entry in that operation's own `errors` list.
+A common service error alone does not satisfy this rule. The normal dependency
+checks still require each declared error to resolve to an error-marked structure.
+Empty hint arrays are valid without an `errors` list and retain their native
+meaning; the resolver neither inserts error declarations nor executes retries.
+
 SemVer-profile WoT minimum-version floors exclude build metadata and fit the
 128-character Core id limit. Generated `0.0.0-N` floors are forbidden, with
 positive `N` as defined by the draft's assignment rule; `0.0.0-0` is an

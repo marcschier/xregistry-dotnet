@@ -181,7 +181,10 @@ vocabulary/source mapping. It does not supply their implementation.
   shape of annotation, idempotent and trait-marker values throughout the
   selected closure. Explicit recognized prelude targets and their declared
   readonly/idempotent, input/output/error and error/trait-definition conflicts
-  are checked. General applicability selectors, custom conflicts, complete
+  are checked. Idempotent `exists`/`notFound` declarations are mutually exclusive
+  arrays of absolute IDs whose targets must occur in the operation's own errors.
+  Their native hints are retained without execution or fallback to service errors.
+  General applicability selectors, custom conflicts, complete
   input/output usage, trait member schemas and default constraints remain open.
 - Complete end-to-end event/outbox delivery qualification while preserving
   atomic mutation publication and caller-visible failure semantics.

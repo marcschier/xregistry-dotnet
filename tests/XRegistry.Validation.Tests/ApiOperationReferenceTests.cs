@@ -2293,6 +2293,108 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
+    [Arguments("""{}""")]
+    [Arguments("""{"exists":[]}""")]
+    [Arguments("""{"notFound":[]}""")]
+    [Arguments("""{"exists":["example#Failure"]}""")]
+    [Arguments("""{"notFound":["example#Failure"]}""")]
+    [Arguments("""{"exists":["example#Failure","example#OtherFailure"]}""")]
+    public async Task SmithyJsonPreservesNativeIdempotentErrorHintsWithoutInferringExecution(string hints)
+    {
+        var document = """
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","traits":{"smithy.api#idempotent":HINTS},
+                "errors":[{"target":"example#Failure"},{"target":"example#OtherFailure"}]},
+              "example#Failure":{"type":"structure","traits":{"smithy.api#error":"client"}},
+              "example#OtherFailure":{"type":"structure","traits":{"smithy.api#error":"server"}}}}
+            """.Replace("HINTS", hints, StringComparison.Ordinal);
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Error IDs do not invoke retrieval."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        using var original = JsonDocument.Parse(document);
+        await Assert.That(result.Operation.GetRawText())
+            .IsEqualTo(original.RootElement.GetProperty("shapes").GetProperty("example#Get").GetRawText());
+        await Assert.That(result.Operation.GetProperty("errors").GetArrayLength()).IsEqualTo(2);
+    }
+
+    [Test]
+    [Arguments("""{"exists":[],"notFound":[]}""", "document.idempotent_conflict", "")]
+    [Arguments("""{"notFound":[],"exists":[]}""", "document.idempotent_conflict", "")]
+    [Arguments("""{"exists":null}""", "document.idempotent_errors", "/exists")]
+    [Arguments("""{"exists":{}}""", "document.idempotent_errors", "/exists")]
+    [Arguments("""{"notFound":"example#Failure"}""", "document.idempotent_errors", "/notFound")]
+    [Arguments("""{"exists":[null]}""", "document.idempotent_error", "/exists/0")]
+    [Arguments("""{"exists":[{}]}""", "document.idempotent_error", "/exists/0")]
+    [Arguments("""{"notFound":[1]}""", "document.idempotent_error", "/notFound/0")]
+    [Arguments("""{"exists":["Failure"]}""", "document.idempotent_error", "/exists/0")]
+    [Arguments("""{"exists":["example#Failure$member"]}""", "document.idempotent_error", "/exists/0")]
+    [Arguments("""{"exists":["example#failure"]}""", "document.idempotent_error", "/exists/0")]
+    [Arguments("""{"exists":["example#NotDeclared"]}""", "document.idempotent_error", "/exists/0")]
+    [Arguments("""{"notFound":["example#Failure","example#NotDeclared"]}""", "document.idempotent_error", "/notFound/1")]
+    public async Task SmithyJsonRejectsInvalidOrUndeclaredIdempotentErrorHints(string hints, string code, string suffix)
+    {
+        var document = """
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","traits":{"smithy.api#idempotent":HINTS},
+                "errors":[{"target":"example#Failure"}]},
+              "example#Failure":{"type":"structure","traits":{"smithy.api#error":"client"}},
+              "example#NotDeclared":{"type":"structure","traits":{"smithy.api#error":"server"}},
+              "example#Service":{"type":"service","errors":[{"target":"example#NotDeclared"}]}}}
+            """.Replace("HINTS", hints, StringComparison.Ordinal);
+        var result = ResolveSmithy(document);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/smithy.api#idempotent" + suffix);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("""{"type":"structure"}""", ApiOperationResolutionStatus.Invalid, "document.error_trait")]
+    [Arguments("""{"type":"string","traits":{"smithy.api#error":"client"}}""", ApiOperationResolutionStatus.Invalid, "document.target_type")]
+    [Arguments("""{"type":"structure","traits":{"smithy.api#error":"Client"}}""", ApiOperationResolutionStatus.Invalid, "document.error_trait")]
+    [Arguments("""null""", ApiOperationResolutionStatus.Indeterminate, "dependency.unresolved")]
+    public async Task SmithyJsonIdempotentHintsDoNotBypassNativeErrorDefinitionValidation(
+        string definition, ApiOperationResolutionStatus status, string code)
+    {
+        var document = JsonNode.Parse("""
+            {"smithy":"2.0","shapes":{"example#Get":{"type":"operation",
+              "traits":{"smithy.api#idempotent":{"exists":["example#Failure"]}},
+              "errors":[{"target":"example#Failure"}]}}}
+            """)!.AsObject();
+        if (definition != "null") { document["shapes"]!["example#Failure"] = JsonNode.Parse(definition); }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(status);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("""{"exists":[]}""", ApiOperationResolutionStatus.Selected)]
+    [Arguments("""{"notFound":[]}""", ApiOperationResolutionStatus.Selected)]
+    [Arguments("""{"exists":["example#Failure"]}""", ApiOperationResolutionStatus.Invalid)]
+    [Arguments("""{"notFound":["example#Failure"]}""", ApiOperationResolutionStatus.Invalid)]
+    public async Task SmithyJsonEmptyIdempotentHintsDoNotRequireAnErrorsList(
+        string hints, ApiOperationResolutionStatus status)
+    {
+        var result = ResolveSmithy("""
+            {"smithy":"2.0","shapes":{"example#Get":{"type":"operation",
+              "traits":{"smithy.api#idempotent":HINTS}}}}
+            """.Replace("HINTS", hints, StringComparison.Ordinal));
+        await Assert.That(result.Status).IsEqualTo(status);
+        if (status == ApiOperationResolutionStatus.Selected)
+        {
+            await Assert.That(result.Operation.TryGetProperty("errors", out _)).IsFalse();
+        }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.idempotent_error");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
     [Arguments("""{"type":"operation","input":{"target":"example#Missing"}}""", "", ApiOperationResolutionStatus.Indeterminate, "dependency.unresolved")]
     [Arguments("""{"type":"operation","input":{"target":"smithy.api#String"}}""", "", ApiOperationResolutionStatus.Invalid, "document.target_type")]
     [Arguments("""{"type":"operation","input":null}""", "", ApiOperationResolutionStatus.Invalid, "document.target")]

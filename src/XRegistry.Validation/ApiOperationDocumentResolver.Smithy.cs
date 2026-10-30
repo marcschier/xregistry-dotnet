@@ -388,9 +388,13 @@ public static partial class ApiOperationDocumentResolver
                             "document.trait_value", "Smithy annotation traits require object values.");
                         continue;
                     case "smithy.api#idempotent":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
+                            "document.trait_value", "The Smithy idempotent trait requires an object value.");
+                        ValidateIdempotent(shape, trait.Value, traitPath);
+                        continue;
                     case "smithy.api#trait":
                         ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
-                            "document.trait_value", "The Smithy idempotent and trait traits require object values.");
+                            "document.trait_value", "The Smithy trait marker requires an object value.");
                         continue;
                     case "smithy.api#default":
                     case "smithy.api#enumValue":
@@ -403,6 +407,44 @@ public static partial class ApiOperationDocumentResolver
                         path + "/traits", "document.trait_definition", "An applied custom trait must target a trait definition.");
                 }
                 Visit(trait.Name, depth + 1, traitDefinition: true);
+            }
+        }
+
+        private void ValidateIdempotent(JsonElement operation, JsonElement trait, string path)
+        {
+            ValidationContext.Require(!trait.TryGetProperty("exists", out _) ||
+                !trait.TryGetProperty("notFound", out _), path, "document.idempotent_conflict",
+                "Smithy idempotent exists and notFound properties are mutually exclusive.");
+            var declaredErrors = new HashSet<string>(StringComparer.Ordinal);
+            if (operation.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var error in errors.EnumerateArray())
+                {
+                    budget.Work(path: path);
+                    if (error.ValueKind == JsonValueKind.Object && error.TryGetProperty("target", out var target) &&
+                        target.ValueKind == JsonValueKind.String)
+                    {
+                        declaredErrors.Add(target.GetString()!);
+                    }
+                }
+            }
+            foreach (var member in new[] { "exists", "notFound" })
+            {
+                if (!trait.TryGetProperty(member, out var values)) { continue; }
+                var memberPath = path + "/" + member;
+                ValidationContext.Require(values.ValueKind == JsonValueKind.Array, memberPath,
+                    "document.idempotent_errors", "Smithy idempotent error declarations must be arrays.");
+                var index = 0;
+                foreach (var value in values.EnumerateArray())
+                {
+                    var valuePath = memberPath + "/" + (index++).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    budget.Work(path: valuePath);
+                    ValidationContext.Require(value.ValueKind == JsonValueKind.String &&
+                        IsSmithyShapeId(value.GetString()!), valuePath, "document.idempotent_error",
+                        "A Smithy idempotent error must be an absolute root shape ID.");
+                    ValidationContext.Require(declaredErrors.Contains(value.GetString()!), valuePath, "document.idempotent_error",
+                        "A Smithy idempotent error must be declared in this operation's errors list.");
+                }
             }
         }
     }
