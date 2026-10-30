@@ -10,6 +10,17 @@ namespace XRegistry.Models.Tests;
 public class WotVersionResolverTests
 {
     [Test]
+    public async Task VersionSelectionDoesNotClaimUnacquiredByteProvenance()
+    {
+        var resource = Resource(("1.0.0", ""));
+        var request = Request(WotReferenceTargetKind.ThingModel, WotReferenceOperator.ThingModel);
+        await Assert.That(WotVersionResolver.SelectVersionId(resource, request)).IsEqualTo("1.0.0");
+        var failure = await Assert.That(() => WotVersionResolver.Resolve(resource, request))
+            .Throws<RegistryException>() ?? throw new InvalidOperationException("Expected missing byte provenance.");
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo("invalid-version");
+    }
+
+    [Test]
     public async Task SelectsHighestStableThingModelAtOrAboveItsFloor()
     {
         var result = WotVersionResolver.Resolve(Resource(

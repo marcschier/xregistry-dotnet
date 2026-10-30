@@ -87,6 +87,21 @@ public static class WotVersionResolver
     /// <exception cref="RegistryException">A specified lookup, pin, floor or selection rule cannot be satisfied.</exception>
     public static WotResolvedVersion Resolve(WotVersionResource? resource, WotVersionResolutionRequest request)
     {
+        var selected = Select(resource, request);
+        return Result(request.TargetWotId, selected);
+    }
+
+    /// <summary>Selects a Version id before acquiring its bytes or asserting byte provenance.</summary>
+    /// <remarks>
+    /// A digest pin requires actual digests in the captured candidates. Without a digest pin,
+    /// candidate digests and origins may be empty; the caller must acquire the selected Version
+    /// and compute its digest before reporting a resolved document.
+    /// </remarks>
+    public static string SelectVersionId(WotVersionResource? resource, WotVersionResolutionRequest request) =>
+        Select(resource, request).VersionId;
+
+    private static WotVersionCandidate Select(WotVersionResource? resource, WotVersionResolutionRequest request)
+    {
         ArgumentNullException.ThrowIfNull(request);
         ValidateRequest(request);
 
@@ -114,7 +129,7 @@ public static class WotVersionResolver
                 StringComparer.Ordinal.Equals(version.VersionId, versionPin));
             return pinned is null
                 ? throw Error("not-found", "The pinned Version does not exist in the selected Resource.")
-                : Result(resource.WotId, pinned);
+                : pinned;
         }
 
         if (request.DigestPin is { } digestPin)
@@ -127,7 +142,7 @@ public static class WotVersionResolver
             }
 
             var selected = Highest(matching);
-            return Result(resource.WotId, selected);
+            return selected;
         }
 
         var floor = DeriveFloor(request);
@@ -142,7 +157,7 @@ public static class WotVersionResolver
 
             var stickyVersion = ParseVersion(sticky.VersionId);
             CheckFloor(stickyVersion, floor, request.TargetKind);
-            return Result(resource.WotId, sticky);
+            return sticky;
         }
 
         var eligible = new List<(WotVersionCandidate Candidate, WotSemanticVersion Version)>();
@@ -180,7 +195,7 @@ public static class WotVersionResolver
             }
         }
 
-        return Result(resource.WotId, best.Candidate);
+        return best.Candidate;
     }
 
     private static void ValidateRequest(WotVersionResolutionRequest request)
@@ -229,7 +244,7 @@ public static class WotVersionResolver
         }
     }
 
-    private static WotResolvedVersion ResolveLocal(WotVersionResolutionRequest request)
+    private static WotVersionCandidate ResolveLocal(WotVersionResolutionRequest request)
     {
         if (request.VersionIdPin is not null || request.DigestPin is not null)
         {
@@ -251,7 +266,7 @@ public static class WotVersionResolver
             CheckFloor(authoredVersion, floor, request.TargetKind);
         }
 
-        return Result(request.TargetWotId, revision);
+        return revision;
     }
 
     private static WotSemanticVersion? DeriveFloor(WotVersionResolutionRequest request)

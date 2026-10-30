@@ -93,7 +93,9 @@ Full native TUnit requirement receipts remain incomplete.
 - Complete the approved draft-alignment scope against the immutable successor
   sources in `eng/specification/successors.json`. The source inventory does not
   replace clause review or execution evidence.
-- Implement the selected incremental WoT profile and provider integration.
+- Implement the selected incremental WoT profile. SemVer provider acquisition now
+  performs scoped native-source lookup and verifies acquired byte digests;
+  URI/base/context processing and document-local/alias integration remain open.
   WoT publication closure also needs the unresolved source-occurrence and target
   mappings from the draft; do not substitute live targets for captured closure.
 - Add full API format validators and the remaining language resolvers. The
