@@ -820,10 +820,13 @@ public static partial class ApiOperationDocumentResolver
                 ValidationContext.Require(IsSmithyShapeId(trait.Name), path + "/traits", "document.trait_id",
                     "A Smithy trait ID must be an absolute root shape ID.");
                 var traitPath = path + "/traits/" + Escape(trait.Name);
+                ValidationContext.Require(trait.Name != "smithy.api#box", traitPath, "document.smithy2_box",
+                    "The box trait cannot be used in Smithy 2.0 models.");
                 var targetAllowed = trait.Name switch
                 {
                     "smithy.api#enum" => memberContainer is null && kind == "string",
-                    "smithy.api#required" or "smithy.api#clientOptional" => memberContainer == "structure",
+                    "smithy.api#required" or "smithy.api#clientOptional" or "smithy.api#recommended" =>
+                        memberContainer == "structure",
                     "smithy.api#addedDefault" => memberContainer == "structure" &&
                         traits.TryGetProperty("smithy.api#default", out _),
                     "smithy.api#sparse" => kind is "list" or "map",
@@ -841,6 +844,8 @@ public static partial class ApiOperationDocumentResolver
                     "The recognized Smithy prelude trait is not applicable to this shape.");
                 var conflict = trait.Name switch
                 {
+                    "smithy.api#recommended" => traits.TryGetProperty("smithy.api#required", out _),
+                    "smithy.api#required" => traits.TryGetProperty("smithy.api#recommended", out _),
                     "smithy.api#readonly" => traits.TryGetProperty("smithy.api#idempotent", out _),
                     "smithy.api#input" => traits.TryGetProperty("smithy.api#output", out _) ||
                         traits.TryGetProperty("smithy.api#error", out _),
@@ -855,6 +860,21 @@ public static partial class ApiOperationDocumentResolver
                     "Conflicting Smithy prelude traits cannot be applied to the same shape.");
                 switch (trait.Name)
                 {
+                    case "smithy.api#deprecated":
+                    case "smithy.api#recommended":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
+                            "document.trait_value", "Smithy lifecycle annotations require object values.");
+                        foreach (var name in trait.Name == "smithy.api#deprecated"
+                            ? new[] { "message", "since" } : new[] { "reason" })
+                        {
+                            budget.Work(path: traitPath);
+                            if (trait.Value.TryGetProperty(name, out var text))
+                            {
+                                ValidationContext.Require(text.ValueKind == JsonValueKind.String, traitPath + "/" + name,
+                                    "document.trait_value", "Smithy lifecycle annotation text must be a string.");
+                            }
+                        }
+                        continue;
                     case "smithy.api#enum":
                         ValidateLegacyEnum(trait.Value, traitPath);
                         continue;

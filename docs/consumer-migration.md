@@ -284,7 +284,7 @@ The implicit prelude support covers `Blob`, `Boolean`, `Document`, `String`,
 `PrimitiveDouble`, and the traits
 `error`, `documentation`, `required`, `clientOptional`, `addedDefault`, `sparse`,
 `uniqueItems`, `private`, `length`, `range`, `pattern`, `input`, `output`, `readonly`, `idempotent`,
-`default`, `enum`, `enumValue` and `trait`
+`default`, `enum`, `enumValue`, `deprecated`, `recommended` and `trait`
 in `smithy.api`. Other required definitions
 must be supplied in the AST. These checks do not validate every Smithy shape
 constraint, trait value or selector. Full Smithy validation and model assembly
@@ -369,6 +369,14 @@ be a nonempty string. Non-null authored defaults must match a declared value,
 and applicable length checks still apply. Null member overrides remain valid.
 The resolver retains the original trait representation without migrating it
 to enum shapes or generating client behavior.
+
+The `deprecated` trait accepts an object on roots and members, with optional
+string `message` and `since` fields. The `since` text is not parsed as a date or
+version. The `recommended` trait accepts an object only on structure members,
+with an optional string `reason`, and conflicts with `required` regardless of
+property order. These annotations do not change default validation or generate
+client warnings. Reached uses of `box` report `Invalid` because Smithy 2.0
+forbids that trait; unrelated definitions and literal metadata are not scanned.
 
 Reachable trait definitions require a string `selector`, when supplied, and
 restrict `structurallyExclusive` to `member` or `target`. These are property

@@ -4048,6 +4048,149 @@ public class ApiOperationReferenceTests
         await Assert.That(invalid.Diagnostic.Path).IsEqualTo("$/shapes/example#Input/members/value/traits/smithy.api#default");
     }
 
+    [Test]
+    [Arguments("deprecated", "null", false, "")]
+    [Arguments("deprecated", "\"text\"", false, "")]
+    [Arguments("deprecated", """{"message":null}""", false, "/message")]
+    [Arguments("deprecated", """{"message":1}""", false, "/message")]
+    [Arguments("deprecated", """{"since":[]}""", false, "/since")]
+    [Arguments("deprecated", """{"since":false}""", false, "/since")]
+    [Arguments("deprecated", "{}", true, "")]
+    [Arguments("deprecated", """{"message":""}""", true, "")]
+    [Arguments("deprecated", """{"since":"not-a-date"}""", true, "")]
+    [Arguments("deprecated", """{"message":"Use next.","since":"v2"}""", true, "")]
+    [Arguments("recommended", "null", false, "")]
+    [Arguments("recommended", "[]", false, "")]
+    [Arguments("recommended", """{"reason":null}""", false, "/reason")]
+    [Arguments("recommended", """{"reason":true}""", false, "/reason")]
+    [Arguments("recommended", "{}", true, "")]
+    [Arguments("recommended", """{"reason":""}""", true, "")]
+    [Arguments("recommended", """{"reason":"Usually useful."}""", true, "")]
+    public async Task SmithyJsonLifecycleAnnotationTextRetainsDeclaredTypes(
+        string trait, string value, bool valid, string suffix)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("string", "null", false))!;
+        var member = document["shapes"]!["example#Input"]!["members"]!["value"]!;
+        member["traits"] = new JsonObject { ["smithy.api#" + trait] = JsonNode.Parse(value) };
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_value");
+            await Assert.That(result.Diagnostic.Path)
+                .IsEqualTo("$/shapes/example#Input/members/value/traits/smithy.api#" + trait + suffix);
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("required")]
+    [Arguments("recommended")]
+    public async Task SmithyJsonRecommendedAndRequiredConflictInEitherPropertyOrder(string first)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("string", "null", false))!;
+        var member = document["shapes"]!["example#Input"]!["members"]!["value"]!;
+        var second = first == "required" ? "recommended" : "required";
+        member["traits"] = new JsonObject
+        {
+            ["smithy.api#" + first] = new JsonObject(),
+            ["smithy.api#" + second] = new JsonObject()
+        };
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_conflict");
+        await Assert.That(result.Diagnostic.Path)
+            .IsEqualTo("$/shapes/example#Input/members/value/traits/smithy.api#" + first);
+    }
+
+    [Test]
+    [Arguments("list", "member")]
+    [Arguments("map", "key")]
+    [Arguments("map", "value")]
+    [Arguments("union", "members/A")]
+    [Arguments("enum", "members/A")]
+    [Arguments("intEnum", "members/A")]
+    public async Task SmithyJsonDeprecationAllowsMembersButRecommendationRequiresStructure(string kind, string position)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument(kind, "null", false))!;
+        document["shapes"]!["example#Input"]!["members"]!["value"]!.AsObject().Remove("traits");
+        var member = document["shapes"]!["example#Value"]!;
+        foreach (var segment in position.Split('/')) { member = member[segment]!; }
+        if (member["traits"] is null) { member["traits"] = new JsonObject(); }
+        member["traits"]!["smithy.api#deprecated"] = JsonNode.Parse("""{"message":"Use next."}""");
+        var deprecated = ResolveSmithy(document.ToJsonString());
+        await Assert.That(deprecated.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        member["traits"]!["smithy.api#recommended"] = new JsonObject();
+        var invalid = ResolveSmithy(document.ToJsonString());
+        await Assert.That(invalid.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(invalid.Diagnostic!.Code).IsEqualTo("document.trait_target");
+        await Assert.That(invalid.Diagnostic.Path)
+            .IsEqualTo("$/shapes/example#Value/" + position + "/traits/smithy.api#recommended");
+    }
+
+    [Test]
+    [Arguments("example#Get")]
+    [Arguments("example#Input")]
+    [Arguments("example#Value")]
+    public async Task SmithyJsonDeprecationAllowsRootsButRecommendationDoesNot(string id)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("string", "null", false))!;
+        document["shapes"]![id]!["traits"] = JsonNode.Parse("""{"smithy.api#deprecated":{"since":"vNext"}}""");
+        var selected = ResolveSmithy(document.ToJsonString());
+        await Assert.That(selected.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        document["shapes"]![id]!["traits"]!["smithy.api#recommended"] = new JsonObject();
+        var invalid = ResolveSmithy(document.ToJsonString());
+        await Assert.That(invalid.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(invalid.Diagnostic!.Code).IsEqualTo("document.trait_target");
+        await Assert.That(invalid.Diagnostic.Path).IsEqualTo("$/shapes/" + id + "/traits/smithy.api#recommended");
+    }
+
+    [Test]
+    [Arguments(false, "{}")]
+    [Arguments(false, "null")]
+    [Arguments(true, "{}")]
+    [Arguments(true, "null")]
+    public async Task SmithyJsonBoxIsForbiddenInVersionTwoAtRootsAndMembers(bool onMember, string value)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("integer", "null", false))!;
+        var owner = onMember ? document["shapes"]!["example#Input"]!["members"]!["value"]!
+            : document["shapes"]!["example#Value"]!;
+        owner["traits"] = new JsonObject { ["smithy.api#box"] = JsonNode.Parse(value) };
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.smithy2_box");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo((onMember
+            ? "$/shapes/example#Input/members/value" : "$/shapes/example#Value") + "/traits/smithy.api#box");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonLifecycleAnnotationsPreserveNativeMetadataWithoutAcquisitionOrUnrelatedScanning()
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("string", "null", false))!;
+        document["shapes"]!["example#Get"]!["traits"] = JsonNode.Parse("""
+            {"smithy.api#deprecated":{"message":"https://example.test/not-an-import","since":"vNext"}}
+            """);
+        document["shapes"]!["example#Input"]!["members"]!["value"]!["traits"] = JsonNode.Parse("""
+            {"smithy.api#recommended":{"reason":"https://example.test/not-a-dependency"},
+             "smithy.api#clientOptional":{},"smithy.api#default":"a"}
+            """);
+        document["shapes"]!["example#Unused"] = JsonNode.Parse("""
+            {"type":"integer","traits":{"smithy.api#box":{},"smithy.api#deprecated":null}}
+            """);
+        document["metadata"] = JsonNode.Parse("""{"literal":{"traits":{"smithy.api#box":{}}}}""");
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Lifecycle text is not an import."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
     private static string SmithyDefaultDocument(string kind, string value, bool rootDefault)
     {
         var target = new JsonObject { ["type"] = kind };

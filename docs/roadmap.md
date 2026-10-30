@@ -218,6 +218,11 @@ vocabulary/source mapping. It does not supply their implementation.
   values, valid unique all-or-none names and optional metadata types. Authored
   defaults check membership and effective length bounds; null overrides remain
   valid. No enum-shape conversion or client generation is performed.
+  `deprecated` checks object values and optional message/since strings.
+  `recommended` checks structure-member applicability, optional reason strings
+  and its conflict with `required` in either property order. Reached `box`
+  applications are rejected as forbidden in Smithy 2.0; unrelated definitions
+  remain outside the selected-closure check.
   Idempotent `exists`/`notFound` declarations are mutually exclusive
   arrays of absolute IDs whose targets must occur in the operation's own errors.
   Their native hints are retained without execution or fallback to service errors.
