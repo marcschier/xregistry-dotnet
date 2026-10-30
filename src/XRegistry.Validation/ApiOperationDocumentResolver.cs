@@ -665,16 +665,32 @@ public static partial class ApiOperationDocumentResolver
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (tokens.Count < 3 || (tokens.Count - 3) % 4 != 0 ||
-            tokens.Count > 3 && format == "Swagger/2.0" ||
+        var methodStart = 2;
+        if (tokens.Count >= 4 && tokens[0] == "components" && format != "Swagger/2.0")
+        {
+            methodStart = tokens[1] switch
+            {
+                "pathItems" when format == "OpenAPI/3.1" => 3,
+                "callbacks" when tokens.Count >= 5 &&
+                    !tokens[3].StartsWith("x-", StringComparison.Ordinal) => 4,
+                _ => -1
+            };
+        }
+        else if (tokens.Count < 3 ||
             !(tokens[0] == "paths" && tokens[1].StartsWith('/') ||
-              format == "OpenAPI/3.1" && tokens[0] == "webhooks") ||
-            !s_methods.Contains(tokens[2], StringComparer.Ordinal))
+              format == "OpenAPI/3.1" && tokens[0] == "webhooks"))
+        {
+            methodStart = -1;
+        }
+        if (methodStart < 0 || tokens.Count <= methodStart ||
+            (tokens.Count - methodStart - 1) % 4 != 0 ||
+            tokens.Count > methodStart + 1 && format == "Swagger/2.0" ||
+            !s_methods.Contains(tokens[methodStart], StringComparer.Ordinal))
         {
             return Failure(ApiOperationResolutionStatus.Invalid, "selection.operation_pointer",
-                "An operation pointer must select paths/{path}/{http-method} or an OpenAPI 3.1 webhook method.");
+                "An operation pointer must select an HTTP method in a supported Path Item or Callback location.");
         }
-        for (var index = 3; index < tokens.Count; index += 4)
+        for (var index = methodStart + 1; index < tokens.Count; index += 4)
         {
             if (tokens[index] != "callbacks" ||
                 tokens[index + 2].StartsWith("x-", StringComparison.Ordinal) ||
@@ -685,13 +701,20 @@ public static partial class ApiOperationDocumentResolver
             }
         }
 
-        var pathPointer = "$/" + tokens[0] + "/" + Escape(tokens[1]);
-        if (!root.TryGetProperty(tokens[0], out var paths) || !paths.TryGetProperty(tokens[1], out var pathItem))
+        var pathPointer = "$";
+        var pathItem = root;
+        for (var index = 0; index < methodStart; index++)
         {
-            return Failure(ApiOperationResolutionStatus.NotFound, "selection.not_found",
-                "The selected path does not exist.");
+            if (pathItem.ValueKind != JsonValueKind.Object || pathItem.TryGetProperty("$ref", out _) ||
+                !pathItem.TryGetProperty(tokens[index], out pathItem))
+            {
+                return Failure(ApiOperationResolutionStatus.NotFound, "selection.not_found",
+                    "The selected inline Path Item does not exist; pointers do not traverse references.",
+                    pathPointer);
+            }
+            pathPointer += "/" + Escape(tokens[index]);
         }
-        for (var methodIndex = 2; ; methodIndex += 4)
+        for (var methodIndex = methodStart; ; methodIndex += 4)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (pathItem.ValueKind != JsonValueKind.Object ||

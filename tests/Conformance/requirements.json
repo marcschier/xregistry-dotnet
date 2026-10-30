@@ -112671,13 +112671,23 @@
       ],
       "text": "If an operation has no `operationId`, its reference MUST use a JSON Pointer to the operation object:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The bounded JSON selector accepts exact inline Operation Objects under paths, OpenAPI 3.1 webhooks, nested callbacks, OpenAPI 3.1 reusable Path Items and OpenAPI 3.0/3.1 reusable Callbacks, including methods without operationId. Native version/object positions are enforced; pointers never dereference Callback, Path Item or operation references. Unused component definitions can be selected explicitly without becoming operation-ID candidates. YAML and complete document validation remain unsupported, so the obligation remains pending without native qualification.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.ResolvesOnlyTheOperationSelectedByJsonPointer",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.WebhookJsonPointerSelectsAnOperationWithoutAnOperationId",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.CallbackSelectionIgnoresExtensionsAndUnusedDefinitionsAndPermitsAnonymousPointers",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenApiPointersSelectInlineOperationsInReusableComponentDefinitions",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.ComponentOperationPointersEnforceNativeVersionAndObjectPositions",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.ComponentOperationPointersRejectReferencesAndMissingOrNonOperationTargets",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.ComponentDefinitionsAreOnlyOperationIdCandidatesWhenReachedThroughTheApi"
+        ],
         "nativeEvidence": []
       }
     },

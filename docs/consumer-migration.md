@@ -86,6 +86,13 @@ webhook pointer; each further callback adds another four tokens. Percent-encode
 URI-fragment data before use, including braces and `#`, and escape `/` and `~`
 inside pointer tokens. Pointers never cross a Callback, Path Item or operation
 reference. Swagger does not interpret callback-shaped data as OpenAPI operations.
+Pointers can also select inline reusable definitions:
+`/components/pathItems/{name}/{method}` in OpenAPI 3.1, and
+`/components/callbacks/{name}/{expression}/{method}` in OpenAPI 3.0 and 3.1.
+These methods can contain further inline callbacks. A pointer selects the
+specified definition even if it is unused; operation-ID lookup still searches
+only API occurrences reachable through paths, webhooks and callbacks. Reusable
+definitions do not add candidates merely by existing in `components`.
 Full OpenAPI validation, including callback-expression syntax, and YAML parsing
 remain unsupported.
 

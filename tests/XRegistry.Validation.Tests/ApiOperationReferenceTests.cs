@@ -674,6 +674,101 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
+    [Arguments("OpenAPI/3.1", "3.1.1", """{"pathItems":{"reusable":{"get":{"summary":"Component operation"}}}}""",
+        "/components/pathItems/reusable/get", "$/components/pathItems/reusable/get")]
+    [Arguments("OpenAPI/3.1", "3.1.1", """{"pathItems":{"x-reusable":{"get":{"summary":"Component operation"}}}}""",
+        "/components/pathItems/x-reusable/get", "$/components/pathItems/x-reusable/get")]
+    [Arguments("OpenAPI/3.0", "3.0.4", """{"callbacks":{"reusable":{"url":{"get":{"summary":"Component operation"}}}}}""",
+        "/components/callbacks/reusable/url/get", "$/components/callbacks/reusable/url/get")]
+    [Arguments("OpenAPI/3.1", "3.1.1", """{"callbacks":{"x-reusable":{"{$request.body#/url}":{"get":{"summary":"Component operation"}}}}}""",
+        "/components/callbacks/x-reusable/%7B$request.body%23~1url%7D/get",
+        "$/components/callbacks/x-reusable/{$request.body#~1url}/get")]
+    [Arguments("OpenAPI/3.1", "3.1.1", """{"pathItems":{"reusable":{"post":{"callbacks":{"done":{"url":{"get":{"summary":"Component operation"}}}}}}}}""",
+        "/components/pathItems/reusable/post/callbacks/done/url/get",
+        "$/components/pathItems/reusable/post/callbacks/done/url/get")]
+    [Arguments("OpenAPI/3.0", "3.0.4", """{"callbacks":{"reusable":{"url":{"post":{"callbacks":{"done":{"url":{"get":{"summary":"Component operation"}}}}}}}}}""",
+        "/components/callbacks/reusable/url/post/callbacks/done/url/get",
+        "$/components/callbacks/reusable/url/post/callbacks/done/url/get")]
+    public async Task OpenApiPointersSelectInlineOperationsInReusableComponentDefinitions(
+        string format, string version, string components, string selector, string expectedPath)
+    {
+        var calls = 0;
+        var document = """{"openapi":"VERSION","paths":{},"components":COMPONENTS}"""
+            .Replace("VERSION", version, StringComparison.Ordinal).Replace("COMPONENTS", components, StringComparison.Ordinal);
+        var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document), ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+            resolveReference: (_, _) => { calls++; throw new InvalidOperationException("Inline pointer must not acquire dependencies."); });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.DocumentPath).IsEqualTo(expectedPath);
+        await Assert.That(result.Operation.GetProperty("summary").GetString()).IsEqualTo("Component operation");
+        await Assert.That(result.Operation.TryGetProperty("operationId", out _)).IsFalse();
+        await Assert.That(result.DocumentUri).IsNull();
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "openapi", "3.0.4", "/components/pathItems/reusable/get")]
+    [Arguments("Swagger/2.0", "swagger", "2.0", "/components/pathItems/reusable/get")]
+    [Arguments("Swagger/2.0", "swagger", "2.0", "/components/callbacks/reusable/url/get")]
+    [Arguments("OpenAPI/3.1", "openapi", "3.1.1", "/components/schemas/reusable/get")]
+    [Arguments("OpenAPI/3.1", "openapi", "3.1.1", "/components/callbacks/reusable/x-extension/get")]
+    [Arguments("OpenAPI/3.1", "openapi", "3.1.1", "/components/pathItems/reusable/summary")]
+    [Arguments("OpenAPI/3.1", "openapi", "3.1.1", "/components/pathItems/reusable/get/responses")]
+    public async Task ComponentOperationPointersEnforceNativeVersionAndObjectPositions(
+        string format, string field, string version, string selector)
+    {
+        var document = """{"FIELD":"VERSION","paths":{},"components":{}}"""
+            .Replace("FIELD", field, StringComparison.Ordinal).Replace("VERSION", version, StringComparison.Ordinal);
+        var result = ApiOperationDocumentResolver.Resolve(format, "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document), ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("selection.operation_pointer");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("""{"pathItems":{"reusable":{"$ref":"./external.json#/item"}}}""",
+        "/components/pathItems/reusable/get", ApiOperationResolutionStatus.NotFound)]
+    [Arguments("""{"pathItems":{"reusable":{"get":{"$ref":"./external.json#/operation"}}}}""",
+        "/components/pathItems/reusable/get", ApiOperationResolutionStatus.Invalid)]
+    [Arguments("""{"callbacks":{"reusable":{"$ref":"./external.json#/callback"}}}""",
+        "/components/callbacks/reusable/url/get", ApiOperationResolutionStatus.NotFound)]
+    [Arguments("""{"callbacks":{"reusable":{"url":{"$ref":"./external.json#/item"}}}}""",
+        "/components/callbacks/reusable/url/get", ApiOperationResolutionStatus.NotFound)]
+    [Arguments("""{"pathItems":{"reusable":{"get":true}}}""",
+        "/components/pathItems/reusable/get", ApiOperationResolutionStatus.Invalid)]
+    [Arguments("""{}""", "/components/pathItems/reusable/get", ApiOperationResolutionStatus.NotFound)]
+    [Arguments("""{"pathItems":null}""", "/components/pathItems/reusable/get", ApiOperationResolutionStatus.NotFound)]
+    public async Task ComponentOperationPointersRejectReferencesAndMissingOrNonOperationTargets(
+        string components, string selector, ApiOperationResolutionStatus status)
+    {
+        var calls = 0;
+        var document = """{"openapi":"3.1.1","paths":{},"components":COMPONENTS}"""
+            .Replace("COMPONENTS", components, StringComparison.Ordinal);
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenAPI/3.1", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document), ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+            resolveReference: (_, _) => { calls++; throw new InvalidOperationException("Pointers do not dereference."); });
+        await Assert.That(result.Status).IsEqualTo(status);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task ComponentDefinitionsAreOnlyOperationIdCandidatesWhenReachedThroughTheApi()
+    {
+        var result = ApiOperationDocumentResolver.Resolve("OpenAPI/3.1", "application/json", """
+            {"openapi":"3.1.1","paths":{"/s":{"$ref":"#/components/pathItems/used"}},
+             "components":{"pathItems":{
+               "used":{"get":{"operationId":"Notify","summary":"Reachable"}},
+               "unused":{"get":{"operationId":"Notify"}}},
+               "callbacks":{"unused":{"url":{"post":{"operationId":"Notify"}}}}}}
+            """u8.ToArray(), ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Notify"));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.DocumentPath).IsEqualTo("$/components/pathItems/used/get");
+        await Assert.That(result.Operation.GetProperty("summary").GetString()).IsEqualTo("Reachable");
+    }
+
+    [Test]
     [Arguments("OpenAPI/3.0", """{"openapi":"3.0.3","paths":{"/users":{"get":{"operationId":"GetUser"}}}}""")]
     [Arguments("Swagger/2.0", """{"swagger":"2.0","paths":{"/users":{"get":{"operationId":"GetUser"}}}}""")]
     public async Task ResolvesOperationIdsForEveryAdvertisedDocumentFormat(string format, string document)
