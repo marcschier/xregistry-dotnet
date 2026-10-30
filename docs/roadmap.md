@@ -231,8 +231,10 @@ vocabulary/source mapping. It does not supply their implementation.
   equality: exact numbers, decoded blobs, timestamp instants and recursive
   aggregates. Nested lists retain order; maps ignore entry order. Absent members
   remain distinct from supplied defaults. Comparisons consume the shared work
-  and depth budgets. Enum value membership, `idRef` value resolution and complete
-  custom application schemas remain unvalidated.
+  and depth budgets. Deprecated string `enum` constraints check exact membership
+  for custom values and decoded map keys, with the same helper used for defaults.
+  Native `enum`/`intEnum` membership, `idRef` value resolution and complete custom
+  application schemas remain unvalidated.
   Reached `protocolDefinition` declarations share the structure-trait target
   and required-trait reference checks; `noInlineDocumentSupport` requires a
   Boolean. Protocol selection and the service-closure document prohibition

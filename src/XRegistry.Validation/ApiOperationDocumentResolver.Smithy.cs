@@ -952,14 +952,7 @@ public static partial class ApiOperationDocumentResolver
             }
             if (kind == "string" && TryTrait(target, "smithy.api#enum", out var legacyEnum))
             {
-                var found = false;
-                foreach (var item in legacyEnum.EnumerateArray())
-                {
-                    var declared = item.GetProperty("value").GetString()!;
-                    budget.Work(declared.Length, path);
-                    found |= string.Equals(value.GetString(), declared, StringComparison.Ordinal);
-                }
-                ValidationContext.Require(found, path, "document.default_enum",
+                ValidationContext.Require(MatchesLegacyEnum(value.GetString()!, legacyEnum, path), path, "document.default_enum",
                     "A Smithy string default must match a declared enum trait value.");
             }
             if (kind is "string" or "enum" &&
@@ -2255,6 +2248,23 @@ public static partial class ApiOperationDocumentResolver
                 ValidationContext.Fail(DocumentValidationStatus.Unsupported, path, "smithy.pattern_trait",
                     "Pattern matching on Smithy trait values is not supported.");
             }
+            if (kind == "string" && TryTrait(shape, "smithy.api#enum", out var legacyEnum))
+            {
+                ValidationContext.Require(MatchesLegacyEnum(value.GetString()!, legacyEnum, path),
+                    path, "document.trait_enum", "A Smithy string trait value must match a declared enum trait value.");
+            }
+        }
+
+        private bool MatchesLegacyEnum(string value, JsonElement declaration, string path)
+        {
+            budget.Work(value.Length, path);
+            foreach (var item in declaration.EnumerateArray())
+            {
+                var declared = item.GetProperty("value").GetString()!;
+                budget.Work(declared.Length, path);
+                if (string.Equals(value, declared, StringComparison.Ordinal)) { return true; }
+            }
+            return false;
         }
 
         private void ValidateLegacyEnum(JsonElement value, string path)

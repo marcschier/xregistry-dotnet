@@ -431,7 +431,11 @@ remain omitted, so they do not equal an explicitly supplied member. Sparse nulls
 in nested collections compare as nulls. Comparisons consume the shared work and
 depth budgets; exhaustion reports `Indeterminate`, without returning an operation.
 Ordinary lists and arbitrary document values are not uniqueness-checked.
-Enum value membership and `idRef` value resolution remain unvalidated.
+The deprecated string `enum` constraint checks exact, case-sensitive membership
+on custom values, including nested values and decoded map keys before sparse
+null values are skipped. It shares the default-value membership check and does
+not insert omitted members. These are legacy fixed-set constraint checks;
+native `enum`/`intEnum` membership and `idRef` value resolution remain unvalidated.
 
 The `conflicts` property must be an array of absolute root trait IDs. A custom
 trait cannot coexist on the same shape with any trait named in that array,

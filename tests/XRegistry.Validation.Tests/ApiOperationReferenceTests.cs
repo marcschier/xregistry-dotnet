@@ -10172,6 +10172,128 @@ public class ApiOperationReferenceTests
         await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
     }
 
+    [Test]
+    [Arguments("\"alpha\"", true)]
+    [Arguments("\"Alpha\"", false)]
+    [Arguments("\"\"", false)]
+    [Arguments("\"0\"", true)]
+    [Arguments("\"\\u00e9\"", true)]
+    [Arguments("\"e\\u0301\"", false)]
+    public async Task SmithyJsonCustomTraitLegacyEnumsMatchExactDeclaredStrings(string value, bool valid)
+    {
+        var document = SmithyCustomNodeDocument("string", value);
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#enum"] = JsonNode.Parse("""
+            [{"value":"alpha"},{"value":"0"},{"value":"\u00e9"}]
+            """);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid)
+        {
+            await Assert.That(result.Diagnostic).IsNull();
+            await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_enum");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/example#Custom");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("list", """["other"]""", "/0")]
+    [Arguments("map", """{"a/b~c":"other"}""", "/a~1b~0c")]
+    [Arguments("structure", """{"value":"other"}""", "/value")]
+    [Arguments("union", """{"value":"other"}""", "/value")]
+    public async Task SmithyJsonCustomTraitLegacyEnumsValidateNestedValues(string kind, string value, string suffix)
+    {
+        var document = SmithyCustomNodeDocument(kind, value);
+        document["shapes"]!["example#Text"] = JsonNode.Parse("""
+            {"type":"string","traits":{"smithy.api#enum":[{"value":"allowed"}]}}
+            """);
+        var reference = JsonNode.Parse("""{"target":"example#Text"}""");
+        if (kind == "list") { document["shapes"]!["example#Custom"]!["member"] = reference; }
+        else if (kind == "map") { document["shapes"]!["example#Custom"]!["value"] = reference; }
+        else { document["shapes"]!["example#Custom"]!["members"] = new JsonObject { ["value"] = reference }; }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_enum");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/example#Custom" + suffix);
+        document["shapes"]!["example#Get"]!["traits"]!["example#Custom"] =
+            JsonNode.Parse(value.Replace("other", "allowed", StringComparison.Ordinal));
+        var valid = ResolveSmithy(document.ToJsonString());
+        await Assert.That(valid.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(valid.Diagnostic).IsNull();
+    }
+
+    [Test]
+    [Arguments("""{"allowed":"value"}""", true)]
+    [Arguments("""{"allowed":null}""", true)]
+    [Arguments("""{"a/b~c":"value"}""", false)]
+    [Arguments("""{"a/b~c":null}""", false)]
+    public async Task SmithyJsonCustomTraitLegacyEnumsCheckDecodedMapKeysBeforeSparseValues(string value, bool valid)
+    {
+        var document = SmithyCustomNodeDocument("map", value);
+        document["shapes"]!["example#Key"] = JsonNode.Parse("""
+            {"type":"string","traits":{"smithy.api#enum":[{"value":"allowed"}]}}
+            """);
+        document["shapes"]!["example#Custom"]!["key"]!["target"] = "example#Key";
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#sparse"] = new JsonObject();
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (!valid)
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_enum");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/example#Custom/a~1b~0c");
+        }
+        else { await Assert.That(result.Diagnostic).IsNull(); }
+    }
+
+    [Test]
+    public async Task SmithyJsonCustomTraitLegacyEnumsCheckEveryReachedApplication()
+    {
+        var document = SmithyCustomNodeDocument("string", "\"allowed\"");
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#enum"] =
+            JsonNode.Parse("""[{"value":"allowed"}]""");
+        document["shapes"]!["example#Get"]!["input"] = JsonNode.Parse("""{"target":"example#Input"}""");
+        document["shapes"]!["example#Input"] = JsonNode.Parse("""
+            {"type":"structure","members":{"value":{"target":"smithy.api#String","traits":{"example#Custom":"other"}}}}
+            """);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_enum");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Input/members/value/traits/example#Custom");
+    }
+
+    [Test]
+    public async Task SmithyJsonCustomTraitLegacyEnumsLeaveOptionalDefaultsOmitted()
+    {
+        var document = SmithyCustomNodeDocument("structure", "{}");
+        document["shapes"]!["example#Text"] = JsonNode.Parse("""
+            {"type":"string","traits":{"smithy.api#enum":[{"value":"allowed"}]}}
+            """);
+        document["shapes"]!["example#Custom"]!["members"] = JsonNode.Parse("""
+            {"value":{"target":"example#Text","traits":{"smithy.api#default":"allowed"}}}
+            """);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+    }
+
+    [Test]
+    public async Task SmithyJsonCustomTraitLegacyEnumsDoNotConstrainLiteralOrUnrelatedValues()
+    {
+        var document = SmithyCustomNodeDocument("document", """{"example#Text":"other"}""");
+        document["shapes"]!["example#Text"] = JsonNode.Parse("""
+            {"type":"string","traits":{"smithy.api#enum":[{"value":"allowed"}],"example#Custom":"other"}}
+            """);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+    }
+
     private static JsonObject SmithyUniqueTraitDocument(string kind, string value)
     {
         var document = SmithyCustomNodeDocument("list", value);
