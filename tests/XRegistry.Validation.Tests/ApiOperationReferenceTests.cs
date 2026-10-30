@@ -4368,6 +4368,164 @@ public class ApiOperationReferenceTests
         await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
     }
 
+    [Test]
+    [Arguments("title", "\"\"", true, "")]
+    [Arguments("title", "\"An authored title\"", true, "")]
+    [Arguments("title", "null", false, "")]
+    [Arguments("title", "{}", false, "")]
+    [Arguments("title", "1", false, "")]
+    [Arguments("since", "\"\"", true, "")]
+    [Arguments("since", "\"not-a-date\"", true, "")]
+    [Arguments("since", "true", false, "")]
+    [Arguments("since", "[]", false, "")]
+    [Arguments("since", "null", false, "")]
+    [Arguments("internal", "{}", true, "")]
+    [Arguments("internal", "null", false, "")]
+    [Arguments("internal", "false", false, "")]
+    [Arguments("internal", "[]", false, "")]
+    [Arguments("tags", "[]", true, "")]
+    [Arguments("tags", """["","a","a","A"]""", true, "")]
+    [Arguments("tags", "null", false, "")]
+    [Arguments("tags", "{}", false, "")]
+    [Arguments("tags", "\"a\"", false, "")]
+    [Arguments("tags", "[null]", false, "/0")]
+    [Arguments("tags", """["a",1]""", false, "/1")]
+    public async Task SmithyJsonDocumentationAnnotationsRetainRootAndMemberValueTypes(
+        string trait, string value, bool valid, string suffix)
+    {
+        foreach (var onMember in new[] { false, true })
+        {
+            var document = JsonNode.Parse(SmithyDefaultDocument("string", "null", false))!;
+            var owner = onMember ? document["shapes"]!["example#Input"]!["members"]!["value"]!
+                : document["shapes"]!["example#Get"]!;
+            owner["traits"] = new JsonObject { ["smithy.api#" + trait] = JsonNode.Parse(value) };
+            var result = ResolveSmithy(document.ToJsonString());
+            await Assert.That(result.Status).IsEqualTo(valid
+                ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+            if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+            else
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_value");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo((onMember
+                    ? "$/shapes/example#Input/members/value" : "$/shapes/example#Get") + "/traits/smithy.api#" + trait + suffix);
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("string")]
+    [Arguments("boolean")]
+    [Arguments("blob")]
+    [Arguments("integer")]
+    [Arguments("timestamp")]
+    [Arguments("document")]
+    [Arguments("list")]
+    [Arguments("map")]
+    [Arguments("structure")]
+    [Arguments("union")]
+    [Arguments("enum")]
+    [Arguments("intEnum")]
+    public async Task SmithyJsonSensitiveAnnotationAcceptsDataRoots(string kind)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument(kind, "null", false))!;
+        document["shapes"]!["example#Input"]!["members"]!["value"]!.AsObject().Remove("traits");
+        document["shapes"]!["example#Value"]!["traits"] = JsonNode.Parse("""{"smithy.api#sensitive":{}}""");
+        var selected = ResolveSmithy(document.ToJsonString());
+        await Assert.That(selected.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(selected.Diagnostic).IsNull();
+        document["shapes"]!["example#Value"]!["traits"]!["smithy.api#sensitive"] = null;
+        var invalid = ResolveSmithy(document.ToJsonString());
+        await Assert.That(invalid.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(invalid.Diagnostic!.Code).IsEqualTo("document.trait_value");
+        await Assert.That(invalid.Diagnostic.Path).IsEqualTo("$/shapes/example#Value/traits/smithy.api#sensitive");
+    }
+
+    [Test]
+    [Arguments("string", "structureMember")]
+    [Arguments("list", "member")]
+    [Arguments("map", "key")]
+    [Arguments("map", "value")]
+    [Arguments("union", "members/A")]
+    [Arguments("enum", "members/A")]
+    [Arguments("intEnum", "members/A")]
+    [Arguments("string", "operation")]
+    public async Task SmithyJsonSensitiveAnnotationRejectsOperationsAndMembers(string kind, string position)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument(kind, "null", false))!;
+        var path = position == "operation" ? "example#Get"
+            : position == "structureMember" ? "example#Input/members/value" : "example#Value/" + position;
+        var owner = document["shapes"]!;
+        foreach (var segment in path.Split('/')) { owner = owner[segment]!; }
+        if (owner["traits"] is null) { owner["traits"] = new JsonObject(); }
+        owner["traits"]!["smithy.api#sensitive"] = new JsonObject();
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/" + path + "/traits/smithy.api#sensitive");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("list", "member")]
+    [Arguments("map", "key")]
+    [Arguments("map", "value")]
+    [Arguments("union", "members/A")]
+    [Arguments("enum", "members/A")]
+    [Arguments("intEnum", "members/A")]
+    public async Task SmithyJsonDocumentationAnnotationsAllowAllAggregateMembers(string kind, string position)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument(kind, "null", false))!;
+        document["shapes"]!["example#Input"]!["members"]!["value"]!.AsObject().Remove("traits");
+        var owner = document["shapes"]!["example#Value"]!;
+        foreach (var segment in position.Split('/')) { owner = owner[segment]!; }
+        if (owner["traits"] is null) { owner["traits"] = new JsonObject(); }
+        owner["traits"]!["smithy.api#title"] = "Member";
+        owner["traits"]!["smithy.api#since"] = "vNext";
+        owner["traits"]!["smithy.api#tags"] = JsonNode.Parse("""["","tag","tag"]""");
+        owner["traits"]!["smithy.api#internal"] = new JsonObject();
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+    }
+
+    [Test]
+    public async Task SmithyJsonDocumentationMetadataStaysNativeWithoutAcquisitionOrUnrelatedScanning()
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("string", "\"a\"", false))!;
+        document["shapes"]!["example#Get"]!["traits"] = JsonNode.Parse("""
+            {"smithy.api#title":"https://example.test/not-an-import","smithy.api#since":"vNext",
+             "smithy.api#tags":["","tag","tag"],"smithy.api#internal":{}}
+            """);
+        document["shapes"]!["example#Value"]!["traits"] = JsonNode.Parse("""{"smithy.api#sensitive":{}}""");
+        document["shapes"]!["example#Unused"] = JsonNode.Parse("""
+            {"type":"string","traits":{"smithy.api#tags":null,"smithy.api#sensitive":null}}
+            """);
+        document["metadata"] = JsonNode.Parse("""{"literal":{"traits":{"smithy.api#tags":[null]}}}""");
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Documentation is not an import."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
+    [Test]
+    public async Task SmithyJsonSensitiveDefaultFailuresDoNotEchoAuthoredValues()
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("string", "\"secret-default-sentinel\"", false))!;
+        document["shapes"]!["example#Value"]!["traits"] = JsonNode.Parse("""
+            {"smithy.api#sensitive":{},"smithy.api#length":{"max":1}}
+            """);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.default_length");
+        await Assert.That(result.Diagnostic.Detail.Contains("secret-default-sentinel", StringComparison.Ordinal)).IsFalse();
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
     private static string SmithyDefaultDocument(string kind, string value, bool rootDefault)
     {
         var target = new JsonObject { ["type"] = kind };

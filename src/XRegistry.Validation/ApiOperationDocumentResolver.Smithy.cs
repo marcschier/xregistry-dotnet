@@ -863,6 +863,7 @@ public static partial class ApiOperationDocumentResolver
                     "The box trait cannot be used in Smithy 2.0 models.");
                 var targetAllowed = trait.Name switch
                 {
+                    "smithy.api#sensitive" => memberContainer is null && kind is not ("service" or "operation" or "resource"),
                     "smithy.api#enum" => memberContainer is null && kind == "string",
                     "smithy.api#required" or "smithy.api#clientOptional" or "smithy.api#recommended" =>
                         memberContainer == "structure",
@@ -899,6 +900,18 @@ public static partial class ApiOperationDocumentResolver
                     "Conflicting Smithy prelude traits cannot be applied to the same shape.");
                 switch (trait.Name)
                 {
+                    case "smithy.api#tags":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Array, traitPath,
+                            "document.trait_value", "Smithy tags require an array of strings.");
+                        var tagIndex = 0;
+                        foreach (var tag in trait.Value.EnumerateArray())
+                        {
+                            var tagPath = traitPath + "/" + (tagIndex++).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                            budget.Work(path: tagPath);
+                            ValidationContext.Require(tag.ValueKind == JsonValueKind.String, tagPath,
+                                "document.trait_value", "Smithy tags must be strings.");
+                        }
+                        continue;
                     case "smithy.api#deprecated":
                     case "smithy.api#recommended":
                         ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
@@ -960,8 +973,10 @@ public static partial class ApiOperationDocumentResolver
                         ValidateLengthDeclaration(trait.Value, traitPath);
                         continue;
                     case "smithy.api#documentation":
+                    case "smithy.api#title":
+                    case "smithy.api#since":
                         ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.String, traitPath,
-                            "document.trait_value", "The Smithy documentation trait requires a string value.");
+                            "document.trait_value", "The Smithy documentation annotation requires a string value.");
                         continue;
                     case "smithy.api#error":
                         ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.String &&
@@ -969,6 +984,8 @@ public static partial class ApiOperationDocumentResolver
                             "document.trait_value", "The Smithy error trait requires client or server.");
                         continue;
                     case "smithy.api#required":
+                    case "smithy.api#internal":
+                    case "smithy.api#sensitive":
                     case "smithy.api#clientOptional":
                     case "smithy.api#addedDefault":
                     case "smithy.api#sparse":

@@ -284,7 +284,8 @@ The implicit prelude support covers `Blob`, `Boolean`, `Document`, `String`,
 `PrimitiveDouble`, and the traits
 `error`, `documentation`, `required`, `clientOptional`, `addedDefault`, `sparse`,
 `uniqueItems`, `private`, `length`, `range`, `pattern`, `input`, `output`, `readonly`, `idempotent`,
-`default`, `enum`, `enumValue`, `deprecated`, `recommended` and `trait`
+`default`, `enum`, `enumValue`, `deprecated`, `recommended`, `title`, `since`,
+`tags`, `internal`, `sensitive` and `trait`
 in `smithy.api`. Other required definitions
 must be supplied in the AST. These checks do not validate every Smithy shape
 constraint, trait value or selector. Full Smithy validation and model assembly
@@ -377,6 +378,14 @@ with an optional string `reason`, and conflicts with `required` regardless of
 property order. These annotations do not change default validation or generate
 client warnings. Reached uses of `box` report `Invalid` because Smithy 2.0
 forbids that trait; unrelated definitions and literal metadata are not scanned.
+
+The `title` and `since` traits require strings; `tags` requires an array of
+strings and permits empty or repeated tag values. The `internal` annotation
+requires an object on roots or members. The `sensitive` annotation requires an
+object on a data root, not a service, operation, resource or member. These
+checks retain authored metadata without filtering shapes, generating client
+behavior or modifying default validation. Diagnostics do not include sensitive
+default values.
 
 Reachable trait definitions require a string `selector`, when supplied, and
 restrict `structurallyExclusive` to `member` or `target`. These are property

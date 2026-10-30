@@ -223,6 +223,10 @@ vocabulary/source mapping. It does not supply their implementation.
   and its conflict with `required` in either property order. Reached `box`
   applications are rejected as forbidden in Smithy 2.0; unrelated definitions
   remain outside the selected-closure check.
+  `title`/`since` strings, `tags` string arrays and `internal` object annotations
+  retain authored metadata on roots and members. `sensitive` checks data-root
+  applicability and object values. No filtering, client behavior or default
+  rewriting is performed.
   Idempotent `exists`/`notFound` declarations are mutually exclusive
   arrays of absolute IDs whose targets must occur in the operation's own errors.
   Their native hints are retained without execution or fallback to service errors.
