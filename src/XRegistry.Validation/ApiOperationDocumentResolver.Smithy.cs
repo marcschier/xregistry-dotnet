@@ -1655,6 +1655,36 @@ public static partial class ApiOperationDocumentResolver
                         ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.String, traitPath,
                             "document.trait_value", "The Smithy jsonName trait requires a string value.");
                         continue;
+                    case "smithy.api#idRef":
+                        var referenceKind = kind;
+                        if (memberContainer is not null)
+                        {
+                            var referenceTargetId = shape.GetProperty("target").GetString()!;
+                            referenceKind = shapes.TryGetProperty(referenceTargetId, out var referenceTarget)
+                                ? referenceTarget.GetProperty("type").GetString() : SmithyPreludeKind(referenceTargetId);
+                        }
+                        ValidationContext.Require(memberContainer is not null && referenceKind is null ||
+                            referenceKind is "string" or "enum", traitPath, "document.trait_target",
+                            "Smithy idRef requires a string or a member targeting one.");
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
+                            "document.trait_value", "The Smithy idRef trait requires an object value.");
+                        foreach (var referenceProperty in trait.Value.EnumerateObject())
+                        {
+                            budget.Work(path: traitPath);
+                            if (referenceProperty.Name is "selector" or "errorMessage")
+                            {
+                                ValidationContext.Require(referenceProperty.Value.ValueKind == JsonValueKind.String,
+                                    traitPath + "/" + referenceProperty.Name, "document.trait_value",
+                                    "Smithy reference selectors and error messages require string values.");
+                            }
+                            else if (referenceProperty.Name == "failWhenMissing")
+                            {
+                                ValidationContext.Require(referenceProperty.Value.ValueKind is JsonValueKind.True or JsonValueKind.False,
+                                    traitPath + "/failWhenMissing", "document.trait_value",
+                                    "The Smithy reference missing-target flag requires a Boolean value.");
+                            }
+                        }
+                        continue;
                     case "smithy.api#timestampFormat":
                         var timestampKind = kind;
                         if (memberContainer is not null)

@@ -225,6 +225,9 @@ vocabulary/source mapping. It does not supply their implementation.
   uniqueness or suppressing structural errors and unresolved dependencies.
   Configurable validators, hierarchical warning suppression and metadata
   severity overrides remain unvalidated.
+  `idRef` checks string/member-string declaration targets, object values and
+  optional string/Boolean fields. Custom application values, reference
+  resolution and selector syntax/evaluation remain unvalidated.
   `optionalAuth` checks operation applicability and object annotations without
   copying service schemes, inferring disabled authentication or changing runtime
   enforcement. Effective service authentication remains unvalidated.

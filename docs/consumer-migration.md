@@ -531,6 +531,14 @@ structural errors or unresolved dependencies. Execution of configurable
 validators, hierarchical warning suppression and metadata severity overrides
 remain unvalidated.
 
+Reached `idRef` declarations require string shapes or members targeting strings,
+including enum specializations. Values must be objects; optional `selector` and
+`errorMessage` fields must be strings, and `failWhenMissing` must be Boolean.
+Missing member target definitions remain unresolved. These checks validate the
+declaration, not values supplied through custom trait applications. Reference
+resolution for those values and selector syntax/evaluation remain unvalidated;
+declaration strings are not acquired as dependencies.
+
 The operation-only `optionalAuth` annotation requires an object value.
 Selection preserves that declaration without copying enclosing-service schemes,
 inferring an empty `auth` list or changing authentication behavior. Supporting

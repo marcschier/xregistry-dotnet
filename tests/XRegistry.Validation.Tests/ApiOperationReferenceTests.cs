@@ -9173,6 +9173,125 @@ public class ApiOperationReferenceTests
         await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
     }
 
+    [Test]
+    [Arguments("{}")]
+    [Arguments("""{"selector":"*","failWhenMissing":false,"errorMessage":""}""")]
+    [Arguments("""{"selector":"integer","failWhenMissing":true,"errorMessage":"example#Missing"}""")]
+    public async Task SmithyJsonIdRefPreservesDeclarationOptionsWithoutAcquiringLiteralFields(string value)
+    {
+        var document = SmithyEndpointDocument();
+        document["shapes"]!["example#Identifier"]!["traits"] =
+            new JsonObject { ["smithy.api#idRef"] = JsonNode.Parse(value) };
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("idRef declaration fields cannot be acquired."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
+    [Test]
+    [Arguments("null", "")]
+    [Arguments("[]", "")]
+    [Arguments("true", "")]
+    [Arguments("""{"selector":null}""", "/selector")]
+    [Arguments("""{"selector":42}""", "/selector")]
+    [Arguments("""{"errorMessage":false}""", "/errorMessage")]
+    [Arguments("""{"errorMessage":{}}""", "/errorMessage")]
+    [Arguments("""{"failWhenMissing":null}""", "/failWhenMissing")]
+    [Arguments("""{"failWhenMissing":"false"}""", "/failWhenMissing")]
+    [Arguments("""{"failWhenMissing":0}""", "/failWhenMissing")]
+    public async Task SmithyJsonIdRefRejectsMalformedDeclarationOptions(string value, string suffix)
+    {
+        var document = SmithyEndpointDocument();
+        document["shapes"]!["example#Identifier"]!["traits"] =
+            new JsonObject { ["smithy.api#idRef"] = JsonNode.Parse(value) };
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_value");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Identifier/traits/smithy.api#idRef" + suffix);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("string")]
+    [Arguments("enum")]
+    public async Task SmithyJsonIdRefAcceptsStringSpecializationsAndMembers(string kind)
+    {
+        var document = SmithyHttpPayloadDocument("input");
+        document["shapes"]!["example#Body"] = SmithyHttpBindingTarget(kind);
+        document["shapes"]!["example#Body"]!["traits"] = JsonNode.Parse("""{"smithy.api#idRef":{}}""");
+        document["shapes"]!["example#Container"]!["members"]!["body"]!["traits"]!["smithy.api#idRef"] =
+            JsonNode.Parse("""{"failWhenMissing":true}""");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        document["shapes"]!["example#Container"]!["members"]!["body"]!["traits"]!["smithy.api#idRef"] = false;
+        var invalid = ResolveSmithy(document.ToJsonString());
+        await Assert.That(invalid.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(invalid.Diagnostic!.Code).IsEqualTo("document.trait_value");
+        await Assert.That(invalid.Diagnostic.Path).IsEqualTo("$/shapes/example#Container/members/body/traits/smithy.api#idRef");
+    }
+
+    [Test]
+    [Arguments("integer", false)]
+    [Arguments("blob", false)]
+    [Arguments("list", false)]
+    [Arguments("structure", false)]
+    [Arguments("operation", false)]
+    [Arguments("integer", true)]
+    [Arguments("blob", true)]
+    [Arguments("list", true)]
+    [Arguments("structure", true)]
+    public async Task SmithyJsonIdRefRejectsNonStringShapesAndMemberTargets(string kind, bool member)
+    {
+        var document = SmithyHttpPayloadDocument("input");
+        var target = member ? document["shapes"]!["example#Container"]!["members"]!["body"]! :
+            kind == "operation" ? document["shapes"]!["example#Get"]! : document["shapes"]!["example#Body"]!;
+        if (kind != "operation")
+        {
+            document["shapes"]!["example#Body"] = SmithyHttpBindingTarget(kind);
+            if (!member) { target = document["shapes"]!["example#Body"]!; }
+        }
+        target["traits"] ??= new JsonObject();
+        target["traits"]!["smithy.api#idRef"] = new JsonObject();
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonIdRefDoesNotInventMissingMemberTargetKinds()
+    {
+        var document = SmithyHttpPayloadDocument("input");
+        document["shapes"]!["example#Container"]!["members"]!["body"]!["traits"]!["smithy.api#idRef"] = new JsonObject();
+        document["shapes"]!.AsObject().Remove("example#Body");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("dependency.unresolved");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Body");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonIdRefIgnoresUnrelatedDeclarationsAndLiteralMetadata()
+    {
+        var document = SmithyEndpointDocument();
+        document["shapes"]!["example#Unused"] = JsonNode.Parse("""
+            {"type":"string","traits":{"smithy.api#idRef":false}}
+            """);
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#examples"] = JsonNode.Parse("""
+            [{"title":"literal metadata","input":{"smithy.api#idRef":{"failWhenMissing":null}}}]
+            """);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+    }
+
     private static JsonNode SmithyProtocolDocument()
     {
         var document = SmithyAuthenticationDocument();
