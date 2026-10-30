@@ -214,8 +214,13 @@ vocabulary/source mapping. It does not supply their implementation.
   `requestCompression` checks operation applicability, a nonempty array of
   case-insensitive gzip encodings and the conflict with length-requiring
   streaming inputs. Authored declarations are preserved without compression,
-  length calculation or stream execution. HTTP payload binding and event
-  header/payload declarations remain open.
+  length calculation or stream execution. HTTP payload binding remains open.
+  `eventHeader`/`eventPayload` check object values, structure-member applicability,
+  declared target kinds and enum specializations. Their mutual conflict is
+  property-order independent. A structure can declare only one explicit payload;
+  every sibling must then be a header. Separate event structures have independent
+  limits; implicit payloads and multiple headers remain valid. These are
+  declaration checks, without event serialization or protocol framing.
   `jsonName` requires a string-valued structure/union member annotation and
   unique exact explicit names within each container. `timestampFormat` checks
   timestamp root/member eligibility and the three declared serialization formats.

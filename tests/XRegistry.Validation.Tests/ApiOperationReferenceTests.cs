@@ -5904,6 +5904,247 @@ public class ApiOperationReferenceTests
         await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
     }
 
+    [Test]
+    [Arguments("eventPayload", "blob", true)]
+    [Arguments("eventPayload", "string", true)]
+    [Arguments("eventPayload", "enum", true)]
+    [Arguments("eventPayload", "structure", true)]
+    [Arguments("eventPayload", "union", true)]
+    [Arguments("eventPayload", "boolean", false)]
+    [Arguments("eventPayload", "integer", false)]
+    [Arguments("eventPayload", "timestamp", false)]
+    [Arguments("eventPayload", "list", false)]
+    [Arguments("eventPayload", "map", false)]
+    [Arguments("eventPayload", "document", false)]
+    [Arguments("eventHeader", "boolean", true)]
+    [Arguments("eventHeader", "byte", true)]
+    [Arguments("eventHeader", "short", true)]
+    [Arguments("eventHeader", "integer", true)]
+    [Arguments("eventHeader", "intEnum", true)]
+    [Arguments("eventHeader", "long", true)]
+    [Arguments("eventHeader", "blob", true)]
+    [Arguments("eventHeader", "string", true)]
+    [Arguments("eventHeader", "enum", true)]
+    [Arguments("eventHeader", "timestamp", true)]
+    [Arguments("eventHeader", "float", false)]
+    [Arguments("eventHeader", "double", false)]
+    [Arguments("eventHeader", "bigInteger", false)]
+    [Arguments("eventHeader", "bigDecimal", false)]
+    [Arguments("eventHeader", "structure", false)]
+    [Arguments("eventHeader", "union", false)]
+    [Arguments("eventHeader", "list", false)]
+    [Arguments("eventHeader", "map", false)]
+    [Arguments("eventHeader", "document", false)]
+    public async Task SmithyJsonEventBindingTargetsMatchPreludeSelectors(string trait, string kind, bool valid)
+    {
+        var document = SmithyEventBindingDocument(trait);
+        document["shapes"]!["example#Target"] = JsonNode.Parse(kind switch
+        {
+            "enum" => """{"type":"enum","members":{"one":{"target":"smithy.api#Unit"}}}""",
+            "intEnum" => """{"type":"intEnum","members":{"one":{"target":"smithy.api#Unit","traits":{"smithy.api#enumValue":1}}}}""",
+            "union" => """{"type":"union","members":{"one":{"target":"smithy.api#Unit"}}}""",
+            "list" => """{"type":"list","member":{"target":"smithy.api#String"}}""",
+            "map" => """{"type":"map","key":{"target":"smithy.api#String"},"value":{"target":"smithy.api#String"}}""",
+            _ => """{"type":"KIND"}""".Replace("KIND", kind, StringComparison.Ordinal)
+        });
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid)
+        {
+            await Assert.That(result.Diagnostic).IsNull();
+            await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Event/members/data/traits/smithy.api#" + trait);
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("eventPayload", "root")]
+    [Arguments("eventPayload", "union")]
+    [Arguments("eventPayload", "list")]
+    [Arguments("eventPayload", "map")]
+    [Arguments("eventHeader", "root")]
+    [Arguments("eventHeader", "union")]
+    [Arguments("eventHeader", "list")]
+    [Arguments("eventHeader", "map")]
+    public async Task SmithyJsonEventBindingsRequireStructureMembers(string trait, string container)
+    {
+        var document = SmithyEventBindingDocument(trait);
+        var member = document["shapes"]!["example#Event"]!["members"]!["data"]!.DeepClone();
+        if (container == "root")
+        {
+            document["shapes"]!["example#Event"]!["members"]!["data"]!["traits"]!.AsObject().Clear();
+            document["shapes"]!["example#Target"]!["traits"] = member["traits"]!.DeepClone();
+        }
+        else
+        {
+            var aggregate = new JsonObject { ["type"] = container };
+            if (container == "union") { aggregate["members"] = new JsonObject { ["data"] = member }; }
+            else if (container == "list") { aggregate["member"] = member; }
+            else
+            {
+                aggregate["key"] = JsonNode.Parse("""{"target":"smithy.api#String"}""");
+                aggregate["value"] = member;
+            }
+            document["shapes"]!["example#Event"] = aggregate;
+            document["shapes"]!["example#Stream"]!["traits"]!.AsObject().Clear();
+        }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("eventPayload", "null")]
+    [Arguments("eventPayload", "true")]
+    [Arguments("eventPayload", "[]")]
+    [Arguments("eventHeader", "null")]
+    [Arguments("eventHeader", "\"text\"")]
+    [Arguments("eventHeader", "[]")]
+    public async Task SmithyJsonEventBindingsRequireObjectAnnotations(string trait, string annotation)
+    {
+        var document = SmithyEventBindingDocument(trait);
+        document["shapes"]!["example#Event"]!["members"]!["data"]!["traits"]!["smithy.api#" + trait] = JsonNode.Parse(annotation);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_value");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Event/members/data/traits/smithy.api#" + trait);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("eventPayload", "eventHeader")]
+    [Arguments("eventHeader", "eventPayload")]
+    public async Task SmithyJsonEventPayloadAndHeaderConflictInEitherPropertyOrder(string first, string second)
+    {
+        var document = SmithyEventBindingDocument(first);
+        document["shapes"]!["example#Event"]!["members"]!["data"]!["traits"]!["smithy.api#" + second] = new JsonObject();
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_conflict");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Event/members/data/traits/smithy.api#" + first);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task SmithyJsonEventPayloadIsStructurallyExclusiveByMember(bool distinctTarget)
+    {
+        var document = SmithyEventBindingDocument("eventPayload");
+        var second = document["shapes"]!["example#Event"]!["members"]!["data"]!.DeepClone();
+        if (distinctTarget) { second["target"] = "smithy.api#String"; }
+        document["shapes"]!["example#Event"]!["members"]!["second"] = second;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_exclusivity");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Event/members/second");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments(false, false)]
+    [Arguments(true, false)]
+    [Arguments(false, true)]
+    [Arguments(true, true)]
+    public async Task SmithyJsonExplicitEventPayloadRequiresHeadersOnEveryOtherMember(bool payloadLast, bool marked)
+    {
+        var document = SmithyEventBindingDocument("eventPayload");
+        var members = document["shapes"]!["example#Event"]!["members"]!.AsObject();
+        var payload = members["data"]!.DeepClone();
+        if (payloadLast) { members.Remove("data"); }
+        members["other"] = JsonNode.Parse(marked
+            ? """{"target":"smithy.api#String","traits":{"smithy.api#eventHeader":{}}}"""
+            : """{"target":"smithy.api#String"}""");
+        if (payloadLast) { members["data"] = payload; }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(marked
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (marked) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.event_binding");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Event/members/other");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    public async Task SmithyJsonEventHeadersPermitImplicitPayloadMembersAndMultipleHeaders()
+    {
+        var document = SmithyEventBindingDocument("eventHeader");
+        document["shapes"]!["example#Event"]!["members"]!["second"] =
+            document["shapes"]!["example#Event"]!["members"]!["data"]!.DeepClone();
+        document["shapes"]!["example#Event"]!["members"]!["body"] = JsonNode.Parse("""{"target":"smithy.api#String"}""");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+    }
+
+    [Test]
+    public async Task SmithyJsonEventPayloadExclusivityIsScopedToEachEventStructure()
+    {
+        var document = SmithyEventBindingDocument("eventPayload");
+        document["shapes"]!["example#OtherEvent"] = document["shapes"]!["example#Event"]!.DeepClone();
+        document["shapes"]!["example#Stream"]!["members"]!["other"] = JsonNode.Parse("""{"target":"example#OtherEvent"}""");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+    }
+
+    [Test]
+    [Arguments("eventPayload")]
+    [Arguments("eventHeader")]
+    public async Task SmithyJsonEventBindingMissingTargetsRemainUnresolvedWithoutAcquisition(string trait)
+    {
+        var document = SmithyEventBindingDocument(trait);
+        document["shapes"]!.AsObject().Remove("example#Target");
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Event shape IDs are not acquisition URLs."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("dependency.unresolved");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Target");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task SmithyJsonEventBindingsPreserveNativeMetadataAndLiteralUnrelatedBoundaries(bool eventStream)
+    {
+        var document = SmithyEventBindingDocument("eventPayload");
+        if (!eventStream) { document["shapes"]!["example#Stream"]!["traits"]!.AsObject().Clear(); }
+        document["shapes"]!["example#Get"]!["traits"] = JsonNode.Parse(
+            """{"smithy.api#examples":[{"title":"literal","input":{"smithy.api#eventPayload":false,"target":"example#Missing"}}]}""");
+        document["shapes"]!["example#Unused"] = JsonNode.Parse(
+            """{"type":"structure","members":{"data":{"target":"smithy.api#Float","traits":{"smithy.api#eventHeader":[]}}}}""");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
+    private static JsonNode SmithyEventBindingDocument(string trait)
+    {
+        var document = JsonNode.Parse(SmithyStreamingDocument())!;
+        document["shapes"]!["example#Stream"] = JsonNode.Parse(
+            """{"type":"union","traits":{"smithy.api#streaming":{}},"members":{"event":{"target":"example#Event"}}}""");
+        document["shapes"]!["example#Event"] = JsonNode.Parse("""
+            {"type":"structure","members":{"data":{"target":"example#Target","traits":{"smithy.api#TRAIT":{}}}}}
+            """.Replace("TRAIT", trait, StringComparison.Ordinal));
+        document["shapes"]!["example#Target"] = JsonNode.Parse("""{"type":"string"}""");
+        return document;
+    }
+
     private static string SmithyStreamingDocument() => """
         {"smithy":"2.0","shapes":{
           "example#Get":{"type":"operation","input":{"target":"example#Input"}},

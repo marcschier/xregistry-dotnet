@@ -556,6 +556,17 @@ public static partial class ApiOperationDocumentResolver
                         Check(target, "target", member.Name, path);
                     }
                 }
+                if (owners.ContainsKey("smithy.api#eventPayload"))
+                {
+                    foreach (var member in members.EnumerateObject())
+                    {
+                        var path = "$/shapes/" + Escape(id) + "/members/" + Escape(member.Name);
+                        budget.Work(path: path);
+                        ValidationContext.Require(TryTrait(member.Value, "smithy.api#eventPayload", out _) ||
+                            TryTrait(member.Value, "smithy.api#eventHeader", out _), path, "document.event_binding",
+                            "Every other member of a structure with an event payload must be an event header.");
+                    }
+                }
 
                 void Check(JsonElement value, string mode, string memberName, string path)
                 {
@@ -563,11 +574,11 @@ public static partial class ApiOperationDocumentResolver
                     foreach (var trait in traits.EnumerateObject())
                     {
                         budget.Work(path: path);
-                        if (trait.Name == "smithy.api#idempotencyToken" && mode == "member")
+                        if (trait.Name is "smithy.api#idempotencyToken" or "smithy.api#eventPayload" && mode == "member")
                         {
                             ValidationContext.Require(owners.TryAdd(trait.Name, memberName), path,
                                 "document.trait_exclusivity",
-                                "Only one member of a Smithy structure can be an idempotency token.");
+                                "Only one member of a Smithy structure can carry this exclusive member trait.");
                             continue;
                         }
                         if (!shapes.TryGetProperty(trait.Name, out var definition) ||
@@ -1053,6 +1064,7 @@ public static partial class ApiOperationDocumentResolver
                     "smithy.api#retryable" => memberContainer is null && kind == "structure" &&
                         traits.TryGetProperty("smithy.api#error", out _),
                     "smithy.api#idempotencyToken" => memberContainer == "structure",
+                    "smithy.api#eventPayload" or "smithy.api#eventHeader" => memberContainer == "structure",
                     "smithy.api#jsonName" => memberContainer is "structure" or "union",
                     "smithy.api#requestCompression" => memberContainer is null && kind == "operation",
                     "smithy.api#streaming" => memberContainer is null && kind is "blob" or "union",
@@ -1081,6 +1093,8 @@ public static partial class ApiOperationDocumentResolver
                 var conflict = trait.Name switch
                 {
                     "smithy.api#recommended" => traits.TryGetProperty("smithy.api#required", out _),
+                    "smithy.api#eventPayload" => traits.TryGetProperty("smithy.api#eventHeader", out _),
+                    "smithy.api#eventHeader" => traits.TryGetProperty("smithy.api#eventPayload", out _),
                     "smithy.api#required" => traits.TryGetProperty("smithy.api#recommended", out _),
                     "smithy.api#readonly" => traits.TryGetProperty("smithy.api#idempotent", out _),
                     "smithy.api#input" => traits.TryGetProperty("smithy.api#output", out _) ||
@@ -1136,6 +1150,19 @@ public static partial class ApiOperationDocumentResolver
                                 traitPath + "/throttling", "document.trait_value",
                                 "Smithy retryable throttling must be a Boolean value.");
                         }
+                        continue;
+                    case "smithy.api#eventPayload":
+                    case "smithy.api#eventHeader":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
+                            "document.trait_value", "Smithy event binding annotations require object values.");
+                        var eventTargetId = shape.GetProperty("target").GetString()!;
+                        var eventKind = shapes.TryGetProperty(eventTargetId, out var eventTarget)
+                            ? eventTarget.GetProperty("type").GetString() : SmithyPreludeKind(eventTargetId);
+                        ValidationContext.Require(eventKind is null || (trait.Name == "smithy.api#eventPayload"
+                            ? eventKind is "blob" or "string" or "enum" or "structure" or "union"
+                            : eventKind is "boolean" or "byte" or "short" or "integer" or "intEnum" or "long" or
+                                "blob" or "string" or "enum" or "timestamp"),
+                            traitPath, "document.trait_target", "The Smithy event binding has an ineligible member target.");
                         continue;
                     case "smithy.api#idempotencyToken":
                         ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,

@@ -482,8 +482,22 @@ an object with a nonempty `encodings` array. Every entry must be a
 case-insensitive `gzip` string; authored casing, order and repeated entries
 are preserved. Compression cannot be declared when an input member targets
 a streaming blob marked `requiresLength`. Selection does not compress requests
-or calculate lengths. Service/protocol-specific HTTP payload bindings, event
-header/payload declarations and stream execution remain outside these checks.
+or calculate lengths. Service/protocol-specific HTTP payload bindings and
+stream execution remain outside these checks.
+
+The `eventPayload` and `eventHeader` annotations require object values on
+structure members. A payload member must target a blob, string, structure or
+union. A header member must target a Boolean, byte, short, integer, long,
+blob, string or timestamp. String and integer eligibility includes their enum
+specializations. Unresolved target definitions remain unresolved dependencies.
+The two annotations conflict on the same member, regardless of property order.
+A structure can mark at most one explicit payload member; every other member
+must then carry `eventHeader`. Separate event structures have independent
+limits. Without an explicit payload annotation, multiple headers and unmarked
+payload members remain valid. Checks apply to reached structure declarations,
+including structures outside an event stream, without serializing events or
+choosing a framing protocol. Literal example content and unrelated event
+definitions remain outside the selected closure.
 
 The `jsonName` trait requires a string value on a structure or union member.
 Explicit names cannot repeat within that structure or union; comparison is
