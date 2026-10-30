@@ -539,6 +539,14 @@ declaration, not values supplied through custom trait applications. Reference
 resolution for those values and selector syntax/evaluation remain unvalidated;
 declaration strings are not acquired as dependencies.
 
+Reached `traitValidators` declarations require trait-definition targets and
+objects keyed by nonempty event IDs. Each rule requires a string `selector`;
+optional `message` values must be strings and explicit `severity` values must
+be `ERROR`, `DANGER`, `WARNING` or `NOTE`. Non-structure trait definitions are
+eligible. Selection preserves declarations without executing selectors or
+emitting configured validation events. Selector syntax and execution remain
+unvalidated; event IDs, selectors and messages do not create dependencies.
+
 The operation-only `optionalAuth` annotation requires an object value.
 Selection preserves that declaration without copying enclosing-service schemes,
 inferring an empty `auth` list or changing authentication behavior. Supporting

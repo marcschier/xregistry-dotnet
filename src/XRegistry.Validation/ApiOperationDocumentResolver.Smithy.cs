@@ -1341,6 +1341,8 @@ public static partial class ApiOperationDocumentResolver
                     "smithy.api#unitType" => memberContainer is null && kind == "structure" &&
                         sourceId == "smithy.api#Unit",
                     "smithy.api#auth" => memberContainer is null && kind is "service" or "operation",
+                    "smithy.api#traitValidators" => memberContainer is null &&
+                        traits.TryGetProperty("smithy.api#trait", out _),
                     "smithy.api#authDefinition" or "smithy.api#protocolDefinition" =>
                         memberContainer is null && kind == "structure" &&
                         traits.TryGetProperty("smithy.api#trait", out _),
@@ -1418,6 +1420,34 @@ public static partial class ApiOperationDocumentResolver
                     "Conflicting Smithy prelude traits cannot be applied to the same shape.");
                 switch (trait.Name)
                 {
+                    case "smithy.api#traitValidators":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
+                            "document.trait_value", "Smithy traitValidators requires an object keyed by nonempty event IDs.");
+                        foreach (var validator in trait.Value.EnumerateObject())
+                        {
+                            var validatorPath = traitPath + "/" + Escape(validator.Name);
+                            budget.Work(validator.Name.Length, validatorPath);
+                            ValidationContext.Require(validator.Name.Length > 0 &&
+                                validator.Value.ValueKind == JsonValueKind.Object, validatorPath,
+                                "document.trait_validator", "A Smithy trait validator requires a nonempty event ID and an object value.");
+                            ValidationContext.Require(validator.Value.TryGetProperty("selector", out var validatorSelector) &&
+                                validatorSelector.ValueKind == JsonValueKind.String, validatorPath + "/selector",
+                                "document.trait_validator", "A Smithy trait validator requires a selector string.");
+                            if (validator.Value.TryGetProperty("message", out var validatorMessage))
+                            {
+                                ValidationContext.Require(validatorMessage.ValueKind == JsonValueKind.String,
+                                    validatorPath + "/message", "document.trait_validator",
+                                    "A Smithy trait validator message must be a string.");
+                            }
+                            if (validator.Value.TryGetProperty("severity", out var validatorSeverity))
+                            {
+                                ValidationContext.Require(validatorSeverity.ValueKind == JsonValueKind.String &&
+                                    validatorSeverity.GetString() is "ERROR" or "DANGER" or "WARNING" or "NOTE",
+                                    validatorPath + "/severity", "document.trait_validator",
+                                    "A Smithy trait validator severity must be recognized.");
+                            }
+                        }
+                        continue;
                     case "smithy.api#auth":
                         ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Array, traitPath,
                             "document.trait_value", "The Smithy auth trait requires an ordered array of authentication scheme IDs.");

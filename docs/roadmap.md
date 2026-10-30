@@ -228,6 +228,10 @@ vocabulary/source mapping. It does not supply their implementation.
   `idRef` checks string/member-string declaration targets, object values and
   optional string/Boolean fields. Custom application values, reference
   resolution and selector syntax/evaluation remain unvalidated.
+  `traitValidators` checks trait-definition targets, nonempty event IDs and rule
+  objects with required string selectors, optional string messages and explicit
+  recognized severities. Selector syntax/execution and configured validation
+  events remain unvalidated.
   `optionalAuth` checks operation applicability and object annotations without
   copying service schemes, inferring disabled authentication or changing runtime
   enforcement. Effective service authentication remains unvalidated.
