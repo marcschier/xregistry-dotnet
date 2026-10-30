@@ -157,11 +157,43 @@ public static partial class ApiOperationDocumentResolver
                         ValidationContext.Require(kind == "structure" || members.EnumerateObject().Any(),
                             path + "/members", "document.members", "Smithy union and enum shapes require at least one member.");
                         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        var enumStrings = new HashSet<string>(StringComparer.Ordinal);
+                        var enumIntegers = new HashSet<JsonNumber>();
                         foreach (var member in members.EnumerateObject())
                         {
                             ValidationContext.Require(IsSmithyShapeId("example#" + member.Name) && names.Add(member.Name),
                                 path + "/members", "document.member_name", "Smithy member names must be valid and case-insensitively unique.");
-                            Reference(member.Value, path + "/members/" + Escape(member.Name), depth);
+                            var memberPath = path + "/members/" + Escape(member.Name);
+                            Reference(member.Value, memberPath, depth);
+                            if (kind is "enum" or "intEnum")
+                            {
+                                ValidationContext.Require(member.Value.GetProperty("target").GetString() == "smithy.api#Unit",
+                                    memberPath, "document.enum_target", "Smithy enum members must target smithy.api#Unit.");
+                                var value = member.Value.TryGetProperty("traits", out var traits) &&
+                                    traits.TryGetProperty("smithy.api#enumValue", out var enumValue) ? enumValue : default;
+                                if (kind == "enum")
+                                {
+                                    ValidationContext.Require(value.ValueKind is JsonValueKind.Undefined or JsonValueKind.String,
+                                        memberPath, "document.enum_value", "A Smithy enum value must be a string.");
+                                    ValidationContext.Require(enumStrings.Add(value.ValueKind == JsonValueKind.Undefined ?
+                                        member.Name : value.GetString()!), memberPath, "document.enum_value",
+                                        "Smithy enum values must be unique.");
+                                }
+                                else
+                                {
+                                    ValidationContext.Require(value.ValueKind == JsonValueKind.Number,
+                                        memberPath, "document.enum_value",
+                                        "A Smithy intEnum member requires a signed 32-bit integer enumValue.");
+                                    var number = JsonNumber.Read(value, budget, memberPath);
+                                    ValidationContext.Require(number.IsInteger &&
+                                        number.CompareTo(new(true, "2147483648", 0)) >= 0 &&
+                                        number.CompareTo(new(false, "2147483647", 0)) <= 0,
+                                        memberPath, "document.enum_value",
+                                        "A Smithy intEnum value must fit a signed 32-bit integer.");
+                                    ValidationContext.Require(enumIntegers.Add(number), memberPath,
+                                        "document.enum_value", "Smithy intEnum values must be unique.");
+                                }
+                            }
                         }
                     }
                     else

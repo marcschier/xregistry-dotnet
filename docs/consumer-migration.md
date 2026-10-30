@@ -72,6 +72,15 @@ required structure cycles and unions with no terminating alternative report
 `Invalid` with `document.recursion`. Optional structure members, empty containers
 and terminating union alternatives allow recursion. These checks do not inspect
 unreachable shape definitions for recursive validity.
+
+Enum and intEnum members must target `smithy.api#Unit`. Enum values are unique
+strings and default to the member name when `enumValue` is absent. IntEnum
+members require unique signed 32-bit integer values; two members assigned
+numerically equal values such as `1` and `1.0` are rejected as aliases.
+Enum member naming recommendations do not reject otherwise valid identifiers.
+Selection preserves the operation JSON rather than inserting implicit enum
+values into it.
+
 Missing required shapes report `Indeterminate`, not a successful partial result.
 Mixins and `apply` entries report `Unsupported`; this resolver does not merge
 model files or parse IDL. Smithy shape IDs are not retrieval URLs and never
