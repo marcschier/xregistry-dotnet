@@ -2550,7 +2550,7 @@ public static partial class ApiOperationDocumentResolver
                                     }
                                 }
                                 else if (scoped) { return null; }
-                                var ignoreCase = (stringOperands is not null || subsetOperands is not null) &&
+                                var ignoreCase = (stringOperands is not null || subsetOperands is not null || numericOperands is not null) &&
                                     position < text.Length && text[position] == 'i';
                                 if (ignoreCase)
                                 {

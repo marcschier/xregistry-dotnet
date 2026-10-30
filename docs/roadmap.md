@@ -256,6 +256,8 @@ vocabulary/source mapping. It does not supply their implementation.
   Numeric trait/node predicates support `>`, `>=`, `<` and `<=` with exact
   decimal comparison and comma-separated alternatives. Both sides must contain
   Smithy number spellings; absent or nonnumeric values do not match.
+  Numeric comparisons accept the optional `i` token without changing exact
+  arithmetic or accepting nonnumeric values.
   Numeric spellings have a 256-character limit, and repeated parsing/comparison
   consumes the shared work budget.
   Node `(length)` counts array items or object entries, including null values;

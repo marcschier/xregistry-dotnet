@@ -434,6 +434,8 @@ Both sides must contain Smithy number spellings, either as numbers or strings;
 other node kinds, missing properties and nonnumeric strings do not match.
 Comparisons use exact decimal values and accept comma-separated alternatives.
 Every operand is parsed, including alternatives after an earlier match.
+The optional `i` token is accepted after numeric comparisons without changing
+their arithmetic or converting nonnumeric text into a number.
 Numeric spellings are limited to 256 characters, and parsing and comparison
 consume the shared work budget. Existing document-ingestion limits still apply
 to numeric JSON tokens.
