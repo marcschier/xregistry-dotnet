@@ -137,9 +137,20 @@ Server/Storage.File execution at this newer source, other platforms or
 requirement-level release qualification.
 
 Later live HTTP workflows exposed and corrected missing Core error arguments
-and over-rejection of uninlined document-view navigation. The source-matched
-native receipts above predate those corrections; their managed workflow
-evidence does not refresh native qualification.
+and over-rejection of uninlined document-view navigation. At
+`306e6cd6d494de9b6cf0f5e47563dbd4c2d5e43f`, the complete HTTP suite passed
+421 native cases on .NET 10/Windows x64, including all 28 TM/TD incremental
+workflow cases. ILC ran with zero IL diagnostics. The same-process proof
+reported native execution with zero JIT compilations; the managed control
+reported false/3,999 and was rejected without creating a receipt.
+
+`D:\temp\xregistry-http-native-306e6cd` retains the TRX, proof and receipt,
+with publish/run logs beside it. The receipt aggregates 136 distinct passed
+methods, with zero failed or skipped. Executable SHA-256:
+`d91381b9a232e66547cba3d241de5591ac3c74cdc71cbdbf1704f7e393e6ed3d`.
+This qualifies the tested live HTTP workflow on in-memory persistence, not a
+durable HTTP restart workflow, another platform or complete Server/Federation
+suite execution at this source.
 
 The module-level receipts below are historical and have not been refreshed
 against the complete successor source set. Do not treat their counts as

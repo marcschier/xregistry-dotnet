@@ -24,7 +24,7 @@ release safeguards remain in their subject guides.
   jitCompiledMethods: 0` (versus a JIT control's `nativeAot: false,
   jitCompiledMethods: 7169`), and the resulting receipt passes every
   structural/hash/native check in `release_check` up to the still-missing
-  seven remaining framework/RID cells. Models, Federation, Server and Storage.File
+  seven remaining framework/RID cells. Models, Federation, Server, Storage.File and HTTP
   now share the proof test; the complete Federation suite passed 626 native cases on
   .NET 10/Windows x64 at `6d143c4`, with zero IL diagnostics and zero JIT-compiled
   methods. Its receipt covers 242 distinct methods, not 626 independent methods.
@@ -37,6 +37,9 @@ release safeguards remain in their subject guides.
   636 cases, including all 31 incremental selector and 10 incremental provider
   cases. Their receipts cover 329 and 250 distinct methods, with zero IL/JIT and
   rejected managed controls.
+  At `306e6cd`, the complete HTTP suite passed 421 native cases in that cell,
+  including all 28 incremental publication-to-resolution workflow cases.
+  Its receipt covers 136 methods, with zero IL/JIT and a rejected managed control.
   Remaining work: link the shared proof into the other test projects, decide
   whether/how the existing native CI matrix (or a new job) runs the full suites
   across all eight `net8.0`/`net10.0` × `win-x64`/`win-arm64`/`linux-x64`/
@@ -53,7 +56,8 @@ Full native TUnit requirement receipts remain incomplete. Models and Federation
 passed 985 and 636 native cases at `c196737`; Server and Storage.File passed
 886 and 32 at `f97af1b`. All four are .NET 10/Windows x64 receipts tied to their
 own sources. They do not refresh the package-consumer matrix or qualify the
-other platforms.
+other platforms. The complete HTTP suite subsequently passed 421 native cases
+in the same cell at `306e6cd`; its receipt is likewise source-specific.
 
 - Refresh source-matched package-consumer and sample evidence after material
   package changes. Preserve exact source, package, executable, and report hashes.
@@ -120,11 +124,13 @@ other platforms.
   Its full managed gate passed 10,748 cases and 283 tooling tests.
   Complete Models/Federation native suites passed at `c196737` on
   .NET 10/Windows x64. Live HTTP TM/TD publication-to-resolution workflows now
-  have managed evidence, including exact replay, rejection without allocation,
-  sticky conflicts and retained local resolution after source shutdown.
+  have managed and .NET 10/Windows x64 native evidence at `306e6cd`, including
+  exact replay, rejection without allocation, sticky conflicts and retained
+  local resolution after source shutdown. The complete managed gate passed
+  10,820 cases and 283 tooling tests.
   Other native cells, URI/context mapping, line eligibility diagnostics and
-  durable HTTP restart workflows remain open; the older native receipts do not
-  qualify the subsequent HTTP corrections.
+  durable HTTP restart workflows remain open. The older module receipts do not
+  qualify complete Server/Federation suites at the HTTP checkpoint.
   SemVer provider acquisition now
   performs scoped native-source lookup and verifies acquired byte digests.
   Parsed local references use the retained containing revision and its authored

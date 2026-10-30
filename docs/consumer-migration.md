@@ -167,8 +167,12 @@ changes return Core problem codes with their required arguments and do not
 consume the next allocation. Document-view navigation to uninlined entities
 remains opaque URL data; it is not followed or mistaken for a missing pointer.
 These workflows use in-memory persistence and parsed reference requests.
-Their managed evidence does not establish a durable HTTP restart workflow,
-complete JSON-LD processing or native execution of the later HTTP corrections.
+The complete managed gate passed 10,820 cases plus 283 tooling tests.
+At `306e6cd`, the complete HTTP suite also passed 421 native cases on
+.NET 10/Windows x64, including all 28 incremental workflow cases, with zero IL
+diagnostics or JIT compilation and a rejected managed control. This does not
+establish a durable HTTP restart workflow, complete JSON-LD processing or
+qualification of the other native cells.
 
 ## Choose the real seam
 
