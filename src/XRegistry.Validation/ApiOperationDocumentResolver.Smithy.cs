@@ -24,6 +24,10 @@ public static partial class ApiOperationDocumentResolver
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
     private static partial Regex SmithyUtcTimestamp();
 
+    [GeneratedRegex(@"\A-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?\z",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
+    private static partial Regex SmithyEncodedNumber();
+
     private static ApiOperationResolutionResult ResolveSmithyOperation(JsonElement root, string shapeId,
         Uri? documentUri, ValidationContext budget)
     {
@@ -629,15 +633,13 @@ public static partial class ApiOperationDocumentResolver
                 }
                 return;
             }
-            if (value.ValueKind == JsonValueKind.String && kind is "bigInteger" or "bigDecimal")
-            {
-                ValidationContext.Fail(DocumentValidationStatus.Unsupported, path, "smithy.numeric_string_default",
-                    "String-encoded Smithy numeric defaults are not supported.");
-            }
+            var encodedNumber = value.ValueKind == JsonValueKind.String && kind is "bigInteger" or "bigDecimal"
+                ? ReadSmithyNumber(value, path, "smithy.numeric_string_default") : (JsonNumber?)null;
             var valid = kind switch
             {
                 "string" or "enum" or "blob" => value.ValueKind == JsonValueKind.String,
                 "boolean" => value.ValueKind is JsonValueKind.True or JsonValueKind.False,
+                "bigInteger" or "bigDecimal" => value.ValueKind == JsonValueKind.Number || encodedNumber.HasValue,
                 "list" => value.ValueKind == JsonValueKind.Array && value.GetArrayLength() == 0,
                 "map" => value.ValueKind == JsonValueKind.Object && !value.EnumerateObject().Any(),
                 "document" => value.ValueKind != JsonValueKind.Array && value.ValueKind != JsonValueKind.Object ||
@@ -673,7 +675,7 @@ public static partial class ApiOperationDocumentResolver
             }
             if (kind is "byte" or "short" or "integer" or "long" or "bigInteger" or "intEnum")
             {
-                var number = JsonNumber.Read(value, budget, path);
+                var number = encodedNumber ?? JsonNumber.Read(value, budget, path);
                 ValidationContext.Require(number.IsInteger && FitsNumericRange(kind, number), path, "document.default_value",
                     "A Smithy integer default must be integral and fit its target range.");
             }
@@ -744,15 +746,15 @@ public static partial class ApiOperationDocumentResolver
             if (IsNumericKind(kind) &&
                 (TryTrait(memberShape, "smithy.api#range", out var range) || TryTrait(target, "smithy.api#range", out range)))
             {
-                var number = JsonNumber.Read(value, budget, path);
+                var number = encodedNumber ?? JsonNumber.Read(value, budget, path);
                 if (range.TryGetProperty("min", out var min))
                 {
-                    ValidationContext.Require(number.CompareTo(JsonNumber.Read(min, budget, path)) >= 0,
+                    ValidationContext.Require(number.CompareTo(ReadSmithyNumber(min, path, "smithy.numeric_string_range")) >= 0,
                         path, "document.default_range", "The Smithy default is below its effective range minimum.");
                 }
                 if (range.TryGetProperty("max", out var max))
                 {
-                    ValidationContext.Require(number.CompareTo(JsonNumber.Read(max, budget, path)) <= 0,
+                    ValidationContext.Require(number.CompareTo(ReadSmithyNumber(max, path, "smithy.numeric_string_range")) <= 0,
                         path, "document.default_range", "The Smithy default exceeds its effective range maximum.");
                 }
             }
@@ -764,6 +766,25 @@ public static partial class ApiOperationDocumentResolver
             return shape.ValueKind == JsonValueKind.Object &&
                 shape.TryGetProperty("traits", out var traits) && traits.ValueKind == JsonValueKind.Object &&
                 traits.TryGetProperty(name, out value);
+        }
+
+        private JsonNumber ReadSmithyNumber(JsonElement value, string path, string unsupportedCode)
+        {
+            if (value.ValueKind != JsonValueKind.String) { return JsonNumber.Read(value, budget, path); }
+            var text = value.GetString()!;
+            budget.Work(text.Length, path);
+            if (text.Length > 256)
+            {
+                ValidationContext.Fail(DocumentValidationStatus.Indeterminate, path, "limit.number",
+                    "Numeric values are limited to 256 source characters.");
+            }
+            if (!SmithyEncodedNumber().IsMatch(text))
+            {
+                ValidationContext.Fail(DocumentValidationStatus.Unsupported, path, unsupportedCode,
+                    "Only JSON-number spellings of string-encoded Smithy numbers are supported.");
+            }
+            using var parsed = JsonDocument.Parse(text);
+            return JsonNumber.Read(parsed.RootElement, budget, path);
         }
 
         private void ValidateTimestampString(string text, string path)
@@ -1128,14 +1149,9 @@ public static partial class ApiOperationDocumentResolver
                 if (!value.TryGetProperty(name, out var bound)) { continue; }
                 var at = path + "/" + name;
                 budget.Work(path: at);
-                if (bound.ValueKind == JsonValueKind.String)
-                {
-                    ValidationContext.Fail(DocumentValidationStatus.Unsupported, at, "smithy.numeric_string_range",
-                        "String-encoded Smithy range bounds are not supported.");
-                }
-                ValidationContext.Require(bound.ValueKind == JsonValueKind.Number, at, "document.range_bound",
+                ValidationContext.Require(bound.ValueKind is JsonValueKind.Number or JsonValueKind.String, at, "document.range_bound",
                     "A Smithy range bound must be numeric.");
-                var number = JsonNumber.Read(bound, budget, at);
+                var number = ReadSmithyNumber(bound, at, "smithy.numeric_string_range");
                 ValidationContext.Require((kind is null or "float" or "double" or "bigDecimal" || number.IsInteger) &&
                     FitsNumericRange(kind, number), at, "document.range_bound",
                     "A Smithy range bound must fit its target numeric kind.");

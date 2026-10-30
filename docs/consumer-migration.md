@@ -348,8 +348,9 @@ including intEnum, reject fractional bounds. Comparisons use exact decimal
 values, including the finite IEEE-754 limits, without first rounding bounds
 to float or double. Numeric defaults must satisfy their effective inclusive
 bounds. A member's range replaces its target's entire range; null member
-overrides remain valid. String-encoded bounds and range checks on special
-floating-point defaults report `Unsupported`. Instance range validation remains
+overrides remain valid. Bounds may use JSON-number spellings encoded as strings;
+other string spellings and range checks on special floating-point defaults
+report `Unsupported`. Instance range validation remains
 outside the selected-operation resolver.
 
 The `pattern` trait requires a string value on a string or enum root, or on a
@@ -474,7 +475,12 @@ designator, including lowercase `t`/`z`, and millisecond-aligned fractions.
 Additional trailing fractional zeros are permitted without rounding. Numeric
 UTC offsets and invalid dates report `Invalid`; leap seconds and nonzero
 sub-millisecond fractions report `Unsupported`.
-String-encoded bigInteger/bigDecimal defaults report `Unsupported`.
+String-encoded bigInteger/bigDecimal defaults support JSON-number spellings
+through the same exact decimal parser as numeric nodes. BigInteger values must
+be integral after exponent normalization; range comparisons accept numeric or
+string-encoded bounds without rounding. Numeric source text remains bounded
+to 256 characters. Other string spellings, including leading plus signs or
+leading zeros, report `Unsupported` rather than receiving guessed semantics.
 Complete timestamp handling and applied pattern constraints remain
 open; these checks do not establish full Smithy validity.
 

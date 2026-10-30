@@ -2512,8 +2512,8 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
-    [Arguments("bigInteger", "\"123456789012345678901234567890\"")]
-    [Arguments("bigDecimal", "\"12345678901234567890.123456789\"")]
+    [Arguments("bigInteger", "\"+123\"")]
+    [Arguments("bigDecimal", "\"NaN\"")]
     public async Task SmithyJsonStringEncodedNumericDefaultsRemainExplicitlyUnsupported(string kind, string value)
     {
         var result = ResolveSmithy(SmithyDefaultDocument(kind, value, false));
@@ -3609,7 +3609,7 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
-    [Arguments("min", "\"1.25\"")]
+    [Arguments("min", "\"+1.25\"")]
     [Arguments("max", "\"NaN\"")]
     public async Task SmithyJsonStringEncodedRangeBoundsRemainExplicitlyUnsupported(string name, string value)
     {
@@ -4524,6 +4524,132 @@ public class ApiOperationReferenceTests
         await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.default_length");
         await Assert.That(result.Diagnostic.Detail.Contains("secret-default-sentinel", StringComparison.Ordinal)).IsFalse();
         await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("bigInteger", "123456789012345678901234567890", true)]
+    [Arguments("bigInteger", "-123456789012345678901234567890", true)]
+    [Arguments("bigInteger", "0", true)]
+    [Arguments("bigInteger", "-0.000", true)]
+    [Arguments("bigInteger", "1.000", true)]
+    [Arguments("bigInteger", "123e1000", true)]
+    [Arguments("bigInteger", "1000e-3", true)]
+    [Arguments("bigInteger", "1.5", false)]
+    [Arguments("bigInteger", "1e-1", false)]
+    [Arguments("bigDecimal", "12345678901234567890.123456789", true)]
+    [Arguments("bigDecimal", "-0.000000000000000000001", true)]
+    [Arguments("bigDecimal", "1E+1000", true)]
+    [Arguments("bigDecimal", "-1e-1000", true)]
+    public async Task SmithyJsonStringEncodedBigNumberDefaultsUseExactNumericValues(string kind, string text, bool valid)
+    {
+        foreach (var rootDefault in new[] { false, true })
+        {
+            var document = JsonNode.Parse(SmithyDefaultDocument(kind, JsonSerializer.Serialize(text), rootDefault))!;
+            if (rootDefault)
+            {
+                document["shapes"]!["example#Input"]!["members"]!["value"]!["traits"]!["smithy.api#default"] = null;
+            }
+            var result = ResolveSmithy(document.ToJsonString());
+            await Assert.That(result.Status).IsEqualTo(valid
+                ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+            if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+            else
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.default_value");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo((rootDefault
+                    ? "$/shapes/example#Value" : "$/shapes/example#Input/members/value") + "/traits/smithy.api#default");
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("bigInteger", "\"9007199254740993\"", """{"max":"9007199254740992"}""", false, "document.default_range")]
+    [Arguments("bigInteger", "\"9007199254740993\"", """{"min":9007199254740993,"max":"9007199254740993"}""", true, "")]
+    [Arguments("bigDecimal", "\"0.10000000000000000001\"", """{"max":"0.1"}""", false, "document.default_range")]
+    [Arguments("bigDecimal", "\"0.1\"", """{"min":"1e-1","max":"0.100"}""", true, "")]
+    [Arguments("bigDecimal", "0.1", """{"min":"0.1","max":"1e-1"}""", true, "")]
+    [Arguments("bigDecimal", "\"-0.10000000000000000001\"", """{"min":"-0.1"}""", false, "document.default_range")]
+    [Arguments("bigDecimal", "\"-0.1\"", """{"min":"-1e-1","max":"-0.100"}""", true, "")]
+    [Arguments("byte", "127", """{"max":"127"}""", true, "")]
+    [Arguments("byte", "127", """{"max":"128"}""", false, "document.range_bound")]
+    [Arguments("integer", "1", """{"min":"0.5"}""", false, "document.range_bound")]
+    [Arguments("float", "1", """{"max":"340282346638528859811704183484516925441"}""", false, "document.range_bound")]
+    public async Task SmithyJsonStringEncodedRangeBoundsRetainExactComparisonAndNativeLimits(
+        string kind, string value, string bounds, bool valid, string code)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument(kind, value, false))!;
+        var member = document["shapes"]!["example#Input"]!["members"]!["value"]!;
+        member["traits"]!["smithy.api#range"] = JsonNode.Parse(bounds);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("")]
+    [Arguments(" 1")]
+    [Arguments("1 ")]
+    [Arguments("+1")]
+    [Arguments("01")]
+    [Arguments(".1")]
+    [Arguments("1.")]
+    [Arguments("Infinity")]
+    [Arguments("0x10")]
+    [Arguments("1e")]
+    public async Task SmithyJsonNonJsonNumberStringSpellingsRemainExplicitlyUnsupported(string text)
+    {
+        var result = ResolveSmithy(SmithyDefaultDocument("bigDecimal", JsonSerializer.Serialize(text), false));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Unsupported);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("smithy.numeric_string_default");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments(false, 256, true)]
+    [Arguments(false, 257, false)]
+    [Arguments(true, 256, true)]
+    [Arguments(true, 257, false)]
+    public async Task SmithyJsonEncodedNumbersRetainSourceCharacterBudget(bool bound, int length, bool valid)
+    {
+        var text = new string('1', length);
+        var document = JsonNode.Parse(SmithyDefaultDocument("bigDecimal", bound ? "0" : JsonSerializer.Serialize(text), false))!;
+        if (bound)
+        {
+            document["shapes"]!["example#Input"]!["members"]!["value"]!["traits"]!["smithy.api#range"] =
+                new JsonObject { ["max"] = text };
+        }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Indeterminate);
+        if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+        else { await Assert.That(result.Diagnostic!.Code).IsEqualTo("limit.number"); }
+    }
+
+    [Test]
+    public async Task SmithyJsonStringEncodedNumbersRetainNativeMetadataAndMemberRangePrecedence()
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("bigDecimal", "\"1.25\"", false))!;
+        document["shapes"]!["example#Value"]!["traits"] = JsonNode.Parse("""{"smithy.api#range":{"min":"2"}}""");
+        document["shapes"]!["example#Input"]!["members"]!["value"]!["traits"]!["smithy.api#range"] =
+            JsonNode.Parse("""{"max":"1.250"}""");
+        document["shapes"]!["example#Unused"] = JsonNode.Parse("""
+            {"type":"bigInteger","traits":{"smithy.api#default":"1.5"}}
+            """);
+        document["metadata"] = JsonNode.Parse("""{"literal":{"target":"https://example.test/not-an-import"}}""");
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Numeric strings are not imports."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
     }
 
     private static string SmithyDefaultDocument(string kind, string value, bool rootDefault)

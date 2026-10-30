@@ -208,8 +208,9 @@ vocabulary/source mapping. It does not supply their implementation.
   `range` declarations check numeric targets, required bounds, integral bounds
   for integral targets and exact native limits. Numeric defaults check
   inclusive effective bounds, with member traits replacing target traits.
-  Null overrides remain valid. String-encoded bounds and special floating
-  defaults with ranges report unsupported; instance range checks remain open.
+  Null overrides remain valid. String-encoded bounds support bounded JSON-number
+  spellings; other spellings and special floating defaults with ranges report
+  unsupported. Instance range checks remain open.
   `pattern` declarations check string/enum targets and string values through
   the shared bounded ECMA-262 syntax checker. Unsupported syntax and non-null
   defaults requiring matching report unsupported; no anchors or .NET matching
@@ -259,7 +260,8 @@ vocabulary/source mapping. It does not supply their implementation.
   millisecond-aligned fractions with trailing zeros. Leap seconds and nonzero
   sub-millisecond fractions report unsupported, without rounding.
   Null overrides and exact default repetition remain supported. String-encoded
-  bigInteger/bigDecimal defaults report unsupported; applied pattern
+  bigInteger/bigDecimal defaults support bounded JSON-number spellings, exact
+  integrality and range checks. Other spellings report unsupported; applied pattern
   constraints and full default validation remain open.
 - Complete end-to-end event/outbox delivery qualification while preserving
   atomic mutation publication and caller-visible failure semantics.
