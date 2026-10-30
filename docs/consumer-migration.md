@@ -79,7 +79,8 @@ members require unique signed 32-bit integer values; two members assigned
 numerically equal values such as `1` and `1.0` are rejected as aliases.
 Enum member naming recommendations do not reject otherwise valid identifiers.
 Selection preserves the operation JSON rather than inserting implicit enum
-values into it.
+values into it. Map keys can target string shapes or enum specializations;
+intEnum, aggregate and trait-definition shapes are not valid map key types.
 
 Missing required shapes report `Indeterminate`, not a successful partial result.
 Mixins and `apply` entries report `Unsupported`; this resolver does not merge

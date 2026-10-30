@@ -113188,7 +113188,8 @@
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.SmithyJsonPropagatesTerminationThroughRequiredShapeChains",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.SmithyJsonDoesNotClaimRecursionValidationOutsideTheSelectedClosure",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.SmithyJsonRejectsInvalidEnumerationTargetsValuesAndAliases",
-          "XRegistry.Validation.Tests.ApiOperationReferenceTests.SmithyJsonAcceptsNativeEnumerationValuesWithoutRewritingTheOperation"
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.SmithyJsonAcceptsNativeEnumerationValuesWithoutRewritingTheOperation",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.SmithyJsonMapKeysAcceptStringSpecializationsButStillValidateTheirDefinitions"
         ],
         "nativeEvidence": []
       }

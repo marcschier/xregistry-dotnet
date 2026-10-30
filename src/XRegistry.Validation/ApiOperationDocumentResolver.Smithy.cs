@@ -113,7 +113,8 @@ public static partial class ApiOperationDocumentResolver
             }
             var kind = shape.GetProperty("type").GetString();
             ValidationContext.Require(expected is null ? kind is not ("operation" or "service" or "resource") :
-                kind == expected, path, "document.target_type", "A Smithy reference targets the wrong shape type.");
+                kind == expected || expected == "string" && kind == "enum",
+                path, "document.target_type", "A Smithy reference targets the wrong shape type.");
             ValidationContext.Require(traitDefinition || !shape.TryGetProperty("traits", out var applied) ||
                 applied.ValueKind != JsonValueKind.Object || !applied.TryGetProperty("smithy.api#trait", out _),
                 path, "document.target_type", "A Smithy data reference cannot target a trait definition.");

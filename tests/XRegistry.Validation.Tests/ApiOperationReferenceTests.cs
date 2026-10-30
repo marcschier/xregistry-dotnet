@@ -1213,6 +1213,43 @@ public class ApiOperationReferenceTests
             """.Replace("KIND", kind, StringComparison.Ordinal).Replace("MEMBERS", members, StringComparison.Ordinal));
 
     [Test]
+    [Arguments("""{"type":"string"}""", ApiOperationResolutionStatus.Selected, null)]
+    [Arguments("""{"type":"enum","members":{"A":{"target":"smithy.api#Unit"}}}""", ApiOperationResolutionStatus.Selected, null)]
+    [Arguments("""{"type":"enum","members":{"A":{"target":"smithy.api#Unit","traits":{"smithy.api#enumValue":"a"}}}}""", ApiOperationResolutionStatus.Selected, null)]
+    [Arguments("""{"type":"integer"}""", ApiOperationResolutionStatus.Invalid, "document.target_type")]
+    [Arguments("""{"type":"intEnum","members":{"A":{"target":"smithy.api#Unit","traits":{"smithy.api#enumValue":1}}}}""", ApiOperationResolutionStatus.Invalid, "document.target_type")]
+    [Arguments("""{"type":"structure"}""", ApiOperationResolutionStatus.Invalid, "document.target_type")]
+    [Arguments("""{"type":"string","traits":{"smithy.api#trait":{}}}""", ApiOperationResolutionStatus.Invalid, "document.target_type")]
+    [Arguments("""{"type":"enum","traits":{"smithy.api#trait":{}},"members":{"A":{"target":"smithy.api#Unit"}}}""", ApiOperationResolutionStatus.Invalid, "document.target_type")]
+    [Arguments("""{"type":"enum","members":{}}""", ApiOperationResolutionStatus.Invalid, "document.members")]
+    [Arguments("""{"type":"enum","members":{"A":{"target":"smithy.api#String"}}}""", ApiOperationResolutionStatus.Invalid, "document.enum_target")]
+    [Arguments("""{"type":"enum","members":{"A":{"target":"smithy.api#Unit"},"B":{"target":"smithy.api#Unit","traits":{"smithy.api#enumValue":"A"}}}}""", ApiOperationResolutionStatus.Invalid, "document.enum_value")]
+    public async Task SmithyJsonMapKeysAcceptStringSpecializationsButStillValidateTheirDefinitions(
+        string key, ApiOperationResolutionStatus status, string? code)
+    {
+        var result = ResolveSmithy("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"example#Input"}},
+              "example#Input":{"type":"structure","members":{
+                "key":{"target":"example#Key"},"entries":{"target":"example#Map"}}},
+              "example#Map":{"type":"map","key":{"target":"example#Key"},"value":{"target":"smithy.api#String"}},
+              "example#Key":KEY}}
+            """.Replace("KEY", key, StringComparison.Ordinal));
+        await Assert.That(result.Status).IsEqualTo(status);
+        if (code is null)
+        {
+            await Assert.That(result.Diagnostic).IsNull();
+            await Assert.That(result.Operation.GetProperty("input").GetProperty("target").GetString())
+                .IsEqualTo("example#Input");
+        }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
     public async Task SmithyJsonTraversesAggregateDependenciesButNotTraitPayloadsAsShapeReferences()
     {
         var result = ResolveSmithy("""
