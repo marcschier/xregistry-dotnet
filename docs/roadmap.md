@@ -127,9 +127,15 @@ in the same cell at `306e6cd`; its receipt is likewise source-specific.
   have managed and .NET 10/Windows x64 native evidence at `306e6cd`, including
   exact replay, rejection without allocation, sticky conflicts and retained
   local resolution after source shutdown. The complete managed gate passed
-  10,820 cases and 283 tooling tests.
-  Other native cells, URI/context mapping, line eligibility diagnostics and
-  durable HTTP restart workflows remain open. The older module receipts do not
+  10,820 cases and 283 tooling tests. Six added file-backed TM/TD HTTP workflows
+  retain greater-than-64-bit allocation across three separate adapter/host
+  lifetimes, with preserved history, Resource deletion or Group deletion.
+  Retained pins preserve bytes; deleted pins fail. The complete managed gate
+  now passes 10,832 cases and 283 tooling tests; these six cases await native
+  execution. Their orderly close/reopen scope does not qualify crash or
+  power-loss behavior.
+  Other native cells, URI/context mapping and line eligibility diagnostics
+  remain open. The older module receipts do not
   qualify complete Server/Federation suites at the HTTP checkpoint.
   SemVer provider acquisition now
   performs scoped native-source lookup and verifies acquired byte digests.

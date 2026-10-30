@@ -166,12 +166,21 @@ local resolution after source shutdown. Rejected byte, line and revision-id
 changes return Core problem codes with their required arguments and do not
 consume the next allocation. Document-view navigation to uninlined entities
 remains opaque URL data; it is not followed or mistaken for a missing pointer.
-These workflows use in-memory persistence and parsed reference requests.
-The complete managed gate passed 10,820 cases plus 283 tooling tests.
+These workflows use parsed reference requests.
 At `306e6cd`, the complete HTTP suite also passed 421 native cases on
 .NET 10/Windows x64, including all 28 incremental workflow cases, with zero IL
-diagnostics or JIT compilation and a rejected managed control. This does not
-establish a durable HTTP restart workflow, complete JSON-LD processing or
+diagnostics or JIT compilation and a rejected managed control.
+
+Six additional TM/TD workflows use `LocalRegistryPersistence` over
+`LocalFileStore` through three separately opened and closed HTTP hosts and
+adapters. An authored revision above the 64-bit range establishes the allocation
+watermark. Preserving its history, deleting its Resource or deleting its Group
+does not reset that watermark: publication after each reopen assigns the next
+number. A retained Version pin still returns the original bytes; a deleted pin
+fails without fallback. The complete managed gate passed 10,832 cases plus 283
+tooling tests, including all 34 incremental HTTP workflow cases per framework.
+The six added cases await native execution. Orderly close/reopen does not
+establish crash or power-loss durability, complete JSON-LD processing or
 qualification of the other native cells.
 
 ## Choose the real seam

@@ -16,6 +16,8 @@ using XRegistry.Client;
 using XRegistry.Federation;
 using XRegistry.Models;
 using XRegistry.Server;
+using XRegistry.Storage.File;
+using XRegistry.Storage.File.Tests;
 
 namespace XRegistry.Http.Tests;
 
@@ -26,6 +28,80 @@ public class WotIncrementalHttpWorkflowTests
     private const string OtherLine = "urn:example:line:b";
     private const string Generated = "{\r\n  \"id\": \"urn:example:pump\", \"value\": 42\r\n}\r\n";
     private static readonly RegistryModel Model = WotRegistryProfiles.Compile(WotVersionProfile.Incremental);
+
+    [Test]
+    [Arguments(false, "preserved")]
+    [Arguments(true, "preserved")]
+    [Arguments(false, "resource")]
+    [Arguments(true, "resource")]
+    [Arguments(false, "group")]
+    [Arguments(true, "group")]
+    public async Task DurableHttpPublicationAndResolutionRetainAllocationAcrossDeletionAndSeparateAdapterRestarts(
+        bool description, string history)
+    {
+        const string authoredId = "184467440737095516160001";
+        const string firstGenerated = "184467440737095516160002";
+        const string secondGenerated = "184467440737095516160003";
+        using var directory = new TestDirectory();
+        using (var store = LocalFileStore.Initialize(directory.Path))
+        using (var persistence = new LocalRegistryPersistence(store))
+        {
+            await using var app = await StartAsync(new(), persistence);
+            using var client = Client(app);
+            await PublishAsync(client, description, Authored(description, authoredId), Line, authoredId, HttpMethod.Put);
+            using var source = await HttpFederationReadSource.OpenAsync(client.Root, new() { AllowLoopbackHttp = true });
+            var original = await WotRegistryResolver.ResolveAsync(source, Collection(description), Request(description));
+            await Assert.That(original.Version.VersionId).IsEqualTo(authoredId);
+            await Assert.That(original.Version.ContentDigest).IsEqualTo(Digest(Authored(description, authoredId)));
+            if (history != "preserved")
+            {
+                var target = history == "resource" ? Resource(description) :
+                    description ? "thingdescriptiongroups/g" : "thingmodelgroups/g";
+                using var deletion = await client.SendAsync(HttpMethod.Delete, target);
+                await Assert.That(deletion.StatusCode).IsEqualTo(HttpStatusCode.NoContent);
+            }
+        }
+        using (var store = LocalFileStore.Open(directory.Path))
+        using (var persistence = new LocalRegistryPersistence(store))
+        {
+            await using var app = await StartAsync(new(), persistence);
+            using var client = Client(app);
+            await PublishAsync(client, description, Generated, Line, firstGenerated, HttpMethod.Post);
+            using var source = await HttpFederationReadSource.OpenAsync(client.Root, new() { AllowLoopbackHttp = true });
+            var selected = await WotRegistryResolver.ResolveAsync(source, Collection(description),
+                Request(description) with { MinimumVersion = firstGenerated });
+            await Assert.That(selected.Version.VersionId).IsEqualTo(firstGenerated);
+            await Assert.That(selected.Version.Profile).IsEqualTo(WotVersionProfile.Incremental);
+            await Assert.That(selected.Version.CompatibilityLine).IsEqualTo(Line);
+            await Assert.That(selected.Version.ContentDigest).IsEqualTo(Digest(Generated));
+            await Assert.That(selected.Version.Origin).IsEqualTo(client.Root.AbsoluteUri);
+            var pin = Request(description) with { VersionIdPin = authoredId };
+            if (history == "preserved")
+            {
+                var retained = await WotRegistryResolver.ResolveAsync(source, Collection(description), pin);
+                await Assert.That(retained.Version.ContentDigest).IsEqualTo(Digest(Authored(description, authoredId)));
+            }
+            else
+            {
+                var failure = await Assert.That(async () => await WotRegistryResolver.ResolveAsync(source,
+                    Collection(description), pin)).Throws<RegistryException>()
+                    ?? throw new InvalidOperationException("The deleted revision must remain absent.");
+                await Assert.That(failure.Diagnostic.Code).IsEqualTo("not-found");
+            }
+        }
+        using (var store = LocalFileStore.Open(directory.Path))
+        using (var persistence = new LocalRegistryPersistence(store))
+        {
+            await using var app = await StartAsync(new(), persistence);
+            using var client = Client(app);
+            await PublishAsync(client, description, Generated, Line, secondGenerated, HttpMethod.Post);
+            using var source = await HttpFederationReadSource.OpenAsync(client.Root, new() { AllowLoopbackHttp = true });
+            var repeated = await WotRegistryResolver.ResolveAsync(source, Collection(description), Request(description));
+            await Assert.That(repeated.Version.VersionId).IsEqualTo(secondGenerated);
+            await Assert.That(repeated.Version.CompatibilityLine).IsEqualTo(Line);
+            await Assert.That(repeated.Version.ContentDigest).IsEqualTo(Digest(Generated));
+        }
+    }
 
     [Test]
     [Arguments(false)]
@@ -266,7 +342,8 @@ public class WotIncrementalHttpWorkflowTests
             metadata, Definition(description));
     }
 
-    private static async Task<WebApplication> StartAsync(ConcurrentQueue<string> documents)
+    private static async Task<WebApplication> StartAsync(ConcurrentQueue<string> documents,
+        IRegistryPersistence? persistence = null)
     {
         var app = await XRegistryHttpClientTests.StartAsync(app =>
         {
@@ -297,7 +374,7 @@ public class WotIncrementalHttpWorkflowTests
             {
                 RegistryId = "wot-workflow", PublicRoot = new Uri(new Uri(app.Urls.Single()), "/registry"),
                 Model = Model, AllowAnonymousReads = true
-            }, new InMemoryRegistryPersistence(), new PermitPolicy());
+            }, persistence ?? new InMemoryRegistryPersistence(), new PermitPolicy());
             app.MapXRegistry(engine, new() { MountPath = "/registry" });
             transferred = true;
             return app;
@@ -314,9 +391,10 @@ public class WotIncrementalHttpWorkflowTests
     private static RegistryResourceDefinition Definition(bool description) => description
         ? Model.Groups["thingdescriptiongroups"].Resources["thingdescriptions"]
         : Model.Groups["thingmodelgroups"].Resources["thingmodels"];
-    private static string Authored(bool description) =>
-        """{"id":"urn:example:pump","version":{"FIELD":"9"},"value":9}"""
-            .Replace("FIELD", description ? "instance" : "model", StringComparison.Ordinal);
+    private static string Authored(bool description, string versionId = "9") =>
+        """{"id":"urn:example:pump","version":{"FIELD":"REVISION"},"value":9}"""
+            .Replace("FIELD", description ? "instance" : "model", StringComparison.Ordinal)
+            .Replace("REVISION", versionId, StringComparison.Ordinal);
     private static WotVersionResolutionRequest Request(bool description) => new(Identity,
         description ? WotReferenceTargetKind.ThingDescription : WotReferenceTargetKind.ThingModel,
         description ? WotReferenceOperator.ThingDescription : WotReferenceOperator.ThingModel)
