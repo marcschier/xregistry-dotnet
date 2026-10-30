@@ -209,6 +209,13 @@ vocabulary/source mapping. It does not supply their implementation.
   `longPoll` requires an operation object annotation with a positive signed
   32-bit integer `timeoutMillis`, checked exactly without rounding. The check
   does not execute polling or modify request timeout configuration.
+  `httpError` checks error-structure applicability and exact signed-32-bit
+  integer values without converting recommended client/server ranges into
+  mandatory bounds. `httpResponseCode` checks object-valued integer-targeting
+  structure members, excludes input-marked containers, enforces one marked
+  member per structure and rejects all six conflicting HTTP bindings in either
+  property order. It does not infer effective response bindings from nested
+  declarations, assign default codes or emit HTTP responses.
   `streaming` checks blob/union applicability, object annotations, structure-only
   event alternatives and one streaming target per top-level input/output
   structure. Streaming blob members require explicit required/default traits.

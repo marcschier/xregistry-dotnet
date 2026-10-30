@@ -605,7 +605,8 @@ public static partial class ApiOperationDocumentResolver
                     foreach (var trait in traits.EnumerateObject())
                     {
                         budget.Work(path: path);
-                        if (trait.Name is "smithy.api#idempotencyToken" or "smithy.api#eventPayload" && mode == "member")
+                        if (trait.Name is "smithy.api#idempotencyToken" or "smithy.api#eventPayload" or
+                            "smithy.api#httpResponseCode" && mode == "member")
                         {
                             ValidationContext.Require(owners.TryAdd(trait.Name, memberName), path,
                                 "document.trait_exclusivity",
@@ -1094,6 +1095,10 @@ public static partial class ApiOperationDocumentResolver
                         sourceId == "smithy.api#Unit",
                     "smithy.api#retryable" => memberContainer is null && kind == "structure" &&
                         traits.TryGetProperty("smithy.api#error", out _),
+                    "smithy.api#httpError" => memberContainer is null && kind == "structure" &&
+                        traits.TryGetProperty("smithy.api#error", out _),
+                    "smithy.api#httpResponseCode" => memberContainer == "structure" &&
+                        !TryTrait(shapes.GetProperty(sourceId), "smithy.api#input", out _),
                     "smithy.api#idempotencyToken" => memberContainer == "structure",
                     "smithy.api#eventPayload" or "smithy.api#eventHeader" => memberContainer == "structure",
                     "smithy.api#jsonName" => memberContainer is "structure" or "union",
@@ -1138,6 +1143,15 @@ public static partial class ApiOperationDocumentResolver
                     "smithy.api#eventHeader" => traits.TryGetProperty("smithy.api#eventPayload", out _),
                     "smithy.api#xmlAttribute" => traits.TryGetProperty("smithy.api#xmlNamespace", out _),
                     "smithy.api#xmlNamespace" => traits.TryGetProperty("smithy.api#xmlAttribute", out _),
+                    "smithy.api#httpResponseCode" => traits.TryGetProperty("smithy.api#httpLabel", out _) ||
+                        traits.TryGetProperty("smithy.api#httpQuery", out _) ||
+                        traits.TryGetProperty("smithy.api#httpHeader", out _) ||
+                        traits.TryGetProperty("smithy.api#httpPrefixHeaders", out _) ||
+                        traits.TryGetProperty("smithy.api#httpPayload", out _) ||
+                        traits.TryGetProperty("smithy.api#httpQueryParams", out _),
+                    "smithy.api#httpLabel" or "smithy.api#httpQuery" or "smithy.api#httpHeader" or
+                        "smithy.api#httpPrefixHeaders" or "smithy.api#httpPayload" or "smithy.api#httpQueryParams" =>
+                        traits.TryGetProperty("smithy.api#httpResponseCode", out _),
                     "smithy.api#required" => traits.TryGetProperty("smithy.api#recommended", out _),
                     "smithy.api#readonly" => traits.TryGetProperty("smithy.api#idempotent", out _),
                     "smithy.api#input" => traits.TryGetProperty("smithy.api#output", out _) ||
@@ -1153,6 +1167,22 @@ public static partial class ApiOperationDocumentResolver
                     "Conflicting Smithy prelude traits cannot be applied to the same shape.");
                 switch (trait.Name)
                 {
+                    case "smithy.api#httpError":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Number, traitPath,
+                            "document.trait_value", "The Smithy httpError trait requires an integer value.");
+                        var errorStatus = JsonNumber.Read(trait.Value, budget, traitPath);
+                        ValidationContext.Require(errorStatus.IsInteger && FitsNumericRange("integer", errorStatus),
+                            traitPath, "document.http_error", "The Smithy HTTP error code must fit a signed 32-bit integer.");
+                        continue;
+                    case "smithy.api#httpResponseCode":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
+                            "document.trait_value", "The Smithy httpResponseCode annotation requires an object value.");
+                        var statusTargetId = shape.GetProperty("target").GetString()!;
+                        var statusKind = shapes.TryGetProperty(statusTargetId, out var statusTarget)
+                            ? statusTarget.GetProperty("type").GetString() : SmithyPreludeKind(statusTargetId);
+                        ValidationContext.Require(statusKind is null or "integer" or "intEnum", traitPath,
+                            "document.trait_target", "A Smithy HTTP response code member must target an integer.");
+                        continue;
                     case "smithy.api#longPoll":
                         ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
                             "document.trait_value", "The Smithy longPoll trait requires an object value.");

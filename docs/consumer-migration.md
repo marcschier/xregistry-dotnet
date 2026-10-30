@@ -499,6 +499,23 @@ including structures outside an event stream, without serializing events or
 choosing a framing protocol. Literal example content and unrelated event
 definitions remain outside the selected closure.
 
+The `httpError` trait requires a numeric signed-32-bit integer on an
+error-marked structure. Decimal and exponent spellings are checked exactly,
+without rounding. The recommended 400-499 client and 500-599 server ranges
+are not mandatory declaration limits; selection does not reject another
+integer solely because it falls outside those recommendations.
+
+The object-valued `httpResponseCode` annotation requires a structure member
+targeting an integer, including an intEnum specialization. Its containing
+structure cannot carry `input`. Unmarked, output and error structures retain
+their declared meaning; acceptance does not turn a nested or input-slot member
+into an effective response binding. A structure can mark at most one response
+code member. The annotation conflicts with `httpLabel`, `httpQuery`,
+`httpHeader`, `httpPrefixHeaders`, `httpPayload` and `httpQueryParams` in either
+property order. Missing targets still report unresolved dependencies.
+These checks do not assign default status codes, emit HTTP responses or
+qualify a complete HTTP protocol binding.
+
 The `jsonName` trait requires a string value on a structure or union member.
 Explicit names cannot repeat within that structure or union; comparison is
 case-sensitive and does not normalize Unicode. Empty strings remain valid
