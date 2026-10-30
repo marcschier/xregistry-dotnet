@@ -22,4 +22,6 @@
 .gitignore text eol=lf
 tests/Conformance/Sources/** -text
 tests/Conformance/Corrections/** -text
+tests/Conformance/Vectors/WotResolution/vectors.json -text
+tests/Conformance/Vectors/WotResolution/LICENSE -text
 src/XRegistry.Models/Resources/** -text
