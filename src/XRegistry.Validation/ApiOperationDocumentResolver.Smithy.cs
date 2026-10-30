@@ -12,6 +12,10 @@ public static partial class ApiOperationDocumentResolver
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
     private static partial Regex SmithyRootShapeId();
 
+    [GeneratedRegex(@"\A(?:/(?:[^~]|~[01])*)*\z",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
+    private static partial Regex SmithyTraitDiffPointer();
+
     private static ApiOperationResolutionResult ResolveSmithyOperation(JsonElement root, string shapeId,
         Uri? documentUri, ValidationContext budget)
     {
@@ -750,6 +754,10 @@ public static partial class ApiOperationDocumentResolver
                     exclusive.GetString() is "member" or "target", path + "/structurallyExclusive",
                     "document.trait_exclusive", "Smithy structural exclusivity must be member or target.");
             }
+            if (marker.TryGetProperty("breakingChanges", out var rules))
+            {
+                ValidateBreakingChanges(rules, path + "/breakingChanges");
+            }
             if (!marker.TryGetProperty("conflicts", out var conflicts)) { return; }
             ValidationContext.Require(conflicts.ValueKind == JsonValueKind.Array, path + "/conflicts",
                 "document.trait_conflicts", "Smithy trait conflicts must be an array of absolute trait IDs.");
@@ -761,6 +769,44 @@ public static partial class ApiOperationDocumentResolver
                 ValidationContext.Require(conflict.ValueKind == JsonValueKind.String &&
                     IsSmithyShapeId(conflict.GetString()!), at, "document.trait_conflicts",
                     "A Smithy trait conflict must name an absolute root trait ID.");
+            }
+        }
+
+        private void ValidateBreakingChanges(JsonElement rules, string path)
+        {
+            ValidationContext.Require(rules.ValueKind == JsonValueKind.Array && rules.GetArrayLength() > 0,
+                path, "document.trait_breaking_changes", "Smithy breakingChanges must be a nonempty array.");
+            var index = 0;
+            foreach (var rule in rules.EnumerateArray())
+            {
+                var at = path + "/" + (index++).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                budget.Work(path: at);
+                ValidationContext.Require(rule.ValueKind == JsonValueKind.Object, at,
+                    "document.trait_breaking_changes", "A Smithy breaking-change rule must be an object.");
+                ValidationContext.Require(rule.TryGetProperty("change", out var change) &&
+                    change.ValueKind == JsonValueKind.String &&
+                    change.GetString() is "add" or "remove" or "update" or "any" or "presence",
+                    at + "/change", "document.trait_change", "A Smithy breaking-change rule requires a valid change type.");
+                if (rule.TryGetProperty("severity", out var severity))
+                {
+                    ValidationContext.Require(severity.ValueKind == JsonValueKind.String &&
+                        severity.GetString() is "ERROR" or "DANGER" or "WARNING" or "NOTE",
+                        at + "/severity", "document.trait_severity", "A Smithy breaking-change severity must be recognized.");
+                }
+                if (rule.TryGetProperty("message", out var message))
+                {
+                    ValidationContext.Require(message.ValueKind == JsonValueKind.String, at + "/message",
+                        "document.trait_message", "A Smithy breaking-change message must be a string.");
+                }
+                if (rule.TryGetProperty("path", out var pointer))
+                {
+                    ValidationContext.Require(pointer.ValueKind == JsonValueKind.String, at + "/path",
+                        "document.trait_pointer", "A Smithy breaking-change path must be a JSON Pointer string.");
+                    var text = pointer.GetString()!;
+                    budget.Work(text.Length, at + "/path");
+                    ValidationContext.Require(SmithyTraitDiffPointer().IsMatch(text), at + "/path",
+                        "document.trait_pointer", "A Smithy breaking-change path must have valid JSON Pointer syntax.");
+                }
             }
         }
 

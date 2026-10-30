@@ -202,8 +202,11 @@ vocabulary/source mapping. It does not supply their implementation.
   checks. Structural exclusivity is enforced per reachable structure and trait:
   member mode limits direct member markings; target mode limits members whose
   targets carry the trait, including repeated use of the same target. Other
-  structures and trait IDs have separate limits. General selector evaluation,
-  breaking-change rules and other trait member schemas remain open.
+  structures and trait IDs have separate limits. Trait-marker `breakingChanges`
+  checks require a nonempty rule array, recognized change/severity values,
+  string messages and JSON Pointer path syntax. Trait-schema path resolution
+  and semantic model comparison remain open, as do general selector evaluation
+  and other trait member schemas.
   Reachable defaults check applicability, root-null rejection, member null
   overrides, explicit repetition of root defaults, native scalar types,
   integer ranges, finite float/double numbers and exact special-value strings,

@@ -308,7 +308,14 @@ regardless of property order or whether the other trait declares a reciprocal
 conflict. This also applies to members and reachable trait definitions.
 Matching is case-sensitive. An unknown conflict ID does not require a definition
 unless that trait is actually applied; conflict declarations are not imports.
-Complete trait-member validation and `breakingChanges` rules remain open.
+When supplied, `breakingChanges` must be a nonempty array of rule objects.
+Each rule requires an exact `change` value: `add`, `remove`, `update`, `any`
+or `presence`. Optional `severity` values are `ERROR`, `DANGER`, `WARNING`
+or `NOTE`; optional messages must be strings. Optional paths must use RFC 6901
+JSON Pointer syntax, including valid tilde escapes. Omissions remain authored
+omissions; selection does not insert severity or path defaults. These checks do
+not resolve paths against trait schemas or compare model versions. Complete
+trait-member validation and semantic diff processing remain open.
 
 Structural exclusivity is checked separately for each reachable structure and
 trait ID. With `member`, at most one member can directly carry that trait.
