@@ -1705,6 +1705,20 @@ public static partial class ApiOperationDocumentResolver
                     case "smithy.api#examples":
                         ValidateExamples(shape, trait.Value, traitPath);
                         continue;
+                    case "smithy.api#suppress":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Array, traitPath,
+                            "document.trait_value", "Smithy suppress requires an array of nonempty event ID strings.");
+                        var suppressionIndex = 0;
+                        foreach (var suppression in trait.Value.EnumerateArray())
+                        {
+                            var suppressionPath = traitPath + "/" +
+                                (suppressionIndex++).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                            budget.Work(path: suppressionPath);
+                            ValidationContext.Require(suppression.ValueKind == JsonValueKind.String &&
+                                suppression.GetString()!.Length > 0, suppressionPath,
+                                "document.trait_value", "A Smithy suppressed event ID must be a nonempty string.");
+                        }
+                        continue;
                     case "smithy.api#tags":
                         ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Array, traitPath,
                             "document.trait_value", "Smithy tags require an array of strings.");

@@ -524,6 +524,13 @@ Operation selection does not infer a service's protocol from these declarations
 or enforce that protocol's service-wide prohibition on document shapes. Those
 checks require the enclosing service closure and remain unvalidated.
 
+Reached `suppress` annotations require arrays of nonempty event ID strings.
+Empty arrays, duplicate IDs and authored ordering are preserved; event IDs do
+not become shape dependencies. These declaration checks do not suppress
+structural errors or unresolved dependencies. Execution of configurable
+validators, hierarchical warning suppression and metadata severity overrides
+remain unvalidated.
+
 The operation-only `optionalAuth` annotation requires an object value.
 Selection preserves that declaration without copying enclosing-service schemes,
 inferring an empty `auth` list or changing authentication behavior. Supporting

@@ -221,6 +221,10 @@ vocabulary/source mapping. It does not supply their implementation.
   and required-trait reference checks; `noInlineDocumentSupport` requires a
   Boolean. Protocol selection and the service-closure document prohibition
   remain unvalidated.
+  `suppress` checks arrays of nonempty literal event IDs without imposing
+  uniqueness or suppressing structural errors and unresolved dependencies.
+  Configurable validators, hierarchical warning suppression and metadata
+  severity overrides remain unvalidated.
   `optionalAuth` checks operation applicability and object annotations without
   copying service schemes, inferring disabled authentication or changing runtime
   enforcement. Effective service authentication remains unvalidated.
