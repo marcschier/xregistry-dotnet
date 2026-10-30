@@ -94,6 +94,27 @@ passed methods, zero failed and zero skipped. Executable SHA-256:
 This establishes execution of the pure allocator, not a durable incremental
 publication adapter or complete profile qualification.
 
+Complete Server and Storage.File suites passed natively on .NET 10/Windows x64
+at `f97af1b91ac79e3a02a2eb19736230b8b69bf2c5`: 886 and 32 cases respectively,
+including all 28 incremental publication cases and all three file-backed
+deletion/restart cases. Both publications ran ILC with zero IL diagnostics.
+Both execution proofs reported native status with zero JIT compilations;
+managed controls reported false/3,997 and were rejected without creating receipts.
+The Server suite's two reflection-based byte-equivalency assertions were
+replaced with ordered byte equality before publication; no warning was suppressed.
+
+The runs are retained in `D:\temp\xregistry-server-native-f97af1b` and
+`D:\temp\xregistry-storage-native-f97af1b`, with publish/run logs beside them.
+Each contains its proof, TRX and converted receipt. Server's receipt records
+415 distinct passed methods; Storage.File's records 30. Neither has a failed or
+skipped method. Executable SHA-256 values are
+`b55c799ef46da65bbd35219519bc20af0267f083cdba7d7778e062e627459648`
+for Server and
+`de0fc0a455b0ddd7ede5e5bf31fa3f62572765451a7689481d55c437d0272f53`
+for Storage.File. This establishes one native publication/durability cell.
+Incremental reference selection, the other native cells and requirement-level
+release qualification remain open.
+
 The module-level receipts below are historical and have not been refreshed
 against the complete successor source set. Do not treat their counts as
 qualification of the current implementation.

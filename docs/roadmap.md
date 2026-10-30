@@ -24,10 +24,15 @@ release safeguards remain in their subject guides.
   jitCompiledMethods: 0` (versus a JIT control's `nativeAot: false,
   jitCompiledMethods: 7169`), and the resulting receipt passes every
   structural/hash/native check in `release_check` up to the still-missing
-  seven remaining framework/RID cells. The proof test is now shared by Models
-  and Federation; the complete Federation suite passed 626 native cases on
+  seven remaining framework/RID cells. Models, Federation, Server and Storage.File
+  now share the proof test; the complete Federation suite passed 626 native cases on
   .NET 10/Windows x64 at `6d143c4`, with zero IL diagnostics and zero JIT-compiled
   methods. Its receipt covers 242 distinct methods, not 626 independent methods.
+  At `f97af1b`, complete Server and Storage.File suites passed 886 and 32 native
+  cases in that cell, including incremental publication and durable restart
+  contracts, with zero IL diagnostics or JIT compilations. Their receipts
+  cover 415 and 30 distinct methods. Managed controls were rejected without
+  creating receipts.
   Remaining work: link the shared proof into the other test projects, decide
   whether/how the existing native CI matrix (or a new job) runs the full suites
   across all eight `net8.0`/`net10.0` × `win-x64`/`win-arm64`/`linux-x64`/
@@ -45,8 +50,9 @@ receipts cover Federation at `6d143c4` and Models at `af72b7f`, each on
 .NET 10/Windows x64; they do not refresh the package-consumer matrix or qualify
 the remaining cells. Models passed 954 native cases, including all 43 pure
 incremental assignment cases, with zero IL diagnostics and JIT compilations.
-Its receipt covers 313 distinct methods; it does not qualify the subsequent
-incremental server integration.
+Its receipt covers 313 distinct methods. Server and Storage.File receipts at
+`f97af1b` cover the subsequent incremental publication integration in the same
+native cell, without qualifying the other platforms.
 
 - Refresh source-matched package-consumer and sample evidence after material
   package changes. Preserve exact source, package, executable, and report hashes.
@@ -106,9 +112,10 @@ incremental server integration.
   atomic allocation, immutable revision bytes and compatibility lines now have
   managed publication evidence, including concurrent conflicts and deletion
   across file-store restarts. The full managed gate passed 10,666 cases and 283
-  tooling tests. Native evidence for this integration, origin-scoped incremental
-  selection, line eligibility diagnostics and complete workflow evidence remain
-  open.
+  tooling tests at `7e84cad`; complete Server and Storage.File native suites
+  passed on .NET 10/Windows x64 at `f97af1b`. Other native cells, origin-scoped
+  incremental selection, line eligibility diagnostics and complete workflow
+  evidence remain open.
   SemVer provider acquisition now
   performs scoped native-source lookup and verifies acquired byte digests.
   Parsed local references use the retained containing revision and its authored

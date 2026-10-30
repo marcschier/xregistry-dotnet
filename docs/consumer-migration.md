@@ -127,7 +127,10 @@ IRI must agree exactly. Compact JSON-LD terms are rejected until context
 processing is implemented. A lineless revision can be stored and read directly,
 but automatic line selection and its publication diagnostic remain open.
 The full managed gate passed 10,666 cases and 283 tooling tests for this
-publication slice. Native execution of the new integration remains unqualified.
+publication slice at `7e84cad`. Complete Server and Storage.File suites also
+passed native execution on .NET 10/Windows x64 at `f97af1b`, including all 28
+incremental publication cases and all three file-backed deletion/restart cases.
+Other native cells and complete incremental-profile qualification remain open.
 
 ## Choose the real seam
 
