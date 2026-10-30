@@ -2374,10 +2374,23 @@ public static partial class ApiOperationDocumentResolver
                         SkipWhitespace();
                         if (position == text.Length || text[position++] != '|') { return null; }
                         SkipWhitespace();
-                        var traitId = AttributeName();
-                        if (traitId is null) { return null; }
-                        if (!traitId.Contains('#', StringComparison.Ordinal)) { traitId = "smithy.api#" + traitId; }
-                        if (!IsSmithyShapeId(traitId)) { return null; }
+                        var countTraits = position < text.Length && text[position] == '(';
+                        string? traitId = null;
+                        if (countTraits)
+                        {
+                            position++;
+                            SkipWhitespace();
+                            if (Identifier() != "length") { return null; }
+                            SkipWhitespace();
+                            if (position == text.Length || text[position++] != ')') { return null; }
+                        }
+                        else
+                        {
+                            traitId = AttributeName();
+                            if (traitId is null) { return null; }
+                            if (!traitId.Contains('#', StringComparison.Ordinal)) { traitId = "smithy.api#" + traitId; }
+                            if (!IsSmithyShapeId(traitId)) { return null; }
+                        }
                         SkipWhitespace();
                         List<(string Name, bool Length)>? properties = null;
                         while (position < text.Length && text[position] == '|')
@@ -2467,13 +2480,14 @@ public static partial class ApiOperationDocumentResolver
                             return null;
                         }
                         var node = default(JsonElement);
+                        int? nodeLength = countTraits ? 0 : null;
                         if (shape.TryGetProperty("traits", out var traits))
                         {
                             ValidationContext.Require(traits.ValueKind == JsonValueKind.Object,
                                 path, "document.traits", "Smithy traits must be an object.");
-                            node = Property(traits, traitId);
+                            if (countTraits) { nodeLength = ObjectLength(traits); }
+                            else { node = Property(traits, traitId!); }
                         }
-                        int? nodeLength = null;
                         if (properties is not null)
                         {
                             foreach (var property in properties)
@@ -2490,12 +2504,7 @@ public static partial class ApiOperationDocumentResolver
                                     if (node.ValueKind == JsonValueKind.Array) { nodeLength = node.GetArrayLength(); }
                                     else if (node.ValueKind == JsonValueKind.Object)
                                     {
-                                        nodeLength = 0;
-                                        foreach (var entry in node.EnumerateObject())
-                                        {
-                                            budget.Work(entry.Name.Length + 1L, path);
-                                            nodeLength++;
-                                        }
+                                        nodeLength = ObjectLength(node);
                                     }
                                     node = default;
                                 }
@@ -2651,6 +2660,17 @@ public static partial class ApiOperationDocumentResolver
                     }
                 }
                 return default;
+            }
+
+            int ObjectLength(JsonElement node)
+            {
+                var length = 0;
+                foreach (var entry in node.EnumerateObject())
+                {
+                    budget.Work(entry.Name.Length + 1L, path);
+                    length++;
+                }
+                return length;
             }
 
             string? NumericOperand()

@@ -244,6 +244,10 @@ vocabulary/source mapping. It does not supply their implementation.
   accept computed lengths, and subsequent property access yields absence.
   Object counting consumes the shared work budget. String length and string
   rendering of computed counts remain unsupported.
+  `[trait|(length)]` counts the selected shape's own applied traits, including
+  a present zero when its traits object is omitted or empty. Payload truthiness
+  does not affect the count. Malformed traits objects remain invalid; implicit
+  prelude trait counts remain unsupported. Counting consumes the work budget.
   String trait/node predicates support ordinal `=`, `!=`, `^=`, `$=` and `*=`
   with operand alternatives. Booleans use their lowercase text; present nulls
   and aggregates compare as empty strings, while missing attributes never

@@ -443,6 +443,12 @@ and presence checks can use the result; further property access yields absence.
 Object-entry counting consumes the shared work budget. String length and
 string rendering of computed lengths remain unsupported. A quoted `'(length)'`
 is a literal object key, not a function property.
+The trait attribute also supports `[trait|(length)]`, which counts every trait
+applied directly to the selected shape, regardless of its payload value.
+An omitted or empty traits object has a present count of zero. Container and
+target traits are not inherited. Counting uses the same work budget as node
+object lengths; malformed traits objects remain invalid, and unknown implicit
+prelude trait sets remain unsupported.
 A member is not matched as its target or container type. An omitted selector
 permits every shape; each reached application is checked independently.
 Type mismatches are invalid. Other selector expressions report `Unsupported`
