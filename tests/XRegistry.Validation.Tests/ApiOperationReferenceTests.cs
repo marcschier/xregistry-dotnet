@@ -2505,7 +2505,7 @@ public class ApiOperationReferenceTests
     [Test]
     public async Task SmithyJsonTimestampDefaultsRemainExplicitlyUnsupported()
     {
-        var result = ResolveSmithy(SmithyDefaultDocument("timestamp", "\"2026-01-01T00:00:00Z\"", false));
+        var result = ResolveSmithy(SmithyDefaultDocument("timestamp", "\"2026-01-01T00:00:00.0001Z\"", false));
         await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Unsupported);
         await Assert.That(result.Diagnostic!.Code).IsEqualTo("smithy.timestamp_default");
         await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
@@ -4285,6 +4285,87 @@ public class ApiOperationReferenceTests
         member["traits"]!["smithy.api#default"] = null;
         var optional = ResolveSmithy(document.ToJsonString());
         await Assert.That(optional.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+    }
+
+    [Test]
+    [Arguments("0001-01-01T00:00:00Z", true)]
+    [Arguments("9999-12-31T23:59:59.999Z", true)]
+    [Arguments("1985-04-12T23:20:50.52Z", true)]
+    [Arguments("2000-02-29t12:34:56z", true)]
+    [Arguments("2024-02-29T00:00:00.123000000Z", true)]
+    [Arguments("2026-01-01T00:00:00.000000000Z", true)]
+    [Arguments("2026-01-01T00:00:00.1Z", true)]
+    [Arguments("0000-01-01T00:00:00Z", false)]
+    [Arguments("10000-01-01T00:00:00Z", false)]
+    [Arguments("1900-02-29T00:00:00Z", false)]
+    [Arguments("2025-02-29T00:00:00Z", false)]
+    [Arguments("2026-04-31T00:00:00Z", false)]
+    [Arguments("2026-00-01T00:00:00Z", false)]
+    [Arguments("2026-13-01T00:00:00Z", false)]
+    [Arguments("2026-01-00T00:00:00Z", false)]
+    [Arguments("2026-01-01T24:00:00Z", false)]
+    [Arguments("2026-01-01T00:60:00Z", false)]
+    [Arguments("2026-01-01T00:00:61Z", false)]
+    [Arguments("2026-01-01T00:00:00+00:00", false)]
+    [Arguments("2026-01-01T00:00:00-00:00", false)]
+    [Arguments("2026-01-01T00:00:00", false)]
+    [Arguments("2026-01-01 00:00:00Z", false)]
+    [Arguments("2026-01-01T00:00:00.Z", false)]
+    [Arguments("2026-01-01T00:00:00Z\n", false)]
+    [Arguments("", false)]
+    public async Task SmithyJsonStringTimestampDefaultsCheckUtcGregorianDates(string text, bool valid)
+    {
+        foreach (var rootDefault in new[] { false, true })
+        {
+            var document = JsonNode.Parse(SmithyDefaultDocument("timestamp", JsonSerializer.Serialize(text), rootDefault))!;
+            if (rootDefault)
+            {
+                document["shapes"]!["example#Input"]!["members"]!["value"]!["traits"]!["smithy.api#default"] = null;
+            }
+            var result = ResolveSmithy(document.ToJsonString());
+            await Assert.That(result.Status).IsEqualTo(valid
+                ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+            if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+            else
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.default_timestamp");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo((rootDefault
+                    ? "$/shapes/example#Value" : "$/shapes/example#Input/members/value") + "/traits/smithy.api#default");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("2016-12-31T23:59:60Z")]
+    [Arguments("2026-01-01T00:00:00.0001Z")]
+    [Arguments("2026-01-01T00:00:00.12301Z")]
+    public async Task SmithyJsonStringTimestampDefaultsDoNotRoundUnsupportedInstants(string text)
+    {
+        var result = ResolveSmithy(SmithyDefaultDocument("timestamp", JsonSerializer.Serialize(text), false));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Unsupported);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("smithy.timestamp_default");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Input/members/value/traits/smithy.api#default");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonUtcTimestampDefaultsRetainImplicitTargetsAndLiteralBoundaries()
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("timestamp", "\"2026-01-01T00:00:00Z\"", false))!;
+        document["shapes"]!["example#Input"]!["members"]!["value"]!["target"] = "smithy.api#Timestamp";
+        document["shapes"]!["example#Unused"] = JsonNode.Parse("""
+            {"type":"timestamp","traits":{"smithy.api#default":"invalid"}}
+            """);
+        document["metadata"] = JsonNode.Parse("""{"literal":{"target":"https://example.test/not-an-import"}}""");
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Timestamp strings are not imports."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
     }
 
     private static string SmithyDefaultDocument(string kind, string value, bool rootDefault)

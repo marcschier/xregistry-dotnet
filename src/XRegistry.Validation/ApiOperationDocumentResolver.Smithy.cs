@@ -20,6 +20,10 @@ public static partial class ApiOperationDocumentResolver
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
     private static partial Regex SmithyEnumConstantName();
 
+    [GeneratedRegex(@"\A[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?[Zz]\z",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
+    private static partial Regex SmithyUtcTimestamp();
+
     private static ApiOperationResolutionResult ResolveSmithyOperation(JsonElement root, string shapeId,
         Uri? documentUri, ValidationContext budget)
     {
@@ -648,8 +652,8 @@ public static partial class ApiOperationDocumentResolver
             {
                 if (value.ValueKind == JsonValueKind.String)
                 {
-                    ValidationContext.Fail(DocumentValidationStatus.Unsupported, path, "smithy.timestamp_default",
-                        "String timestamp default validation is not supported.");
+                    ValidateTimestampString(value.GetString()!, path);
+                    return;
                 }
                 var seconds = JsonNumber.Read(value, budget, path);
                 ValidationContext.Require((seconds.IsZero || seconds.Exponent >= -3) &&
@@ -760,6 +764,31 @@ public static partial class ApiOperationDocumentResolver
             return shape.ValueKind == JsonValueKind.Object &&
                 shape.TryGetProperty("traits", out var traits) && traits.ValueKind == JsonValueKind.Object &&
                 traits.TryGetProperty(name, out value);
+        }
+
+        private void ValidateTimestampString(string text, string path)
+        {
+            budget.Work(text.Length, path);
+            ValidationContext.Require(SmithyUtcTimestamp().IsMatch(text), path, "document.default_timestamp",
+                "A Smithy string timestamp default must use RFC 3339 UTC Z syntax without an offset.");
+            var year = Part(0, 4);
+            var month = Part(5, 2);
+            var day = Part(8, 2);
+            var hour = Part(11, 2);
+            var minute = Part(14, 2);
+            var second = Part(17, 2);
+            ValidationContext.Require(year >= 1 && month is >= 1 and <= 12 &&
+                day >= 1 && day <= DateTime.DaysInMonth(year, month) &&
+                hour <= 23 && minute <= 59 && second <= 60,
+                path, "document.default_timestamp", "The Smithy timestamp default must contain a valid Gregorian date and time.");
+            if (second == 60 || text.Length > 24 && text.AsSpan(23, text.Length - 24).ContainsAnyExcept('0'))
+            {
+                ValidationContext.Fail(DocumentValidationStatus.Unsupported, path, "smithy.timestamp_default",
+                    "Leap seconds and sub-millisecond string timestamp defaults are not supported.");
+            }
+
+            int Part(int start, int count) => int.Parse(text.AsSpan(start, count),
+                System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture);
         }
 
         private static bool IsNumericKind(string? kind) => kind is "byte" or "short" or "integer" or "long" or

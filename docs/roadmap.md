@@ -251,7 +251,10 @@ vocabulary/source mapping. It does not supply their implementation.
   base64 blobs, enum membership and empty list/map/document containers. Defaults
   are not inserted into operations. Numeric timestamp defaults check exact
   epoch-second bounds for years 0001 through 9999 and millisecond resolution.
-  Null overrides and exact default repetition remain supported. String timestamp and string-encoded
+  String timestamps check RFC 3339 UTC Z syntax and Gregorian dates, including
+  millisecond-aligned fractions with trailing zeros. Leap seconds and nonzero
+  sub-millisecond fractions report unsupported, without rounding.
+  Null overrides and exact default repetition remain supported. String-encoded
   bigInteger/bigDecimal defaults report unsupported; applied pattern
   constraints and full default validation remain open.
 - Complete end-to-end event/outbox delivery qualification while preserving

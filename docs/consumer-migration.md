@@ -460,7 +460,12 @@ with exact inclusive bounds of `-62135596800` and `253402300799.999` for years
 0001 through 9999. Decimal and exponent spellings with the same mathematical
 value compare equally; sub-millisecond values and values outside those bounds
 report `Invalid`. Null member overrides remain valid.
-String timestamp and string-encoded bigInteger/bigDecimal defaults report `Unsupported`.
+String timestamp defaults accept RFC 3339 Gregorian dates with a UTC `Z`
+designator, including lowercase `t`/`z`, and millisecond-aligned fractions.
+Additional trailing fractional zeros are permitted without rounding. Numeric
+UTC offsets and invalid dates report `Invalid`; leap seconds and nonzero
+sub-millisecond fractions report `Unsupported`.
+String-encoded bigInteger/bigDecimal defaults report `Unsupported`.
 Complete timestamp handling and applied pattern constraints remain
 open; these checks do not establish full Smithy validity.
 
