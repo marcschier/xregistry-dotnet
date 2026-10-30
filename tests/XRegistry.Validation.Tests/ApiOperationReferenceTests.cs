@@ -388,6 +388,292 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4", "operations/Notify")]
+    [Arguments("OpenAPI/3.1", "3.1.1", "operations/Notify")]
+    [Arguments("OpenAPI/3.0", "3.0.4", "/paths/~1subscribe/post/callbacks/x-notify/%7B$request.query.url%7D/put")]
+    [Arguments("OpenAPI/3.1", "3.1.1", "/paths/~1subscribe/post/callbacks/x-notify/%7B$request.query.url%7D/put")]
+    public async Task OpenApiCallbackOperationsRetainTheirNativeObjectAndPointer(
+        string format, string version, string selector)
+    {
+        var document = """
+            {"openapi":"VERSION","paths":{"/subscribe":{"post":{"callbacks":{
+              "x-notify":{"{$request.query.url}":{"put":{"operationId":"Notify","x-native":[1,true]}}},
+              "empty":{} }}}}}
+            """.Replace("VERSION", version, StringComparison.Ordinal);
+        var result = ApiOperationDocumentResolver.Resolve(format, "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.DocumentPath).IsEqualTo("$/paths/~1subscribe/post/callbacks/x-notify/{$request.query.url}/put");
+        await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("Notify");
+        await Assert.That(result.Operation.GetProperty("x-native").GetArrayLength()).IsEqualTo(2);
+        await Assert.That(result.DocumentUri).IsNull();
+    }
+
+    [Test]
+    [Arguments("operations/Deep")]
+    [Arguments("/webhooks/event/post/callbacks/first/%7B$request.body%23~1url%7D/put/callbacks/second/https:~1~1client.example~1hook/delete")]
+    public async Task NestedWebhookCallbacksSelectExactOperationsWithoutEvaluatingRuntimeExpressions(string selector)
+    {
+        var calls = 0;
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenAPI/3.1", "application/json", """
+            {"openapi":"3.1.1","webhooks":{"event":{"post":{"callbacks":{
+              "first":{"{$request.body#/url}":{"put":{"callbacks":{
+                "second":{"https://client.example/hook":{"delete":{"operationId":"Deep","summary":"Nested callback"}}}
+              }}}}
+            }}}}}
+            """u8.ToArray(), ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+            resolveReference: (_, _) => { calls++; throw new InvalidOperationException("Runtime expressions are not imports."); });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.DocumentPath).IsEqualTo(
+            "$/webhooks/event/post/callbacks/first/{$request.body#~1url}/put/callbacks/second/https:~1~1client.example~1hook/delete");
+        await Assert.That(result.Operation.GetProperty("summary").GetString()).IsEqualTo("Nested callback");
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task CallbackReferencesResolveRelativeToTheContainingReferencedDocument()
+    {
+        var calls = new List<string>();
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenAPI/3.1", "application/json", """
+            {"openapi":"3.1.1","paths":{"/subscribe":{"$ref":"./nested/path.json#/item"}}}
+            """u8.ToArray(), ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Notify"),
+            new Uri("https://api.example/root.json"), (uri, _) =>
+            {
+                calls.Add(uri);
+                var json = uri switch
+                {
+                    "https://api.example/nested/path.json" =>
+                        """{"item":{"post":{"callbacks":{"event":{"$ref":"./callbacks/map.json#/callback","summary":"Annotation"}}}}}""",
+                    "https://api.example/nested/callbacks/map.json" =>
+                        """{"callback":{"{$request.query.url}":{"$ref":"../target.json#/item"}}}""",
+                    "https://api.example/nested/target.json" =>
+                        """{"item":{"post":{"operationId":"Notify","summary":"External callback"}}}""",
+                    _ => throw new InvalidOperationException(uri)
+                };
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(json));
+            });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.DocumentPath).IsEqualTo("$/item/post");
+        await Assert.That(result.DocumentUri).IsEqualTo(new Uri("https://api.example/nested/target.json"));
+        await Assert.That(result.Operation.GetProperty("summary").GetString()).IsEqualTo("External callback");
+        await Assert.That(calls.Count).IsEqualTo(3);
+    }
+
+    [Test]
+    [Arguments("""{"callbacks":[]}""", ApiOperationResolutionStatus.Invalid, "document.callbacks")]
+    [Arguments("""{"callbacks":{"event":null}}""", ApiOperationResolutionStatus.Invalid, "document.callback")]
+    [Arguments("""{"callbacks":{"event":{"$ref":true}}}""", ApiOperationResolutionStatus.Invalid, "dependency.callback")]
+    [Arguments("""{"callbacks":{"event":{"{$request.query.url}":null}}}""", ApiOperationResolutionStatus.Invalid, "document.path_item")]
+    [Arguments("""{"callbacks":{"event":{"{$request.query.url}":{"post":{"operationId":true}}}}}""", ApiOperationResolutionStatus.Invalid, "document.operation_id")]
+    [Arguments("""{"callbacks":{"event":{"$ref":"./missing.json"}}}""", ApiOperationResolutionStatus.Indeterminate, "dependency.unresolved")]
+    [Arguments("""{"operationId":"Notify","callbacks":{"event":{"$ref":"./missing.json"}}}""", ApiOperationResolutionStatus.Indeterminate, "dependency.unresolved")]
+    [Arguments("""{"operationId":"Notify","callbacks":{"event":{"url":{"post":{"operationId":"Notify"}}}}}""", ApiOperationResolutionStatus.Ambiguous, "selection.ambiguous")]
+    [Arguments("""{"callbacks":{"event":{"url":{"post":{"operationId":"notify"}}}}}""", ApiOperationResolutionStatus.NotFound, "selection.not_found")]
+    [Arguments("""{"callbacks":{"event":{"x-extension":{"post":{"operationId":"Notify"}}}}}""", ApiOperationResolutionStatus.NotFound, "selection.not_found")]
+    public async Task CallbackSelectionDoesNotReturnPartialOrAmbiguousOperations(
+        string operation, ApiOperationResolutionStatus status, string code)
+    {
+        var document = """{"openapi":"3.1.1","paths":{"/subscribe":{"post":OPERATION}}}"""
+            .Replace("OPERATION", operation, StringComparison.Ordinal);
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenAPI/3.1", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Notify"), new Uri("https://api.example/root.json"));
+        await Assert.That(result.Status).IsEqualTo(status);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task CallbackReferenceAndOperationCyclesAreIndeterminate(bool callbackReference)
+    {
+        var document = callbackReference ? """
+            {"openapi":"3.1.1","paths":{"/s":{"post":{"operationId":"Notify","callbacks":{"c":{"$ref":"#/components/callbacks/c"}}}}},
+             "components":{"callbacks":{"c":{"$ref":"#/components/callbacks/c"}}}}
+            """ : """
+            {"openapi":"3.1.1","paths":{"/s":{"post":{"operationId":"Notify","callbacks":{"c":{"url":{"$ref":"#/paths/~1s"}}}}}}}
+            """;
+        var result = ApiOperationDocumentResolver.Resolve("OpenAPI/3.1", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document), ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Notify"));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("dependency.cycle");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments(64, ApiOperationResolutionStatus.Selected)]
+    [Arguments(65, ApiOperationResolutionStatus.Indeterminate)]
+    public async Task CallbackTraversalBoundsShallowReferencedGraphs(int edges, ApiOperationResolutionStatus status)
+    {
+        var items = new System.Text.Json.Nodes.JsonObject();
+        for (var index = 0; index <= edges; index++)
+        {
+            var operation = index == edges
+                ? new System.Text.Json.Nodes.JsonObject { ["operationId"] = "Notify" }
+                : new System.Text.Json.Nodes.JsonObject
+                {
+                    ["callbacks"] = new System.Text.Json.Nodes.JsonObject
+                    {
+                        ["next"] = new System.Text.Json.Nodes.JsonObject
+                        {
+                            ["url"] = new System.Text.Json.Nodes.JsonObject { ["$ref"] = "#/items/i" + (index + 1) }
+                        }
+                    }
+                };
+            items["i" + index] = new System.Text.Json.Nodes.JsonObject { ["post"] = operation };
+        }
+        var document = new System.Text.Json.Nodes.JsonObject
+        {
+            ["openapi"] = "3.1.1",
+            ["paths"] = new System.Text.Json.Nodes.JsonObject
+            {
+                ["/s"] = new System.Text.Json.Nodes.JsonObject { ["$ref"] = "#/items/i0" }
+            },
+            ["items"] = items
+        };
+        var result = ApiOperationDocumentResolver.Resolve("OpenAPI/3.1", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Notify"));
+        await Assert.That(result.Status).IsEqualTo(status);
+        if (status == ApiOperationResolutionStatus.Selected)
+        {
+            await Assert.That(result.DocumentPath).IsEqualTo("$/items/i64/post");
+        }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("limit.callback_depth");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("""{"$ref":"./missing.json"}""", ApiOperationResolutionStatus.NotFound)]
+    [Arguments("""{"url":{"$ref":"./missing.json"}}""", ApiOperationResolutionStatus.NotFound)]
+    [Arguments("""{"url":{"post":{"$ref":"./missing.json"}}}""", ApiOperationResolutionStatus.Invalid)]
+    public async Task CallbackPointersNeverAcquireReferencedTargets(string callback, ApiOperationResolutionStatus status)
+    {
+        var calls = 0;
+        var document = """{"openapi":"3.1.1","paths":{"/s":{"post":{"callbacks":{"c":CALLBACK}}}}}"""
+            .Replace("CALLBACK", callback, StringComparison.Ordinal);
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenAPI/3.1", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#/paths/~1s/post/callbacks/c/url/post"),
+            resolveReference: (_, _) => { calls++; throw new InvalidOperationException("Pointers do not dereference."); });
+        await Assert.That(result.Status).IsEqualTo(status);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task ReusedCallbackDefinitionsRemainDistinctOperationOccurrences()
+    {
+        var result = ApiOperationDocumentResolver.Resolve("OpenAPI/3.1", "application/json", """
+            {"openapi":"3.1.1","paths":{"/s":{"post":{"callbacks":{
+              "first":{"$ref":"#/shared"},"second":{"$ref":"#/shared"},"third":{"$ref":"#/shared"}
+            }}}},"shared":{"url":{"post":{"operationId":"Notify"}}}}
+            """u8.ToArray(), ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Notify"));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Ambiguous);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("selection.ambiguous");
+    }
+
+    [Test]
+    public async Task CallbackAcquisitionPreservesCallerDenialAndCancellation()
+    {
+        var document = """
+            {"openapi":"3.1.1","paths":{"/s":{"post":{"operationId":"Notify","callbacks":{"c":{"$ref":"./callback.json"}}}}}}
+            """u8.ToArray();
+        var reference = ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Notify");
+        var denied = await ApiOperationDocumentResolver.ResolveAsync("OpenAPI/3.1", "application/json",
+            document, reference, new Uri("https://api.example/root.json"),
+            (_, _) => throw new UnauthorizedAccessException("Blocked by caller policy."));
+        await Assert.That(denied.Status).IsEqualTo(ApiOperationResolutionStatus.Denied);
+        await Assert.That(denied.Diagnostic!.Code).IsEqualTo("dependency.denied");
+        await Assert.That(denied.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+
+        using var cancellation = new CancellationTokenSource();
+        await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+            await ApiOperationDocumentResolver.ResolveAsync("OpenAPI/3.1", "application/json",
+                document, reference, new Uri("https://api.example/root.json"), (_, _) =>
+                {
+                    cancellation.Cancel();
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>("{}"u8.ToArray());
+                }, cancellation.Token));
+    }
+
+    [Test]
+    public async Task SwaggerDoesNotInterpretCallbackShapedDataAsOpenApiOperations()
+    {
+        var document = """
+            {"swagger":"2.0","paths":{"/s":{"post":{"callbacks":{"c":{"url":{"post":{"operationId":"Notify"}}}}}}}}
+            """u8.ToArray();
+        var reference = ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Notify");
+        var result = ApiOperationDocumentResolver.Resolve("Swagger/2.0", "application/json", document, reference);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.NotFound);
+        var nested = ApiOperationDocumentResolver.Resolve("Swagger/2.0", "application/json", document,
+            ApiOperationReference.Parse("/apigroups/g/apis/a#/paths/~1s/post/callbacks/c/url/post"));
+        await Assert.That(nested.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(nested.Diagnostic!.Code).IsEqualTo("selection.operation_pointer");
+    }
+
+    [Test]
+    [Arguments(64, ApiOperationResolutionStatus.Selected)]
+    [Arguments(65, ApiOperationResolutionStatus.Indeterminate)]
+    public async Task CallbackReferenceChainsHonorTheAdvertisedReferenceDepth(
+        int edges, ApiOperationResolutionStatus status)
+    {
+        var callbacks = new System.Text.Json.Nodes.JsonObject();
+        for (var index = 0; index < edges; index++)
+        {
+            callbacks["c" + index] = index == edges - 1
+                ? System.Text.Json.Nodes.JsonNode.Parse("""{"url":{"post":{"operationId":"Notify"}}}""")
+                : new System.Text.Json.Nodes.JsonObject { ["$ref"] = "#/definitions/c" + (index + 1) };
+        }
+        var document = new System.Text.Json.Nodes.JsonObject
+        {
+            ["openapi"] = "3.1.1",
+            ["paths"] = System.Text.Json.Nodes.JsonNode.Parse("""
+                {"/s":{"post":{"callbacks":{"c":{"$ref":"#/definitions/c0"}}}}}
+                """),
+            ["definitions"] = callbacks
+        };
+        var result = ApiOperationDocumentResolver.Resolve("OpenAPI/3.1", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Notify"));
+        await Assert.That(result.Status).IsEqualTo(status);
+        if (status == ApiOperationResolutionStatus.Selected)
+        {
+            await Assert.That(result.DocumentPath).IsEqualTo("$/definitions/c63/url/post");
+        }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("limit.reference_depth");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("operations/Start", "$/paths/~1s/post", "Parent")]
+    [Arguments("/paths/~1s/post/callbacks/c/url/post", "$/paths/~1s/post/callbacks/c/url/post", "Anonymous callback")]
+    public async Task CallbackSelectionIgnoresExtensionsAndUnusedDefinitionsAndPermitsAnonymousPointers(
+        string selector, string expectedPath, string summary)
+    {
+        var calls = 0;
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenAPI/3.1", "application/json", """
+            {"openapi":"3.1.1","paths":{"/s":{"post":{"operationId":"Start","summary":"Parent",
+              "callbacks":{"c":{"x-extension":{"$ref":"https://untrusted.example/not-imported"},
+                               "url":{"post":{"summary":"Anonymous callback"}}}}}}},
+             "components":{"callbacks":{"unused":{"$ref":"https://untrusted.example/unused"}}}}
+            """u8.ToArray(), ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+            resolveReference: (_, _) => { calls++; throw new InvalidOperationException("No dependency is reachable."); });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.DocumentPath).IsEqualTo(expectedPath);
+        await Assert.That(result.Operation.GetProperty("summary").GetString()).IsEqualTo(summary);
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
     [Arguments("OpenAPI/3.0", """{"openapi":"3.0.3","paths":{"/users":{"get":{"operationId":"GetUser"}}}}""")]
     [Arguments("Swagger/2.0", """{"swagger":"2.0","paths":{"/users":{"get":{"operationId":"GetUser"}}}}""")]
     public async Task ResolvesOperationIdsForEveryAdvertisedDocumentFormat(string format, string document)

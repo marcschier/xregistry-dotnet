@@ -135,8 +135,10 @@ vocabulary/source mapping. It does not supply their implementation.
   selection preserves the declared native message but does not check all schema
   definitions, name binding or defaults.
   OpenAPI 3.1 selection includes webhook operation IDs and inline webhook method
-  pointers, with ambiguity checking across paths and webhooks. Callback operation
-  selection remains open.
+  pointers, with ambiguity checking across paths and webhooks. OpenAPI selection
+  also traverses nested callbacks and caller-supplied Callback references within
+  finite depth/work limits. It does not evaluate runtime expressions or validate
+  their complete syntax.
   Smithy selection checks required operation/data/custom-trait dependencies in
   an already assembled non-mixin AST and rejects invalid recursion in that
   closure, invalid enum targets and duplicate or malformed enum values. Its

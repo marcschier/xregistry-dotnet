@@ -66,7 +66,28 @@ OpenAPI 3.1 documents can omit `paths` when they contain `components` or
 `webhooks`. With no matching path or webhook operation, selection reports `NotFound`.
 OpenAPI 3.0 and Swagger still require `paths` and do not select webhooks. Malformed `paths`
 values fail in every supported version; malformed `webhooks` fail in 3.1.
-Callback operation selection and full OpenAPI validation remain unsupported.
+For OpenAPI 3.0 and 3.1, operation-ID selection also searches callbacks attached
+to reachable operations, including nested callbacks and callbacks on webhooks.
+Callback, Path Item and operation references use the containing document's base
+URI and the same caller-controlled acquisition policy. Callback expression keys
+remain literal data; the resolver never evaluates an expression or invokes its
+callback URL. An `x-` key within a Callback Object is an extension and is not
+searched, whereas an `x-` name in the operation's `callbacks` map names a callback.
+Unused callback definitions in `components` are not operation occurrences.
+Repeated use of a callback definition creates separate occurrences; duplicate
+matching IDs are ambiguous.
+
+Callback operation traversal and each reference chain permit at most 64 edges.
+Cycles, excessive depth and exhausted cumulative work report `Indeterminate`
+instead of returning an earlier partial match. Missing or policy-denied callback
+dependencies prevent selection. Inline nested methods can be selected with
+`/paths/{path}/{method}/callbacks/{name}/{expression}/{method}` and the analogous
+webhook pointer; each further callback adds another four tokens. Percent-encode
+URI-fragment data before use, including braces and `#`, and escape `/` and `~`
+inside pointer tokens. Pointers never cross a Callback, Path Item or operation
+reference. Swagger does not interpret callback-shaped data as OpenAPI operations.
+Full OpenAPI validation, including callback-expression syntax, and YAML parsing
+remain unsupported.
 
 For `AvroProtocol/1.12.0`, `#operations/GetUser` selects the exact `GetUser`
 member of `messages`. An absent or empty `messages` object has no selectable

@@ -112620,7 +112620,7 @@
       "text": "For OpenAPI, `operations/{operationId}` resolves an Operation Object with that `operationId` in the API described by the entry document, including referenced path items and operations. Publishers SHOULD supply `operationId`; when present it MUST be unique as specified by the native specification. An ambiguous match MUST fail.",
       "review": {
         "status": "reviewed",
-        "note": "The bounded JSON selector scans path operations and OpenAPI 3.1 webhook operations with exact case-sensitive operation IDs, resolving caller-supplied Path Item and Operation references. Duplicate matches across paths and webhooks are ambiguous; malformed operations and unavailable required references fail even after an earlier match. Webhook names, including x- names, remain native map keys. Callback operation traversal and YAML remain unsupported, so this obligation stays pending without native qualification.",
+        "note": "The bounded JSON selector scans path operations, OpenAPI 3.1 webhooks and reachable nested OpenAPI callbacks with exact case-sensitive operation IDs. Caller-supplied Callback, Path Item and Operation references use their containing source base. Duplicate operation occurrences are ambiguous; malformed operations and unavailable or denied required references fail even after an earlier match. Callback graphs and reference chains have finite depth/work limits and explicit cycle failures; runtime expression keys are never evaluated as acquisition URLs. Webhook and callback map names, including x- names, remain native keys; Callback Object x- extensions are ignored. YAML and complete OpenAPI validation, including callback-expression syntax, remain unsupported, so this obligation stays pending without native qualification.",
         "roles": [
           "client"
         ]
@@ -112635,7 +112635,17 @@
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenApi31SelectsNativeWebhookOperationsWithTheirDocumentProvenance",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenApi31WebhookSelectionRejectsAmbiguousMalformedAndUnavailableDefinitions",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenApi31WebhookOperationIdsFollowOnlyCallerSuppliedReferences",
-          "XRegistry.Validation.Tests.ApiOperationReferenceTests.OlderFormatsDoNotAcquireOrSelectOpenApi31Webhooks"
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.OlderFormatsDoNotAcquireOrSelectOpenApi31Webhooks",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenApiCallbackOperationsRetainTheirNativeObjectAndPointer",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.NestedWebhookCallbacksSelectExactOperationsWithoutEvaluatingRuntimeExpressions",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.CallbackReferencesResolveRelativeToTheContainingReferencedDocument",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.CallbackSelectionDoesNotReturnPartialOrAmbiguousOperations",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.CallbackReferenceAndOperationCyclesAreIndeterminate",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.CallbackTraversalBoundsShallowReferencedGraphs",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.CallbackReferenceChainsHonorTheAdvertisedReferenceDepth",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.ReusedCallbackDefinitionsRemainDistinctOperationOccurrences",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.CallbackAcquisitionPreservesCallerDenialAndCancellation",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.SwaggerDoesNotInterpretCallbackShapedDataAsOpenApiOperations"
         ],
         "nativeEvidence": []
       }

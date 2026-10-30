@@ -264,8 +264,15 @@ public static partial class ApiOperationDocumentResolver
                 return await ResolveOpenRpcMethodAsync(root, reference.Selector.Tokens[^1], references,
                     cancellationToken).ConfigureAwait(false);
             }
-            return await ResolveOperationIdAsync(format, root, reference.Selector.Tokens[^1], references,
-                cancellationToken).ConfigureAwait(false);
+            try
+            {
+                return await ResolveOperationIdAsync(format, root, reference.Selector.Tokens[^1], references,
+                    budget, cancellationToken).ConfigureAwait(false);
+            }
+            catch (ValidationFailure failure)
+            {
+                return ParseFailure(failure, "document.operation", failure.Diagnostic.Path);
+            }
         }
     }
 
@@ -456,7 +463,7 @@ public static partial class ApiOperationDocumentResolver
     }
 
     private static async ValueTask<ApiOperationResolutionResult> ResolveOperationIdAsync(string format, JsonElement root,
-        string operationId, ReferenceContext references, CancellationToken cancellationToken)
+        string operationId, ReferenceContext references, ValidationContext budget, CancellationToken cancellationToken)
     {
         var matches = new List<OperationLocation>();
         foreach (var collectionName in format == "OpenAPI/3.1" ? new[] { "paths", "webhooks" } : new[] { "paths" })
@@ -488,18 +495,12 @@ public static partial class ApiOperationDocumentResolver
 
                 foreach (var operation in pathItem.Operations)
                 {
-                    if (operation.Value.Operation.TryGetProperty("operationId", out var id))
+                    var failure = await CollectOperationMatchesAsync(operation.Value, operationId,
+                        format != "Swagger/2.0", matches, references, budget,
+                        new(StringComparer.Ordinal), 0, cancellationToken).ConfigureAwait(false);
+                    if (failure is not null)
                     {
-                        if (id.ValueKind != JsonValueKind.String)
-                        {
-                            return Failure(ApiOperationResolutionStatus.Invalid, "document.operation_id",
-                                "An operationId must be a string.",
-                                operation.Value.Pointer + "/operationId");
-                        }
-                        if (string.Equals(id.GetString(), operationId, StringComparison.Ordinal))
-                        {
-                            matches.Add(operation.Value);
-                        }
+                        return failure;
                     }
                 }
             }
@@ -611,8 +612,7 @@ public static partial class ApiOperationDocumentResolver
         }
         if (!operation.TryGetProperty("$ref", out var referenceValue))
         {
-            return OperationReferenceResolution.Succeeded(new(operation, sourcePointer,
-                source.IsRoot ? null : source.Uri));
+            return OperationReferenceResolution.Succeeded(new(operation, sourcePointer, source));
         }
         if (referencePath.Count >= Capabilities.MaxReferenceDepth)
         {
@@ -665,13 +665,24 @@ public static partial class ApiOperationDocumentResolver
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (tokens.Count != 3 ||
+        if (tokens.Count < 3 || (tokens.Count - 3) % 4 != 0 ||
+            tokens.Count > 3 && format == "Swagger/2.0" ||
             !(tokens[0] == "paths" && tokens[1].StartsWith('/') ||
               format == "OpenAPI/3.1" && tokens[0] == "webhooks") ||
             !s_methods.Contains(tokens[2], StringComparer.Ordinal))
         {
             return Failure(ApiOperationResolutionStatus.Invalid, "selection.operation_pointer",
                 "An operation pointer must select paths/{path}/{http-method} or an OpenAPI 3.1 webhook method.");
+        }
+        for (var index = 3; index < tokens.Count; index += 4)
+        {
+            if (tokens[index] != "callbacks" ||
+                tokens[index + 2].StartsWith("x-", StringComparison.Ordinal) ||
+                !s_methods.Contains(tokens[index + 3], StringComparer.Ordinal))
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid, "selection.operation_pointer",
+                    "A nested operation pointer must select callbacks/{name}/{expression}/{http-method}.");
+            }
         }
 
         var pathPointer = "$/" + tokens[0] + "/" + Escape(tokens[1]);
@@ -680,34 +691,37 @@ public static partial class ApiOperationDocumentResolver
             return Failure(ApiOperationResolutionStatus.NotFound, "selection.not_found",
                 "The selected path does not exist.");
         }
-        if (pathItem.ValueKind != JsonValueKind.Object)
+        for (var methodIndex = 2; ; methodIndex += 4)
         {
-            return Failure(ApiOperationResolutionStatus.NotFound, "selection.not_found",
-                "The selected HTTP operation does not exist.");
+            cancellationToken.ThrowIfCancellationRequested();
+            if (pathItem.ValueKind != JsonValueKind.Object ||
+                pathItem.TryGetProperty("$ref", out _) ||
+                !pathItem.TryGetProperty(tokens[methodIndex], out var operation))
+            {
+                return Failure(ApiOperationResolutionStatus.NotFound, "selection.not_found",
+                    "The selected inline HTTP operation does not exist; pointers do not traverse references.",
+                    pathPointer);
+            }
+            pathPointer += "/" + tokens[methodIndex];
+            if (operation.ValueKind != JsonValueKind.Object || operation.TryGetProperty("$ref", out _))
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid, "selection.not_operation",
+                    "The selected value is not an inline Operation Object.", pathPointer);
+            }
+            if (methodIndex == tokens.Count - 1) { return Selected(operation, pathPointer); }
+            if (!operation.TryGetProperty("callbacks", out var callbacks) ||
+                callbacks.ValueKind != JsonValueKind.Object ||
+                !callbacks.TryGetProperty(tokens[methodIndex + 2], out var callback) ||
+                callback.ValueKind != JsonValueKind.Object ||
+                callback.TryGetProperty("$ref", out _) ||
+                !callback.TryGetProperty(tokens[methodIndex + 3], out pathItem))
+            {
+                return Failure(ApiOperationResolutionStatus.NotFound, "selection.not_found",
+                    "The selected inline callback does not exist; pointers do not traverse references.",
+                    pathPointer + "/callbacks");
+            }
+            pathPointer += "/callbacks/" + Escape(tokens[methodIndex + 2]) + "/" + Escape(tokens[methodIndex + 3]);
         }
-        if (pathItem.TryGetProperty("$ref", out _))
-        {
-            return Failure(ApiOperationResolutionStatus.NotFound, "selection.not_found",
-                "The pointer does not traverse a Path Item reference.",
-                pathPointer);
-        }
-        if (!pathItem.TryGetProperty(tokens[2], out var operation))
-        {
-            return Failure(ApiOperationResolutionStatus.NotFound, "selection.not_found",
-                "The selected HTTP operation does not exist.");
-        }
-        if (operation.ValueKind != JsonValueKind.Object)
-        {
-            return Failure(ApiOperationResolutionStatus.Invalid, "selection.not_operation",
-                "The selected value is not an inline Operation Object.");
-        }
-        if (operation.TryGetProperty("$ref", out _))
-        {
-            return Failure(ApiOperationResolutionStatus.Invalid, "selection.not_operation",
-                "The pointer selects a reference object, not an inline Operation Object.",
-                pathPointer + "/" + tokens[2]);
-        }
-        return Selected(operation, pathPointer + "/" + tokens[2]);
     }
 
     private static ApiOperationResolutionResult Selected(JsonElement operation, string pointer, Uri? documentUri = null) =>
@@ -727,7 +741,10 @@ public static partial class ApiOperationDocumentResolver
     private static string Escape(string token) =>
         token.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal);
 
-    private sealed record OperationLocation(JsonElement Operation, string Pointer, Uri? DocumentUri);
+    private sealed record OperationLocation(JsonElement Operation, string Pointer, ReferencedDocument Source)
+    {
+        internal Uri? DocumentUri => Source.IsRoot ? null : Source.Uri;
+    }
 
     private sealed record PathItemResolution(IReadOnlyDictionary<string, OperationLocation> Operations,
         ApiOperationResolutionResult? Failure)
