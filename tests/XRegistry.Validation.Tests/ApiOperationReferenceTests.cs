@@ -155,6 +155,71 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
+    [Arguments("OpenAPI/3.0", "openapi", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "openapi", "3.1.1")]
+    [Arguments("Swagger/2.0", "swagger", "2.0")]
+    public async Task OperationIdSelectionIgnoresPathsExtensionsWithoutAcquiringTheirReferences(
+        string format, string versionField, string version)
+    {
+        var calls = 0;
+        var document = new System.Text.Json.Nodes.JsonObject
+        {
+            [versionField] = version,
+            ["paths"] = System.Text.Json.Nodes.JsonNode.Parse("""
+                {"x-null":null,"x-array":[],"x-number":7,
+                 "x-metadata":{"get":{"operationId":"GetUser"},"$ref":"https://untrusted.example"},
+                 "/users":{"get":{"operationId":"GetUser"}}}
+                """)
+        };
+        var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/GetUser"),
+            new Uri("https://registry.example/apis/a"),
+            (_, _) => { calls++; throw new InvalidOperationException("Extensions are not dependencies."); });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.DocumentPath).IsEqualTo("$/paths/~1users/get");
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("")]
+    [Arguments("users")]
+    [Arguments("X-metadata")]
+    [Arguments("https://example.test/users")]
+    public async Task OperationIdSelectionRejectsNonPathKeysOutsideTheExtensionNamespace(string key)
+    {
+        var document = new System.Text.Json.Nodes.JsonObject
+        {
+            ["openapi"] = "3.1.1",
+            ["paths"] = new System.Text.Json.Nodes.JsonObject
+            {
+                [key] = System.Text.Json.Nodes.JsonNode.Parse("""{"get":{"operationId":"GetUser"}}""")
+            }
+        };
+        var result = ApiOperationDocumentResolver.Resolve("OpenAPI/3.1", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/GetUser"));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.path");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("x-metadata")]
+    [Arguments("users")]
+    public async Task JsonPointerSelectionCannotTreatPathsExtensionDataAsAnOperation(string key)
+    {
+        var result = ApiOperationDocumentResolver.Resolve("OpenAPI/3.1", "application/json",
+            System.Text.Encoding.UTF8.GetBytes("""
+                {"openapi":"3.1.1","paths":{"KEY":{"get":{"operationId":"GetUser"}}}}
+                """.Replace("KEY", key, StringComparison.Ordinal)),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#/paths/" + key + "/get"));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("selection.operation_pointer");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
     [Arguments("OpenAPI/3.0", """{"openapi":"3.0.3","paths":{"/users":{"get":{"operationId":"GetUser"}}}}""")]
     [Arguments("Swagger/2.0", """{"swagger":"2.0","paths":{"/users":{"get":{"operationId":"GetUser"}}}}""")]
     public async Task ResolvesOperationIdsForEveryAdvertisedDocumentFormat(string format, string document)

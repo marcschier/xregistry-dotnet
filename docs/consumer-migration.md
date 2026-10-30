@@ -50,6 +50,10 @@ to the releases known by this library. A nonempty hyphen suffix is accepted as
 in the publisher's document schemas; this check does not impose SemVer rules
 on `info.version`. Malformed root versions fail before dependency acquisition,
 including when selection uses a JSON Pointer.
+OpenAPI and Swagger `paths` entries must start with `/`; `x-` entries are
+specification extensions. Operation-ID selection ignores extension payloads,
+including apparent operations or references inside them. A JSON Pointer must
+select an HTTP method beneath a slash-prefixed path, not extension data.
 
 For `AvroProtocol/1.12.0`, `#operations/GetUser` selects the exact `GetUser`
 member of `messages`. An absent or empty `messages` object has no selectable

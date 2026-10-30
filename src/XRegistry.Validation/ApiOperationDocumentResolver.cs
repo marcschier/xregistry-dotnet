@@ -446,6 +446,13 @@ public static partial class ApiOperationDocumentResolver
         foreach (var path in paths.EnumerateObject())
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (path.Name.StartsWith("x-", StringComparison.Ordinal)) { continue; }
+            if (!path.Name.StartsWith('/'))
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid, "document.path",
+                    "A paths entry must start with '/' or be an x- specification extension.",
+                    "$/paths/" + Escape(path.Name));
+            }
             if (path.Value.ValueKind != JsonValueKind.Object)
             {
                 return Failure(ApiOperationResolutionStatus.Invalid, "document.path_item",
@@ -638,7 +645,9 @@ public static partial class ApiOperationDocumentResolver
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (tokens.Count != 3 || tokens[0] != "paths" || !s_methods.Contains(tokens[2], StringComparer.Ordinal))
+        if (tokens.Count != 3 || tokens[0] != "paths" ||
+            !tokens[1].StartsWith('/') ||
+            !s_methods.Contains(tokens[2], StringComparer.Ordinal))
         {
             return Failure(ApiOperationResolutionStatus.Invalid, "selection.operation_pointer",
                 "An OpenAPI or Swagger operation pointer must select paths/{path}/{http-method}.");
