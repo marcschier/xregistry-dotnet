@@ -73,6 +73,9 @@ python eng\run_native_suites.py --framework net10.0 --rid win-x64 --project XReg
 ```
 
 Omit `--project` to run all thirteen suites, or repeat it to select several.
+Keep `dotnet`, Git and Python on `PATH`; Windows link fixtures also need
+PowerShell (`pwsh`). Missing tools fail before publication, not as skipped
+interoperability or filesystem cases.
 Both roots must already exist and be absolute paths. The artifact root gets a
 fresh run directory; the work root supplies `TEMP`, `TMP` and `TMPDIR` for the
 test processes. Use local NTFS/ext4 for storage tests. The selected RID must
@@ -103,6 +106,17 @@ tests are explicitly classified outside this generic-library gate; their
 omission is not evidence that they passed. Scheduling these cells does not
 establish that they pass, resolve the .NET 8 HTTP dependency warning below,
 review requirement mappings or promote a package's qualification status.
+
+The driver passed complete Core and Models suites at
+`18728752587a11d9fabc1af1b95426c2d3a57bc5` on both .NET 8 and .NET 10/
+Windows x64: 756 and 1,006 native cases respectively, with matching complete
+managed case inventories. Their receipts aggregate 268 and 332 methods.
+Both native processes reported Windows x64 with zero JIT compilations; both
+frameworks' managed baselines reported non-native status with positive JIT
+counts and were rejected without receipts. Source inventories remained
+unchanged. Evidence is retained in `D:\temp\native-suites-mfdnfwlc` (.NET 8)
+and `D:\temp\native-suites-rh3auxlv` (.NET 10). These selected subsets do not
+qualify a complete thirteen-project cell.
 
 ## Current evidence and uncovered cells
 

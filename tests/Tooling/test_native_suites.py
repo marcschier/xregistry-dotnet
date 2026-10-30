@@ -22,6 +22,9 @@ import run_native_suites as tool
 
 class NativeSuiteRunnerTests(unittest.TestCase):
     def setUp(self) -> None:
+        programs = patch.object(tool.shutil, "which", return_value="fixture-program")
+        programs.start()
+        self.addCleanup(programs.stop)
         directory = tempfile.TemporaryDirectory(prefix="xregistry-native-suites-")
         self.addCleanup(directory.cleanup)
         self.root = Path(directory.name)
@@ -177,6 +180,15 @@ class NativeSuiteRunnerTests(unittest.TestCase):
         with patch.object(tool, "native_host", return_value="linux-arm64"), \
                 patch.object(tool, "execute_suite") as execute, contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(tool.main(self.arguments()), 1)
+        execute.assert_not_called()
+        self.assertEqual(list(self.root.glob("native-suites-*")), [])
+
+    def test_missing_external_test_tool_is_rejected_before_creating_artifacts(self) -> None:
+        with patch.object(tool, "native_host", return_value="win-x64"), \
+                patch.object(tool.shutil, "which", side_effect=lambda name: None if name == "pwsh" else "present"), \
+                patch.object(tool, "execute_suite") as execute, contextlib.redirect_stderr(io.StringIO()) as errors:
+            self.assertEqual(tool.main(self.arguments()), 1)
+        self.assertIn("missing from PATH: pwsh", errors.getvalue())
         execute.assert_not_called()
         self.assertEqual(list(self.root.glob("native-suites-*")), [])
 

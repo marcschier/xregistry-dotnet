@@ -80,7 +80,7 @@ public class PublicationManifestTests
         await Assert.That(manifest.Documents[0].ViewVersion).IsEqualTo("/sets/manual/documents/intro/versions/7");
         await Assert.That(manifest.Documents[0].Content.Reference.Registry.Binding).IsEqualTo("http");
         await Assert.That(manifest.Extensions["urn:example:manifest-extension"].Reference.Registry.Binding).IsEqualTo("opcua");
-        await Assert.That(manifest.RequiredExtensions).IsEquivalentTo(["urn:example:manifest-extension"]);
+        await Assert.That(manifest.RequiredExtensions.SequenceEqual(["urn:example:manifest-extension"])).IsTrue();
         await Assert.That(manifest.GetExactBytes().SequenceEqual(ValidManifest)).IsTrue();
         await Assert.That(manifest.SnapshotId).IsEqualTo(Convert.ToHexString(SHA256.HashData(ValidManifest)).ToLowerInvariant());
 

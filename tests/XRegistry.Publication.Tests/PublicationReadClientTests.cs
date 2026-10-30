@@ -32,11 +32,11 @@ public class PublicationReadClientTests
         var snapshot = await client.OpenChannelAsync(Access, ChannelResource);
 
         await Assert.That(binding.ChannelReadCount).IsEqualTo(1);
-        await Assert.That(binding.OpenedVersions).IsEquivalentTo(new[]
+        await Assert.That(binding.OpenedVersions.SequenceEqual(new[]
         {
             fixture.ManifestDescriptor.Reference.Version,
             fixture.RegistryDescriptor.Reference.Version
-        });
+        })).IsTrue();
         await Assert.That(binding.OpenedVersions[0]).IsEqualTo(fixture.ManifestDescriptor.Reference.Version);
         await Assert.That(binding.OpenedVersions[1]).IsEqualTo(fixture.RegistryDescriptor.Reference.Version);
         await Assert.That(resolverCalls.Count).IsEqualTo(3);
@@ -209,13 +209,13 @@ public class PublicationReadClientTests
         var reopened = await fixture.Client(binding).OpenRecordAsync(initial.OpenRecord);
 
         await Assert.That(binding.ChannelReadCount).IsEqualTo(1);
-        await Assert.That(binding.OpenedVersions).IsEquivalentTo(new[]
+        await Assert.That(binding.OpenedVersions.SequenceEqual(new[]
         {
             fixture.ManifestDescriptor.Reference.Version,
             fixture.RegistryDescriptor.Reference.Version,
             fixture.ManifestDescriptor.Reference.Version,
             fixture.RegistryDescriptor.Reference.Version
-        });
+        })).IsTrue();
         await Assert.That(reopened.GetExactRegistryBytes().SequenceEqual(fixture.RegistryBytes)).IsTrue();
     }
 
@@ -401,10 +401,8 @@ public class PublicationReadClientTests
             };
             if (requiredExtension)
             {
-                root["requiredExtensions"] = new JsonArray
-                {
-                    JsonValue.Create("https://publisher.example.test/extensions/policy")
-                };
+                root["requiredExtensions"] = new JsonArray(
+                    JsonValue.Create("https://publisher.example.test/extensions/policy"));
             }
             var manifestBytes = Encoding.UTF8.GetBytes(root.ToJsonString());
             var snapshotId = Convert.ToHexString(SHA256.HashData(manifestBytes)).ToLowerInvariant();

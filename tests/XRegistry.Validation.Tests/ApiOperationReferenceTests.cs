@@ -31,6 +31,9 @@ public class ApiOperationReferenceTests
     private static readonly string[] s_registryPointerTokens =
         ["apigroups", "users", "apis", "Profile", "versions", "2"];
     private static readonly string[] s_singleDecodeTokens = ["operations", "a~1b%2F"];
+    private static readonly string[] s_supportedFormats = ["OpenAPI/3.0", "OpenAPI/3.1", "Swagger/2.0", "OpenRPC/1.4"];
+    private static readonly ApiOperationSelectorKind[] s_supportedSelectors =
+        [ApiOperationSelectorKind.Operation, ApiOperationSelectorKind.JsonPointer];
 
     [Test]
     public async Task ParsesAnOperationIdReference()
@@ -42,7 +45,7 @@ public class ApiOperationReferenceTests
             .IsEqualTo("https://registry.example/apigroups/users/apis/Profile");
         await Assert.That(parsed.RegistryEntityPointer).IsNull();
         await Assert.That(parsed.Selector.Kind).IsEqualTo(ApiOperationSelectorKind.Operation);
-        await Assert.That(parsed.Selector.Tokens).IsEquivalentTo(s_operationTokens);
+        await Assert.That(parsed.Selector.Tokens.SequenceEqual(s_operationTokens)).IsTrue();
     }
 
     [Test]
@@ -54,9 +57,9 @@ public class ApiOperationReferenceTests
             "/apigroups/users/apis/Profile#operations/subscription/profileChanged");
 
         await Assert.That(service.Selector.Kind).IsEqualTo(ApiOperationSelectorKind.ServiceOperation);
-        await Assert.That(service.Selector.Tokens).IsEquivalentTo(s_serviceTokens);
+        await Assert.That(service.Selector.Tokens.SequenceEqual(s_serviceTokens)).IsTrue();
         await Assert.That(graphQl.Selector.Kind).IsEqualTo(ApiOperationSelectorKind.GraphQlField);
-        await Assert.That(graphQl.Selector.Tokens).IsEquivalentTo(s_graphQlTokens);
+        await Assert.That(graphQl.Selector.Tokens.SequenceEqual(s_graphQlTokens)).IsTrue();
     }
 
     [Test]
@@ -69,9 +72,9 @@ public class ApiOperationReferenceTests
 
         await Assert.That(overload.Selector.Kind)
             .IsEqualTo(ApiOperationSelectorKind.InterfaceOperationInputOutput);
-        await Assert.That(overload.Selector.Tokens).IsEquivalentTo(s_interfaceTokens);
+        await Assert.That(overload.Selector.Tokens.SequenceEqual(s_interfaceTokens)).IsTrue();
         await Assert.That(pointer.Selector.Kind).IsEqualTo(ApiOperationSelectorKind.JsonPointer);
-        await Assert.That(pointer.Selector.Tokens).IsEquivalentTo(s_pointerTokens);
+        await Assert.That(pointer.Selector.Tokens.SequenceEqual(s_pointerTokens)).IsTrue();
     }
 
     [Test]
@@ -82,8 +85,9 @@ public class ApiOperationReferenceTests
         var selector = parsed.Selector.Tokens;
 
         await Assert.That(parsed.EntityReference).IsNull();
-        await Assert.That(parsed.RegistryEntityPointer).IsEquivalentTo(s_registryPointerTokens);
-        await Assert.That(selector).IsEquivalentTo(s_singleDecodeTokens);
+        var registryPointer = parsed.RegistryEntityPointer ?? throw new InvalidOperationException("Expected registry entity pointer.");
+        await Assert.That(registryPointer.SequenceEqual(s_registryPointerTokens)).IsTrue();
+        await Assert.That(selector.SequenceEqual(s_singleDecodeTokens)).IsTrue();
     }
 
     [Test]
@@ -115,12 +119,13 @@ public class ApiOperationReferenceTests
         await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
         await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("GetUser");
         await Assert.That(result.DocumentPath).IsEqualTo("$/paths/~1users~1{id}/get");
-        await Assert.That(ApiOperationDocumentResolver.Capabilities.Formats)
-            .IsEquivalentTo(["OpenAPI/3.0", "OpenAPI/3.1", "Swagger/2.0", "OpenRPC/1.4"]);
-        await Assert.That(ApiOperationDocumentResolver.Capabilities.ContentTypes)
-            .IsEquivalentTo(["application/json"]);
-        await Assert.That(ApiOperationDocumentResolver.Capabilities.Selectors)
-            .IsEquivalentTo([ApiOperationSelectorKind.Operation, ApiOperationSelectorKind.JsonPointer]);
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.Formats
+            .Order(StringComparer.Ordinal)
+            .SequenceEqual(s_supportedFormats.Order(StringComparer.Ordinal))).IsTrue();
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.ContentTypes
+            .SequenceEqual(["application/json"])).IsTrue();
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.Selectors.Order()
+            .SequenceEqual(s_supportedSelectors.Order())).IsTrue();
         await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsCallerProvidedPathItemReferences)
             .IsTrue();
         await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsCallerProvidedOperationReferences)
@@ -769,7 +774,7 @@ public class ApiOperationReferenceTests
         await Assert.That(result.Operation.GetProperty("params").GetArrayLength()).IsEqualTo(0);
         await Assert.That(result.DocumentUri).IsEqualTo(new Uri("https://api.example/shared.json"));
         await Assert.That(result.DocumentPath).IsEqualTo("$/methods/0");
-        await Assert.That(requests).IsEquivalentTo(["https://api.example/shared.json"]);
+        await Assert.That(requests.SequenceEqual(["https://api.example/shared.json"])).IsTrue();
     }
 
     [Test]
@@ -968,7 +973,7 @@ public class ApiOperationReferenceTests
         var methods = new JsonArray();
         for (var index = 0; index < count; index++)
         {
-            methods.Add(new JsonObject { ["$ref"] = $"https://api.example/{index}.json" });
+            methods.Add((JsonNode)new JsonObject { ["$ref"] = $"https://api.example/{index}.json" });
         }
         var document = new JsonObject { ["openrpc"] = "1.4.0", ["methods"] = methods };
         var loads = 0;

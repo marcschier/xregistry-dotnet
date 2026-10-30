@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import platform
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -168,7 +169,7 @@ def execute_suite(name: str, framework: str, rid: str, run: Path,
     run_recorded([
         "dotnet", "publish", str(project), "-c", "Release", "-f", framework, "-r", rid,
         "--self-contained", "--artifacts-path", str(build), "-p:PublishAot=true",
-        "-p:IsAotCompatible=true", "-p:TrimmerSingleWarn=false", "-o", str(native),
+        "-p:IsAotCompatible=true", "-p:TrimmerSingleWarn=false", "-p:UseSharedCompilation=false", "-o", str(native),
         "--nologo", "-v", "minimal",
     ], publish_log, environment, timeout=1800)
     verify_publish(publish_log, executable)
@@ -215,6 +216,9 @@ def main(argv: list[str] | None = None) -> int:
         require(len(projects) == len(set(projects)), "Each suite may be selected only once.")
         for directory in (args.artifacts_root, args.work_root):
             require(directory.is_absolute() and directory.is_dir(), "Artifact and work roots must be existing absolute directories.")
+        programs = ("dotnet", "git", "python") + (("pwsh",) if args.rid.startswith("win-") else ())
+        for program in programs:
+            require(shutil.which(program) is not None, f"Required build/test program is missing from PATH: {program}")
         validate_suite_inventory(ROOT)
         before = source_inventory(ROOT)
         run = Path(tempfile.mkdtemp(prefix="native-suites-", dir=args.artifacts_root))
@@ -228,6 +232,7 @@ def main(argv: list[str] | None = None) -> int:
         write_json(run / "summary.json", summary)
         environment = dict(os.environ) | {k: str(args.work_root) for k in ("TEMP", "TMP", "TMPDIR")}
         environment["DOTNET_CLI_UI_LANGUAGE"] = "en-US"
+        environment["MSBUILDDISABLENODEREUSE"] = "1"
         if os.name == "nt":
             installer = Path(os.environ["ProgramFiles(x86)"]) / "Microsoft Visual Studio" / "Installer"
             environment["PATH"] = str(installer) + os.pathsep + environment.get("PATH", "")

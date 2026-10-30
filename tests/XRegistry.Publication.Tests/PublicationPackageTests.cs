@@ -369,11 +369,13 @@ public class PublicationPackageTests
         await Assert.That(package.Objects.Count).IsEqualTo(3);
         await Assert.That(package.Objects.Any(item =>
             item.Reference.Version == sourceDescriptor.Reference.Version)).IsFalse();
-        await Assert.That(package.Objects.Select(item => item.Reference.Version)).IsEquivalentTo(new[]
+        var expectedVersions = new[]
         {
             fixture.ManifestDescriptor.Reference.Version, fixture.RegistryDescriptor.Reference.Version,
             fixture.DocumentDescriptor.Reference.Version
-        });
+        };
+        await Assert.That(package.Objects.Select(item => item.Reference.Version).Order(StringComparer.Ordinal)
+            .SequenceEqual(expectedVersions.Order(StringComparer.Ordinal))).IsTrue();
 
         // Only the three materialized objects fit the offline package's exact budget.
         var snapshot = await PublicationPackage.OpenDirectoryAsync(directory.PackagePath, maxObjects: 3,

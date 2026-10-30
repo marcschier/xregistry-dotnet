@@ -40,6 +40,7 @@ class NativeSuiteCiWorkflowTests(unittest.TestCase):
         self.assertEqual(set(cells), expected)
         self.assertIn("fail-fast: false", self.job)
         self.assertIn("runs-on: ${{ matrix.os }}", self.job)
+        self.assertIn("fetch-depth: 0", self.job)
 
     def test_native_suite_workflow_retains_failure_evidence_and_unmounts_its_own_volume(self) -> None:
         self.assertIn("python eng/run_native_suites.py --framework '${{ matrix.framework }}' --rid '${{ matrix.rid }}'", self.job)

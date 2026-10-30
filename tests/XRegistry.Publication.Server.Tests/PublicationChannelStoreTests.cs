@@ -297,7 +297,7 @@ public class PublicationChannelStoreTests
             var documentDescriptor = Descriptor("/publications/team/objects/documents/versions/intro",
                 documentBytes, StoreRegistry);
             objects.Add(new(documentDescriptor, documentBytes));
-            root["documents"]!.AsArray().Add(new JsonObject
+            root["documents"]!.AsArray().Add((JsonNode)new JsonObject
             {
                 ["viewVersion"] = "/sets/manual/documents/intro/versions/7",
                 ["originRegistry"] = "https://author.example.test/registry",
