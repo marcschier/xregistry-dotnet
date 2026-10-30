@@ -168,6 +168,88 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
+    [Arguments("OpenAPI/3.0", "3.0.0")]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.0", "3.0.4-rc.1")]
+    [Arguments("OpenAPI/3.0", "3.0.999999999999999999999999999999999999")]
+    [Arguments("OpenAPI/3.1", "3.1.0")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    [Arguments("OpenAPI/3.1", "3.1.01")]
+    [Arguments("OpenAPI/3.1", "3.1.1-rc.1")]
+    [Arguments("OpenAPI/3.1", "3.1.999999999999999999999999999999999999")]
+    public async Task OpenApiVersionCheckingAcceptsTheSupportedFeatureSetWithoutRestrictingPatchNumbers(
+        string format, string version)
+    {
+        var result = ApiOperationDocumentResolver.Resolve(format, "application/json",
+            System.Text.Encoding.UTF8.GetBytes("""
+                {"openapi":"VERSION","info":{"title":"Users","version":"independent release name"},
+                 "paths":{"/users":{"get":{"operationId":"GetUser"}}}}
+                """.Replace("VERSION", version, StringComparison.Ordinal)),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/GetUser"));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("GetUser");
+        await Assert.That(result.Diagnostic).IsNull();
+    }
+
+    [Test]
+    [Arguments("3.1.")]
+    [Arguments("3.1.garbage")]
+    [Arguments("3.1.1-")]
+    [Arguments("3.1.-1")]
+    [Arguments("3.1.+1")]
+    [Arguments("3.1.1.0")]
+    [Arguments("3.1.1suffix")]
+    [Arguments("3.1.1\n")]
+    [Arguments("3.1.1 ")]
+    [Arguments(" 3.1.1")]
+    [Arguments("3.1")]
+    [Arguments("3.2.0")]
+    [Arguments("3.10.0")]
+    [Arguments("3.1.\u0661")]
+    public async Task OpenApiVersionCheckingRejectsMalformedVersionsBeforeDependencyAcquisition(string version)
+    {
+        var calls = 0;
+        var document = new System.Text.Json.Nodes.JsonObject
+        {
+            ["openapi"] = version,
+            ["paths"] = System.Text.Json.Nodes.JsonNode.Parse("""{"/users":{"$ref":"./shared.json#/path"}}""")
+        };
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenAPI/3.1", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/GetUser"),
+            new Uri("https://registry.example/apis/a"),
+            (_, _) => { calls++; throw new InvalidOperationException("Invalid roots must not acquire dependencies."); });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.openapi_version");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/openapi");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.1.1")]
+    [Arguments("OpenAPI/3.1", "3.0.4")]
+    [Arguments("OpenAPI/3.0", "3.0.garbage")]
+    [Arguments("OpenAPI/3.0", "3.0.")]
+    [Arguments("OpenAPI/3.0", "3.0.4\n")]
+    [Arguments("OpenAPI/3.1", "3.1.garbage")]
+    public async Task OpenApiJsonPointerSelectionCannotBypassTheDeclaredVersionCheck(string format, string version)
+    {
+        var document = new System.Text.Json.Nodes.JsonObject
+        {
+            ["openapi"] = version,
+            ["paths"] = System.Text.Json.Nodes.JsonNode.Parse("""{"/users":{"get":{"operationId":"GetUser"}}}""")
+        };
+        var result = ApiOperationDocumentResolver.Resolve(format, "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#/paths/~1users/get"));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.openapi_version");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        await Assert.That(result.DocumentPath).IsNull();
+    }
+
+    [Test]
     [Arguments("{", "document.json")]
     [Arguments("[]", "document.root")]
     [Arguments("""{"openapi":"3.1.1"}""", "document.paths")]

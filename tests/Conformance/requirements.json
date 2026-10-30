@@ -112579,13 +112579,21 @@
       ],
       "text": "The API document is an OpenAPI Description in JSON or YAML. The root `openapi` field MUST match the selected feature set; it is independent of `info.version`. JSON and YAML representations MUST be distinguished by `contenttype`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The bounded JSON operation selector checks that root openapi identifies the selected 3.0/3.1 feature set with a numeric patch component before operation-ID or JSON Pointer selection and dependency acquisition. Arbitrary patch numbers and publisher-schema hyphen suffixes are accepted independently of info.version. JSON content types are checked, but YAML and complete OpenAPI Description validation remain unsupported. Keep this combined obligation pending.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenApiVersionCheckingAcceptsTheSupportedFeatureSetWithoutRestrictingPatchNumbers",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenApiVersionCheckingRejectsMalformedVersionsBeforeDependencyAcquisition",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenApiJsonPointerSelectionCannotBypassTheDeclaredVersionCheck"
+        ],
         "nativeEvidence": []
       }
     },

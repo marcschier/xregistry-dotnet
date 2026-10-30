@@ -35,7 +35,7 @@ it does not transfer historical qualification to a successor.
 
 | Family | Blocks | Reviewed | Qualified |
 | --- | ---: | ---: | ---: |
-| api | 53 | 3 | 0 |
+| api | 53 | 4 | 0 |
 | catalog | 141 | 141 | 0 |
 | cloudevents | 8 | 4 | 0 |
 | core | 1209 | 602 | 0 |

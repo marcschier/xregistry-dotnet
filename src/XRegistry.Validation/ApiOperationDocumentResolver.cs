@@ -147,6 +147,10 @@ public static partial class ApiOperationDocumentResolver
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
     private static partial Regex OpenRpcVersion();
 
+    [GeneratedRegex(@"\A3\.[01]\.[0-9]+(?:-[^\r\n]+)?\z",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
+    private static partial Regex OpenApiVersion();
+
     /// <summary>Gets the exact optional resolution features available from this implementation.</summary>
     public static ApiOperationResolverCapabilities Capabilities { get; } = new();
 
@@ -313,7 +317,8 @@ public static partial class ApiOperationDocumentResolver
         {
             var expectedPrefix = format == "OpenAPI/3.0" ? "3.0." : "3.1.";
             if (!root.TryGetProperty("openapi", out var version) || version.ValueKind != JsonValueKind.String ||
-                !version.GetString()!.StartsWith(expectedPrefix, StringComparison.Ordinal))
+                !version.GetString()!.StartsWith(expectedPrefix, StringComparison.Ordinal) ||
+                !OpenApiVersion().IsMatch(version.GetString()!))
             {
                 return Failure(ApiOperationResolutionStatus.Invalid, "document.openapi_version",
                     $"The root openapi value does not match '{format}'.", "$/openapi");

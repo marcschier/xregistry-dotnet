@@ -44,6 +44,13 @@ reports `Denied`. A required dependency failure prevents selection even if an
 earlier method matched. Caller cancellation propagates; deadline expiry reports
 `Indeterminate`. Resolution never invokes an API.
 
+For OpenAPI JSON, the root `openapi` value must identify the selected `3.0` or
+`3.1` feature set with a numeric patch component. Patch numbers are not bounded
+to the releases known by this library. A nonempty hyphen suffix is accepted as
+in the publisher's document schemas; this check does not impose SemVer rules
+on `info.version`. Malformed root versions fail before dependency acquisition,
+including when selection uses a JSON Pointer.
+
 For `AvroProtocol/1.12.0`, `#operations/GetUser` selects the exact `GetUser`
 member of `messages`. An absent or empty `messages` object has no selectable
 operations; an Avro data schema without a protocol declaration is rejected.
