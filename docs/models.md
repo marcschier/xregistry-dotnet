@@ -104,6 +104,10 @@ check model-specific contracts, unknown-kind errors and ownership. The
 `eng/test-model-packages.ps1` probe packs into a new local feed, uses a fresh
 package cache and package references (not project references), and publishes and
 runs real native consumers for both TFMs on the executing platform.
+At `6b3aa35`, the fresh package-only consumer passed on Windows x64 under
+.NET 8 and .NET 10, including Media dependency resolution and general-composite
+isolation. Both JIT controls were rejected; this does not qualify other native
+platforms or full Media behavior.
 
 ## Domain behavior and current boundaries
 

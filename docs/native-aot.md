@@ -139,6 +139,18 @@ development cell, not requirement-level release qualification.
 
 ## Current evidence and uncovered cells
 
+The package-only model consumer at `6b3aa357b7a79b49f3dddb4f2b05935130c7c416`
+passed natively on Windows x64 under .NET 8 and .NET 10 using a fresh local feed
+and package cache. Each run checked eleven exact source hashes, compiled every
+built-in model, resolved the new Media snapshots and confirmed that Media stays
+outside the general composite. Both managed controls were rejected, neither
+publication emitted IL diagnostics, and the package nuspecs identify that exact
+source commit. Package, native executable, managed control and log hashes are
+retained in
+`D:\temp\xregistry-media-package-6b3aa35\ebd09c9dea8a43cd8a12cd0db1013e43\artifact-audit.json`.
+This is selected-package evidence, not a refreshed native TUnit matrix or
+per-requirement qualification.
+
 The [corrected matrix at `e502e5d`](https://github.com/marcschier/xregistry-dotnet/actions/runs/41133118088)
 completed all four .NET 10 cells successfully on Windows/Linux x64 and ARM64.
 Each downloaded cell passed all thirteen suites, with 9,118 native cases and
