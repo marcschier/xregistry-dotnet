@@ -2441,7 +2441,7 @@ public static partial class ApiOperationDocumentResolver
                                 var properSubset = false;
                                 var stringComparator = '\0';
                                 List<string>? stringOperands = null;
-                                if (scoped && position < text.Length && text[position] == '{')
+                                if (position < text.Length && text[position] == '{')
                                 {
                                     position++;
                                     if (position == text.Length || text[position++] != '<') { return null; }
@@ -2454,7 +2454,7 @@ public static partial class ApiOperationDocumentResolver
                                         SkipWhitespace();
                                         var projection = false;
                                         List<string> texts = [];
-                                        if (position < text.Length && text[position] == '@')
+                                        if (scoped && position < text.Length && text[position] == '@')
                                         {
                                             var operands = ProjectionContextValues(evaluateAssertion, context,
                                                 contexts is not null, out projection);

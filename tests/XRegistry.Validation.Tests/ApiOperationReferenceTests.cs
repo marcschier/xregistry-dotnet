@@ -15074,6 +15074,94 @@ public class ApiOperationReferenceTests
         await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
     }
 
+    [Test]
+    [Arguments("[trait|example#Custom|values|(values) {<} x]", false)]
+    [Arguments("[trait|example#Custom|values|(values) {<<} x]", false)]
+    [Arguments("[trait|example#Custom|values|(values) {<} x,y i]", false)]
+    [Arguments("[trait|example#Custom|empty|(values) {<} x]", false)]
+    [Arguments("[trait|example#Custom|missing|(values) {<<} x]", false)]
+    [Arguments("[id {<} example#Get]", false)]
+    [Arguments("[trait|example#Custom|scalar {<} x]", false)]
+    [Arguments(":not([trait|example#Custom|values|(values) {<} x])", true)]
+    [Arguments(":not([trait|example#Custom|empty|(values) {<<} x])", true)]
+    [Arguments(":is(*,[trait|example#Custom|values|(values) {<} x])", true)]
+    public async Task SmithyJsonUnscopedProjectionSubsetsRequireProjectionOperandsRatherThanScalarAlternatives(
+        string selector, bool matches)
+    {
+        var document = SmithyCustomNodeDocument("document", """{"values":["x"],"empty":[],"scalar":"x"}""");
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!["selector"] = selector;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(matches ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (matches)
+        {
+            await Assert.That(result.Diagnostic).IsNull();
+            await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_selector_target");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("""{"values":["x",1]}""", "[trait|example#Custom|values|(values) {<} x]", false)]
+    [Arguments("""{"values":["x","\u00e9"]}""", "[trait|example#Custom|values|(values) {<} x i]", false)]
+    [Arguments("""{"values":[]}""", "[trait|example#Custom|values|(values) {<<} x,'\u00e9' i]", false)]
+    [Arguments("""{"values":["x",1]}""", "[trait|example#Custom|values|(values) {<} x]", true)]
+    [Arguments("""{"values":["x","\u00e9"]}""", "[trait|example#Custom|values|(values) {<} x i]", true)]
+    [Arguments("""{"values":[]}""", "[trait|example#Custom|values|(values) {<<} x,'\u00e9' i]", true)]
+    public async Task SmithyJsonUnscopedProjectionSubsetsValidateAllValuesUnlessOnlyParsing(
+        string json, string selector, bool parseOnly)
+    {
+        var document = SmithyCustomNodeDocument("document", json);
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!["selector"] =
+            parseOnly ? ":not(:future(" + selector + "))" : ":is(*," + selector + ")";
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(parseOnly ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Unsupported);
+        if (parseOnly) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("smithy.trait_selector");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("[trait|example#Custom|values|(values) {<} @{id}]")]
+    [Arguments("[trait|example#Custom|values|(values) {<} x,]")]
+    [Arguments("[trait|example#Custom|values|(values) {<} x ii]")]
+    [Arguments("[trait|example#Custom|values|(values) {<<<} x]")]
+    [Arguments("[trait|example#Custom|values|(values) {< x]")]
+    [Arguments("[trait|example#Custom|values|(values) {<} 1]")]
+    [Arguments("[trait|example#Custom|values|(values) {=} x]")]
+    [Arguments("[trait|example#Custom|values|(values) {!=} x]")]
+    public async Task SmithyJsonUnscopedProjectionSubsetsRejectMalformedAndUnsupportedOperandForms(string selector)
+    {
+        var document = SmithyCustomNodeDocument("document", """{"values":["x"]}""");
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!["selector"] = ":is(*," + selector + ")";
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Unsupported);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("smithy.trait_selector");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonUnscopedProjectionSubsetsChargeValueChecksEvenForNonprojectionAlternatives()
+    {
+        var document = SmithyCustomNodeDocument("document",
+            "{\"values\":[" + JsonValue.Create(new string('x', 1000))!.ToJsonString() + "]}");
+        const string selector = "[trait|example#Custom|values|(values) {<} x i]";
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!["selector"] = ":not(" + selector + ")";
+        await Assert.That(ResolveSmithy(document.ToJsonString()).Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!["selector"] =
+            ":is(*," + string.Concat(Enumerable.Repeat(selector, 9000)) + ")";
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("limit.work");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
     private static JsonNode SmithyIdRefTarget(string kind)
     {
         var target = SmithyCustomNodeDocument(kind, "{}")["shapes"]!["example#Custom"]!.DeepClone();

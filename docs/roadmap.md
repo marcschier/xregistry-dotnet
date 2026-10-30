@@ -350,6 +350,8 @@ vocabulary/source mapping. It does not supply their implementation.
   operand checks and shared work limits apply. `{=}` and `{!=}` remain
   unsupported because the publisher's equality table describes one-way
   containment rather than the equality named in the surrounding text.
+  Unscoped `{<}` and `{<<}` accept literal alternatives as valid nonmatches,
+  since those alternatives are not projections; all values are still checked.
   Each application is checked independently. Type mismatches are invalid;
   unsupported grammar reports `Unsupported` at the application without changing
   unapplied declaration checks or masking earlier missing schema dependencies.

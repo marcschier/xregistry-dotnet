@@ -445,8 +445,8 @@ decoded text; Booleans compare as `true` or `false`. Present nulls and
 aggregates compare as empty strings, but absent attributes never match any of
 these operators, including `!=`. Quoted numeric text is compared literally;
 numeric JSON values and unquoted numeric operands report `Unsupported` because
-numeric-to-string rendering is not implemented. Empty quoted operands and
-unscoped projection set comparisons remain unsupported. The `i` modifier enables
+numeric-to-string rendering is not implemented. Empty quoted operands remain
+unsupported. The `i` modifier enables
 case-insensitive string comparison when every operand and the selected value
 contain only ASCII characters. Non-ASCII case folding remains unsupported,
 including an operand after an earlier match or on an absent attribute. Trait
@@ -566,6 +566,10 @@ projection supplies no alternatives, so it cannot make an absence check match.
 Every supplied context value is checked, even after a matching Boolean
 alternative or when the left side is absent. Numeric JSON rendering remains
 unsupported on the right, and ASCII folding checks every right-hand text value.
+Unscoped `{<}` and `{<<}` forms accept literal alternatives but do not match:
+their right-hand operands are not projections. They still check every supplied
+value, including rendering and ASCII folding, rather than treating a literal as
+a singleton projection. Context paths on the right require a scoped assertion.
 Named scopes resolve an attribute once, then evaluate relative context paths
 against that value; for example, `[@trait|example#Custom: @{min} < @{max}]`.
 This also applies to the `id` and `service` attributes and trait-key identities.
