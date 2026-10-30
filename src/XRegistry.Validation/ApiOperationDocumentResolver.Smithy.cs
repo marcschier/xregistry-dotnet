@@ -1970,7 +1970,8 @@ public static partial class ApiOperationDocumentResolver
             }
         }
 
-        private void ValidateTraitNode(string id, JsonElement value, string path, int depth)
+        private void ValidateTraitNode(string id, JsonElement value, string path, int depth,
+            JsonElement memberShape = default)
         {
             budget.Work(path: path);
             if (depth > Capabilities.MaxReferenceDepth)
@@ -2029,6 +2030,7 @@ public static partial class ApiOperationDocumentResolver
             {
                 ValidateTimestampString(value.GetString()!, path);
             }
+            ValidateTraitNodeConstraints(kind!, shape, memberShape, value, path);
             if (kind == "list")
             {
                 var index = 0;
@@ -2037,7 +2039,8 @@ public static partial class ApiOperationDocumentResolver
                     var itemPath = path + "/" + (index++).ToString(System.Globalization.CultureInfo.InvariantCulture);
                     budget.Work(path: itemPath);
                     if (item.ValueKind == JsonValueKind.Null && TryTrait(shape, "smithy.api#sparse", out _)) { continue; }
-                    ValidateTraitNode(shape.GetProperty("member").GetProperty("target").GetString()!, item, itemPath, depth + 1);
+                    var listMember = shape.GetProperty("member");
+                    ValidateTraitNode(listMember.GetProperty("target").GetString()!, item, itemPath, depth + 1, listMember);
                 }
             }
             if (kind == "map")
@@ -2046,8 +2049,13 @@ public static partial class ApiOperationDocumentResolver
                 {
                     var itemPath = path + "/" + Escape(item.Name);
                     budget.Work(item.Name.Length, itemPath);
+                    var keyMember = shape.GetProperty("key");
+                    using var keyDocument = JsonDocument.Parse("\"" + JsonEncodedText.Encode(item.Name).ToString() + "\"");
+                    ValidateTraitNode(keyMember.GetProperty("target").GetString()!,
+                        keyDocument.RootElement, itemPath, depth + 1, keyMember);
                     if (item.Value.ValueKind == JsonValueKind.Null && TryTrait(shape, "smithy.api#sparse", out _)) { continue; }
-                    ValidateTraitNode(shape.GetProperty("value").GetProperty("target").GetString()!, item.Value, itemPath, depth + 1);
+                    var valueMember = shape.GetProperty("value");
+                    ValidateTraitNode(valueMember.GetProperty("target").GetString()!, item.Value, itemPath, depth + 1, valueMember);
                 }
             }
             if (kind is "structure" or "union")
@@ -2062,8 +2070,9 @@ public static partial class ApiOperationDocumentResolver
                     budget.Work(path: itemPath);
                     ValidationContext.Require(hasMembers && members.TryGetProperty(item.Name, out _),
                         itemPath, "document.trait_node", "A Smithy trait value contains an undeclared structure or union member.");
-                    ValidateTraitNode(members.GetProperty(item.Name).GetProperty("target").GetString()!,
-                        item.Value, itemPath, depth + 1);
+                    var structureMember = members.GetProperty(item.Name);
+                    ValidateTraitNode(structureMember.GetProperty("target").GetString()!,
+                        item.Value, itemPath, depth + 1, structureMember);
                 }
                 if (kind == "structure" && hasMembers)
                 {
@@ -2075,6 +2084,62 @@ public static partial class ApiOperationDocumentResolver
                             "document.trait_node", "A Smithy trait value must supply every required structure member.");
                     }
                 }
+            }
+        }
+
+        private void ValidateTraitNodeConstraints(string kind, JsonElement shape, JsonElement member,
+            JsonElement value, string path)
+        {
+            if (TryTrait(member, "smithy.api#length", out var length) ||
+                TryTrait(shape, "smithy.api#length", out length))
+            {
+                var count = 0;
+                if (kind is "string" or "enum")
+                {
+                    var text = value.GetString()!;
+                    budget.Work(text.Length, path);
+                    foreach (var rune in text.EnumerateRunes()) { count++; }
+                }
+                else if (kind == "blob")
+                {
+                    var text = value.GetString()!;
+                    budget.Work(text.Length, path);
+                    ValidationContext.Require(Convert.TryFromBase64String(text, new byte[text.Length], out count),
+                        path, "document.trait_node", "A Smithy blob trait value must contain valid base64.");
+                }
+                else if (kind == "list") { count = value.GetArrayLength(); }
+                else
+                {
+                    foreach (var item in value.EnumerateObject()) { budget.Work(path: path); count++; }
+                }
+                var size = new JsonNumber(false, count.ToString(System.Globalization.CultureInfo.InvariantCulture), 0);
+                ValidationContext.Require(
+                    (!length.TryGetProperty("min", out var min) || size.CompareTo(JsonNumber.Read(min, budget, path)) >= 0) &&
+                    (!length.TryGetProperty("max", out var max) || size.CompareTo(JsonNumber.Read(max, budget, path)) <= 0),
+                    path, "document.trait_length", "A Smithy trait value must satisfy its effective length constraint.");
+            }
+            if (TryTrait(member, "smithy.api#range", out var range) ||
+                TryTrait(shape, "smithy.api#range", out range))
+            {
+                if (value.ValueKind == JsonValueKind.String && kind is "float" or "double")
+                {
+                    ValidationContext.Fail(DocumentValidationStatus.Unsupported, path, "smithy.special_range_trait",
+                        "Range checks on special floating-point trait values are not supported.");
+                }
+                var number = kind is "bigInteger" or "bigDecimal"
+                    ? ReadSmithyNumber(value, path, "smithy.numeric_string_trait")
+                    : JsonNumber.Read(value, budget, path);
+                ValidationContext.Require(
+                    (!range.TryGetProperty("min", out var min) ||
+                        number.CompareTo(ReadSmithyNumber(min, path, "smithy.numeric_string_range")) >= 0) &&
+                    (!range.TryGetProperty("max", out var max) ||
+                        number.CompareTo(ReadSmithyNumber(max, path, "smithy.numeric_string_range")) <= 0),
+                    path, "document.trait_range", "A Smithy trait value must satisfy its effective range constraint.");
+            }
+            if (TryTrait(member, "smithy.api#pattern", out _) || TryTrait(shape, "smithy.api#pattern", out _))
+            {
+                ValidationContext.Fail(DocumentValidationStatus.Unsupported, path, "smithy.pattern_trait",
+                    "Pattern matching on Smithy trait values is not supported.");
             }
         }
 

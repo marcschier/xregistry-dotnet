@@ -221,9 +221,13 @@ vocabulary/source mapping. It does not supply their implementation.
   type bounds and supported string timestamps after schema-closure validation.
   Recursive list/map values, sparse nulls, required/declared structure members
   and single-member unions are checked on every reached application. Document
-  values remain arbitrary JSON. Custom constraint evaluation, enum value
-  membership, map-key constraints, `idRef` value resolution and complete custom
-  application schemas remain unvalidated.
+  values remain arbitrary JSON. Effective length/range constraints now apply
+  to custom values and decoded map keys, with member constraints replacing
+  target constraints. Length counts scalar values, decoded bytes or entries;
+  range comparisons remain exact. Pattern matching and special-float range
+  checks report `Unsupported`. Enum value membership, collection uniqueness,
+  `idRef` value resolution and complete custom application schemas remain
+  unvalidated.
   Reached `protocolDefinition` declarations share the structure-trait target
   and required-trait reference checks; `noInlineDocumentSupport` requires a
   Boolean. Protocol selection and the service-closure document prohibition

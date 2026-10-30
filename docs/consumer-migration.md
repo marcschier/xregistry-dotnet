@@ -411,8 +411,16 @@ Lists and maps recursively check their values, with null entries permitted by
 all required members; unions require exactly one declared member. Optional
 omissions remain omitted. Validation checks every reached application,
 including members, without interpreting payload strings as shape references.
-Custom application constraint evaluation, enum value membership, map-key
-constraints and `idRef` value resolution remain unvalidated.
+Effective `length` and `range` constraints are checked on custom application
+values, including nested members and decoded map keys. A member constraint
+replaces the corresponding target constraint rather than intersecting with it;
+omitted bounds do not inherit target bounds. Length counts Unicode scalar values
+for strings, decoded bytes for blobs and entries for collections. Range checks
+use exact inclusive numeric comparisons, including string-encoded large numbers.
+Pattern matching and range checks on special floating-point strings report
+`Unsupported`; optional members that are absent need no value evaluation.
+Enum value membership, collection uniqueness and `idRef` value resolution remain
+unvalidated.
 
 The `conflicts` property must be an array of absolute root trait IDs. A custom
 trait cannot coexist on the same shape with any trait named in that array,
