@@ -331,7 +331,18 @@ public static partial class ApiOperationDocumentResolver
                 "The root swagger value must be '2.0'.", "$/swagger");
         }
 
-        if (!root.TryGetProperty("paths", out var paths) || paths.ValueKind != JsonValueKind.Object)
+        if (!root.TryGetProperty("paths", out var paths))
+        {
+            if (format == "OpenAPI/3.1" &&
+                (root.TryGetProperty("components", out var components) && components.ValueKind == JsonValueKind.Object ||
+                 root.TryGetProperty("webhooks", out var webhooks) && webhooks.ValueKind == JsonValueKind.Object))
+            {
+                return null;
+            }
+            return Failure(ApiOperationResolutionStatus.Invalid, "document.paths",
+                "The API document must contain a paths object.", "$/paths");
+        }
+        if (paths.ValueKind != JsonValueKind.Object)
         {
             return Failure(ApiOperationResolutionStatus.Invalid, "document.paths",
                 "The API document must contain a paths object.", "$/paths");
@@ -442,7 +453,11 @@ public static partial class ApiOperationDocumentResolver
         string operationId, ReferenceContext references, CancellationToken cancellationToken)
     {
         var matches = new List<OperationLocation>();
-        var paths = root.GetProperty("paths");
+        if (!root.TryGetProperty("paths", out var paths))
+        {
+            return Failure(ApiOperationResolutionStatus.NotFound, "selection.not_found",
+                "The API document has no path operations.");
+        }
         foreach (var path in paths.EnumerateObject())
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -653,7 +668,7 @@ public static partial class ApiOperationDocumentResolver
                 "An OpenAPI or Swagger operation pointer must select paths/{path}/{http-method}.");
         }
 
-        if (!root.GetProperty("paths").TryGetProperty(tokens[1], out var pathItem))
+        if (!root.TryGetProperty("paths", out var paths) || !paths.TryGetProperty(tokens[1], out var pathItem))
         {
             return Failure(ApiOperationResolutionStatus.NotFound, "selection.not_found",
                 "The selected path does not exist.");

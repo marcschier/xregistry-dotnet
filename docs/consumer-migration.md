@@ -54,6 +54,10 @@ OpenAPI and Swagger `paths` entries must start with `/`; `x-` entries are
 specification extensions. Operation-ID selection ignores extension payloads,
 including apparent operations or references inside them. A JSON Pointer must
 select an HTTP method beneath a slash-prefixed path, not extension data.
+OpenAPI 3.1 documents can omit `paths` when they contain `components` or
+`webhooks`; path-operation selection then reports `NotFound`. Webhook operation
+IDs are not path operations. OpenAPI 3.0 and Swagger still require `paths`,
+and an explicitly malformed `paths` value is rejected in every supported version.
 
 For `AvroProtocol/1.12.0`, `#operations/GetUser` selects the exact `GetUser`
 member of `messages`. An absent or empty `messages` object has no selectable

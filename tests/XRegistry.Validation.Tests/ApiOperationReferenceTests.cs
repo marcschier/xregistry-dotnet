@@ -220,6 +220,43 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
+    [Arguments("""{"components":{}}""", "operations/GetUser")]
+    [Arguments("""{"webhooks":{}}""", "operations/GetUser")]
+    [Arguments("""{"components":{},"webhooks":{}}""", "operations/GetUser")]
+    [Arguments("""{"webhooks":{"event":{"post":{"operationId":"GetUser"}}}}""", "operations/GetUser")]
+    [Arguments("""{"components":{}}""", "/paths/~1users/get")]
+    [Arguments("""{"webhooks":{}}""", "/paths/~1users/get")]
+    public async Task OpenApi31DocumentsWithoutPathsReportNoPathOperation(string content, string selector)
+    {
+        var result = ApiOperationDocumentResolver.Resolve("OpenAPI/3.1", "application/json",
+            System.Text.Encoding.UTF8.GetBytes("""{"openapi":"3.1.1","info":{"title":"Types","version":"1"},""" +
+                content[1..]),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.NotFound);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("selection.not_found");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        await Assert.That(result.DocumentPath).IsNull();
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", """{"openapi":"3.0.4","components":{}}""")]
+    [Arguments("Swagger/2.0", """{"swagger":"2.0","components":{}}""")]
+    [Arguments("OpenAPI/3.1", """{"openapi":"3.1.1"}""")]
+    [Arguments("OpenAPI/3.1", """{"openapi":"3.1.1","components":null}""")]
+    [Arguments("OpenAPI/3.1", """{"openapi":"3.1.1","webhooks":[]}""")]
+    [Arguments("OpenAPI/3.1", """{"openapi":"3.1.1","paths":null,"components":{}}""")]
+    [Arguments("OpenAPI/3.1", """{"openapi":"3.1.1","paths":[],"webhooks":{}}""")]
+    public async Task OptionalOpenApi31PathsDoNotRelaxOtherRootRequirements(string format, string document)
+    {
+        var result = ApiOperationDocumentResolver.Resolve(format, "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/GetUser"));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.paths");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
     [Arguments("OpenAPI/3.0", """{"openapi":"3.0.3","paths":{"/users":{"get":{"operationId":"GetUser"}}}}""")]
     [Arguments("Swagger/2.0", """{"swagger":"2.0","paths":{"/users":{"get":{"operationId":"GetUser"}}}}""")]
     public async Task ResolvesOperationIdsForEveryAdvertisedDocumentFormat(string format, string document)
