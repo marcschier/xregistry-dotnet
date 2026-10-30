@@ -269,6 +269,14 @@ model files or parse IDL. Smithy shape IDs are not retrieval URLs and never
 invoke the document dependency callback. Trait payloads remain node values;
 a payload member named `target` or `$ref` is not an import.
 
+Reached operation input, output and error references permit only `target`.
+Aggregate member definitions permit `target` and optional `traits`; other
+properties are rejected. Traits belong to the referenced shape or to an
+aggregate member, not to an operation's reference object, even when the
+authored trait map is empty. Error-reference diagnostics identify the array
+occurrence. These property checks do not inspect unrelated references or
+interpret literal trait payloads as shape references.
+
 The implicit prelude support covers `Blob`, `Boolean`, `Document`, `String`,
 `Byte`, `Short`, `Integer`, `Long`, `Float`, `Double`, `BigInteger`,
 `BigDecimal`, `Timestamp`, `Unit`, and the traits

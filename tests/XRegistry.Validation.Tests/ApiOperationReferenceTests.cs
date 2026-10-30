@@ -2271,8 +2271,10 @@ public class ApiOperationReferenceTests
         var result = ResolveSmithy(document.ToJsonString());
         await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
         var operationTrait = position == "operation" && traitName == "smithy.api#trait";
-        await Assert.That(result.Diagnostic!.Code).IsEqualTo(operationTrait ? "document.target_type" : "document.trait_target");
-        await Assert.That(result.Diagnostic.Path).IsEqualTo(operationTrait ? path : path + "/traits/" + traitName);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(position == "reference" ? "document.reference_property"
+            : operationTrait ? "document.target_type" : "document.trait_target");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo(position == "reference" ? path + "/traits"
+            : operationTrait ? path : path + "/traits/" + traitName);
         await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
     }
 
@@ -2547,6 +2549,119 @@ public class ApiOperationReferenceTests
             await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
         }
         else { await Assert.That(result.Diagnostic).IsNull(); }
+    }
+
+    [Test]
+    [Arguments("input", "traits", "{}")]
+    [Arguments("output", "traits", "{}")]
+    [Arguments("errors", "traits", "{}")]
+    [Arguments("input", "traits", """{"smithy.api#documentation":"Not a member"}""")]
+    [Arguments("output", "traits", """{"example#Missing":{}}""")]
+    [Arguments("errors", "traits", "null")]
+    [Arguments("input", "$ref", "\"https://must-not-load.example/schema\"")]
+    [Arguments("output", "type", "\"structure\"")]
+    [Arguments("errors", "Target", "\"example#Payload\"")]
+    [Arguments("input", "a/b~c", "true")]
+    public async Task SmithyJsonPlainReferencesRejectExtraPropertiesBeforeTraversingThem(
+        string position, string property, string value)
+    {
+        var document = JsonNode.Parse("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation"},
+              "example#Payload":{"type":"structure","traits":{"smithy.api#error":"client"}}}}
+            """)!;
+        var reference = new JsonObject { ["target"] = "example#Payload", [property] = JsonNode.Parse(value) };
+        document["shapes"]!["example#Get"]![position] = position == "errors" ? new JsonArray(reference) : reference;
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Reference properties are not imports."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.reference_property");
+        await Assert.That(result.Diagnostic.Path)
+            .IsEqualTo("$/shapes/example#Get/" + position + (position == "errors" ? "/0" : "") + "/" +
+                property.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal));
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        await Assert.That(result.DocumentPath).IsNull();
+    }
+
+    [Test]
+    [Arguments("structure", "members/value")]
+    [Arguments("union", "members/value")]
+    [Arguments("enum", "members/value")]
+    [Arguments("intEnum", "members/value")]
+    [Arguments("list", "member")]
+    [Arguments("map", "key")]
+    [Arguments("map", "value")]
+    public async Task SmithyJsonMemberReferencesPermitTraitsButRejectOtherProperties(string kind, string position)
+    {
+        var target = kind is "enum" or "intEnum" ? "smithy.api#Unit" : "smithy.api#String";
+        var member = new JsonObject
+        {
+            ["target"] = target,
+            ["traits"] = JsonNode.Parse(kind == "intEnum"
+                ? """{"smithy.api#documentation":"Member","smithy.api#enumValue":1}"""
+                : """{"smithy.api#documentation":"Member"}""")
+        };
+        var container = new JsonObject { ["type"] = kind };
+        if (kind == "list") { container["member"] = member; }
+        else if (kind == "map")
+        {
+            container["key"] = position == "key" ? member : new JsonObject { ["target"] = target };
+            container["value"] = position == "value" ? member : new JsonObject { ["target"] = target };
+        }
+        else { container["members"] = new JsonObject { ["value"] = member }; }
+        var document = JsonNode.Parse("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"example#Input"}},
+              "example#Input":{"type":"structure","members":{"value":{"target":"example#Container"}}}}}
+            """)!;
+        document["shapes"]!["example#Container"] = container;
+        var valid = ResolveSmithy(document.ToJsonString());
+        await Assert.That(valid.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(valid.Diagnostic).IsNull();
+        await Assert.That(valid.Operation.GetRawText())
+            .IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        member["type"] = "member";
+        var invalid = ResolveSmithy(document.ToJsonString());
+        await Assert.That(invalid.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(invalid.Diagnostic!.Code).IsEqualTo("document.reference_property");
+        await Assert.That(invalid.Diagnostic.Path).IsEqualTo("$/shapes/example#Container/" + position + "/type");
+        await Assert.That(invalid.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonPlainReferencePropertyErrorsIdentifyTheArrayOccurrence()
+    {
+        var result = ResolveSmithy("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","errors":[
+                {"target":"example#Failure"},{"target":"example#Failure","traits":{}}]},
+              "example#Failure":{"type":"structure","traits":{"smithy.api#error":"server"}}}}
+            """);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.reference_property");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/errors/1/traits");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonReferencePropertyChecksDoNotValidateUnrelatedShapesOrLiteralPayloads()
+    {
+        var document = """
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","traits":{"example#Literal":{
+                "target":"example#Unknown","traits":{"$ref":"https://must-not-load.example/schema"}}}},
+              "example#Literal":{"type":"document","traits":{"smithy.api#trait":{}}},
+              "example#Other":{"type":"operation","input":{"target":"example#Unknown","traits":{}}}}}
+            """;
+        var result = ResolveSmithy(document);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        using var original = JsonDocument.Parse(document);
+        await Assert.That(result.Operation.GetRawText())
+            .IsEqualTo(original.RootElement.GetProperty("shapes").GetProperty("example#Get").GetRawText());
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
     }
 
     private static string SmithyDefaultDocument(string kind, string value, bool rootDefault)

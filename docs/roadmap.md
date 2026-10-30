@@ -175,7 +175,11 @@ vocabulary/source mapping. It does not supply their implementation.
   These checks do not validate example instances against method schemas.
   Smithy selection checks required operation/data/custom-trait dependencies in
   an already assembled non-mixin AST and rejects invalid recursion in that
-  closure, invalid enum targets and duplicate or malformed enum values. Explicit
+  closure, invalid enum targets and duplicate or malformed enum values.
+  Operation references permit only target; aggregate members can also declare
+  traits. Extra reference/member properties prevent selection, including empty
+  trait maps on plain references. Unrelated references and literal trait
+  payloads remain outside these property checks. Explicit
   enum strings must be nonempty, and `enumValue` applies only to enum/intEnum
   members, not to the enumeration's root shape or other shapes and references.
   The selector's implicit prelude is limited, and full trait/schema validation

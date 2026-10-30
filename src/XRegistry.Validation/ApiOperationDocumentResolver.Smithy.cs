@@ -154,9 +154,12 @@ public static partial class ApiOperationDocumentResolver
                     {
                         ValidationContext.Require(errors.ValueKind == JsonValueKind.Array,
                             path + "/errors", "document.errors", "Smithy operation errors must be an array.");
+                        var index = 0;
                         foreach (var target in errors.EnumerateArray())
                         {
-                            Reference(target, path + "/errors", depth, "structure", error: true);
+                            Reference(target, path + "/errors/" +
+                                (index++).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                                depth, "structure", error: true);
                         }
                     }
                     break;
@@ -625,7 +628,16 @@ public static partial class ApiOperationDocumentResolver
                 value.TryGetProperty("target", out var target) && target.ValueKind == JsonValueKind.String &&
                 IsSmithyShapeId(target.GetString()!), path, "document.target",
                 "A Smithy shape reference must have an absolute root target ID.");
-            Traits(value, path, depth, memberContainer: memberContainer);
+            foreach (var property in value.EnumerateObject())
+            {
+                var propertyPath = path + "/" + Escape(property.Name);
+                budget.Work(path: propertyPath);
+                ValidationContext.Require(property.Name == "target" ||
+                    memberContainer is not null && property.Name == "traits",
+                    propertyPath, "document.reference_property",
+                    "A Smithy shape reference permits only target; a member can also declare traits.");
+            }
+            if (memberContainer is not null) { Traits(value, path, depth, memberContainer: memberContainer); }
             Visit(value.GetProperty("target").GetString()!, depth + 1, expected, error);
         }
 
