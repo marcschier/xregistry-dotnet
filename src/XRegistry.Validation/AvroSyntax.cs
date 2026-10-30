@@ -9,8 +9,9 @@ namespace XRegistry.Validation;
 internal sealed class AvroSyntax(string format, ValidationContext context)
 {
     private readonly Dictionary<string, AvroType> _names = new(StringComparer.Ordinal);
-    private readonly Dictionary<AvroField, JsonElement> _defaults = [];
+    private readonly Dictionary<AvroField, (JsonElement Value, string Path)> _defaults = [];
     private readonly bool _enumDefaults = format.Equals("Avro/1.11.0", StringComparison.OrdinalIgnoreCase);
+    private readonly bool _protocol = format == "AvroProtocol/1.12.0";
     internal IReadOnlyDictionary<string, AvroType> NamedTypes => _names;
 
     internal static bool IsFormat(string format)
@@ -21,12 +22,57 @@ internal sealed class AvroSyntax(string format, ValidationContext context)
     {
         using var json = context.ReadJson(bytes);
         var schema = Read(json.RootElement, "", "$");
-        foreach (var (field, value) in _defaults)
-        {
-            Default(field.Type, value, "$/fields/" + field.Name + "/default", 1);
-        }
+        ValidateDefaults();
         validatedRoot?.Invoke(json.RootElement, schema);
         return schema;
+    }
+
+    internal void ReadProtocol(JsonElement root)
+    {
+        var protocol = root.GetProperty("protocol").GetString()!;
+        var lastDot = protocol.LastIndexOf('.');
+        var ns = lastDot >= 0 ? protocol[..lastDot]
+            : root.TryGetProperty("namespace", out var namespaceValue) ? namespaceValue.GetString()! : "";
+        if (root.TryGetProperty("types", out var types))
+        {
+            var index = 0;
+            foreach (var type in types.EnumerateArray())
+            {
+                Read(type, ns, "$/types/" + (index++).ToString(CultureInfo.InvariantCulture));
+            }
+        }
+        if (root.TryGetProperty("messages", out var messages))
+        {
+            foreach (var message in messages.EnumerateObject())
+            {
+                var path = SchemaJson.Path("$/messages", message.Name);
+                ReadFields(new("record"), message.Value.GetProperty("request"), ns, path + "/request");
+                Read(message.Value.GetProperty("response"), ns, path + "/response");
+                if (message.Value.TryGetProperty("errors", out var errors))
+                {
+                    var names = new HashSet<string>(StringComparer.Ordinal);
+                    var index = 0;
+                    foreach (var error in errors.EnumerateArray())
+                    {
+                        var errorPath = path + "/errors/" + (index++).ToString(CultureInfo.InvariantCulture);
+                        var type = Read(error, ns, errorPath);
+                        ValidationContext.Require(type.IsError, errorPath, "avro.error",
+                            "A declared protocol error must resolve to an error type.");
+                        ValidationContext.Require(names.Add(type.Name!), errorPath, "avro.union",
+                            "A declared error union cannot repeat a fullname.");
+                    }
+                }
+            }
+        }
+        ValidateDefaults();
+    }
+
+    private void ValidateDefaults()
+    {
+        foreach (var (field, value) in _defaults)
+        {
+            Default(field.Type, value.Value, value.Path, 1);
+        }
     }
 
     private AvroType Read(JsonElement schema, string ns, string path)
@@ -63,12 +109,14 @@ internal sealed class AvroSyntax(string format, ValidationContext context)
         {
             SchemaJson.String(documentation, path + "/doc");
         }
+        var isError = _protocol && kind == "error";
+        if (isError) { kind = "record"; }
         if (kind is not ("record" or "enum" or "fixed" or "array" or "map"))
         {
             return Reference(kind, ns, path + "/type");
         }
 
-        var type = new AvroType(kind);
+        var type = new AvroType(kind) { IsError = isError };
         if (kind is "record" or "enum" or "fixed")
         {
             var name = SchemaJson.String(SchemaJson.Member(schema, "name", path), path + "/name");
@@ -97,34 +145,7 @@ internal sealed class AvroSyntax(string format, ValidationContext context)
         {
             case "record":
                 var fields = SchemaJson.Member(schema, "fields", path);
-                SchemaJson.Array(fields, path + "/fields");
-                foreach (var fieldValue in fields.EnumerateArray())
-                {
-                    var fieldPath = path + "/fields/" + type.Fields.Count.ToString(CultureInfo.InvariantCulture);
-                    SchemaJson.Object(fieldValue, fieldPath);
-                    var name = SchemaJson.String(SchemaJson.Member(fieldValue, "name", fieldPath), fieldPath + "/name");
-                    ValidationContext.Require(SchemaJson.Identifier(name), fieldPath + "/name", "avro.field_name", "Invalid record field name.");
-                    var fieldType = Read(SchemaJson.Member(fieldValue, "type", fieldPath), ns, fieldPath + "/type");
-                    var field = new AvroField(name, fieldType, fieldValue.TryGetProperty("default", out var defaultValue));
-                    ValidationContext.Require(type.Fields.TryAdd(name, field), fieldPath, "avro.duplicate_field", "Record field names must be unique.");
-                    if (field.HasDefault)
-                    {
-                        _defaults.Add(field, defaultValue);
-                    }
-                    if (fieldValue.TryGetProperty("aliases", out var aliases))
-                    {
-                        field.Aliases.AddRange(SchemaJson.Strings(aliases, fieldPath + "/aliases"));
-                    }
-                    if (fieldValue.TryGetProperty("doc", out var doc))
-                    {
-                        SchemaJson.String(doc, fieldPath + "/doc");
-                    }
-                    if (fieldValue.TryGetProperty("order", out var order))
-                    {
-                        ValidationContext.Require(SchemaJson.String(order, fieldPath + "/order") is "ascending" or "descending" or "ignore",
-                            fieldPath + "/order", "avro.order", "Unknown field ordering.");
-                    }
-                }
+                ReadFields(type, fields, ns, path + "/fields");
                 break;
             case "enum":
                 var symbols = SchemaJson.Member(schema, "symbols", path);
@@ -133,7 +154,7 @@ internal sealed class AvroSyntax(string format, ValidationContext context)
                     ValidationContext.Require(SchemaJson.Identifier(symbol), path + "/symbols", "avro.symbol", "Invalid enum symbol.");
                     type.Symbols.Add(symbol);
                 }
-                if (_enumDefaults && schema.TryGetProperty("default", out var enumDefault))
+                if ((_enumDefaults || _protocol) && schema.TryGetProperty("default", out var enumDefault))
                 {
                     type.EnumDefault = SchemaJson.String(enumDefault, path + "/default");
                     ValidationContext.Require(type.Symbols.Contains(type.EnumDefault), path + "/default", "avro.default", "An enum default must name a declared symbol.");
@@ -153,6 +174,39 @@ internal sealed class AvroSyntax(string format, ValidationContext context)
                 break;
         }
         return type;
+    }
+
+    private void ReadFields(AvroType type, JsonElement fields, string ns, string path)
+    {
+        SchemaJson.Array(fields, path);
+        foreach (var fieldValue in fields.EnumerateArray())
+        {
+            context.Work(path: path);
+            var fieldPath = path + "/" + type.Fields.Count.ToString(CultureInfo.InvariantCulture);
+            SchemaJson.Object(fieldValue, fieldPath);
+            var name = SchemaJson.String(SchemaJson.Member(fieldValue, "name", fieldPath), fieldPath + "/name");
+            ValidationContext.Require(SchemaJson.Identifier(name), fieldPath + "/name", "avro.field_name", "Invalid record field name.");
+            var fieldType = Read(SchemaJson.Member(fieldValue, "type", fieldPath), ns, fieldPath + "/type");
+            var field = new AvroField(name, fieldType, fieldValue.TryGetProperty("default", out var defaultValue));
+            ValidationContext.Require(type.Fields.TryAdd(name, field), fieldPath, "avro.duplicate_field", "Record field names must be unique.");
+            if (field.HasDefault)
+            {
+                _defaults.Add(field, (defaultValue, fieldPath + "/default"));
+            }
+            if (fieldValue.TryGetProperty("aliases", out var aliases))
+            {
+                field.Aliases.AddRange(SchemaJson.Strings(aliases, fieldPath + "/aliases"));
+            }
+            if (fieldValue.TryGetProperty("doc", out var doc))
+            {
+                SchemaJson.String(doc, fieldPath + "/doc");
+            }
+            if (fieldValue.TryGetProperty("order", out var order))
+            {
+                ValidationContext.Require(SchemaJson.String(order, fieldPath + "/order") is "ascending" or "descending" or "ignore",
+                    fieldPath + "/order", "avro.order", "Unknown field ordering.");
+            }
+        }
     }
 
     private AvroType Reference(string name, string ns, string path)
@@ -195,7 +249,26 @@ internal sealed class AvroSyntax(string format, ValidationContext context)
         switch (type.Kind)
         {
             case "union":
-                Default(type.Branches[0], value, path, depth + 1);
+                if (!_protocol)
+                {
+                    Default(type.Branches[0], value, path, depth + 1);
+                    break;
+                }
+                foreach (var branch in type.Branches)
+                {
+                    try
+                    {
+                        Default(branch, value, path, depth + 1);
+                        return;
+                    }
+                    catch (ValidationFailure failure) when (failure.Status == DocumentValidationStatus.Invalid &&
+                        failure.Diagnostic.Code == "avro.default")
+                    {
+                        // Avro 1.12 defaults use the first matching union schema.
+                    }
+                }
+                ValidationContext.Fail(DocumentValidationStatus.Invalid, path, "avro.default",
+                    "The default does not conform to any union branch.");
                 break;
             case "array":
                 foreach (var item in value.EnumerateArray())
@@ -214,8 +287,9 @@ internal sealed class AvroSyntax(string format, ValidationContext context)
                 {
                     if (!value.TryGetProperty(field.Name, out var fieldValue))
                     {
-                        ValidationContext.Require(_defaults.TryGetValue(field, out fieldValue), SchemaJson.Path(path, field.Name),
+                        ValidationContext.Require(_defaults.TryGetValue(field, out var fieldDefault), SchemaJson.Path(path, field.Name),
                             "avro.default", "A record default is missing a field with no default.");
+                        fieldValue = fieldDefault.Value;
                     }
                     Default(field.Type, fieldValue, SchemaJson.Path(path, field.Name), depth + 1);
                 }
@@ -229,6 +303,7 @@ internal sealed class AvroSyntax(string format, ValidationContext context)
 
 internal sealed class AvroType(string kind)
 {
+    internal bool IsError { get; init; }
     internal string Kind { get; } = kind;
     internal string? Name { get; set; }
     internal string DeclarationPath { get; set; } = "$";

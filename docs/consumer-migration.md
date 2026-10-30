@@ -101,8 +101,7 @@ member of `messages`. An absent or empty `messages` object has no selectable
 operations; an Avro data schema without a protocol declaration is rejected.
 The returned object preserves the native request, response, declared errors and
 one-way flag. A one-way message requires a null response and no declared errors.
-The resolver checks protocol/message declarations, not complete Avro schemas,
-name binding or defaults. Protocol names follow Avro fullname syntax; a qualified
+Protocol names follow Avro fullname syntax; a qualified
 name supplies its own namespace. A `types` array contains named record, error,
 enum or fixed declarations with unique effective fullnames. Qualified type names
 likewise override a supplied namespace; unqualified names inherit it. Names that
@@ -113,10 +112,28 @@ is a string, `order` is `ascending`, `descending` or `ignore`, and aliases are
 an array of strings. Parameter defaults and native schema values are preserved,
 not inferred or rewritten. Malformed declarations in another message prevent
 selection even after an exact match.
+
+The shared Avro parser binds all protocol named types and message schemas in
+declaration order. Forward references fail; a record can refer to itself after
+its name is declared. Request lists use anonymous-record field rules, and named
+schemas declared within them remain visible to later declarations. Response and
+error schemas use the same namespace rules. Declared errors must resolve to
+distinct error definitions, not ordinary records or the implicit system-error
+string branch. Unused malformed types and invalid later message schemas prevent
+selection; an unknown message does not bypass schema checks.
+
+Field defaults are checked against the bound schema, including nested records,
+containers, enum symbols, byte/fixed values and numeric ranges. Avro 1.12 union
+defaults use the first matching branch; the existing Avro 1.8.2 and 1.11.0 data
+schema profiles retain their first-branch rule. Recursive default expansion and
+schema work use finite shared budgets. Enum definition defaults must name a
+declared symbol. Logical-type annotations report `Unsupported` under the current
+schema policy, not successful validation or a malformed-protocol result.
 Named types remain in the caller's original protocol;
 selection does not inline them or synthesize the implicit system-error branch.
 Avro JSON metadata, including a member named `$ref`, never triggers dependency
-acquisition. This does not add Avro IDL parsing or full protocol validation.
+acquisition. This does not add Avro IDL parsing, complete logical-type support
+or full protocol qualification. `SupportsApiDocumentValidation` remains false.
 
 For `Smithy/2.0` with `application/json`, `#operations/example%23Get` selects
 the exact `example#Get` operation shape in a

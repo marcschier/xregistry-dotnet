@@ -256,7 +256,25 @@ public static partial class ApiOperationDocumentResolver
             }
             if (format == "AvroProtocol/1.12.0")
             {
-                return ResolveAvroMessage(root, reference.Selector.Tokens[^1], documentUri, cancellationToken);
+                var selection = ResolveAvroMessage(root, reference.Selector.Tokens[^1], documentUri, cancellationToken);
+                if (selection.Status is not (ApiOperationResolutionStatus.Selected or ApiOperationResolutionStatus.NotFound))
+                {
+                    return selection;
+                }
+                try
+                {
+                    new AvroSyntax(format, budget).ReadProtocol(root);
+                }
+                catch (ValidationFailure failure)
+                {
+                    return new(failure.Status switch
+                    {
+                        DocumentValidationStatus.Unsupported => ApiOperationResolutionStatus.Unsupported,
+                        DocumentValidationStatus.Indeterminate => ApiOperationResolutionStatus.Indeterminate,
+                        _ => ApiOperationResolutionStatus.Invalid
+                    }, failure.Diagnostic);
+                }
+                return selection;
             }
             using var references = new ReferenceContext(parsed, documentUri, resolveReference, budget);
             if (format == "OpenRPC/1.4")

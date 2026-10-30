@@ -132,10 +132,12 @@ vocabulary/source mapping. It does not supply their implementation.
   OpenAPI/Swagger, OpenRPC, Avro Protocol and assembled Smithy JSON selectors
   do not establish full format validation, YAML support, or gRPC, Thrift,
   Avro IDL, GraphQL, WSDL or Smithy IDL/model-assembly support. Avro message
-  selection preserves the declared native message but does not check all schema
-  definitions, name binding or defaults. It checks protocol/type declaration
-  names, effective namespace collisions and request-field declaration shapes
-  across messages before returning a selection.
+  selection preserves the declared native message. It checks protocol/type
+  declaration names, effective namespace collisions and request fields, then
+  binds named request/response/error schemas and checks defaults in native
+  declaration order across the complete protocol. Avro 1.12 union defaults
+  use the first matching branch. Logical-type annotations remain unsupported;
+  complete protocol validation and qualification remain open.
   OpenAPI 3.1 selection includes webhook operation IDs and inline webhook method
   pointers, with ambiguity checking across paths and webhooks. OpenAPI selection
   also traverses nested callbacks and caller-supplied Callback references within

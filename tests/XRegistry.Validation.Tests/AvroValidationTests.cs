@@ -48,4 +48,28 @@ public class AvroValidationTests
             Encoding.UTF8.GetBytes("""{"type":"record","name":"R","fields":[{"name":"id","type":"long"}]}"""));
         await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
     }
+
+    [Test]
+    [Arguments("Avro/1.8.2")]
+    [Arguments("Avro/1.11.0")]
+    public async Task OlderDataSchemaProfilesRetainFirstBranchUnionDefaultValidation(string format)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync(format, """
+            {"type":"record","name":"R","fields":[
+              {"name":"id","type":["null","string"],"default":"later-branch"}]}
+            """u8.ToArray());
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("avro.default");
+    }
+
+    [Test]
+    [Arguments("Avro/1.8.2")]
+    [Arguments("Avro/1.11.0")]
+    public async Task ProtocolErrorDefinitionsDoNotBecomeDataSchemaTypes(string format)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync(format,
+            """{"type":"error","name":"Denied","fields":[]}"""u8.ToArray());
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("avro.unknown_name");
+    }
 }
