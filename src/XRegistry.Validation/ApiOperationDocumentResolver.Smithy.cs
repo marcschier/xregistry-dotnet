@@ -1341,7 +1341,8 @@ public static partial class ApiOperationDocumentResolver
                     "smithy.api#unitType" => memberContainer is null && kind == "structure" &&
                         sourceId == "smithy.api#Unit",
                     "smithy.api#auth" => memberContainer is null && kind is "service" or "operation",
-                    "smithy.api#authDefinition" => memberContainer is null && kind == "structure" &&
+                    "smithy.api#authDefinition" or "smithy.api#protocolDefinition" =>
+                        memberContainer is null && kind == "structure" &&
                         traits.TryGetProperty("smithy.api#trait", out _),
                     "smithy.api#retryable" => memberContainer is null && kind == "structure" &&
                         traits.TryGetProperty("smithy.api#error", out _),
@@ -1449,13 +1450,23 @@ public static partial class ApiOperationDocumentResolver
                         }
                         continue;
                     case "smithy.api#authDefinition":
+                    case "smithy.api#protocolDefinition":
+                        var isProtocolDefinition = trait.Name == "smithy.api#protocolDefinition";
+                        var requiredTraitCode = isProtocolDefinition ?
+                            "document.protocol_required_trait" : "document.auth_required_trait";
                         ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
-                            "document.trait_value", "The Smithy authDefinition trait requires an object value.");
+                            "document.trait_value", "A Smithy authentication or protocol definition requires an object value.");
+                        if (isProtocolDefinition && trait.Value.TryGetProperty("noInlineDocumentSupport", out var noInline))
+                        {
+                            ValidationContext.Require(noInline.ValueKind is JsonValueKind.True or JsonValueKind.False,
+                                traitPath + "/noInlineDocumentSupport", "document.trait_value",
+                                "The Smithy protocol inline-document support flag requires a Boolean value.");
+                        }
                         if (trait.Value.TryGetProperty("traits", out var requiredTraits))
                         {
                             ValidationContext.Require(requiredTraits.ValueKind == JsonValueKind.Array,
                                 traitPath + "/traits", "document.trait_value",
-                                "Smithy authentication required traits must be an array of trait shape IDs.");
+                                "Smithy authentication or protocol required traits must be an array of trait shape IDs.");
                             var requiredIndex = 0;
                             foreach (var requiredTrait in requiredTraits.EnumerateArray())
                             {
@@ -1464,13 +1475,13 @@ public static partial class ApiOperationDocumentResolver
                                 budget.Work(path: requiredPath);
                                 ValidationContext.Require(requiredTrait.ValueKind == JsonValueKind.String &&
                                     IsSmithyShapeId(requiredTrait.GetString()!), requiredPath,
-                                    "document.auth_required_trait", "An authentication dependency requires an absolute trait shape ID.");
+                                    requiredTraitCode, "An authentication or protocol dependency requires an absolute trait shape ID.");
                                 var requiredId = requiredTrait.GetString()!;
                                 if (shapes.TryGetProperty(requiredId, out var requiredShape))
                                 {
                                     ValidationContext.Require(TryTrait(requiredShape, "smithy.api#trait", out _),
-                                        requiredPath, "document.auth_required_trait",
-                                        "An authentication dependency must refer to a trait definition.");
+                                        requiredPath, requiredTraitCode,
+                                        "An authentication or protocol dependency must refer to a trait definition.");
                                 }
                                 Visit(requiredId, depth + 1, traitDefinition: true, sourceId: sourceId,
                                     referencePath: requiredPath);

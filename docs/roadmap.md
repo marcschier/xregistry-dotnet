@@ -217,6 +217,10 @@ vocabulary/source mapping. It does not supply their implementation.
   unresolved without acquisition. Complete implicit required-trait coverage,
   enclosing-service scheme application/inheritance and custom application
   schemas remain unvalidated.
+  Reached `protocolDefinition` declarations share the structure-trait target
+  and required-trait reference checks; `noInlineDocumentSupport` requires a
+  Boolean. Protocol selection and the service-closure document prohibition
+  remain unvalidated.
   `optionalAuth` checks operation applicability and object annotations without
   copying service schemes, inferring disabled authentication or changing runtime
   enforcement. Effective service authentication remains unvalidated.

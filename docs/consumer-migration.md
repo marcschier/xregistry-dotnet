@@ -516,6 +516,14 @@ resolver's prelude registry. Selection does not establish that schemes are
 applied to every enclosing service, compute inherited authentication priorities
 or validate complete custom trait application schemas.
 
+Reached `protocolDefinition` declarations likewise require structure traits and
+object values. Their optional `traits` array identifies required trait
+definitions, with the same dependency traversal and no uniqueness restriction.
+The optional `noInlineDocumentSupport` property requires a Boolean value.
+Operation selection does not infer a service's protocol from these declarations
+or enforce that protocol's service-wide prohibition on document shapes. Those
+checks require the enclosing service closure and remain unvalidated.
+
 The operation-only `optionalAuth` annotation requires an object value.
 Selection preserves that declaration without copying enclosing-service schemes,
 inferring an empty `auth` list or changing authentication behavior. Supporting

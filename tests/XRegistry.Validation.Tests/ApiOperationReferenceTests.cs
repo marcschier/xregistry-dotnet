@@ -8924,6 +8924,165 @@ public class ApiOperationReferenceTests
         await Assert.That(unresolved.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
     }
 
+    [Test]
+    [Arguments("{}")]
+    [Arguments("""{"traits":[]}""")]
+    [Arguments("""{"traits":["example#Dependency"]}""")]
+    [Arguments("""{"traits":["example#Dependency","example#Dependency"],"noInlineDocumentSupport":false}""")]
+    [Arguments("""{"traits":["example#Protocol"],"noInlineDocumentSupport":true}""")]
+    public async Task SmithyJsonProtocolDefinitionPreservesDeclarationsWithoutServiceClosureInference(string value)
+    {
+        var document = SmithyProtocolDocument();
+        document["shapes"]!["example#Protocol"]!["traits"]!["smithy.api#protocolDefinition"] = JsonNode.Parse(value);
+        document["shapes"]!["example#Input"]!["members"]!["document"] =
+            JsonNode.Parse("""{"target":"smithy.api#Document"}""");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
+    [Test]
+    [Arguments("null", "document.trait_value", "")]
+    [Arguments("[]", "document.trait_value", "")]
+    [Arguments("true", "document.trait_value", "")]
+    [Arguments("""{"noInlineDocumentSupport":null}""", "document.trait_value", "/noInlineDocumentSupport")]
+    [Arguments("""{"noInlineDocumentSupport":0}""", "document.trait_value", "/noInlineDocumentSupport")]
+    [Arguments("""{"noInlineDocumentSupport":"false"}""", "document.trait_value", "/noInlineDocumentSupport")]
+    [Arguments("""{"traits":null}""", "document.trait_value", "/traits")]
+    [Arguments("""{"traits":{}}""", "document.trait_value", "/traits")]
+    [Arguments("""{"traits":[false]}""", "document.protocol_required_trait", "/traits/0")]
+    [Arguments("""{"traits":["relative"]}""", "document.protocol_required_trait", "/traits/0")]
+    [Arguments("""{"traits":["example#Dependency$member"]}""", "document.protocol_required_trait", "/traits/0")]
+    public async Task SmithyJsonProtocolDefinitionRejectsMalformedDeclarations(string value, string diagnostic, string suffix)
+    {
+        var document = SmithyProtocolDocument();
+        document["shapes"]!["example#Protocol"]!["traits"]!["smithy.api#protocolDefinition"] = JsonNode.Parse(value);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(diagnostic);
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Protocol/traits/smithy.api#protocolDefinition" + suffix);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("string")]
+    [Arguments("integer")]
+    [Arguments("list")]
+    [Arguments("map")]
+    [Arguments("union")]
+    public async Task SmithyJsonProtocolDefinitionRequiresAStructureTrait(string kind)
+    {
+        var document = SmithyProtocolDocument();
+        var markers = document["shapes"]!["example#Protocol"]!["traits"]!.DeepClone();
+        document["shapes"]!["example#Protocol"] = SmithyHttpBindingTarget(kind);
+        document["shapes"]!["example#Protocol"]!["traits"] = markers;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Protocol/traits/smithy.api#protocolDefinition");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("structure")]
+    [Arguments("member")]
+    public async Task SmithyJsonProtocolDefinitionRejectsNonTraitTargets(string location)
+    {
+        var document = SmithyEndpointDocument();
+        var target = location == "structure" ? document["shapes"]!["example#Input"]! :
+            document["shapes"]!["example#Input"]!["members"]!["id"]!;
+        target["traits"] ??= new JsonObject();
+        target["traits"]!["smithy.api#protocolDefinition"] = new JsonObject();
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonProtocolDefinitionTraversesRequiredTraitSchemasAndRejectsDataDependencies()
+    {
+        var document = SmithyProtocolDocument();
+        document["shapes"]!["example#Dependency"]!["traits"]!["smithy.api#documentation"] = false;
+        var invalidSchema = ResolveSmithy(document.ToJsonString());
+        await Assert.That(invalidSchema.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(invalidSchema.Diagnostic!.Code).IsEqualTo("document.trait_value");
+        await Assert.That(invalidSchema.Diagnostic.Path).IsEqualTo("$/shapes/example#Dependency/traits/smithy.api#documentation");
+        document["shapes"]!["example#Dependency"]!["traits"]!.AsObject().Clear();
+        var nonTrait = ResolveSmithy(document.ToJsonString());
+        await Assert.That(nonTrait.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(nonTrait.Diagnostic!.Code).IsEqualTo("document.protocol_required_trait");
+        await Assert.That(nonTrait.Diagnostic.Path).IsEqualTo("$/shapes/example#Protocol/traits/smithy.api#protocolDefinition/traits/0");
+        await Assert.That(nonTrait.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonProtocolDefinitionRetainsPrivateAccessChecks()
+    {
+        var document = SmithyProtocolDocument();
+        document["shapes"]!["other#Dependency"] = JsonNode.Parse("""
+            {"type":"string","traits":{"smithy.api#trait":{},"smithy.api#private":{}}}
+            """);
+        document["shapes"]!["example#Protocol"]!["traits"]!["smithy.api#protocolDefinition"] =
+            JsonNode.Parse("""{"traits":["other#Dependency"]}""");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.private_access");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Protocol/traits/smithy.api#protocolDefinition/traits/0");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("example#Missing")]
+    [Arguments("example#dependency")]
+    public async Task SmithyJsonProtocolDefinitionRetainsMissingAndExactCaseDependenciesWithoutAcquisition(string dependency)
+    {
+        var document = SmithyProtocolDocument();
+        document["shapes"]!["example#Protocol"]!["traits"]!["smithy.api#protocolDefinition"] =
+            new JsonObject { ["traits"] = new JsonArray(JsonValue.Create(dependency)) };
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Protocol trait IDs cannot be acquired."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("dependency.unresolved");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/" + dependency);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonProtocolDefinitionIgnoresUnrelatedShapesAndLiteralValues()
+    {
+        var document = SmithyProtocolDocument();
+        document["shapes"]!["example#Unused"] = JsonNode.Parse("""
+            {"type":"structure","traits":{"smithy.api#protocolDefinition":false}}
+            """);
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#examples"] = JsonNode.Parse("""
+            [{"title":"literal metadata","input":{"smithy.api#protocolDefinition":{"traits":["example#Missing"]}}}]
+            """);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+    }
+
+    private static JsonNode SmithyProtocolDocument()
+    {
+        var document = SmithyAuthenticationDocument();
+        document["shapes"]!["example#Scheme"]!["traits"]!["smithy.api#authDefinition"] =
+            JsonNode.Parse("""{"traits":["example#Protocol"]}""");
+        document["shapes"]!["example#Protocol"] = JsonNode.Parse("""
+            {"type":"structure","traits":{"smithy.api#trait":{"selector":"service"},
+             "smithy.api#protocolDefinition":{"traits":["example#Dependency"]}}}
+            """);
+        document["shapes"]!["example#Dependency"] = JsonNode.Parse("""
+            {"type":"string","traits":{"smithy.api#trait":{}}}
+            """);
+        return document;
+    }
+
     private static JsonNode SmithyAuthenticationDocument()
     {
         var document = SmithyEndpointDocument();
