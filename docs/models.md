@@ -45,6 +45,12 @@ valid media behavior: use `EndpointDefinition.MaterializeMedia` or
 `RegistryDomainRules.ValidateMediaEndpointMetadata` for the draft's
 single producer/consumer role, message-association and protocol-specific rules.
 Successful metadata validation does not establish receiver compatibility.
+Tests across all eleven Media protocols check the common option types,
+deployment defaults and explicit flags, ordered addresses, authorization
+records and open extensions through both Media entry points. Absent or empty
+address lists defer network configuration; an authored address record without a
+URI still fails when materialized. Authorization metadata remains discovery
+information, not credentials or evidence that authorization succeeded.
 
 SPEC-008 aligns Message declaration names and shapes with the domain prose:
 `basemessage`, HTTP `status` and string-map `query`, NATS `reply-to`, optional

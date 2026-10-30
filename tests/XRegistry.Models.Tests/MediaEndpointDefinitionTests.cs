@@ -577,6 +577,136 @@ public class MediaEndpointDefinitionTests
         await Assert.That(failure.Diagnostic.Path).IsEqualTo("/protocoloptions/" + name);
     }
 
+    [Test]
+    [Arguments("SRT")]
+    [Arguments("WebRTC")]
+    [Arguments("RTSP/1.0")]
+    [Arguments("RTSP/2.0")]
+    [Arguments("RTP/2")]
+    [Arguments("MPEGTS-UDP")]
+    [Arguments("RTMP/1.0")]
+    [Arguments("HLS")]
+    [Arguments("DASH")]
+    [Arguments("RIST-Simple/2020")]
+    [Arguments("RIST-Main/2024")]
+    public async Task InheritedMediaOptionShapesRejectInvalidJsonKindsAtExactPaths(string protocol)
+    {
+        var definitions = BuiltInRegistryModels.Compile(RegistryModelKind.Media).Groups["endpoints"]
+            .Attributes["protocol"].IfValues[protocol]["protocoloptions"].Attributes;
+        await Assert.That(definitions["deployed"].Type).IsEqualTo(RegistryValueType.Boolean);
+        await Assert.That(definitions["authorization"].Type).IsEqualTo(RegistryValueType.Array);
+        foreach (var name in new[] { "type", "mechanism", "resourceuri", "authorityuri" })
+        {
+            await Assert.That(definitions["authorization"].Item!.Attributes[name].Type)
+                .IsEqualTo(name.EndsWith("uri", StringComparison.Ordinal) ? RegistryValueType.Uri : RegistryValueType.String);
+        }
+        foreach (var invalid in new[] { "null", "\"true\"", "0", "[]", "{}" })
+        {
+            await RejectOption("deployed", invalid, "/protocoloptions/deployed");
+        }
+        foreach (var name in new[] { "endpoints", "authorization" })
+        {
+            foreach (var invalid in new[] { "null", "true", "false", "42", "\"value\"", "{}" })
+            {
+                await RejectOption(name, invalid, "/protocoloptions/" + name);
+            }
+            foreach (var invalid in new[] { "null", "true", "false", "42", "\"value\"", "[]" })
+            {
+                await RejectOption(name, "[" + invalid + "]", "/protocoloptions/" + name + "/0");
+            }
+        }
+        foreach (var invalid in new[] { "null", "true", "false", "42", "[]", "{}" })
+        {
+            await RejectOption("endpoints", "[{\"uri\":" + invalid + "}]", "/protocoloptions/endpoints/0/uri");
+            foreach (var name in new[] { "type", "mechanism", "resourceuri", "authorityuri" })
+            {
+                await RejectOption("authorization", "[{\"" + name + "\":" + invalid + "}]",
+                    "/protocoloptions/authorization/0/" + name);
+            }
+        }
+
+        async Task RejectOption(string name, string json, string path)
+        {
+            var input = JsonNode.Parse(ValidEndpoint(protocol, "consumer").RootElement.GetRawText())!.AsObject();
+            input["protocoloptions"]![name] = JsonNode.Parse(json);
+            var metadata = RegistryJson.Parse(input.ToJsonString());
+            await Rejects(metadata, path);
+            await RejectsCanonicalMediaMetadata(metadata, path);
+        }
+    }
+
+    [Test]
+    [Arguments("SRT")]
+    [Arguments("WebRTC")]
+    [Arguments("RTSP/1.0")]
+    [Arguments("RTSP/2.0")]
+    [Arguments("RTP/2")]
+    [Arguments("MPEGTS-UDP")]
+    [Arguments("RTMP/1.0")]
+    [Arguments("HLS")]
+    [Arguments("DASH")]
+    [Arguments("RIST-Simple/2020")]
+    [Arguments("RIST-Main/2024")]
+    public async Task InheritedMediaOptionsPreservePreferenceAndDeferAuthorizationWithoutLivenessClaims(string protocol)
+    {
+        var original = ValidEndpoint(protocol, "consumer");
+        var defaults = EndpointDefinition.MaterializeMedia(original);
+        await Assert.That(defaults.IsDeployed).IsTrue();
+        await Assert.That(defaults.Authored.RootElement.GetProperty("protocoloptions").TryGetProperty("deployed", out _)).IsFalse();
+        foreach (var deployed in new[] { false, true })
+        {
+            var input = JsonNode.Parse(original.RootElement.GetRawText())!.AsObject();
+            var options = input["protocoloptions"]!.AsObject();
+            options["deployed"] = deployed;
+            var first = options["endpoints"]![0]!.DeepClone().AsObject();
+            first["vendor-rank"] = new JsonObject { ["preferred"] = true };
+            var second = first.DeepClone().AsObject();
+            second["uri"] = first["uri"]!.GetValue<string>().Replace("media.example.test", "backup.example.test", StringComparison.Ordinal);
+            options["endpoints"] = new JsonArray(first, second);
+            options["authorization"] = JsonNode.Parse("""
+                [{"type":"SASL","mechanism":"VendorMechanism","resourceuri":"urn:media:camera","authorityuri":"../authorization",
+                  "vendor-metadata":{"rank":1}},
+                 {"type":"VendorAuthorization","authorityuri":"/custom/authorization"}]
+                """);
+            options["vendor-metadata"] = new JsonArray(1, "extension", false);
+            var metadata = RegistryJson.Parse(input.ToJsonString());
+            await Assert.That(() => RegistryDomainRules.ValidateMediaEndpointMetadata(metadata.RootElement)).ThrowsNothing();
+            var result = EndpointDefinition.MaterializeMedia(metadata);
+            await Assert.That(result.IsDeployed).IsEqualTo(deployed);
+            foreach (var name in new[] { "endpoints", "authorization", "vendor-metadata" })
+            {
+                await Assert.That(result.GetProtocolOption(name).GetRawText())
+                    .IsEqualTo(metadata.RootElement.GetProperty("protocoloptions").GetProperty(name).GetRawText());
+            }
+            await Assert.That(string.Join(",", result.DeferredChecks.Where(static check => check.Code == "authorization_configuration")
+                .Select(static check => check.Path)))
+                .IsEqualTo("/protocoloptions/authorization/0,/protocoloptions/authorization/1");
+            await Assert.That(result.DeferredChecks.Any(static check => check.Code == "extension_option" &&
+                check.Path == "/protocoloptions/vendor-metadata")).IsTrue();
+        }
+        var empty = JsonNode.Parse(original.RootElement.GetRawText())!.AsObject();
+        empty["protocoloptions"]!["endpoints"] = new JsonArray();
+        empty["protocoloptions"]!["authorization"] = new JsonArray();
+        var emptyMetadata = RegistryJson.Parse(empty.ToJsonString());
+        await Assert.That(() => RegistryDomainRules.ValidateMediaEndpointMetadata(emptyMetadata.RootElement)).ThrowsNothing();
+        var emptyResult = EndpointDefinition.MaterializeMedia(emptyMetadata);
+        await Assert.That(emptyResult.DeferredChecks.Any(static check => check.Code == "endpoint_address")).IsTrue();
+        await Assert.That(emptyResult.DeferredChecks.Any(static check => check.Code == "authorization_configuration")).IsFalse();
+        empty["protocoloptions"]!.AsObject().Remove("endpoints");
+        empty["protocoloptions"]!.AsObject().Remove("authorization");
+        var absentMetadata = RegistryJson.Parse(empty.ToJsonString());
+        await Assert.That(() => RegistryDomainRules.ValidateMediaEndpointMetadata(absentMetadata.RootElement)).ThrowsNothing();
+        var absentResult = EndpointDefinition.MaterializeMedia(absentMetadata);
+        await Assert.That(absentResult.GetProtocolOption("endpoints").ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        await Assert.That(absentResult.GetProtocolOption("authorization").ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        await Assert.That(absentResult.DeferredChecks.Any(static check => check.Code == "endpoint_address")).IsTrue();
+        await Assert.That(absentResult.DeferredChecks.Any(static check => check.Code == "authorization_configuration")).IsFalse();
+        empty["protocoloptions"]!["endpoints"] = new JsonArray(new JsonObject { ["vendor-address"] = "not-a-network-uri" });
+        var missingUri = RegistryJson.Parse(empty.ToJsonString());
+        await Assert.That(() => RegistryDomainRules.ValidateMediaEndpointMetadata(missingUri.RootElement)).ThrowsNothing();
+        await Rejects(missingUri, "/protocoloptions/endpoints/0/uri");
+    }
+
     private static JsonDocument CanonicalMediaVectors() => ReadCanonicalMediaSource("MediaValidationVectors",
         "F140A1F1F38190ED87E83579E7207A2492DB44CE1B7C9934081E85C25484B260", 2270);
 
