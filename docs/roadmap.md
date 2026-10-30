@@ -209,6 +209,9 @@ vocabulary/source mapping. It does not supply their implementation.
   `longPoll` requires an operation object annotation with a positive signed
   32-bit integer `timeoutMillis`, checked exactly without rounding. The check
   does not execute polling or modify request timeout configuration.
+  `optionalAuth` checks operation applicability and object annotations without
+  copying service schemes, inferring disabled authentication or changing runtime
+  enforcement. Effective service authentication remains unvalidated.
   `unstable` checks object declarations and optional string `featureId` values
   with a 100-Unicode-scalar limit, without normalization or shape acquisition.
   Enclosing-service `unstableFeatures` membership, generated warnings and

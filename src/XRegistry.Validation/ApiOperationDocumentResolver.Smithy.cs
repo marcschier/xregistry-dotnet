@@ -1340,7 +1340,8 @@ public static partial class ApiOperationDocumentResolver
                         traits.TryGetProperty("smithy.api#error", out _),
                     "smithy.api#httpError" => memberContainer is null && kind == "structure" &&
                         traits.TryGetProperty("smithy.api#error", out _),
-                    "smithy.api#http" or "smithy.api#endpoint" or "smithy.api#httpChecksumRequired" =>
+                    "smithy.api#http" or "smithy.api#endpoint" or "smithy.api#httpChecksumRequired" or
+                        "smithy.api#optionalAuth" =>
                         memberContainer is null && kind == "operation",
                     "smithy.api#hostLabel" => memberContainer == "structure",
                     "smithy.api#httpLabel" or "smithy.api#httpPayload" or "smithy.api#httpHeader" or
@@ -1748,6 +1749,7 @@ public static partial class ApiOperationDocumentResolver
                         continue;
                     case "smithy.api#required":
                     case "smithy.api#httpChecksumRequired":
+                    case "smithy.api#optionalAuth":
                     case "smithy.api#httpPayload":
                     case "smithy.api#streaming":
                     case "smithy.api#requiresLength":

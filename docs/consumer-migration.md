@@ -499,6 +499,13 @@ including structures outside an event stream, without serializing events or
 choosing a framing protocol. Literal example content and unrelated event
 definitions remain outside the selected closure.
 
+The operation-only `optionalAuth` annotation requires an object value.
+Selection preserves that declaration without copying enclosing-service schemes,
+inferring an empty `auth` list or changing authentication behavior. Supporting
+both authenticated and unauthenticated invocation is distinct from disabling
+authentication. Effective service authentication and runtime enforcement remain
+outside this selector.
+
 The `unstable` trait requires an object on reached shapes and members.
 Its optional `featureId` must be a string of at most 100 Unicode scalar values;
 supplementary characters count once and combining characters are not normalized.

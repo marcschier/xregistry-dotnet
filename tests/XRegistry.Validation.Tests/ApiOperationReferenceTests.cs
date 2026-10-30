@@ -8564,6 +8564,111 @@ public class ApiOperationReferenceTests
         await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
     }
 
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task SmithyJsonOptionalAuthPreservesOperationAnnotationsWithoutInventingAuthenticationSchemes(bool servicePresent)
+    {
+        var document = SmithyEndpointDocument();
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#optionalAuth"] = new JsonObject();
+        if (servicePresent)
+        {
+            document["shapes"]!["example#Service"] = JsonNode.Parse("""
+                {"type":"service","version":"1","operations":[{"target":"example#Get"}],
+                 "traits":{"smithy.api#httpDigestAuth":{}}}
+                """);
+        }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        await Assert.That(result.Operation.GetProperty("traits").TryGetProperty("smithy.api#auth", out _)).IsFalse();
+        await Assert.That(result.Operation.GetProperty("traits").TryGetProperty("smithy.api#httpDigestAuth", out _)).IsFalse();
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
+    [Test]
+    [Arguments("null")]
+    [Arguments("true")]
+    [Arguments("false")]
+    [Arguments("0")]
+    [Arguments("\"anonymous\"")]
+    [Arguments("[]")]
+    public async Task SmithyJsonOptionalAuthRequiresAnObjectAnnotation(string annotation)
+    {
+        var document = SmithyEndpointDocument();
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#optionalAuth"] = JsonNode.Parse(annotation);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_value");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/smithy.api#optionalAuth");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("structure")]
+    [Arguments("string")]
+    [Arguments("member")]
+    [Arguments("list")]
+    [Arguments("map")]
+    [Arguments("union")]
+    public async Task SmithyJsonOptionalAuthRejectsNonOperationTargets(string location)
+    {
+        var document = SmithyEndpointDocument();
+        document["shapes"]!["example#Get"]!.AsObject().Remove("traits");
+        document["shapes"]!["example#Input"]!["members"]!["id"]!.AsObject().Remove("traits");
+        JsonNode target;
+        if (location == "structure") { target = document["shapes"]!["example#Input"]!; }
+        else if (location == "string") { target = document["shapes"]!["example#Identifier"]!; }
+        else if (location == "member") { target = document["shapes"]!["example#Input"]!["members"]!["id"]!; }
+        else
+        {
+            document["shapes"]!["example#Identifier"] = SmithyHttpBindingTarget(location);
+            target = location switch
+            {
+                "list" => document["shapes"]!["example#Identifier"]!["member"]!,
+                "map" => document["shapes"]!["example#Identifier"]!["value"]!,
+                _ => document["shapes"]!["example#Identifier"]!["members"]!["value"]!
+            };
+        }
+        target["traits"] = JsonNode.Parse("""{"smithy.api#optionalAuth":{}}""");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonOptionalAuthDoesNotInspectLiteralPayloadsOrUnrelatedDeclarations()
+    {
+        var document = SmithyEndpointDocument();
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#optionalAuth"] = new JsonObject();
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#examples"] = JsonNode.Parse("""
+            [{"title":"literal metadata","input":{"smithy.api#optionalAuth":false,"target":"example#Absent"}}]
+            """);
+        document["shapes"]!["example#Unused"] = JsonNode.Parse("""{"type":"operation","traits":{"smithy.api#optionalAuth":false}}""");
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Optional authentication cannot acquire dependencies."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+    }
+
+    [Test]
+    public async Task SmithyJsonOptionalAuthCannotSupplyMissingInputDefinitions()
+    {
+        var document = SmithyEndpointDocument();
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#optionalAuth"] = new JsonObject();
+        document["shapes"]!.AsObject().Remove("example#Input");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("dependency.unresolved");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Input");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
     private static JsonNode SmithyEndpointDocument()
     {
         var document = SmithyHttpOperationDocument();
