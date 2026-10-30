@@ -3439,6 +3439,286 @@ public class ApiOperationReferenceTests
         await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
     }
 
+    [Test]
+    [Arguments("integer", "null", false, "document.range_bounds", "")]
+    [Arguments("integer", "[]", false, "document.range_bounds", "")]
+    [Arguments("integer", "{}", false, "document.range_bounds", "")]
+    [Arguments("integer", """{"min":null}""", false, "document.range_bound", "/min")]
+    [Arguments("integer", """{"max":true}""", false, "document.range_bound", "/max")]
+    [Arguments("byte", """{"min":-128,"max":127}""", true, "", "")]
+    [Arguments("byte", """{"min":-129}""", false, "document.range_bound", "/min")]
+    [Arguments("byte", """{"max":128}""", false, "document.range_bound", "/max")]
+    [Arguments("short", """{"min":-32768,"max":32767}""", true, "", "")]
+    [Arguments("short", """{"min":-32769}""", false, "document.range_bound", "/min")]
+    [Arguments("short", """{"max":32768}""", false, "document.range_bound", "/max")]
+    [Arguments("integer", """{"min":-2147483648,"max":2147483647}""", true, "", "")]
+    [Arguments("integer", """{"min":-2147483649}""", false, "document.range_bound", "/min")]
+    [Arguments("integer", """{"max":2147483648}""", false, "document.range_bound", "/max")]
+    [Arguments("long", """{"min":-9223372036854775808,"max":9223372036854775807}""", true, "", "")]
+    [Arguments("long", """{"min":-9223372036854775809}""", false, "document.range_bound", "/min")]
+    [Arguments("long", """{"max":9223372036854775808}""", false, "document.range_bound", "/max")]
+    [Arguments("intEnum", """{"min":-2147483648,"max":2147483647}""", true, "", "")]
+    [Arguments("intEnum", """{"max":2147483648}""", false, "document.range_bound", "/max")]
+    [Arguments("integer", """{"min":1.5}""", false, "document.range_bound", "/min")]
+    [Arguments("bigInteger", """{"max":1.5}""", false, "document.range_bound", "/max")]
+    [Arguments("bigInteger", """{"min":-1e100,"max":1e100}""", true, "", "")]
+    [Arguments("integer", """{"min":1.0,"max":1e1}""", true, "", "")]
+    [Arguments("bigDecimal", """{"min":-1.25e1000,"max":1.25e1000}""", true, "", "")]
+    [Arguments("float", """{"min":-340282346638528859811704183484516925440,"max":340282346638528859811704183484516925440}""", true, "", "")]
+    [Arguments("float", """{"min":-340282346638528859811704183484516925441}""", false, "document.range_bound", "/min")]
+    [Arguments("float", """{"max":340282346638528859811704183484516925441}""", false, "document.range_bound", "/max")]
+    [Arguments("double", """{"min":-1.7976931348623157e308,"max":1.7976931348623157e308}""", true, "", "")]
+    [Arguments("double", """{"min":-1.7976931348623158e308}""", false, "document.range_bound", "/min")]
+    [Arguments("double", """{"max":1.7976931348623158e308}""", false, "document.range_bound", "/max")]
+    [Arguments("float", """{"min":-0.125,"max":0.125}""", true, "", "")]
+    public async Task SmithyJsonRangeDeclarationsCheckExactNativeNumericBounds(
+        string kind, string bounds, bool valid, string code, string suffix)
+    {
+        foreach (var onMember in new[] { false, true })
+        {
+            var document = JsonNode.Parse(SmithyDefaultDocument(kind, "null", false))!;
+            var member = document["shapes"]!["example#Input"]!["members"]!["value"]!;
+            member.AsObject().Remove("traits");
+            var owner = onMember ? member : document["shapes"]!["example#Value"]!;
+            owner["traits"] = new JsonObject { ["smithy.api#range"] = JsonNode.Parse(bounds) };
+            var result = ResolveSmithy(document.ToJsonString());
+            await Assert.That(result.Status).IsEqualTo(valid
+                ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+            if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+            else
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+                await Assert.That(result.Diagnostic.Path).IsEqualTo((onMember
+                    ? "$/shapes/example#Input/members/value" : "$/shapes/example#Value") + "/traits/smithy.api#range" + suffix);
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("integer", "0", """{"min":1}""", false)]
+    [Arguments("integer", "1", """{"min":1,"max":2}""", true)]
+    [Arguments("integer", "2", """{"min":1,"max":2}""", true)]
+    [Arguments("integer", "3", """{"max":2}""", false)]
+    [Arguments("long", "9007199254740993", """{"max":9007199254740992}""", false)]
+    [Arguments("long", "-9007199254740993", """{"min":-9007199254740992}""", false)]
+    [Arguments("bigInteger", "1e100", """{"min":1e100,"max":1e100}""", true)]
+    [Arguments("bigInteger", "100000000000000000001", """{"max":1e20}""", false)]
+    [Arguments("bigDecimal", "0.10000000000000000001", """{"max":0.1}""", false)]
+    [Arguments("bigDecimal", "0.1", """{"min":1e-1,"max":0.100}""", true)]
+    [Arguments("float", "-0.25", """{"min":-0.125}""", false)]
+    [Arguments("float", "0.125", """{"min":-0.125,"max":0.125}""", true)]
+    [Arguments("double", "0.25", """{"max":0.125}""", false)]
+    [Arguments("double", "-0.125", """{"min":-0.125,"max":0.125}""", true)]
+    [Arguments("intEnum", "1", """{"min":1,"max":1}""", true)]
+    [Arguments("intEnum", "1", """{"min":2}""", false)]
+    public async Task SmithyJsonNumericDefaultsMeetInclusiveEffectiveRangeBounds(
+        string kind, string value, string bounds, bool valid)
+    {
+        foreach (var rootDefault in new[] { false, true })
+        {
+            var document = JsonNode.Parse(SmithyDefaultDocument(kind, value, rootDefault))!;
+            var owner = rootDefault ? document["shapes"]!["example#Value"]!
+                : document["shapes"]!["example#Input"]!["members"]!["value"]!;
+            owner["traits"]!["smithy.api#range"] = JsonNode.Parse(bounds);
+            if (rootDefault)
+            {
+                document["shapes"]!["example#Input"]!["members"]!["value"]!["traits"]!["smithy.api#default"] = null;
+            }
+            var result = ResolveSmithy(document.ToJsonString());
+            await Assert.That(result.Status).IsEqualTo(valid
+                ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+            if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+            else
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.default_range");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo((rootDefault
+                    ? "$/shapes/example#Value" : "$/shapes/example#Input/members/value") + "/traits/smithy.api#default");
+            }
+        }
+    }
+
+    [Test]
+    [Arguments(false, false)]
+    [Arguments(false, true)]
+    [Arguments(true, false)]
+    [Arguments(true, true)]
+    public async Task SmithyJsonMemberRangeSupersedesRatherThanMergesTargetBounds(bool overrideRange, bool narrow)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("integer", "2", false))!;
+        document["shapes"]!["example#Value"]!["traits"] = JsonNode.Parse(narrow
+            ? """{"smithy.api#range":{"min":0,"max":10}}"""
+            : """{"smithy.api#range":{"min":3,"max":4}}""");
+        if (overrideRange)
+        {
+            document["shapes"]!["example#Input"]!["members"]!["value"]!["traits"]!["smithy.api#range"] =
+                JsonNode.Parse(narrow ? """{"max":1}""" : """{"min":1}""");
+        }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(overrideRange != narrow
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (overrideRange != narrow) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.default_range");
+            await Assert.That(result.Diagnostic.Path)
+                .IsEqualTo("$/shapes/example#Input/members/value/traits/smithy.api#default");
+        }
+    }
+
+    [Test]
+    [Arguments("string")]
+    [Arguments("boolean")]
+    [Arguments("blob")]
+    [Arguments("list")]
+    [Arguments("map")]
+    [Arguments("structure")]
+    [Arguments("union")]
+    [Arguments("enum")]
+    [Arguments("document")]
+    [Arguments("timestamp")]
+    public async Task SmithyJsonRangeRejectsNonNumericRootsAndMembers(string kind)
+    {
+        foreach (var onMember in new[] { false, true })
+        {
+            var document = JsonNode.Parse(SmithyDefaultDocument(kind, "null", false))!;
+            var member = document["shapes"]!["example#Input"]!["members"]!["value"]!;
+            member.AsObject().Remove("traits");
+            var owner = onMember ? member : document["shapes"]!["example#Value"]!;
+            owner["traits"] = JsonNode.Parse("""{"smithy.api#range":{"min":0}}""");
+            var result = ResolveSmithy(document.ToJsonString());
+            await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo((onMember
+                ? "$/shapes/example#Input/members/value" : "$/shapes/example#Value") + "/traits/smithy.api#range");
+        }
+    }
+
+    [Test]
+    [Arguments("float", "\"NaN\"")]
+    [Arguments("float", "\"Infinity\"")]
+    [Arguments("double", "\"-Infinity\"")]
+    public async Task SmithyJsonRangeSpecialFloatingDefaultsRemainExplicitlyUnsupported(string kind, string value)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument(kind, value, false))!;
+        document["shapes"]!["example#Value"]!["traits"] = JsonNode.Parse("""{"smithy.api#range":{"min":0}}""");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Unsupported);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("smithy.special_range_default");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Input/members/value/traits/smithy.api#default");
+    }
+
+    [Test]
+    [Arguments("min", "\"1.25\"")]
+    [Arguments("max", "\"NaN\"")]
+    public async Task SmithyJsonStringEncodedRangeBoundsRemainExplicitlyUnsupported(string name, string value)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("bigDecimal", "null", false))!;
+        document["shapes"]!["example#Value"]!["traits"] = new JsonObject
+        {
+            ["smithy.api#range"] = new JsonObject { [name] = JsonNode.Parse(value) }
+        };
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Unsupported);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("smithy.numeric_string_range");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Value/traits/smithy.api#range/" + name);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task SmithyJsonNullDefaultOverridesAreNotComparedWithRangeBounds(bool onMember)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("integer", "1", true))!;
+        document["shapes"]!["example#Value"]!["traits"]!["smithy.api#range"] = JsonNode.Parse("""{"min":1}""");
+        var member = document["shapes"]!["example#Input"]!["members"]!["value"]!;
+        member["traits"]!["smithy.api#default"] = null;
+        if (onMember) { member["traits"]!["smithy.api#range"] = JsonNode.Parse("""{"min":2}"""); }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+    }
+
+    [Test]
+    [Arguments("list", "member")]
+    [Arguments("map", "value")]
+    [Arguments("union", "members/A")]
+    public async Task SmithyJsonRangeChecksApplyToAggregateMemberTargets(string kind, string position)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument(kind, "null", false))!;
+        document["shapes"]!["example#Input"]!["members"]!["value"]!.AsObject().Remove("traits");
+        var owner = document["shapes"]!["example#Value"]!;
+        foreach (var segment in position.Split('/')) { owner = owner[segment]!; }
+        owner["target"] = "smithy.api#Byte";
+        owner["traits"] = JsonNode.Parse("""{"smithy.api#range":{"max":127}}""");
+        var selected = ResolveSmithy(document.ToJsonString());
+        await Assert.That(selected.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(selected.Diagnostic).IsNull();
+        owner["traits"]!["smithy.api#range"]!["max"] = 128;
+        var invalid = ResolveSmithy(document.ToJsonString());
+        await Assert.That(invalid.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(invalid.Diagnostic!.Code).IsEqualTo("document.range_bound");
+        await Assert.That(invalid.Diagnostic.Path)
+            .IsEqualTo("$/shapes/example#Value/" + position + "/traits/smithy.api#range/max");
+    }
+
+    [Test]
+    [Arguments("smithy.api#Byte", 127, true)]
+    [Arguments("smithy.api#Byte", 128, false)]
+    [Arguments("smithy.api#PrimitiveByte", 127, true)]
+    [Arguments("smithy.api#PrimitiveByte", 128, false)]
+    [Arguments("smithy.api#Float", 1, true)]
+    [Arguments("smithy.api#PrimitiveFloat", 1, true)]
+    public async Task SmithyJsonRangeUsesImplicitPreludeNumericKinds(string target, int maximum, bool valid)
+    {
+        var document = JsonNode.Parse("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"example#Input"}},
+              "example#Input":{"type":"structure","members":{"value":{"target":"smithy.api#Byte",
+                "traits":{"smithy.api#range":{"max":127},"smithy.api#default":0}}}}}}
+            """)!;
+        var member = document["shapes"]!["example#Input"]!["members"]!["value"]!;
+        member["target"] = target;
+        member["traits"]!["smithy.api#range"]!["max"] = maximum;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.range_bound");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Input/members/value/traits/smithy.api#range/max");
+        }
+    }
+
+    [Test]
+    public async Task SmithyJsonRangeChecksPreserveNativeSelectionWithoutAcquisitionOrUnrelatedScanning()
+    {
+        var document = JsonNode.Parse("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"example#Input"}},
+              "example#Input":{"type":"structure","members":{"value":{"target":"example#Missing",
+                "traits":{"smithy.api#range":{"min":1},"smithy.api#default":1}}}},
+              "example#Unused":{"type":"integer","traits":{"smithy.api#range":null}}}}
+            """)!;
+        var missing = ResolveSmithy(document.ToJsonString());
+        await Assert.That(missing.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(missing.Diagnostic!.Code).IsEqualTo("dependency.unresolved");
+        document["shapes"]!["example#Missing"] = JsonNode.Parse("""{"type":"integer"}""");
+        document["metadata"] = JsonNode.Parse("""
+            {"literal":{"target":"https://example.test/not-an-import",
+              "traits":{"smithy.api#range":{"min":10},"smithy.api#default":1}}}
+            """);
+        var selected = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Range bounds are not imports."));
+        await Assert.That(selected.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(selected.Diagnostic).IsNull();
+        await Assert.That(selected.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
     private static string SmithyDefaultDocument(string kind, string value, bool rootDefault)
     {
         var target = new JsonObject { ["type"] = kind };

@@ -283,7 +283,7 @@ The implicit prelude support covers `Blob`, `Boolean`, `Document`, `String`,
 `PrimitiveShort`, `PrimitiveInteger`, `PrimitiveLong`, `PrimitiveFloat`,
 `PrimitiveDouble`, and the traits
 `error`, `documentation`, `required`, `clientOptional`, `addedDefault`, `sparse`,
-`uniqueItems`, `private`, `length`, `input`, `output`, `readonly`, `idempotent`,
+`uniqueItems`, `private`, `length`, `range`, `input`, `output`, `readonly`, `idempotent`,
 `default`, `enumValue` and `trait`
 in `smithy.api`. Other required definitions
 must be supplied in the AST. These checks do not validate every Smithy shape
@@ -340,6 +340,16 @@ including omitted bounds. Strings count Unicode scalar values, blobs count
 decoded bytes, and the permitted empty list/map defaults have length zero.
 Null member overrides are not measured. Instance lengths and unrelated
 definitions remain unchecked.
+
+The `range` trait requires a numeric root or member target and at least one
+bound. Numeric bounds must fit the target's native range; integral targets,
+including intEnum, reject fractional bounds. Comparisons use exact decimal
+values, including the finite IEEE-754 limits, without first rounding bounds
+to float or double. Numeric defaults must satisfy their effective inclusive
+bounds. A member's range replaces its target's entire range; null member
+overrides remain valid. String-encoded bounds and range checks on special
+floating-point defaults report `Unsupported`. Instance range validation remains
+outside the selected-operation resolver.
 
 Reachable trait definitions require a string `selector`, when supplied, and
 restrict `structurallyExclusive` to `member` or `target`. These are property
@@ -419,7 +429,7 @@ empty containers, not nested content. These checks do not apply defaults to
 the returned operation or treat literal values as imports.
 
 Timestamp and string-encoded bigInteger/bigDecimal defaults report `Unsupported`.
-Complete timestamp handling and applied range/pattern constraints remain
+Complete timestamp handling and applied pattern constraints remain
 open; these checks do not establish full Smithy validity.
 
 SemVer-profile WoT minimum-version floors exclude build metadata and fit the

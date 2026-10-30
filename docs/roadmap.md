@@ -205,6 +205,11 @@ vocabulary/source mapping. It does not supply their implementation.
   bounds, with member traits superseding target traits. Strings count Unicode
   scalars, blobs count decoded bytes, and empty list/map defaults count zero.
   Null member overrides are not measured; instance length evaluation remains open.
+  `range` declarations check numeric targets, required bounds, integral bounds
+  for integral targets and exact native limits. Numeric defaults check
+  inclusive effective bounds, with member traits replacing target traits.
+  Null overrides remain valid. String-encoded bounds and special floating
+  defaults with ranges report unsupported; instance range checks remain open.
   Idempotent `exists`/`notFound` declarations are mutually exclusive
   arrays of absolute IDs whose targets must occur in the operation's own errors.
   Their native hints are retained without execution or fallback to service errors.
@@ -232,7 +237,7 @@ vocabulary/source mapping. It does not supply their implementation.
   integer ranges, finite float/double numbers and exact special-value strings,
   base64 blobs, enum membership and empty list/map/document containers. Defaults
   are not inserted into operations. Timestamp and string-encoded
-  bigInteger/bigDecimal defaults report unsupported; applied range/pattern
+  bigInteger/bigDecimal defaults report unsupported; applied pattern
   constraints and full default validation remain open.
 - Complete end-to-end event/outbox delivery qualification while preserving
   atomic mutation publication and caller-visible failure semantics.
