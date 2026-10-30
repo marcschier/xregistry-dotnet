@@ -157,10 +157,10 @@ vocabulary/source mapping. It does not supply their implementation.
   have structural checks. Tag references use the same authorized retrieval;
   server and documentation URLs remain native strings without invocation.
   Supplied root servers, documentation, schema URI and Info/Contact/License
-  metadata have structural checks before Method dependency acquisition. An
-  omitted root Info Object is still accepted by the partial selector; complete
-  required-root validation remains open. Root defaults are not inserted into
-  selected methods.
+  metadata have structural checks before Method dependency acquisition. The
+  root Info Object is required, including its title and document-version strings.
+  Root defaults are not inserted into selected methods; full-document validity
+  is not claimed.
   URL-template semantics and complete URL validation remain open.
   Link references use the same acquisition policy; supplied linked method names
   must identify one occurrence after the complete Method array is resolved.

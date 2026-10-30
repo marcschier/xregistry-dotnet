@@ -13,9 +13,9 @@ public static partial class ApiOperationDocumentResolver
         ValidateOpenRpcServers(root, "$", budget);
         ValidateOpenRpcDocumentation(root, "$");
         ValidateOpenRpcOptionalString(root, "$schema", "$");
-        if (!root.TryGetProperty("info", out var info)) { return; }
-        ValidationContext.Require(info.ValueKind == JsonValueKind.Object, "$/info",
-            "document.info", "OpenRPC info must be an object.");
+        ValidationContext.Require(root.TryGetProperty("info", out var info) &&
+            info.ValueKind == JsonValueKind.Object, "$/info",
+            "document.info", "OpenRPC requires an info object.");
         RequireOpenRpcString(info, "title", "$/info", "document.info_title");
         RequireOpenRpcString(info, "version", "$/info", "document.info_version");
         ValidateOpenRpcOptionalString(info, "description", "$/info");

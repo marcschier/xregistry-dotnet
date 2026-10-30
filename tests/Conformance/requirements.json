@@ -113162,6 +113162,7 @@
         "status": "implemented",
         "testIds": [
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenRpcSelectionPreservesTheNativeMethodAndDecodesItsNameOnce",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenRpcRequiresInfoEvenForEmptyOrReferencedMethodArrays",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenRpcUnrelatedDuplicateMethodNamesPreventSelectionOrNotFound",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenRpcMethodNameUniquenessUsesExactCaseAndIgnoresUnusedDefinitions",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenRpcRootMetadataPreservesMethodSelectionWithoutDefaultOrUrlAcquisition",
