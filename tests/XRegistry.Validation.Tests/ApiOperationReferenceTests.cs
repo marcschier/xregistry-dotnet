@@ -5566,6 +5566,351 @@ public class ApiOperationReferenceTests
         await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
     }
 
+    [Test]
+    [Arguments(false, false)]
+    [Arguments(false, true)]
+    [Arguments(true, false)]
+    [Arguments(true, true)]
+    public async Task SmithyJsonStreamingBlobsSupportTopLevelInputAndOutputMembers(bool output, bool useDefault)
+    {
+        var document = JsonNode.Parse(SmithyStreamingDocument())!;
+        if (output)
+        {
+            document["shapes"]!["example#Get"]!.AsObject().Remove("input");
+            document["shapes"]!["example#Get"]!["output"] = JsonNode.Parse("""{"target":"example#Input"}""");
+        }
+        if (useDefault)
+        {
+            document["shapes"]!["example#Input"]!["members"]!["data"]!["traits"] =
+                JsonNode.Parse("""{"smithy.api#default":""}""");
+        }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+    }
+
+    [Test]
+    public async Task SmithyJsonStreamingBlobMembersRequireExplicitRequiredOrDefault()
+    {
+        var document = JsonNode.Parse(SmithyStreamingDocument())!;
+        document["shapes"]!["example#Input"]!["members"]!["data"]!.AsObject().Remove("traits");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.streaming_member");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Input/members/data");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("input", true)]
+    [Arguments("output", false)]
+    [Arguments("both", false)]
+    public async Task SmithyJsonRequiresLengthRestrictsStreamingBlobsToInputs(string slot, bool valid)
+    {
+        var document = JsonNode.Parse(SmithyStreamingDocument())!;
+        document["shapes"]!["example#Stream"]!["traits"]!["smithy.api#requiresLength"] = new JsonObject();
+        if (slot != "input")
+        {
+            document["shapes"]!["example#Get"]!["output"] = JsonNode.Parse("""{"target":"example#Input"}""");
+            if (slot == "output") { document["shapes"]!["example#Get"]!.AsObject().Remove("input"); }
+        }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.streaming_usage");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Input/members/data");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("structure", """{"type":"structure","members":{"data":{"target":"example#Stream","traits":{"smithy.api#required":{}}}}}""")]
+    [Arguments("union", """{"type":"union","members":{"data":{"target":"example#Stream"}}}""")]
+    [Arguments("list", """{"type":"list","member":{"target":"example#Stream"}}""")]
+    [Arguments("map", """{"type":"map","key":{"target":"smithy.api#String"},"value":{"target":"example#Stream"}}""")]
+    public async Task SmithyJsonStreamingShapesRejectNonTopLevelAggregateReferences(string kind, string container)
+    {
+        var document = JsonNode.Parse(SmithyStreamingDocument())!;
+        document["shapes"]!["example#Other"] = JsonNode.Parse(container);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.streaming_usage");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo(kind is "structure" or "union"
+            ? "$/shapes/example#Other/members/data" : "$/shapes/example#Other/" + (kind == "list" ? "member" : "value"));
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("""{"type":"structure","members":{"nested":{"target":"example#Input"}}}""", "/members/nested")]
+    [Arguments("""{"type":"union","members":{"nested":{"target":"example#Input"}}}""", "/members/nested")]
+    [Arguments("""{"type":"list","member":{"target":"example#Input"}}""", "/member")]
+    [Arguments("""{"type":"map","key":{"target":"smithy.api#String"},"value":{"target":"example#Input"}}""", "/value")]
+    public async Task SmithyJsonStreamingContainersCannotBeNestedInOtherMembers(string container, string suffix)
+    {
+        var document = JsonNode.Parse(SmithyStreamingDocument())!;
+        document["shapes"]!["example#Other"] = JsonNode.Parse(container);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.streaming_usage");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Other" + suffix);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task SmithyJsonStreamingTargetsAreExclusiveWithinEachStructure(bool distinctTarget)
+    {
+        var document = JsonNode.Parse(SmithyStreamingDocument())!;
+        if (distinctTarget)
+        {
+            document["shapes"]!["example#OtherStream"] = JsonNode.Parse(
+                """{"type":"blob","traits":{"smithy.api#streaming":{}}}""");
+        }
+        document["shapes"]!["example#Input"]!["members"]!["second"] = JsonNode.Parse(
+            """{"target":"TARGET","traits":{"smithy.api#required":{}}}"""
+                .Replace("TARGET", distinctTarget ? "example#OtherStream" : "example#Stream", StringComparison.Ordinal));
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_exclusivity");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Input/members/second");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("structure", true)]
+    [Arguments("error", true)]
+    [Arguments("string", false)]
+    [Arguments("blob", false)]
+    [Arguments("union", false)]
+    public async Task SmithyJsonEventStreamsRequireStructureAlternatives(string kind, bool valid)
+    {
+        var document = JsonNode.Parse(SmithyStreamingDocument())!;
+        document["shapes"]!["example#Stream"] = JsonNode.Parse(
+            """{"type":"union","traits":{"smithy.api#streaming":{}},"members":{"event":{"target":"example#Event"}}}""");
+        document["shapes"]!["example#Input"]!["members"]!["data"]!.AsObject().Remove("traits");
+        document["shapes"]!["example#Event"] = JsonNode.Parse(kind switch
+        {
+            "error" => """{"type":"structure","traits":{"smithy.api#error":"server"}}""",
+            "union" => """{"type":"union","members":{"done":{"target":"smithy.api#Unit"}}}""",
+            _ => """{"type":"KIND"}""".Replace("KIND", kind, StringComparison.Ordinal)
+        });
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.target_type");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Event");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("streaming", "string", true)]
+    [Arguments("streaming", "structure", true)]
+    [Arguments("streaming", "blob", false)]
+    [Arguments("requiresLength", "blob", true)]
+    [Arguments("requiresLength", "union", true)]
+    public async Task SmithyJsonStreamingAnnotationsRejectIneligibleShapes(string trait, string kind, bool root)
+    {
+        var document = JsonNode.Parse(SmithyStreamingDocument())!;
+        var selected = root ? document["shapes"]!["example#Stream"]! :
+            document["shapes"]!["example#Input"]!["members"]!["data"]!;
+        if (root)
+        {
+            selected.AsObject().Clear();
+            selected["type"] = kind;
+        }
+        selected["traits"] ??= new JsonObject();
+        selected["traits"]!["smithy.api#" + trait] = new JsonObject();
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("streaming", "null")]
+    [Arguments("streaming", "true")]
+    [Arguments("streaming", "[]")]
+    [Arguments("requiresLength", "null")]
+    [Arguments("requiresLength", "\"known\"")]
+    public async Task SmithyJsonStreamingAnnotationsRequireObjectValues(string trait, string value)
+    {
+        var document = JsonNode.Parse(SmithyStreamingDocument())!;
+        document["shapes"]!["example#Stream"]!["traits"]!["smithy.api#" + trait] = JsonNode.Parse(value);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_value");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Stream/traits/smithy.api#" + trait);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonStreamingPreservesNativeMetadataAndIgnoresUnrelatedStreamsAndLiteralTargets()
+    {
+        var document = JsonNode.Parse(SmithyStreamingDocument())!;
+        document["shapes"]!["example#Get"]!["traits"] = JsonNode.Parse("""
+            {"smithy.api#examples":[{"title":"literal","input":{"target":"example#Input","smithy.api#streaming":false}}]}
+            """);
+        document["shapes"]!["example#Unused"] = JsonNode.Parse(
+            """{"type":"blob","traits":{"smithy.api#streaming":false,"smithy.api#requiresLength":[]}}""");
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Streaming shapes are not imports."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
+    [Test]
+    public async Task SmithyJsonStreamingExclusivityIsIndependentForSeparateOperationStructures()
+    {
+        var document = JsonNode.Parse(SmithyStreamingDocument())!;
+        document["shapes"]!["example#Get"]!["output"] = JsonNode.Parse("""{"target":"example#Output"}""");
+        document["shapes"]!["example#Output"] = document["shapes"]!["example#Input"]!.DeepClone();
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+    }
+
+    [Test]
+    public async Task SmithyJsonStreamingInboundExclusivityCountsUnvisitedSiblingTargets()
+    {
+        var document = JsonNode.Parse(SmithyStreamingDocument())!;
+        document["shapes"]!["example#Other"] = JsonNode.Parse("""
+            {"type":"structure","members":{
+              "first":{"target":"example#Stream","traits":{"smithy.api#required":{}}},
+              "second":{"target":"example#OtherStream","traits":{"smithy.api#required":{}}}}}
+            """);
+        document["shapes"]!["example#OtherStream"] = JsonNode.Parse(
+            """{"type":"blob","traits":{"smithy.api#streaming":{}}}""");
+        document["shapes"]!["example#OtherOperation"] = JsonNode.Parse(
+            """{"type":"operation","input":{"target":"example#Other"}}""");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_exclusivity");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Other/members/second");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonEventStreamsReportMissingAlternativesWithoutAcquisition()
+    {
+        var document = JsonNode.Parse(SmithyStreamingDocument())!;
+        document["shapes"]!["example#Stream"] = JsonNode.Parse(
+            """{"type":"union","traits":{"smithy.api#streaming":{}},"members":{"event":{"target":"example#Missing"}}}""");
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Shape IDs are not acquisition URLs."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("dependency.unresolved");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Missing");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("""["gzip"]""")]
+    [Arguments("""["GZIP"]""")]
+    [Arguments("""["GzIp","gzip"]""")]
+    public async Task SmithyJsonRequestCompressionAcceptsCaseInsensitiveGzipWithoutRewriting(string encodings)
+    {
+        var document = JsonNode.Parse(SmithyStreamingDocument())!;
+        document["shapes"]!["example#Get"]!["traits"] = JsonNode.Parse(
+            """{"smithy.api#requestCompression":{"encodings":ENCODINGS}}""".Replace("ENCODINGS", encodings, StringComparison.Ordinal));
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+    }
+
+    [Test]
+    [Arguments("""{}""", "/encodings", "document.request_compression")]
+    [Arguments("""{"encodings":null}""", "/encodings", "document.request_compression")]
+    [Arguments("""{"encodings":"gzip"}""", "/encodings", "document.request_compression")]
+    [Arguments("""{"encodings":[]}""", "/encodings", "document.request_compression")]
+    [Arguments("""{"encodings":[null]}""", "/encodings/0", "document.request_compression")]
+    [Arguments("""{"encodings":["gzip",1]}""", "/encodings/1", "document.request_compression")]
+    [Arguments("""{"encodings":["gzip","deflate"]}""", "/encodings/1", "document.request_compression")]
+    [Arguments("""{"encodings":[" gzip"]}""", "/encodings/0", "document.request_compression")]
+    [Arguments("""{"encodings":[""]}""", "/encodings/0", "document.request_compression")]
+    [Arguments("null", "", "document.trait_value")]
+    [Arguments("[]", "", "document.trait_value")]
+    public async Task SmithyJsonRequestCompressionChecksRequiredEncodingsAndNodeTypes(string annotation, string suffix, string code)
+    {
+        var document = JsonNode.Parse(SmithyStreamingDocument())!;
+        document["shapes"]!["example#Get"]!["traits"] = new JsonObject
+        {
+            ["smithy.api#requestCompression"] = JsonNode.Parse(annotation)
+        };
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/smithy.api#requestCompression" + suffix);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task SmithyJsonRequestCompressionCannotAnnotateShapesOrMembers(bool member)
+    {
+        var document = JsonNode.Parse(SmithyStreamingDocument())!;
+        var target = member ? document["shapes"]!["example#Input"]!["members"]!["data"]! :
+            document["shapes"]!["example#Stream"]!;
+        target["traits"]!["smithy.api#requestCompression"] = JsonNode.Parse("""{"encodings":["gzip"]}""");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonRequestCompressionRejectsLengthRequiringStreamingInputs()
+    {
+        var document = JsonNode.Parse(SmithyStreamingDocument())!;
+        document["shapes"]!["example#Get"]!["traits"] = JsonNode.Parse("""{"smithy.api#requestCompression":{"encodings":["gzip"]}}""");
+        document["shapes"]!["example#Stream"]!["traits"]!["smithy.api#requiresLength"] = new JsonObject();
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.request_compression");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/smithy.api#requestCompression");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("absent")]
+    [Arguments("empty")]
+    [Arguments("implicit")]
+    public async Task SmithyJsonRequestCompressionAllowsAbsentOrNonStreamingInputs(string input)
+    {
+        var document = JsonNode.Parse(SmithyStreamingDocument())!;
+        document["shapes"]!["example#Get"]!["traits"] = JsonNode.Parse("""{"smithy.api#requestCompression":{"encodings":["gzip"]}}""");
+        if (input == "absent") { document["shapes"]!["example#Get"]!.AsObject().Remove("input"); }
+        else if (input == "empty") { document["shapes"]!["example#Input"]!.AsObject().Remove("members"); }
+        else { document["shapes"]!["example#Input"]!["members"]!["data"]!["target"] = "smithy.api#String"; }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+    }
+
+    private static string SmithyStreamingDocument() => """
+        {"smithy":"2.0","shapes":{
+          "example#Get":{"type":"operation","input":{"target":"example#Input"}},
+          "example#Input":{"type":"structure","members":{"data":{"target":"example#Stream","traits":{"smithy.api#required":{}}}}},
+          "example#Stream":{"type":"blob","traits":{"smithy.api#streaming":{}}}}}
+        """;
+
     private static string SmithyExampleDocument(string examples) => """
         {"smithy":"2.0","shapes":{
           "example#Get":{"type":"operation","input":{"target":"example#Input"},

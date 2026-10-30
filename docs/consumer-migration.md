@@ -464,6 +464,27 @@ string-encoded timeouts are invalid. Selection preserves the declaration
 without setting client timeouts, waiting for responses or overriding user
 request configuration.
 
+The `streaming` annotation requires an object value on a blob or union.
+Streaming union alternatives must target structures, including error structures.
+A streaming target can occur only in a top-level operation input or output
+structure, with at most one streaming member per structure. A member targeting
+a streaming blob must explicitly carry `required` or `default`; a root blob
+default alone does not satisfy this rule. Structures containing streaming
+members cannot themselves be targeted by aggregate members. For reached
+streaming shapes, these placement checks also inspect otherwise unvisited data
+references in recognized AST member positions. Literal trait values are not
+references, and unrelated streaming definitions are not validated.
+
+The object-valued `requiresLength` annotation applies only to streaming blobs.
+Those blobs can occur only in operation inputs; a structure reused as an output
+is therefore invalid. The operation-only `requestCompression` trait requires
+an object with a nonempty `encodings` array. Every entry must be a
+case-insensitive `gzip` string; authored casing, order and repeated entries
+are preserved. Compression cannot be declared when an input member targets
+a streaming blob marked `requiresLength`. Selection does not compress requests
+or calculate lengths. Service/protocol-specific HTTP payload bindings, event
+header/payload declarations and stream execution remain outside these checks.
+
 The `jsonName` trait requires a string value on a structure or union member.
 Explicit names cannot repeat within that structure or union; comparison is
 case-sensitive and does not normalize Unicode. Empty strings remain valid

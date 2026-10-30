@@ -204,6 +204,18 @@ vocabulary/source mapping. It does not supply their implementation.
   `longPoll` requires an operation object annotation with a positive signed
   32-bit integer `timeoutMillis`, checked exactly without rounding. The check
   does not execute polling or modify request timeout configuration.
+  `streaming` checks blob/union applicability, object annotations, structure-only
+  event alternatives and one streaming target per top-level input/output
+  structure. Streaming blob members require explicit required/default traits.
+  Reached streaming shapes and their containers also undergo inbound aggregate
+  member checks across authored shapes; neither nested containers nor
+  non-top-level stream references are permitted. `requiresLength` is restricted
+  to streaming blobs referenced only by inputs.
+  `requestCompression` checks operation applicability, a nonempty array of
+  case-insensitive gzip encodings and the conflict with length-requiring
+  streaming inputs. Authored declarations are preserved without compression,
+  length calculation or stream execution. HTTP payload binding and event
+  header/payload declarations remain open.
   `jsonName` requires a string-valued structure/union member annotation and
   unique exact explicit names within each container. `timestampFormat` checks
   timestamp root/member eligibility and the three declared serialization formats.

@@ -84,6 +84,7 @@ public static partial class ApiOperationDocumentResolver
             closure.ValidateDefaults();
             closure.ValidateStructuralExclusivity();
             closure.ValidateUniqueItems();
+            closure.ValidateStreaming();
             return Selected(operation, "$/shapes/" + Escape(shapeId), documentUri);
         }
         catch (ValidationFailure failure)
@@ -204,6 +205,7 @@ public static partial class ApiOperationDocumentResolver
                                 depth, id, "structure", error: true);
                         }
                     }
+                    ValidateRequestCompression(shape, path);
                     break;
                 case "structure":
                 case "union":
@@ -224,7 +226,9 @@ public static partial class ApiOperationDocumentResolver
                             ValidationContext.Require(IsSmithyShapeId("example#" + member.Name) && names.Add(member.Name),
                                 path + "/members", "document.member_name", "Smithy member names must be valid and case-insensitively unique.");
                             var memberPath = path + "/members/" + Escape(member.Name);
-                            Reference(member.Value, memberPath, depth, id, memberContainer: kind);
+                            Reference(member.Value, memberPath, depth, id,
+                                kind == "union" && TryTrait(shape, "smithy.api#streaming", out _) ? "structure" : null,
+                                memberContainer: kind);
                             if (TryTrait(member.Value, "smithy.api#jsonName", out var jsonName))
                             {
                                 budget.Work(jsonName.GetString()!.Length, memberPath);
@@ -630,6 +634,111 @@ public static partial class ApiOperationDocumentResolver
             }
         }
 
+        private void ValidateRequestCompression(JsonElement operation, string path)
+        {
+            if (!TryTrait(operation, "smithy.api#requestCompression", out _) ||
+                !operation.TryGetProperty("input", out var input) ||
+                !shapes.TryGetProperty(input.GetProperty("target").GetString()!, out var structure) ||
+                !structure.TryGetProperty("members", out var members)) { return; }
+            foreach (var member in members.EnumerateObject())
+            {
+                budget.Work();
+                if (!shapes.TryGetProperty(member.Value.GetProperty("target").GetString()!, out var target)) { continue; }
+                ValidationContext.Require(!TryTrait(target, "smithy.api#streaming", out _) ||
+                    !TryTrait(target, "smithy.api#requiresLength", out _),
+                    path + "/traits/smithy.api#requestCompression", "document.request_compression",
+                    "Request compression cannot combine streaming and requiresLength on an input member target.");
+            }
+        }
+
+        internal void ValidateStreaming()
+        {
+            var streams = _visited.Where(static entry => TryTrait(entry.Value, "smithy.api#streaming", out _))
+                .ToDictionary(static entry => entry.Key, static entry => entry.Value, StringComparer.Ordinal);
+            if (streams.Count == 0) { return; }
+            var inputs = new HashSet<string>(StringComparer.Ordinal);
+            var outputs = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var shape in shapes.EnumerateObject())
+            {
+                budget.Work();
+                if (shape.Value.GetProperty("type").GetString() != "operation") { continue; }
+                foreach (var slot in new[] { "input", "output" })
+                {
+                    if (shape.Value.TryGetProperty(slot, out var reference) &&
+                        reference.ValueKind == JsonValueKind.Object &&
+                        reference.TryGetProperty("target", out var target) && target.ValueKind == JsonValueKind.String)
+                    {
+                        (slot == "input" ? inputs : outputs).Add(target.GetString()!);
+                    }
+                }
+            }
+            var containers = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var shape in shapes.EnumerateObject())
+            {
+                budget.Work();
+                var kind = shape.Value.GetProperty("type").GetString();
+                if (!Members(shape.Name, shape.Value, kind).Any(entry =>
+                    entry.Member.TryGetProperty("target", out var target) && target.ValueKind == JsonValueKind.String &&
+                    streams.ContainsKey(target.GetString()!))) { continue; }
+                var count = 0;
+                foreach (var (member, memberPath) in Members(shape.Name, shape.Value, kind))
+                {
+                    if (!member.TryGetProperty("target", out var target) || target.ValueKind != JsonValueKind.String ||
+                        !shapes.TryGetProperty(target.GetString()!, out var stream) ||
+                        !TryTrait(stream, "smithy.api#streaming", out _)) { continue; }
+                    ValidationContext.Require(kind == "structure" &&
+                        (inputs.Contains(shape.Name) || outputs.Contains(shape.Name)), memberPath,
+                        "document.streaming_usage", "Streaming shapes require top-level operation input or output members.");
+                    ValidationContext.Require(++count == 1, memberPath, "document.trait_exclusivity",
+                        "Only one member of a Smithy structure can target a streaming shape.");
+                    if (stream.GetProperty("type").GetString() == "blob")
+                    {
+                        ValidationContext.Require(TryTrait(member, "smithy.api#required", out _) ||
+                            TryDefault(member, out _), memberPath, "document.streaming_member",
+                            "A member targeting a streaming blob requires a required or default trait.");
+                    }
+                    if (TryTrait(stream, "smithy.api#requiresLength", out _))
+                    {
+                        ValidationContext.Require(inputs.Contains(shape.Name) && !outputs.Contains(shape.Name), memberPath,
+                            "document.streaming_usage", "A requiresLength blob can only be referenced by operation input members.");
+                    }
+                    containers.Add(shape.Name);
+                }
+            }
+            foreach (var shape in shapes.EnumerateObject())
+            {
+                budget.Work();
+                foreach (var (member, memberPath) in Members(shape.Name, shape.Value, shape.Value.GetProperty("type").GetString()))
+                {
+                    ValidationContext.Require(!member.TryGetProperty("target", out var target) ||
+                        target.ValueKind != JsonValueKind.String || !containers.Contains(target.GetString()!),
+                        memberPath, "document.streaming_usage",
+                        "A structure containing a streaming member cannot be targeted by another member.");
+                }
+            }
+
+            IEnumerable<(JsonElement Member, string Path)> Members(string id, JsonElement shape, string? kind)
+            {
+                var path = "$/shapes/" + Escape(id);
+                if (kind is "structure" or "union" or "enum" or "intEnum" &&
+                    shape.TryGetProperty("members", out var members) && members.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var member in members.EnumerateObject())
+                    {
+                        budget.Work();
+                        if (member.Value.ValueKind == JsonValueKind.Object)
+                        { yield return (member.Value, path + "/members/" + Escape(member.Name)); }
+                    }
+                }
+                foreach (var name in kind == "list" ? new[] { "member" } : kind == "map" ? new[] { "key", "value" } : [])
+                {
+                    budget.Work();
+                    if (shape.TryGetProperty(name, out var member) && member.ValueKind == JsonValueKind.Object)
+                    { yield return (member, path + "/" + name); }
+                }
+            }
+        }
+
         private static bool TryDefault(JsonElement shape, out JsonElement value)
         {
             value = default;
@@ -945,6 +1054,10 @@ public static partial class ApiOperationDocumentResolver
                         traits.TryGetProperty("smithy.api#error", out _),
                     "smithy.api#idempotencyToken" => memberContainer == "structure",
                     "smithy.api#jsonName" => memberContainer is "structure" or "union",
+                    "smithy.api#requestCompression" => memberContainer is null && kind == "operation",
+                    "smithy.api#streaming" => memberContainer is null && kind is "blob" or "union",
+                    "smithy.api#requiresLength" => memberContainer is null && kind == "blob" &&
+                        traits.TryGetProperty("smithy.api#streaming", out _),
                     "smithy.api#sensitive" => memberContainer is null && kind is not ("service" or "operation" or "resource"),
                     "smithy.api#enum" => memberContainer is null && kind == "string",
                     "smithy.api#required" or "smithy.api#clientOptional" or "smithy.api#recommended" =>
@@ -1108,6 +1221,23 @@ public static partial class ApiOperationDocumentResolver
                             "Smithy length requires a string, blob, list or map, or a member targeting one.");
                         ValidateLengthDeclaration(trait.Value, traitPath);
                         continue;
+                    case "smithy.api#requestCompression":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
+                            "document.trait_value", "The Smithy requestCompression trait requires an object value.");
+                        ValidationContext.Require(trait.Value.TryGetProperty("encodings", out var encodings) &&
+                            encodings.ValueKind == JsonValueKind.Array && encodings.GetArrayLength() > 0,
+                            traitPath + "/encodings", "document.request_compression",
+                            "Request compression requires a nonempty encodings array.");
+                        var encodingIndex = 0;
+                        foreach (var encoding in encodings.EnumerateArray())
+                        {
+                            budget.Work();
+                            ValidationContext.Require(encoding.ValueKind == JsonValueKind.String &&
+                                string.Equals(encoding.GetString(), "gzip", StringComparison.OrdinalIgnoreCase),
+                                traitPath + "/encodings/" + (encodingIndex++).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                                "document.request_compression", "Only the case-insensitive gzip compression algorithm is defined.");
+                        }
+                        continue;
                     case "smithy.api#documentation":
                     case "smithy.api#title":
                     case "smithy.api#since":
@@ -1120,6 +1250,8 @@ public static partial class ApiOperationDocumentResolver
                             "document.trait_value", "The Smithy error trait requires client or server.");
                         continue;
                     case "smithy.api#required":
+                    case "smithy.api#streaming":
+                    case "smithy.api#requiresLength":
                     case "smithy.api#unitType":
                     case "smithy.api#internal":
                     case "smithy.api#sensitive":
