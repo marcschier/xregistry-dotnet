@@ -286,7 +286,7 @@ The implicit prelude support covers `Blob`, `Boolean`, `Document`, `String`,
 `uniqueItems`, `private`, `length`, `range`, `pattern`, `input`, `output`, `readonly`, `idempotent`,
 `default`, `enum`, `enumValue`, `deprecated`, `recommended`, `title`, `since`,
 `tags`, `internal`, `sensitive`, `unitType`, `examples`, `retryable`,
-`idempotencyToken` and `trait`
+`idempotencyToken`, `jsonName`, `timestampFormat` and `trait`
 in `smithy.api`. Other required definitions
 must be supplied in the AST. These checks do not validate every Smithy shape
 constraint, trait value or selector. Full Smithy validation and model assembly
@@ -454,6 +454,22 @@ definitions still report unresolved dependencies. These checks do not generate
 tokens, discard replayed requests or implement client retry policy. A token
 on a nested structure remains valid model metadata, but does not become a
 top-level operation token.
+
+The `jsonName` trait requires a string value on a structure or union member.
+Explicit names cannot repeat within that structure or union; comparison is
+case-sensitive and does not normalize Unicode. Empty strings remain valid
+string values. Separate containers can reuse a name. The selector preserves
+authored names without renaming model members or generating serialized objects.
+These checks do not qualify a protocol's complete property-name mapping.
+
+The `timestampFormat` trait applies to a timestamp root or a member targeting
+a timestamp, including list, map-value and union members. Its exact string
+value must be `date-time`, `http-date` or `epoch-seconds`. Missing target
+definitions still report unresolved dependencies. The annotation controls
+protocol serialization; it does not change the default trait's node
+representation, so numeric and supported RFC 3339 defaults retain their
+existing checks regardless of the authored serialization format. No timestamp
+conversion or protocol-default format inference occurs during selection.
 
 The `examples` trait applies only to operations and requires an array of
 objects. Each example requires a string `title`; `documentation`, when present,

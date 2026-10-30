@@ -5208,6 +5208,260 @@ public class ApiOperationReferenceTests
         await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
     }
 
+    [Test]
+    [Arguments("structure", "\"\"", true)]
+    [Arguments("union", "\"wire-name\"", true)]
+    [Arguments("structure", "\"wire/name~雪\"", true)]
+    [Arguments("structure", "null", false)]
+    [Arguments("union", "1", false)]
+    [Arguments("structure", "{}", false)]
+    [Arguments("union", "[]", false)]
+    public async Task SmithyJsonJsonNameRetainsMemberStringValues(string kind, string value, bool valid)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("string", "null", false))!;
+        document["shapes"]!["example#Value"] = JsonNode.Parse(
+            """{"type":"KIND","members":{"a":{"target":"smithy.api#String","traits":{"smithy.api#jsonName":VALUE}}}}"""
+                .Replace("KIND", kind, StringComparison.Ordinal).Replace("VALUE", value, StringComparison.Ordinal));
+        document["shapes"]!["example#Input"]!["members"]!["value"]!.AsObject().Remove("traits");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid)
+        {
+            await Assert.That(result.Diagnostic).IsNull();
+            await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_value");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Value/members/a/traits/smithy.api#jsonName");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("structure", "same", "same", false)]
+    [Arguments("union", "", "", false)]
+    [Arguments("structure", "Name", "name", true)]
+    [Arguments("union", "é", "e\u0301", true)]
+    [Arguments("structure", "a/b~c", "a/b~c", false)]
+    public async Task SmithyJsonJsonNamesAreExactAndUniqueWithinTheirContainer(
+        string kind, string first, string second, bool valid)
+    {
+        var document = JsonNode.Parse(SmithyExampleDocument("[]"))!;
+        document["shapes"]!["example#Values"] = new JsonObject
+        {
+            ["type"] = kind,
+            ["members"] = new JsonObject
+            {
+                ["a"] = new JsonObject { ["target"] = "smithy.api#String",
+                    ["traits"] = new JsonObject { ["smithy.api#jsonName"] = first } },
+                ["b"] = new JsonObject { ["target"] = "smithy.api#String",
+                    ["traits"] = new JsonObject { ["smithy.api#jsonName"] = second } }
+            }
+        };
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.json_name");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Values/members/b/traits/smithy.api#jsonName");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("operation")]
+    [Arguments("root")]
+    [Arguments("listMember")]
+    [Arguments("mapKey")]
+    [Arguments("mapValue")]
+    [Arguments("enumMember")]
+    public async Task SmithyJsonJsonNameRequiresAStructureOrUnionMember(string position)
+    {
+        var document = JsonNode.Parse(SmithyExampleDocument("[]"))!;
+        var selected = position == "operation" ? document["shapes"]!["example#Get"]! :
+            position == "root" ? document["shapes"]!["example#Input"]! :
+            document["shapes"]!["example#Values"]!["member"]!;
+        if (position is "mapKey" or "mapValue" or "enumMember")
+        {
+            document["shapes"]!["example#Values"] = JsonNode.Parse(position == "enumMember"
+                ? """{"type":"enum","members":{"a":{"target":"smithy.api#Unit"}}}"""
+                : """{"type":"map","key":{"target":"smithy.api#String"},"value":{"target":"smithy.api#String"}}""");
+            selected = position == "enumMember" ? document["shapes"]!["example#Values"]!["members"]!["a"]! :
+                document["shapes"]!["example#Values"]![position == "mapKey" ? "key" : "value"]!;
+        }
+        selected["traits"] ??= new JsonObject();
+        selected["traits"]!["smithy.api#jsonName"] = "wire";
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("date-time")]
+    [Arguments("http-date")]
+    [Arguments("epoch-seconds")]
+    public async Task SmithyJsonTimestampFormatRetainsRootAndAggregateMemberDeclarations(string format)
+    {
+        var document = JsonNode.Parse(SmithyExampleDocument("[]"))!;
+        document["shapes"]!["example#Input"]!["members"] = JsonNode.Parse("""
+            {"plain":{"target":"example#Time"},"list":{"target":"example#Times"},"map":{"target":"example#TimeMap"},
+             "union":{"target":"example#TimeChoice"},"implicit":{"target":"smithy.api#Timestamp"}}
+            """);
+        document["shapes"]!["example#Time"] = new JsonObject { ["type"] = "timestamp",
+            ["traits"] = new JsonObject { ["smithy.api#timestampFormat"] = format } };
+        document["shapes"]!["example#Times"] = JsonNode.Parse("""{"type":"list","member":{"target":"example#Time"}}""");
+        document["shapes"]!["example#TimeMap"] = JsonNode.Parse(
+            """{"type":"map","key":{"target":"smithy.api#String"},"value":{"target":"example#Time"}}""");
+        document["shapes"]!["example#TimeChoice"] = JsonNode.Parse(
+            """{"type":"union","members":{"time":{"target":"example#Time"}}}""");
+        foreach (var member in new[]
+        {
+            document["shapes"]!["example#Input"]!["members"]!["plain"]!,
+            document["shapes"]!["example#Input"]!["members"]!["implicit"]!,
+            document["shapes"]!["example#Times"]!["member"]!,
+            document["shapes"]!["example#TimeMap"]!["value"]!,
+            document["shapes"]!["example#TimeChoice"]!["members"]!["time"]!
+        })
+        {
+            member["traits"] = new JsonObject { ["smithy.api#timestampFormat"] = format };
+        }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+    }
+
+    [Test]
+    [Arguments("\"DATE-TIME\"")]
+    [Arguments("\"rfc3339\"")]
+    [Arguments("\"\"")]
+    [Arguments("null")]
+    [Arguments("{}")]
+    [Arguments("1")]
+    [Arguments("true")]
+    public async Task SmithyJsonTimestampFormatRejectsUnrecognizedOrNonStringValues(string value)
+    {
+        foreach (var onMember in new[] { false, true })
+        {
+            var document = JsonNode.Parse(SmithyDefaultDocument("timestamp", "0", false))!;
+            var selected = onMember ? document["shapes"]!["example#Input"]!["members"]!["value"]! :
+                document["shapes"]!["example#Value"]!;
+            selected["traits"] ??= new JsonObject();
+            selected["traits"]!["smithy.api#timestampFormat"] = JsonNode.Parse(value);
+            var result = ResolveSmithy(document.ToJsonString());
+            await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_value");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo((onMember
+                ? "$/shapes/example#Input/members/value" : "$/shapes/example#Value") + "/traits/smithy.api#timestampFormat");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("operation")]
+    [Arguments("stringRoot")]
+    [Arguments("structureRoot")]
+    [Arguments("stringMember")]
+    [Arguments("mapKey")]
+    public async Task SmithyJsonTimestampFormatRequiresATimestampTarget(string position)
+    {
+        var document = JsonNode.Parse(SmithyExampleDocument("[]"))!;
+        var selected = position == "operation" ? document["shapes"]!["example#Get"]! :
+            position == "structureRoot" ? document["shapes"]!["example#Input"]! :
+            document["shapes"]!["example#Values"]!;
+        if (position == "stringRoot")
+        {
+            selected.AsObject().Remove("member");
+            selected["type"] = "string";
+        }
+        if (position == "stringMember") { selected = document["shapes"]!["example#Values"]!["member"]!; }
+        if (position == "mapKey")
+        {
+            document["shapes"]!["example#Values"] = JsonNode.Parse(
+                """{"type":"map","key":{"target":"smithy.api#String"},"value":{"target":"smithy.api#Timestamp"}}""");
+            selected = document["shapes"]!["example#Values"]!["key"]!;
+        }
+        selected["traits"] ??= new JsonObject();
+        selected["traits"]!["smithy.api#timestampFormat"] = "date-time";
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("date-time")]
+    [Arguments("http-date")]
+    [Arguments("epoch-seconds")]
+    public async Task SmithyJsonTimestampFormatDoesNotRedefineDefaultNodeRepresentation(string format)
+    {
+        foreach (var value in new[] { "0", "\"1970-01-01T00:00:00Z\"" })
+        {
+            var document = JsonNode.Parse(SmithyDefaultDocument("timestamp", value, true))!;
+            document["shapes"]!["example#Value"]!["traits"]!["smithy.api#timestampFormat"] = format;
+            document["shapes"]!["example#Input"]!["members"]!["value"]!["traits"]!["smithy.api#timestampFormat"] =
+                format == "http-date" ? "epoch-seconds" : "http-date";
+            var result = ResolveSmithy(document.ToJsonString());
+            await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+            await Assert.That(result.Diagnostic).IsNull();
+        }
+    }
+
+    [Test]
+    public async Task SmithyJsonSerializationAnnotationsPreserveNativeMetadataWithoutAcquisitionOrUnrelatedScanning()
+    {
+        var document = JsonNode.Parse(SmithyExampleDocument(
+            """[{"title":"literal","input":{"smithy.api#jsonName":false,"smithy.api#timestampFormat":"not-a-format"}}]"""))!;
+        document["shapes"]!["example#Input"]!["members"]!["value"]!["traits"] =
+            JsonNode.Parse("""{"smithy.api#jsonName":"https://must-not-load.example/schema"}""");
+        document["shapes"]!["example#Values"]!["member"]!["target"] = "example#Time";
+        document["shapes"]!["example#Time"] = JsonNode.Parse(
+            """{"type":"timestamp","traits":{"smithy.api#timestampFormat":"epoch-seconds"}}""");
+        document["shapes"]!["example#Unused"] = JsonNode.Parse(
+            """{"type":"string","traits":{"smithy.api#jsonName":null,"smithy.api#timestampFormat":null}}""");
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Serialization annotations are not imports."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
+    [Test]
+    public async Task SmithyJsonTimestampFormatMissingTargetsRemainUnresolved()
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("timestamp", "0", false))!;
+        document["shapes"]!.AsObject().Remove("example#Value");
+        document["shapes"]!["example#Input"]!["members"]!["value"]!["traits"]!["smithy.api#timestampFormat"] = "date-time";
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("dependency.unresolved");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Value");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonExplicitJsonNamesAreScopedToEachStructureOrUnion()
+    {
+        var document = JsonNode.Parse(SmithyExampleDocument("[]"))!;
+        document["shapes"]!["example#Input"]!["members"]!["value"]!["traits"] =
+            JsonNode.Parse("""{"smithy.api#jsonName":"wire"}""");
+        document["shapes"]!["example#Values"] = JsonNode.Parse("""
+            {"type":"union","members":{"a":{"target":"smithy.api#String","traits":{"smithy.api#jsonName":"wire"}}}}
+            """);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+    }
+
     private static string SmithyExampleDocument(string examples) => """
         {"smithy":"2.0","shapes":{
           "example#Get":{"type":"operation","input":{"target":"example#Input"},

@@ -216,6 +216,7 @@ public static partial class ApiOperationDocumentResolver
                         ValidationContext.Require(kind == "structure" || members.EnumerateObject().Any(),
                             path + "/members", "document.members", "Smithy union and enum shapes require at least one member.");
                         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        var jsonNames = new HashSet<string>(StringComparer.Ordinal);
                         var enumStrings = new HashSet<string>(StringComparer.Ordinal);
                         var enumIntegers = new HashSet<JsonNumber>();
                         foreach (var member in members.EnumerateObject())
@@ -224,6 +225,12 @@ public static partial class ApiOperationDocumentResolver
                                 path + "/members", "document.member_name", "Smithy member names must be valid and case-insensitively unique.");
                             var memberPath = path + "/members/" + Escape(member.Name);
                             Reference(member.Value, memberPath, depth, id, memberContainer: kind);
+                            if (TryTrait(member.Value, "smithy.api#jsonName", out var jsonName))
+                            {
+                                budget.Work(jsonName.GetString()!.Length, memberPath);
+                                ValidationContext.Require(jsonNames.Add(jsonName.GetString()!), memberPath + "/traits/smithy.api#jsonName",
+                                    "document.json_name", "Smithy structure or union members cannot repeat an explicit JSON name.");
+                            }
                             if (kind is "enum" or "intEnum")
                             {
                                 ValidationContext.Require(member.Value.GetProperty("target").GetString() == "smithy.api#Unit",
@@ -937,6 +944,7 @@ public static partial class ApiOperationDocumentResolver
                     "smithy.api#retryable" => memberContainer is null && kind == "structure" &&
                         traits.TryGetProperty("smithy.api#error", out _),
                     "smithy.api#idempotencyToken" => memberContainer == "structure",
+                    "smithy.api#jsonName" => memberContainer is "structure" or "union",
                     "smithy.api#sensitive" => memberContainer is null && kind is not ("service" or "operation" or "resource"),
                     "smithy.api#enum" => memberContainer is null && kind == "string",
                     "smithy.api#required" or "smithy.api#clientOptional" or "smithy.api#recommended" =>
@@ -974,6 +982,25 @@ public static partial class ApiOperationDocumentResolver
                     "Conflicting Smithy prelude traits cannot be applied to the same shape.");
                 switch (trait.Name)
                 {
+                    case "smithy.api#jsonName":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.String, traitPath,
+                            "document.trait_value", "The Smithy jsonName trait requires a string value.");
+                        continue;
+                    case "smithy.api#timestampFormat":
+                        var timestampKind = kind;
+                        if (memberContainer is not null)
+                        {
+                            var targetId = shape.GetProperty("target").GetString()!;
+                            timestampKind = shapes.TryGetProperty(targetId, out var timestampTarget)
+                                ? timestampTarget.GetProperty("type").GetString() : SmithyPreludeKind(targetId);
+                        }
+                        ValidationContext.Require(memberContainer is not null && timestampKind is null ||
+                            timestampKind == "timestamp", traitPath, "document.trait_target",
+                            "Smithy timestampFormat requires a timestamp or a member targeting one.");
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.String &&
+                            trait.Value.GetString() is "date-time" or "http-date" or "epoch-seconds", traitPath,
+                            "document.trait_value", "The Smithy timestamp format must be a recognized format.");
+                        continue;
                     case "smithy.api#retryable":
                         ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
                             "document.trait_value", "The Smithy retryable trait requires an object value.");

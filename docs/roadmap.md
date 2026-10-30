@@ -201,6 +201,11 @@ vocabulary/source mapping. It does not supply their implementation.
   on a string-targeting structure member, with at most one marked member per
   structure. Nested declarations do not establish top-level operation tokens;
   no replay store, token generation or retry execution is added.
+  `jsonName` requires a string-valued structure/union member annotation and
+  unique exact explicit names within each container. `timestampFormat` checks
+  timestamp root/member eligibility and the three declared serialization formats.
+  Neither annotation rewrites the selected operation or changes default-node
+  representations; protocol serialization and full name mapping remain open.
   Recognized prelude traits now check documentation/error values and the object
   shape of annotation, idempotent and trait-marker values throughout the
   selected closure. Explicit recognized prelude targets and their declared
