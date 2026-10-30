@@ -113162,6 +113162,8 @@
         "status": "implemented",
         "testIds": [
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenRpcSelectionPreservesTheNativeMethodAndDecodesItsNameOnce",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenRpcRootMetadataPreservesMethodSelectionWithoutDefaultOrUrlAcquisition",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenRpcMalformedRootMetadataFailsBeforeMethodDependencyAcquisition",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenRpcExamplesPreserveLiteralJsonAndNotificationAbsenceWithoutAcquisition",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenRpcMalformedExamplesInLaterMethodsPreventAnEarlierSelection",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenRpcPairingAndExampleReferencesResolveFromTheirActualContainingDocuments",

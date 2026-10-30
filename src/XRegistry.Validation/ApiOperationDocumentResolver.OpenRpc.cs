@@ -8,6 +8,30 @@ namespace XRegistry.Validation;
 
 public static partial class ApiOperationDocumentResolver
 {
+    private static void ValidateOpenRpcDocumentMetadata(JsonElement root, ValidationContext budget)
+    {
+        ValidateOpenRpcServers(root, "$", budget);
+        ValidateOpenRpcDocumentation(root, "$");
+        ValidateOpenRpcOptionalString(root, "$schema", "$");
+        if (!root.TryGetProperty("info", out var info)) { return; }
+        ValidationContext.Require(info.ValueKind == JsonValueKind.Object, "$/info",
+            "document.info", "OpenRPC info must be an object.");
+        RequireOpenRpcString(info, "title", "$/info", "document.info_title");
+        RequireOpenRpcString(info, "version", "$/info", "document.info_version");
+        ValidateOpenRpcOptionalString(info, "description", "$/info");
+        ValidateOpenRpcOptionalString(info, "termsOfService", "$/info");
+        foreach (var member in new[] { "contact", "license" })
+        {
+            if (!info.TryGetProperty(member, out var metadata)) { continue; }
+            var path = "$/info/" + member;
+            ValidationContext.Require(metadata.ValueKind == JsonValueKind.Object, path,
+                "document.info_metadata", "OpenRPC contact and license must be objects.");
+            ValidateOpenRpcOptionalString(metadata, "name", path);
+            ValidateOpenRpcOptionalString(metadata, "url", path);
+            if (member == "contact") { ValidateOpenRpcOptionalString(metadata, "email", path); }
+        }
+    }
+
     private static async ValueTask<ApiOperationResolutionResult?> ValidateOpenRpcMethodAsync(
         OperationLocation location, ReferenceContext references, ValidationContext budget,
         List<OperationLocation> links, CancellationToken cancellationToken)
@@ -17,17 +41,7 @@ public static partial class ApiOperationDocumentResolver
         budget.Work(path: path);
         ValidateOpenRpcAnnotations(method, path);
         ValidateOpenRpcDocumentation(method, path);
-        if (method.TryGetProperty("servers", out var servers))
-        {
-            ValidationContext.Require(servers.ValueKind == JsonValueKind.Array, path + "/servers",
-                "document.servers", "OpenRPC servers must be an array.");
-            var serverIndex = 0;
-            foreach (var server in servers.EnumerateArray())
-            {
-                var serverPath = path + "/servers/" + (serverIndex++).ToString(CultureInfo.InvariantCulture);
-                ValidateOpenRpcServer(server, serverPath, budget);
-            }
-        }
+        ValidateOpenRpcServers(method, path, budget);
         if (method.TryGetProperty("links", out var methodLinks))
         {
             ValidationContext.Require(methodLinks.ValueKind == JsonValueKind.Array, path + "/links",
@@ -194,6 +208,19 @@ public static partial class ApiOperationDocumentResolver
             item.Pointer + "/externalValue", "document.example_value_conflict",
             "OpenRPC example value and externalValue are mutually exclusive.");
         return null;
+    }
+
+    private static void ValidateOpenRpcServers(JsonElement value, string path, ValidationContext budget)
+    {
+        if (!value.TryGetProperty("servers", out var servers)) { return; }
+        ValidationContext.Require(servers.ValueKind == JsonValueKind.Array, path + "/servers",
+            "document.servers", "OpenRPC servers must be an array.");
+        var index = 0;
+        foreach (var server in servers.EnumerateArray())
+        {
+            ValidateOpenRpcServer(server,
+                path + "/servers/" + (index++).ToString(CultureInfo.InvariantCulture), budget);
+        }
     }
 
     private static void ValidateOpenRpcServer(JsonElement server, string path, ValidationContext budget)

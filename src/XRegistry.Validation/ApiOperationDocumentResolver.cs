@@ -281,6 +281,7 @@ public static partial class ApiOperationDocumentResolver
             {
                 try
                 {
+                    ValidateOpenRpcDocumentMetadata(root, budget);
                     return await ResolveOpenRpcMethodAsync(root, reference.Selector.Tokens[^1], references,
                         budget, cancellationToken).ConfigureAwait(false);
                 }

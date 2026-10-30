@@ -127,6 +127,21 @@ opaque schema data and do not trigger retrieval. This checks method contracts,
 not every schema keyword or document metadata field.
 `SupportsApiDocumentValidation` remains false.
 
+Supplied root metadata is checked before any Method dependency is acquired.
+Root servers use the same structural rules as method servers; root
+`externalDocs` requires a URL string and an optional description string, and
+`$schema`, when present, must be a string. None of these URLs triggers retrieval.
+A supplied `info` must be an object with string `title` and `version` fields.
+The document version is independent of the OpenRPC feature-set version and is
+not parsed as SemVer. Info descriptions and terms-of-service values must be
+strings. Supplied contact and license declarations must be objects with string
+name/URL fields when present; contact email must also be a string.
+
+The partial selector still accepts documents that omit `info`; it does not
+establish that every required root property is present. URL, email and template
+validity remain outside these structural checks. Root server defaults are not
+inserted into the selected native Method Object.
+
 Supplied method servers require a URL string; optional names and descriptions
 retain their string types. Server-variable entries require string defaults and,
 when present, arrays of string enum values. Selection preserves template text

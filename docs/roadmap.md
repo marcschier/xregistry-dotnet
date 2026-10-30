@@ -155,6 +155,11 @@ vocabulary/source mapping. It does not supply their implementation.
   Supplied method servers, server variables, tags and documentation declarations
   have structural checks. Tag references use the same authorized retrieval;
   server and documentation URLs remain native strings without invocation.
+  Supplied root servers, documentation, schema URI and Info/Contact/License
+  metadata have structural checks before Method dependency acquisition. An
+  omitted root Info Object is still accepted by the partial selector; complete
+  required-root validation remains open. Root defaults are not inserted into
+  selected methods.
   URL-template semantics and complete URL validation remain open.
   Link references use the same acquisition policy; supplied linked method names
   must identify one occurrence after the complete Method array is resolved.

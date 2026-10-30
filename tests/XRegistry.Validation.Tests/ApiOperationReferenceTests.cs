@@ -2476,7 +2476,7 @@ public class ApiOperationReferenceTests
     public async Task OpenRpcSelectionPreservesTheNativeMethodAndDecodesItsNameOnce()
     {
         const string document = """
-            {"openrpc":"1.4.0","info":{"version":"9.2.0"},"methods":[
+            {"openrpc":"1.4.0","info":{"title":"Users","version":"9.2.0"},"methods":[
               {"name":"Other","params":[]},
               {"name":"a/~1%2F","params":[{"name":"request","schema":{"type":"string"}}],
                "result":{"name":"reply","schema":{"type":"integer"}},
@@ -2520,6 +2520,81 @@ public class ApiOperationReferenceTests
         await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
         await Assert.That(result.Operation.GetRawText()).IsEqualTo(native);
         await Assert.That(result.Operation.TryGetProperty("result", out _)).IsFalse();
+    }
+
+    [Test]
+    [Arguments("""{}""")]
+    [Arguments("""{"servers":[]}""")]
+    [Arguments("""{"info":{"title":"","version":"release not SemVer","contact":{},"license":{}}}""")]
+    [Arguments("""
+        {"info":{"title":"Users","version":"independent document release",
+          "description":"API description","termsOfService":"https://must-not-load.example/terms",
+          "contact":{"name":"API contact","url":"https://must-not-load.example/contact","email":"support@example.test"},
+          "license":{"name":"MIT","url":"https://must-not-load.example/license"}},
+         "externalDocs":{"url":"https://must-not-load.example/docs","description":"Reference"},
+         "$schema":"https://must-not-load.example/schema",
+         "servers":[{"url":"../{region}","name":"Root server","summary":"Summary","description":"Description",
+            "variables":{"region":{"default":"west","enum":["west","east"],"description":"Region"}}}]}
+        """)]
+    public async Task OpenRpcRootMetadataPreservesMethodSelectionWithoutDefaultOrUrlAcquisition(string metadata)
+    {
+        var document = JsonNode.Parse(metadata)!.AsObject();
+        document["openrpc"] = "1.4.0";
+        const string method = """{"name":"Target","params":[]}""";
+        document["methods"] = new JsonArray(JsonNode.Parse(method));
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenRPC/1.4", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Metadata URLs must not be acquired."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Operation.GetProperty("name").GetString()).IsEqualTo("Target");
+        await Assert.That(result.Operation.GetProperty("params").GetArrayLength()).IsEqualTo(0);
+        await Assert.That(result.Operation.TryGetProperty("servers", out _)).IsFalse();
+        await Assert.That(result.Operation.TryGetProperty("info", out _)).IsFalse();
+        await Assert.That(result.DocumentPath).IsEqualTo("$/methods/0");
+    }
+
+    [Test]
+    [Arguments("""{"info":null}""", "document.info", "$/info")]
+    [Arguments("""{"info":[]}""", "document.info", "$/info")]
+    [Arguments("""{"info":{}}""", "document.info_title", "$/info/title")]
+    [Arguments("""{"info":{"title":false,"version":"x"}}""", "document.info_title", "$/info/title")]
+    [Arguments("""{"info":{"title":"API"}}""", "document.info_version", "$/info/version")]
+    [Arguments("""{"info":{"title":"API","version":1}}""", "document.info_version", "$/info/version")]
+    [Arguments("""{"info":{"title":"API","version":"x","description":[]}}""", "document.annotation", "$/info/description")]
+    [Arguments("""{"info":{"title":"API","version":"x","termsOfService":true}}""", "document.annotation", "$/info/termsOfService")]
+    [Arguments("""{"info":{"title":"API","version":"x","contact":null}}""", "document.info_metadata", "$/info/contact")]
+    [Arguments("""{"info":{"title":"API","version":"x","contact":{"name":0}}}""", "document.annotation", "$/info/contact/name")]
+    [Arguments("""{"info":{"title":"API","version":"x","contact":{"email":{}}}}""", "document.annotation", "$/info/contact/email")]
+    [Arguments("""{"info":{"title":"API","version":"x","contact":{"url":null}}}""", "document.annotation", "$/info/contact/url")]
+    [Arguments("""{"info":{"title":"API","version":"x","license":[]}}""", "document.info_metadata", "$/info/license")]
+    [Arguments("""{"info":{"title":"API","version":"x","license":{"name":false}}}""", "document.annotation", "$/info/license/name")]
+    [Arguments("""{"info":{"title":"API","version":"x","license":{"url":3}}}""", "document.annotation", "$/info/license/url")]
+    [Arguments("""{"$schema":{}}""", "document.annotation", "$/$schema")]
+    [Arguments("""{"externalDocs":null}""", "document.external_docs", "$/externalDocs")]
+    [Arguments("""{"externalDocs":{}}""", "document.external_docs_url", "$/externalDocs/url")]
+    [Arguments("""{"externalDocs":{"url":false}}""", "document.external_docs_url", "$/externalDocs/url")]
+    [Arguments("""{"externalDocs":{"url":"https://example.test","description":0}}""", "document.annotation", "$/externalDocs/description")]
+    [Arguments("""{"servers":null}""", "document.servers", "$/servers")]
+    [Arguments("""{"servers":[0]}""", "document.server", "$/servers/0")]
+    [Arguments("""{"servers":[{}]}""", "document.server_url", "$/servers/0/url")]
+    [Arguments("""{"servers":[{"url":"localhost","variables":{"a/b~c":{"default":0}}}]}""", "document.server_default", "$/servers/0/variables/a~1b~0c/default")]
+    [Arguments("""{"servers":[{"url":"localhost","variables":{"region":{"default":"west","enum":[false]}}}]}""", "document.server_enum", "$/servers/0/variables/region/enum/0")]
+    public async Task OpenRpcMalformedRootMetadataFailsBeforeMethodDependencyAcquisition(
+        string metadata, string code, string path)
+    {
+        var document = JsonNode.Parse(metadata)!.AsObject();
+        document["openrpc"] = "1.4.0";
+        document["methods"] = new JsonArray(new JsonObject { ["$ref"] = "https://must-not-load.example/method" });
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenRPC/1.4", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Invalid root must fail before imports."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        await Assert.That(result.Diagnostic.Path).IsEqualTo(path);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        await Assert.That(result.DocumentPath).IsNull();
     }
 
     [Test]
@@ -3229,7 +3304,7 @@ public class ApiOperationReferenceTests
     [Arguments("1.4.0+build.01")]
     public async Task OpenRpcUsesTheDeclaredFeatureSetRatherThanTheApplicationVersion(string version)
     {
-        var document = $$"""{"openrpc":"{{version}}","info":{"version":"7.0.0"},"methods":[{"name":"Target","params":[]}]}""";
+        var document = $$"""{"openrpc":"{{version}}","info":{"title":"Users","version":"7.0.0"},"methods":[{"name":"Target","params":[]}]}""";
         var result = ApiOperationDocumentResolver.Resolve("OpenRPC/1.4", "application/json",
             System.Text.Encoding.UTF8.GetBytes(document),
             ApiOperationReference.Parse("/apigroups/users/apis/Profile#operations/Target"));
