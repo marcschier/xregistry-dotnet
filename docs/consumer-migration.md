@@ -195,6 +195,15 @@ explicitly owned caches and work children are removed.
 
 ## Current evidence and limits
 
+All eight generic package-consumer cells in
+[native run `41024778707`](https://github.com/marcschier/xregistry-dotnet/actions/runs/41024778707)
+passed at source commit `ecd2a3bb92e5c390590b121ae96b598671361305`:
+.NET 8/.NET 10 on Windows/Linux x64 and ARM64. Each cell executed all 27
+native cases and both managed negative controls. The run retains source,
+package, binary and execution evidence in its `native-all-packages-*`
+artifacts. This is development qualification of the consumer fixture, not
+full native test-suite coverage or release qualification.
+
 The development runs at `D:\temp\97aa2a5176f5` (net8.0/win-x64) and
 `D:\temp\cac5584c2f5c` (net10.0/win-x64) each passed all 27 native cases,
 with zero JIT compilations and no IL warnings. Ordinary and feature-masked
@@ -213,9 +222,9 @@ gate without suppressing warnings or altering the HTTP host. A test host or
 application that independently selects packaged System.Text.Json 10.x still
 requires separate qualification.
 
-This evidence does not establish Linux/ARM64 package qualification, power-loss
-durability, arbitrary authoritative dispatch, immutable live HTTP federation,
-complete protocol conformance, or production TLS/authentication. The OPC UA
+This evidence does not establish power-loss durability, arbitrary authoritative
+dispatch, immutable live HTTP federation, complete protocol conformance, or
+production TLS/authentication. The OPC UA
 binding has live-server coverage for its tested Session, operation, event
 Subscription, and two-server external-target paths, but has no NativeAOT
 qualification. Core API views and NodeSet projection remain unimplemented;

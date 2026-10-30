@@ -34,15 +34,18 @@ release safeguards remain in their subject guides.
 
 ## Native platforms and package consumers
 
-- Execute the required .NET 8/.NET 10 Windows/Linux x64/ARM64 library-consumer
-  cells and the .NET 10 principal-sample cells with real Native AOT binaries.
+The selected generic package, model, client/bridge sample and storage matrix
+passed all 28 jobs at `ecd2a3b` on Windows/Linux x64 and ARM64. See
+[native evidence](native-aot.md#current-evidence-and-uncovered-cells).
+Full native TUnit requirement receipts remain incomplete.
+
 - Refresh source-matched package-consumer and sample evidence after material
   package changes. Preserve exact source, package, executable, and report hashes.
 - Resolve the .NET 8 HTTP test-host warning gate caused by its own packaged
   System.Text.Json 10.0.x dependency. The generic package-consumer gate now
   passes using framework JSON; that does not qualify the TUnit test host.
-- Add the still-unexecuted Linux/ARM64 sample, storage, binding, federation,
-  interoperability, and performance cells described in
+- Execute the remaining module-level binding, federation, interoperability and
+  performance cases described in
   [native AOT qualification](native-aot.md).
 
 ## Interoperability

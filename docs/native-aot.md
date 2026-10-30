@@ -54,9 +54,15 @@ and executed-case evidence described by the
 
 ## Current evidence and uncovered cells
 
-The current generic package-consumer receipts cover Windows x64 on both target
-frameworks, as described in
-[consumer embedding](consumer-migration.md#current-evidence-and-limits).
+The [native matrix at `ecd2a3b`](https://github.com/marcschier/xregistry-dotnet/actions/runs/41024778707)
+passed all 28 jobs on Windows/Linux x64 and ARM64: eight generic package-consumer
+cells, four model-consumer jobs executing both frameworks, eight storage cells,
+and four jobs each for the client and bridge samples. The .NET 10 storage jobs
+also executed the durable HTTP probe. Generic consumer receipts are described
+in [consumer embedding](consumer-migration.md#current-evidence-and-limits).
+These jobs qualify their development probes, not the complete native TUnit
+suites or every specification obligation.
+
 The module-level receipts below are historical and have not been refreshed
 against the complete successor source set. Do not treat their counts as
 qualification of the current implementation.
@@ -90,9 +96,10 @@ review and evidence mapping. Their count does not establish conformance.
 The strict tooling retains rejected receipts for a concurrently changed
 protected ledger and for pytest subtest/XML accounting disagreement.
 
-Linux/ARM64 package/sample cells, peer limitations, and release approvals are
-not covered by the current source-matched evidence. The complete outstanding
-matrix is tracked in the
+The passing matrix does not cover every module-level binding, federation,
+interoperability or performance case. Full native requirement receipts,
+unimplemented profiles, peer limitations and release approvals remain open.
+The outstanding work is tracked in the
 [roadmap](roadmap.md#native-platforms-and-package-consumers). Older checkpoint
 receipts and before/after narratives are retained in the
 [changelog](changelog.md#package-consumer-checkpoints).
