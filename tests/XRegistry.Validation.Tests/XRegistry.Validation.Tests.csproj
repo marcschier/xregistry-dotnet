@@ -5,6 +5,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <IsTestProject>true</IsTestProject>
+    <IsAotCompatible>true</IsAotCompatible>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>

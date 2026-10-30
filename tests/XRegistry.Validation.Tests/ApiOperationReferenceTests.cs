@@ -2537,7 +2537,7 @@ public class ApiOperationReferenceTests
     [Arguments("double", "", false)]
     public async Task SmithyJsonFloatingSpecialDefaultsUseExactNativeStrings(string kind, string value, bool valid)
     {
-        var literal = JsonSerializer.Serialize(value);
+        var literal = JsonValue.Create(value)!.ToJsonString();
         foreach (var rootDefault in new[] { false, true })
         {
             var result = ResolveSmithy(SmithyDefaultDocument(kind, literal, rootDefault));
@@ -4317,7 +4317,7 @@ public class ApiOperationReferenceTests
     {
         foreach (var rootDefault in new[] { false, true })
         {
-            var document = JsonNode.Parse(SmithyDefaultDocument("timestamp", JsonSerializer.Serialize(text), rootDefault))!;
+            var document = JsonNode.Parse(SmithyDefaultDocument("timestamp", JsonValue.Create(text)!.ToJsonString(), rootDefault))!;
             if (rootDefault)
             {
                 document["shapes"]!["example#Input"]!["members"]!["value"]!["traits"]!["smithy.api#default"] = null;
@@ -4342,7 +4342,7 @@ public class ApiOperationReferenceTests
     [Arguments("2026-01-01T00:00:00.12301Z")]
     public async Task SmithyJsonStringTimestampDefaultsDoNotRoundUnsupportedInstants(string text)
     {
-        var result = ResolveSmithy(SmithyDefaultDocument("timestamp", JsonSerializer.Serialize(text), false));
+        var result = ResolveSmithy(SmithyDefaultDocument("timestamp", JsonValue.Create(text)!.ToJsonString(), false));
         await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Unsupported);
         await Assert.That(result.Diagnostic!.Code).IsEqualTo("smithy.timestamp_default");
         await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Input/members/value/traits/smithy.api#default");
@@ -4544,7 +4544,7 @@ public class ApiOperationReferenceTests
     {
         foreach (var rootDefault in new[] { false, true })
         {
-            var document = JsonNode.Parse(SmithyDefaultDocument(kind, JsonSerializer.Serialize(text), rootDefault))!;
+            var document = JsonNode.Parse(SmithyDefaultDocument(kind, JsonValue.Create(text)!.ToJsonString(), rootDefault))!;
             if (rootDefault)
             {
                 document["shapes"]!["example#Input"]!["members"]!["value"]!["traits"]!["smithy.api#default"] = null;
@@ -4604,7 +4604,7 @@ public class ApiOperationReferenceTests
     [Arguments("1e")]
     public async Task SmithyJsonNonJsonNumberStringSpellingsRemainExplicitlyUnsupported(string text)
     {
-        var result = ResolveSmithy(SmithyDefaultDocument("bigDecimal", JsonSerializer.Serialize(text), false));
+        var result = ResolveSmithy(SmithyDefaultDocument("bigDecimal", JsonValue.Create(text)!.ToJsonString(), false));
         await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Unsupported);
         await Assert.That(result.Diagnostic!.Code).IsEqualTo("smithy.numeric_string_default");
         await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
@@ -4618,7 +4618,7 @@ public class ApiOperationReferenceTests
     public async Task SmithyJsonEncodedNumbersRetainSourceCharacterBudget(bool bound, int length, bool valid)
     {
         var text = new string('1', length);
-        var document = JsonNode.Parse(SmithyDefaultDocument("bigDecimal", bound ? "0" : JsonSerializer.Serialize(text), false))!;
+        var document = JsonNode.Parse(SmithyDefaultDocument("bigDecimal", bound ? "0" : JsonValue.Create(text)!.ToJsonString(), false))!;
         if (bound)
         {
             document["shapes"]!["example#Input"]!["members"]!["value"]!["traits"]!["smithy.api#range"] =
@@ -10164,7 +10164,7 @@ public class ApiOperationReferenceTests
     {
         var document = SmithyUniqueTraitDocument("integer", "[]");
         var values = new JsonArray();
-        for (var index = 0; index < 1600; index++) { values.Add(index); }
+        for (var index = 0; index < 1600; index++) { values.Add((JsonNode?)JsonValue.Create(index)); }
         document["shapes"]!["example#Get"]!["traits"]!["example#Custom"] = values;
         var result = ResolveSmithy(document.ToJsonString());
         await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
@@ -13216,7 +13216,7 @@ public class ApiOperationReferenceTests
     {
         var document = SmithyIdRefTraitDocument("example#Target", """{"selector":"[trait|example#Marker|(values) = match]"}""");
         var values = new JsonArray();
-        for (var index = 0; index < 1000; index++) { values.Add("match"); }
+        for (var index = 0; index < 1000; index++) { values.Add((JsonNode?)JsonValue.Create("match")); }
         document["shapes"]!["example#Target"]!["traits"] = new JsonObject { ["example#Marker"] = values };
         var control = ResolveSmithy(document.ToJsonString());
         await Assert.That(control.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
@@ -13379,7 +13379,7 @@ public class ApiOperationReferenceTests
     {
         var document = SmithyIdRefTraitDocument("example#Target", """{"selector":"[trait|example#Marker|(values)|(first) = match]"}""");
         var values = new JsonArray();
-        for (var index = 0; index < 1000; index++) { values.Add("match"); }
+        for (var index = 0; index < 1000; index++) { values.Add((JsonNode?)JsonValue.Create("match")); }
         document["shapes"]!["example#Target"]!["traits"] = new JsonObject { ["example#Marker"] = values };
         var control = ResolveSmithy(document.ToJsonString());
         await Assert.That(control.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
@@ -14071,7 +14071,7 @@ public class ApiOperationReferenceTests
     public async Task SmithyJsonScopedContextOperandsBoundEveryNumericAlternativeUnlessOnlyParsing(int length, bool parseOnly)
     {
         var document = SmithyCustomNodeDocument("document", """{"right":[0]}""");
-        document["shapes"]!["example#Get"]!["traits"]!["example#Custom"]!["right"]!.AsArray().Add(new string('1', length));
+        document["shapes"]!["example#Get"]!["traits"]!["example#Custom"]!["right"]!.AsArray().Add((JsonNode?)JsonValue.Create(new string('1', length)));
         var selector = "[@: '1' > @{trait|example#Custom|right|(values)}]";
         document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!["selector"] =
             parseOnly ? ":not(:future(" + selector + "))" : selector;
@@ -14091,8 +14091,8 @@ public class ApiOperationReferenceTests
     {
         var document = SmithyCustomNodeDocument("document", """{"left":[],"right":[]}""");
         var value = document["shapes"]!["example#Get"]!["traits"]!["example#Custom"]!;
-        value["left"]!.AsArray().Add(new string('x', 1000));
-        value["right"]!.AsArray().Add(new string('x', 1000));
+        value["left"]!.AsArray().Add((JsonNode?)JsonValue.Create(new string('x', 1000)));
+        value["right"]!.AsArray().Add((JsonNode?)JsonValue.Create(new string('x', 1000)));
         var assertion = "@{trait|example#Custom|left|(values)} = @{trait|example#Custom|right|(values)}";
         document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!["selector"] = "[@: " + assertion + "]";
         await Assert.That(ResolveSmithy(document.ToJsonString()).Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
@@ -14472,9 +14472,9 @@ public class ApiOperationReferenceTests
               "example#Custom":{"type":"structure","traits":{"smithy.api#trait":{"breakingChanges":[]}}}}}
             """)!;
         var rules = document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!["breakingChanges"]!.AsArray();
-        rules.Add(new JsonObject { ["change"] = change, ["severity"] = severity, ["path"] = rulePath,
+        rules.Add((JsonNode)new JsonObject { ["change"] = change, ["severity"] = severity, ["path"] = rulePath,
             ["message"] = "https://must-not-load.example/schema" });
-        rules.Add(new JsonObject { ["change"] = "presence", ["message"] = "" });
+        rules.Add((JsonNode)new JsonObject { ["change"] = "presence", ["message"] = "" });
         var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
             System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
             ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
