@@ -1348,7 +1348,7 @@ public static partial class ApiOperationDocumentResolver
                     "smithy.api#traitValidators" => memberContainer is null &&
                         traits.TryGetProperty("smithy.api#trait", out _),
                     "smithy.api#authDefinition" or "smithy.api#protocolDefinition" =>
-                        memberContainer is null && kind == "structure" &&
+                        memberContainer is null &&
                         traits.TryGetProperty("smithy.api#trait", out _),
                     "smithy.api#retryable" => memberContainer is null && kind == "structure" &&
                         traits.TryGetProperty("smithy.api#error", out _),

@@ -736,7 +736,8 @@ operations. Empty arrays remain valid, and selection preserves authored order.
 The four implicit HTTP schemes (`httpBasicAuth`, `httpDigestAuth`,
 `httpBearerAuth` and `httpApiKeyAuth`) are recognized without supplied
 definitions. Explicit scheme definitions must carry both `trait` and
-`authDefinition`; the latter requires a structure trait with an object value.
+`authDefinition`; the latter requires a root trait definition and an object
+annotation. The scheme's own value schema need not be a structure.
 Its optional `traits` array identifies required trait definitions. Those
 definitions and their schema dependencies are traversed with the existing
 private-access checks. Repeated entries in this dependency array are not
@@ -748,9 +749,10 @@ resolver's prelude registry. Selection does not establish that schemes are
 applied to every enclosing service, compute inherited authentication priorities
 or validate complete custom trait application schemas.
 
-Reached `protocolDefinition` declarations likewise require structure traits and
-object values. Their optional `traits` array identifies required trait
-definitions, with the same dependency traversal and no uniqueness restriction.
+Reached `protocolDefinition` declarations likewise accept any root trait
+definition and require object annotations. Their optional `traits` array
+identifies required trait definitions, with the same dependency traversal and no
+uniqueness restriction.
 The optional `noInlineDocumentSupport` property requires a Boolean value.
 Operation selection does not infer a service's protocol from these declarations
 or enforce that protocol's service-wide prohibition on document shapes. Those

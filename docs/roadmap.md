@@ -231,7 +231,7 @@ vocabulary/source mapping. It does not supply their implementation.
   does not execute polling or modify request timeout configuration.
   `auth` checks ordered unique absolute scheme IDs, including empty lists and
   the four implicit HTTP authentication schemes. Explicit schemes must be
-  structure traits marked with object-valued `authDefinition`; required trait
+  trait definitions marked with object-valued `authDefinition`; required trait
   IDs are traversed with schema dependencies and private-access checks, without
   requiring that dependency list to be unique. Missing definitions remain
   unresolved without acquisition. Complete implicit required-trait coverage,
@@ -377,9 +377,12 @@ vocabulary/source mapping. It does not supply their implementation.
   for custom values and decoded map keys, with the same helper used for defaults.
   Native `enum`/`intEnum` membership and complete custom application schemas
   remain unvalidated.
-  Reached `protocolDefinition` declarations share the structure-trait target
-  and required-trait reference checks; `noInlineDocumentSupport` requires a
-  Boolean. Protocol selection and the service-closure document prohibition
+  Reached `authDefinition` and `protocolDefinition` declarations accept any
+  root trait schema, as specified by their `[trait|trait]` selectors, rather
+  than requiring structures. Non-trait targets remain invalid, and applied
+  values still check the declared schema. Required-trait references retain
+  their marker, presence and access checks; `noInlineDocumentSupport` requires
+  a Boolean. Protocol selection and the service-closure document prohibition
   remain unvalidated.
   `suppress` checks arrays of nonempty literal event IDs without imposing
   uniqueness or suppressing structural errors and unresolved dependencies.

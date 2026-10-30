@@ -8073,6 +8073,36 @@ public class ApiOperationReferenceTests
     })!;
 
     [Test]
+    [Arguments("authDefinition", "\"configured\"", true)]
+    [Arguments("protocolDefinition", "\"configured\"", true)]
+    [Arguments("authDefinition", "{}", false)]
+    [Arguments("protocolDefinition", "{}", false)]
+    public async Task SmithyJsonMetaTraitSchemasStillValidateAppliedValues(string marker, string value, bool valid)
+    {
+        var document = SmithyAuthenticationDocument();
+        document["shapes"]!["example#Scheme"] = JsonNode.Parse("""
+            {"type":"string","traits":{"smithy.api#trait":{} }}
+            """);
+        document["shapes"]!["example#Scheme"]!["traits"]!["smithy.api#" + marker] = new JsonObject();
+        document["shapes"]!["example#Get"]!["traits"]!.AsObject().Remove("smithy.api#auth");
+        document["shapes"]!["example#Get"]!["traits"]!["example#Scheme"] = JsonNode.Parse(value);
+        var result = ResolveSmithy(document.ToJsonString());
+
+        await Assert.That(result.Status).IsEqualTo(valid ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid)
+        {
+            await Assert.That(result.Diagnostic).IsNull();
+            await Assert.That(result.Operation.GetProperty("traits").GetProperty("example#Scheme").GetString()).IsEqualTo("configured");
+        }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_node");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/example#Scheme");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
     [Arguments("null", "document.trait_value")]
     [Arguments("true", "document.trait_value")]
     [Arguments("[]", "document.trait_value")]
@@ -8749,17 +8779,23 @@ public class ApiOperationReferenceTests
     [Arguments("list")]
     [Arguments("map")]
     [Arguments("union")]
-    public async Task SmithyJsonAuthDefinitionRequiresAStructureTrait(string kind)
+    [Arguments("structure")]
+    [Arguments("boolean")]
+    [Arguments("blob")]
+    [Arguments("document")]
+    [Arguments("timestamp")]
+    [Arguments("enum")]
+    [Arguments("intEnum")]
+    public async Task SmithyJsonAuthDefinitionAcceptsNonStructureTraitSchemas(string kind)
     {
         var document = SmithyAuthenticationDocument();
         var markers = document["shapes"]!["example#Scheme"]!["traits"]!.DeepClone();
         document["shapes"]!["example#Scheme"] = SmithyHttpBindingTarget(kind);
         document["shapes"]!["example#Scheme"]!["traits"] = markers;
         var result = ResolveSmithy(document.ToJsonString());
-        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
-        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
-        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Scheme/traits/smithy.api#authDefinition");
-        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
     }
 
     [Test]
@@ -8972,17 +9008,23 @@ public class ApiOperationReferenceTests
     [Arguments("list")]
     [Arguments("map")]
     [Arguments("union")]
-    public async Task SmithyJsonProtocolDefinitionRequiresAStructureTrait(string kind)
+    [Arguments("structure")]
+    [Arguments("boolean")]
+    [Arguments("blob")]
+    [Arguments("document")]
+    [Arguments("timestamp")]
+    [Arguments("enum")]
+    [Arguments("intEnum")]
+    public async Task SmithyJsonProtocolDefinitionAcceptsNonStructureTraitSchemas(string kind)
     {
         var document = SmithyProtocolDocument();
         var markers = document["shapes"]!["example#Protocol"]!["traits"]!.DeepClone();
         document["shapes"]!["example#Protocol"] = SmithyHttpBindingTarget(kind);
         document["shapes"]!["example#Protocol"]!["traits"] = markers;
         var result = ResolveSmithy(document.ToJsonString());
-        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
-        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
-        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Protocol/traits/smithy.api#protocolDefinition");
-        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
     }
 
     [Test]
