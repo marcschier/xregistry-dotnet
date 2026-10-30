@@ -8,7 +8,6 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="..\Shared\NativeExecutionProofTests.cs" Link="NativeExecutionProofTests.cs" />
     <PackageReference Include="TUnit" />
     <ProjectReference Include="..\..\src\XRegistry.Federation\XRegistry.Federation.csproj" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />

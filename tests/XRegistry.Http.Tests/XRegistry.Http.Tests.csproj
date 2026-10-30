@@ -8,7 +8,6 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="..\Shared\NativeExecutionProofTests.cs" Link="NativeExecutionProofTests.cs" />
     <Compile Include="..\XRegistry.Storage.File.Tests\TestDirectory.cs" Link="TestDirectory.cs" />
     <PackageReference Include="TUnit" />
     <ProjectReference Include="..\..\src\XRegistry\XRegistry.csproj" />

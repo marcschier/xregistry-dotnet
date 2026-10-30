@@ -17,4 +17,8 @@
     <None Include="$(MSBuildThisFileDirectory)LICENSE" Pack="true" PackagePath="\" />
     <None Include="$(MSBuildThisFileDirectory)NOTICE" Pack="true" PackagePath="\" />
   </ItemGroup>
+  <ItemGroup Condition="'$(IsTestProject)' == 'true'">
+    <Compile Include="$(MSBuildThisFileDirectory)tests\Shared\NativeExecutionProofTests.cs"
+             Link="NativeExecutionProofTests.cs" />
+  </ItemGroup>
 </Project>

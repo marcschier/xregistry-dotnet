@@ -24,8 +24,9 @@ release safeguards remain in their subject guides.
   jitCompiledMethods: 0` (versus a JIT control's `nativeAot: false,
   jitCompiledMethods: 7169`), and the resulting receipt passes every
   structural/hash/native check in `release_check` up to the still-missing
-  seven remaining framework/RID cells. Models, Federation, Server, Storage.File and HTTP
-  now share the proof test; the complete Federation suite passed 626 native cases on
+  seven remaining framework/RID cells.   All 16 test projects now share the proof test through the common build targets;
+  that inclusion does not qualify their native execution.
+  The complete Federation suite passed 626 native cases on
   .NET 10/Windows x64 at `6d143c4`, with zero IL diagnostics and zero JIT-compiled
   methods. Its receipt covers 242 distinct methods, not 626 independent methods.
   At `f97af1b`, complete Server and Storage.File suites passed 886 and 32 native
@@ -41,8 +42,7 @@ release safeguards remain in their subject guides.
   including all 34 incremental publication-to-resolution workflow cases and
   their file-backed deletion/restart paths. Its receipt covers 137 methods,
   with zero IL/JIT and a rejected managed control.
-  Remaining work: link the shared proof into the other test projects, decide
-  whether/how the existing native CI matrix (or a new job) runs the full suites
+  Remaining work: decide how the existing native CI matrix (or a new job) runs the full suites
   across all eight `net8.0`/`net10.0` × `win-x64`/`win-arm64`/`linux-x64`/
   `linux-arm64` cells and uploads receipts, then map each reviewed
   requirement's `testIds` to real method names and attach the resulting

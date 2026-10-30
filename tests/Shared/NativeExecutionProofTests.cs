@@ -26,7 +26,7 @@ public class NativeExecutionProofTests
         var path = Environment.GetEnvironmentVariable("XREGISTRY_NATIVE_PROOF_PATH");
         if (!string.IsNullOrEmpty(path))
         {
-            await using var stream = File.Create(path);
+            await using var stream = System.IO.File.Create(path);
             using var writer = new Utf8JsonWriter(stream);
             writer.WriteStartObject();
             writer.WriteBoolean("nativeAot", nativeAot);

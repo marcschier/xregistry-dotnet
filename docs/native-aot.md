@@ -52,6 +52,15 @@ Release receipts require the exact qualified source, package, runner, artifact,
 and executed-case evidence described by the
 [conformance](conformance.md) and [release](releasing.md) gates.
 
+Every repository test project now includes the same opt-in
+`NativeExecutionProofTests` through `Directory.Build.targets`; setting
+`XREGISTRY_NATIVE_PROOF_PATH` captures that process's dynamic-code flags and JIT
+count. Set a distinct proof path for each separately executed test host.
+Evaluated compile items contain exactly one copy in each of the 16 projects.
+The complete managed gate passes 10,852 cases plus 283 tooling tests.
+The additional proof cases establish availability of the measurement, not
+native execution or specification coverage.
+
 ## Current evidence and uncovered cells
 
 The [native matrix at `ecd2a3b`](https://github.com/marcschier/xregistry-dotnet/actions/runs/41024778707)
