@@ -538,6 +538,7 @@ public class MediaEndpointDefinitionTests
         {
             "", "description", "//media.example.test/description", "http://media.example.test/description",
             "https://user@media.example.test/description", "https://user:password@media.example.test/description",
+            "https://@media.example.test/description", "https://:@media.example.test/description",
             "https://media.example.test/has space", "https://media.example.test/%ZZ",
             "https://media.example.test/\n", "https://media.example.test/\\description"
         })
