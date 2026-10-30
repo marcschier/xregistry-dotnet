@@ -2705,6 +2705,177 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
+    [Arguments("member", 0, true)]
+    [Arguments("member", 1, true)]
+    [Arguments("member", 2, false)]
+    [Arguments("member", 3, false)]
+    [Arguments("target", 0, true)]
+    [Arguments("target", 1, true)]
+    [Arguments("target", 2, false)]
+    [Arguments("target", 3, false)]
+    public async Task SmithyJsonStructuralExclusivityAllowsAtMostOneMemberPerTrait(
+        string mode, int marked, bool valid)
+    {
+        var document = JsonNode.Parse("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"example#Input"}},
+              "example#Input":{"type":"structure","members":{}},
+              "example#Exclusive":{"type":"structure","traits":{"smithy.api#trait":{"structurallyExclusive":"MODE"}}}}}
+            """.Replace("MODE", mode, StringComparison.Ordinal))!;
+        var shapes = document["shapes"]!.AsObject();
+        for (var index = 0; index < 3; index++)
+        {
+            var member = new JsonObject { ["target"] = "example#Value" + index };
+            var target = new JsonObject { ["type"] = "string" };
+            if (index < marked)
+            {
+                (mode == "member" ? member : target)["traits"] = new JsonObject { ["example#Exclusive"] = new JsonObject() };
+            }
+            shapes["example#Input"]!["members"]!["v" + index] = member;
+            shapes["example#Value" + index] = target;
+        }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid)
+        {
+            await Assert.That(result.Operation.GetRawText())
+                .IsEqualTo("""{"type":"operation","input":{"target":"example#Input"}}""");
+        }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_exclusivity");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Input/members/v1");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    public async Task SmithyJsonExclusiveTargetCountsEachMemberEvenWhenBothTargetTheSameShape()
+    {
+        var result = ResolveSmithy("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"example#Input"}},
+              "example#Input":{"type":"structure","members":{
+                "first":{"target":"example#Value"},"second":{"target":"example#Value"}}},
+              "example#Value":{"type":"string","traits":{"example#Exclusive":{}}},
+              "example#Exclusive":{"type":"structure","traits":{"smithy.api#trait":{"structurallyExclusive":"target"}}}}}
+            """);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_exclusivity");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Input/members/second");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("member")]
+    [Arguments("target")]
+    public async Task SmithyJsonStructuralExclusivityIsScopedToEachStructureAndEachTrait(string mode)
+    {
+        var document = """
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"example#Input"},"output":{"target":"example#Output"}},
+              "example#Input":{"type":"structure","members":{
+                "first":{"target":"example#One",MEMBER_ONE},"second":{"target":"example#Two",MEMBER_TWO}}},
+              "example#Output":{"type":"structure","members":{
+                "first":{"target":"example#One",MEMBER_ONE},"second":{"target":"example#Two",MEMBER_TWO}}},
+              "example#One":{"type":"string",TARGET_ONE},
+              "example#Two":{"type":"string",TARGET_TWO},
+              "example#First":{"type":"structure","traits":{"smithy.api#trait":{"structurallyExclusive":"MODE"}}},
+              "example#Second":{"type":"structure","traits":{"smithy.api#trait":{"structurallyExclusive":"MODE"}}}}}
+            """.Replace("MODE", mode, StringComparison.Ordinal);
+        foreach (var name in new[] { "ONE", "TWO" })
+        {
+            var trait = name == "ONE" ? "example#First" : "example#Second";
+            var applied = "\"traits\":{\"" + trait + "\":{}}";
+            document = document.Replace("MEMBER_" + name, mode == "member" ? applied : "\"traits\":{}", StringComparison.Ordinal)
+                .Replace("TARGET_" + name, mode == "target" ? applied : "\"traits\":{}", StringComparison.Ordinal);
+        }
+        var result = ResolveSmithy(document);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetProperty("output").GetProperty("target").GetString()).IsEqualTo("example#Output");
+    }
+
+    [Test]
+    [Arguments("member", "target")]
+    [Arguments("target", "member")]
+    public async Task SmithyJsonStructuralExclusivityDoesNotConfuseMemberAndTargetModes(string mode, string position)
+    {
+        var document = JsonNode.Parse("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"example#Input"}},
+              "example#Input":{"type":"structure","members":{
+                "first":{"target":"example#Value"},"second":{"target":"example#Value"}}},
+              "example#Value":{"type":"string"},
+              "example#Exclusive":{"type":"structure","traits":{"smithy.api#trait":{"structurallyExclusive":"MODE"}}}}}
+            """.Replace("MODE", mode, StringComparison.Ordinal))!;
+        if (position == "target")
+        {
+            document["shapes"]!["example#Value"]!["traits"] = JsonNode.Parse("""{"example#Exclusive":{}}""");
+        }
+        else
+        {
+            foreach (var member in document["shapes"]!["example#Input"]!["members"]!.AsObject())
+            {
+                member.Value!["traits"] = JsonNode.Parse("""{"example#Exclusive":{}}""");
+            }
+        }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task SmithyJsonStructuralExclusivityChecksOnlyReachableStructuresIncludingTraitDefinitions(bool applied)
+    {
+        var document = JsonNode.Parse("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation"},
+              "example#Outer":{"type":"structure","traits":{"smithy.api#trait":{}},"members":{
+                "first":{"target":"smithy.api#String","traits":{"example#Exclusive":{}}},
+                "second":{"target":"smithy.api#String","traits":{"example#Exclusive":{}}}}},
+              "example#Exclusive":{"type":"structure","traits":{"smithy.api#trait":{"structurallyExclusive":"member"}}}}}
+            """)!;
+        if (applied)
+        {
+            document["shapes"]!["example#Get"]!["traits"] = JsonNode.Parse("""{"example#Outer":{}}""");
+        }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(applied
+            ? ApiOperationResolutionStatus.Invalid : ApiOperationResolutionStatus.Selected);
+        if (applied)
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_exclusivity");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Outer/members/second");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+        else
+        {
+            await Assert.That(result.Operation.GetRawText()).IsEqualTo("""{"type":"operation"}""");
+            await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+        }
+    }
+
+    [Test]
+    public async Task SmithyJsonStructuralExclusivityDoesNotRestrictUnionAlternatives()
+    {
+        var result = ResolveSmithy("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"example#Input"}},
+              "example#Input":{"type":"structure","members":{"value":{"target":"example#Choice"}}},
+              "example#Choice":{"type":"union","members":{
+                "first":{"target":"smithy.api#String","traits":{"example#Exclusive":{}}},
+                "second":{"target":"smithy.api#String","traits":{"example#Exclusive":{}}}}},
+              "example#Exclusive":{"type":"structure","traits":{"smithy.api#trait":{"structurallyExclusive":"member"}}}}}
+            """);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+    }
+
+    [Test]
     [Arguments("input", false)]
     [Arguments("input", true)]
     [Arguments("output", false)]

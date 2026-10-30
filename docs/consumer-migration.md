@@ -293,7 +293,7 @@ Literal members inside trait payloads do not become dependency references.
 
 Reachable trait definitions require a string `selector`, when supplied, and
 restrict `structurallyExclusive` to `member` or `target`. These are property
-checks; selector evaluation and structural-exclusivity enforcement remain open.
+checks; general selector evaluation remains open.
 The `conflicts` property must be an array of absolute root trait IDs. A custom
 trait cannot coexist on the same shape with any trait named in that array,
 regardless of property order or whether the other trait declares a reciprocal
@@ -301,6 +301,16 @@ conflict. This also applies to members and reachable trait definitions.
 Matching is case-sensitive. An unknown conflict ID does not require a definition
 unless that trait is actually applied; conflict declarations are not imports.
 Complete trait-member validation and `breakingChanges` rules remain open.
+
+Structural exclusivity is checked separately for each reachable structure and
+trait ID. With `member`, at most one member can directly carry that trait.
+With `target`, at most one member can target a shape carrying that trait;
+two members targeting the same marked shape still violate the rule. Different
+traits can select different members, and the same trait can select one member
+in each of several structures. Direct member markings and target markings are
+not interchangeable. These checks include reachable structure-valued trait
+definitions, but do not constrain union alternatives or inspect unrelated
+structures outside the selected closure.
 
 For each input/output-marked structure reached by the selected operation, the
 resolver checks references across all recognized JSON AST shape kinds. Only

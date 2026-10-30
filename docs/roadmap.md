@@ -195,8 +195,11 @@ vocabulary/source mapping. It does not supply their implementation.
   conflicts are checked on reachable shapes, members and trait definitions,
   independent of property order. Unapplied conflict IDs need no definition.
   Trait-marker selector/conflicts/structurallyExclusive properties have shape
-  checks; general selector evaluation, structural exclusivity, breaking-change
-  rules and other trait member schemas remain open.
+  checks. Structural exclusivity is enforced per reachable structure and trait:
+  member mode limits direct member markings; target mode limits members whose
+  targets carry the trait, including repeated use of the same target. Other
+  structures and trait IDs have separate limits. General selector evaluation,
+  breaking-change rules and other trait member schemas remain open.
   Reachable defaults check applicability, root-null rejection, member null
   overrides, explicit repetition of root defaults, native scalar types,
   integer ranges, finite float/double numbers and exact special-value strings,

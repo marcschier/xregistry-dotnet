@@ -64,6 +64,7 @@ public static partial class ApiOperationDocumentResolver
             closure.ValidateRecursion();
             closure.ValidateInputOutputUsage();
             closure.ValidateDefaults();
+            closure.ValidateStructuralExclusivity();
             return Selected(operation, "$/shapes/" + Escape(shapeId), documentUri);
         }
         catch (ValidationFailure failure)
@@ -464,6 +465,47 @@ public static partial class ApiOperationDocumentResolver
                             "A structure member must repeat its target's default or explicitly override it with null.");
                     }
                     if (hasDefault) { ValidateDefault(targetKind, target, memberDefault, memberPath, member: true); }
+                }
+            }
+        }
+
+        internal void ValidateStructuralExclusivity()
+        {
+            foreach (var (id, shape) in _visited)
+            {
+                budget.Work();
+                if (shape.GetProperty("type").GetString() != "structure" ||
+                    !shape.TryGetProperty("members", out var members)) { continue; }
+                var owners = new Dictionary<string, string>(StringComparer.Ordinal);
+                foreach (var member in members.EnumerateObject())
+                {
+                    var path = "$/shapes/" + Escape(id) + "/members/" + Escape(member.Name);
+                    budget.Work(path: path);
+                    Check(member.Value, "member", member.Name, path);
+                    if (shapes.TryGetProperty(member.Value.GetProperty("target").GetString()!, out var target))
+                    {
+                        Check(target, "target", member.Name, path);
+                    }
+                }
+
+                void Check(JsonElement value, string mode, string memberName, string path)
+                {
+                    if (!value.TryGetProperty("traits", out var traits)) { return; }
+                    foreach (var trait in traits.EnumerateObject())
+                    {
+                        budget.Work(path: path);
+                        if (!shapes.TryGetProperty(trait.Name, out var definition) ||
+                            !definition.TryGetProperty("traits", out var markers) ||
+                            markers.ValueKind != JsonValueKind.Object ||
+                            !markers.TryGetProperty("smithy.api#trait", out var marker) ||
+                            marker.ValueKind != JsonValueKind.Object ||
+                            !marker.TryGetProperty("structurallyExclusive", out var exclusive) ||
+                            exclusive.ValueKind != JsonValueKind.String ||
+                            exclusive.GetString() != mode) { continue; }
+                        ValidationContext.Require(owners.TryAdd(trait.Name, memberName) ||
+                            owners[trait.Name] == memberName, path, "document.trait_exclusivity",
+                            "A structurally exclusive Smithy trait can select only one member of a structure.");
+                    }
                 }
             }
         }
