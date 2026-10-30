@@ -98,6 +98,10 @@ public static partial class ApiOperationDocumentResolver
         {
             budget.Work(path: pointer);
             if (expression.Name.StartsWith("x-", StringComparison.Ordinal)) { continue; }
+            if (!IsCallbackExpression(expression.Name))
+            {
+                return InvalidCallbackExpression(pointer + "/" + Escape(expression.Name));
+            }
             var pathItem = await ResolvePathItemAsync(expression.Value, source, pointer + "/" + Escape(expression.Name),
                 references, new(StringComparer.Ordinal), cancellationToken).ConfigureAwait(false);
             if (pathItem.Failure is not null) { return pathItem.Failure; }
@@ -109,5 +113,73 @@ public static partial class ApiOperationDocumentResolver
             }
         }
         return null;
+    }
+
+    private static ApiOperationResolutionResult InvalidCallbackExpression(string path) =>
+        Failure(ApiOperationResolutionStatus.Invalid, "document.callback_expression",
+            "The callback key contains a malformed OpenAPI runtime expression.", path);
+
+    private static bool IsCallbackExpression(string value)
+    {
+        if (value.StartsWith('$')) { return IsRuntimeExpression(value.AsSpan()); }
+        for (var index = 0; index < value.Length; index++)
+        {
+            if (value[index] == '}') { return false; }
+            if (value[index] != '{') { continue; }
+            var end = value.IndexOf('}', index + 1);
+            if (end < 0 || !IsRuntimeExpression(value.AsSpan(index + 1, end - index - 1)))
+            {
+                return false;
+            }
+            index = end;
+        }
+        return true;
+    }
+
+    private static bool IsRuntimeExpression(ReadOnlySpan<char> expression)
+    {
+        if (expression is "$url" or "$method" or "$statusCode") { return true; }
+        if (expression.StartsWith("$request.", StringComparison.Ordinal))
+        {
+            expression = expression[9..];
+        }
+        else if (expression.StartsWith("$response.", StringComparison.Ordinal))
+        {
+            expression = expression[10..];
+        }
+        else { return false; }
+
+        if (expression.StartsWith("header.", StringComparison.Ordinal))
+        {
+            var token = expression[7..];
+            if (token.IsEmpty) { return false; }
+            foreach (var character in token)
+            {
+                if (!char.IsAsciiLetterOrDigit(character) &&
+                    !"!#$%&'*+-.^_`|~".Contains(character))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+        if (expression.StartsWith("query.", StringComparison.Ordinal) ||
+            expression.StartsWith("path.", StringComparison.Ordinal))
+        {
+            // JSON decoding has already checked the RFC 7159 CHAR production.
+            return true;
+        }
+        if (expression.SequenceEqual("body")) { return true; }
+        if (!expression.StartsWith("body#", StringComparison.Ordinal)) { return false; }
+        var pointer = expression[5..];
+        if (!pointer.IsEmpty && pointer[0] != '/') { return false; }
+        for (var index = 0; index < pointer.Length; index++)
+        {
+            if (pointer[index] == '~' && (++index >= pointer.Length || pointer[index] is not ('0' or '1')))
+            {
+                return false;
+            }
+        }
+        return true;
     }
 }

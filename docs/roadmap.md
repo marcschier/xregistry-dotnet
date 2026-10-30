@@ -141,10 +141,12 @@ vocabulary/source mapping. It does not supply their implementation.
   OpenAPI 3.1 selection includes webhook operation IDs and inline webhook method
   pointers, with ambiguity checking across paths and webhooks. OpenAPI selection
   also traverses nested callbacks and caller-supplied Callback references within
-  finite depth/work limits. It does not evaluate runtime expressions or validate
-  their complete syntax. Inline JSON Pointers can select reusable Path Item and
-  Callback component methods without dereferencing or making unused definitions
-  into operation-ID candidates.
+  finite depth/work limits. Callback keys check bare and embedded runtime
+  expressions, header tokens and body-pointer escapes without evaluating
+  parameter declarations, runtime values or callback URLs. Literal callback
+  text is preserved without URL validation. Inline JSON Pointers can select
+  reusable Path Item and Callback component methods without dereferencing or
+  making unused definitions into operation-ID candidates.
   Smithy selection checks required operation/data/custom-trait dependencies in
   an already assembled non-mixin AST and rejects invalid recursion in that
   closure, invalid enum targets and duplicate or malformed enum values. Its

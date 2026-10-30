@@ -461,6 +461,174 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
+    [Arguments("$url")]
+    [Arguments("$method")]
+    [Arguments("$statusCode")]
+    [Arguments("$request.header.X-Callback")]
+    [Arguments("$response.header.!#$%&'*+-.^_`|~012AZaz")]
+    [Arguments("$request.query.")]
+    [Arguments("$response.path.id")]
+    [Arguments("$request.query.a\"b\\c")]
+    [Arguments("$request.body")]
+    [Arguments("$response.body#")]
+    [Arguments("$request.body#/")]
+    [Arguments("$request.body#/a~0b/~1/")]
+    [Arguments("$request.body#/~01~10")]
+    [Arguments("$request.body#/a%2Fb")]
+    [Arguments("{$request.body#/a~01b}")]
+    [Arguments("https://client.example/hook?id={$request.body#/id}&email={$request.body#/email}")]
+    [Arguments("{$request.query.callback}")]
+    [Arguments("https://client.example/hook")]
+    [Arguments("url")]
+    public async Task CallbackRuntimeSyntaxPreservesNativeKeysWithoutEvaluation(string expression)
+    {
+        foreach (var (format, version) in new[] { ("OpenAPI/3.0", "3.0.4"), ("OpenAPI/3.1", "3.1.1") })
+        {
+            var callback = new System.Text.Json.Nodes.JsonObject
+            {
+                [expression] = new System.Text.Json.Nodes.JsonObject
+                {
+                    ["post"] = new System.Text.Json.Nodes.JsonObject { ["operationId"] = "Notify" }
+                }
+            };
+            var document = System.Text.Encoding.UTF8.GetBytes(
+                """
+                {"openapi":"VERSION","paths":{"/s":{"post":{"callbacks":{"c":CALLBACK}}}},
+                 "components":{"callbacks":{"c":CALLBACK}}}
+                """
+                .Replace("VERSION", version, StringComparison.Ordinal)
+                .Replace("CALLBACK", callback.ToJsonString(), StringComparison.Ordinal));
+            var token = Uri.EscapeDataString(expression.Replace("~", "~0", StringComparison.Ordinal)
+                .Replace("/", "~1", StringComparison.Ordinal));
+            foreach (var selector in new[] { "operations/Notify",
+                "/paths/~1s/post/callbacks/c/" + token + "/post",
+                "/components/callbacks/c/" + token + "/post" })
+            {
+                var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json", document,
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                    resolveReference: (_, _) => throw new InvalidOperationException("Callback keys are not imports."));
+                await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+                await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("Notify");
+                await Assert.That(result.DocumentPath!.Contains(expression.Replace("~", "~0", StringComparison.Ordinal)
+                    .Replace("/", "~1", StringComparison.Ordinal), StringComparison.Ordinal)).IsTrue();
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("$unknown")]
+    [Arguments("$request.unknown.id")]
+    [Arguments("$response.header.")]
+    [Arguments("$request.header.bad name")]
+    [Arguments("$request.header.a:b")]
+    [Arguments("$request.header.ä")]
+    [Arguments("$request.body#not-a-pointer")]
+    [Arguments("$request.body#%2Furl")]
+    [Arguments("$request.body#/a~")]
+    [Arguments("$request.body#/a~2b")]
+    [Arguments("{$url")]
+    [Arguments("$url}")]
+    [Arguments("https://client.example/}")]
+    [Arguments("{}")]
+    [Arguments("{url}")]
+    [Arguments("{$request.body#/a~3}")]
+    [Arguments("https://client.example/?a={$url}&b={$request.bad}")]
+    public async Task MalformedCallbackExpressionsPreventEarlierMatchesAndInlineSelection(string expression)
+    {
+        foreach (var (format, version) in new[] { ("OpenAPI/3.0", "3.0.4"), ("OpenAPI/3.1", "3.1.1") })
+        {
+            var callback = new System.Text.Json.Nodes.JsonObject
+            {
+                [expression] = new System.Text.Json.Nodes.JsonObject
+                {
+                    ["post"] = new System.Text.Json.Nodes.JsonObject { ["operationId"] = "Other" }
+                }
+            };
+            var document = System.Text.Encoding.UTF8.GetBytes(
+                """
+                {"openapi":"VERSION","paths":{"/s":{"post":{"operationId":"Notify","callbacks":{"c":CALLBACK}}}},
+                 "components":{"callbacks":{"c":CALLBACK}}}
+                """
+                .Replace("VERSION", version, StringComparison.Ordinal)
+                .Replace("CALLBACK", callback.ToJsonString(), StringComparison.Ordinal));
+            var token = Uri.EscapeDataString(expression.Replace("~", "~0", StringComparison.Ordinal)
+                .Replace("/", "~1", StringComparison.Ordinal));
+            foreach (var selector in new[] { "operations/Notify",
+                "/paths/~1s/post/callbacks/c/" + token + "/post",
+                "/components/callbacks/c/" + token + "/post" })
+            {
+                var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json", document,
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                    resolveReference: (_, _) => throw new InvalidOperationException("Invalid keys are not imports."));
+                await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.callback_expression");
+                await Assert.That(result.Diagnostic.Path.EndsWith("/" + expression.Replace("~", "~0", StringComparison.Ordinal)
+                    .Replace("/", "~1", StringComparison.Ordinal), StringComparison.Ordinal)).IsTrue();
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task ReferencedCallbackExpressionsAreCheckedButExtensionsAndUnusedDefinitionsAreNotTraversed(bool malformed)
+    {
+        var calls = 0;
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenAPI/3.1", "application/json", """
+            {"openapi":"3.1.1","paths":{"/s":{"post":{"operationId":"Notify","callbacks":{"c":{"$ref":"./callback.json"}}}}},
+             "components":{"callbacks":{"unused":{"{$invalid}":null}}}}
+            """u8.ToArray(), ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Notify"),
+            new Uri("https://api.example/root.json"), (_, _) =>
+            {
+                calls++;
+                var callback = malformed ? """
+                    {"x-{$invalid}":null,"{$request.body#/bad~2}":{"$ref":"https://must-not-load.example/item"}}
+                    """ : """
+                    {"x-{$invalid}":null,"{$request.body#/url}":{"post":{"operationId":"Other"}}}
+                    """;
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(callback));
+            });
+        await Assert.That(calls).IsEqualTo(1);
+        await Assert.That(result.Status).IsEqualTo(malformed
+            ? ApiOperationResolutionStatus.Invalid : ApiOperationResolutionStatus.Selected);
+        if (malformed)
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.callback_expression");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/{$request.body#~1bad~02}");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+        else
+        {
+            await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("Notify");
+            await Assert.That(result.DocumentPath).IsEqualTo("$/paths/~1s/post");
+        }
+    }
+
+    [Test]
+    [Arguments("operations/Notify")]
+    [Arguments("/paths/~1s/post/callbacks/outer/url/put/callbacks/inner/%7B$request.body%23~1bad~02%7D/post")]
+    [Arguments("/components/pathItems/item/post/callbacks/outer/url/put/callbacks/inner/%7B$request.body%23~1bad~02%7D/post")]
+    public async Task DeepCallbackExpressionFailuresAreNotHiddenByValidOuterExpressions(string selector)
+    {
+        var document = """
+            {"openapi":"3.1.1","paths":{"/s":ITEM},"components":{"pathItems":{"item":ITEM}}}
+            """.Replace("ITEM", """
+            {"post":{"operationId":"Notify","callbacks":{"outer":{"url":{"put":{"callbacks":{
+              "inner":{"{$request.body#/bad~2}":{"post":{"operationId":"Other"}}}
+            }}}}}}}
+            """, StringComparison.Ordinal);
+        var result = ApiOperationDocumentResolver.Resolve("OpenAPI/3.1", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.callback_expression");
+        await Assert.That(result.Diagnostic.Path.EndsWith("/callbacks/inner/{$request.body#~1bad~02}",
+            StringComparison.Ordinal)).IsTrue();
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
     [Arguments("""{"callbacks":[]}""", ApiOperationResolutionStatus.Invalid, "document.callbacks")]
     [Arguments("""{"callbacks":{"event":null}}""", ApiOperationResolutionStatus.Invalid, "document.callback")]
     [Arguments("""{"callbacks":{"event":{"$ref":true}}}""", ApiOperationResolutionStatus.Invalid, "dependency.callback")]

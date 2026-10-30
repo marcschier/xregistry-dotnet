@@ -70,8 +70,17 @@ For OpenAPI 3.0 and 3.1, operation-ID selection also searches callbacks attached
 to reachable operations, including nested callbacks and callbacks on webhooks.
 Callback, Path Item and operation references use the containing document's base
 URI and the same caller-controlled acquisition policy. Callback expression keys
-remain literal data; the resolver never evaluates an expression or invokes its
-callback URL. An `x-` key within a Callback Object is an extension and is not
+remain native strings; the resolver never evaluates an expression or invokes its
+callback URL. Bare `$` expressions and expressions embedded in `{...}` are
+checked against the OpenAPI runtime-expression forms. Header references require
+an HTTP token; body fragments require JSON Pointer syntax with exact `~0`/`~1`
+escapes. An empty body pointer and empty pointer tokens are valid; pointer text
+is not percent-decoded or resolved against an HTTP payload. Malformed expressions
+in a reachable callback prevent an earlier operation-ID match. Inline callback
+pointers check each expression token, including reusable and nested definitions.
+Literal callback text is preserved, not checked as a retrievable URL. Parameter
+declarations, runtime values and the resulting callback URL are not evaluated.
+An `x-` key within a Callback Object is an extension and is not
 searched, whereas an `x-` name in the operation's `callbacks` map names a callback.
 Unused callback definitions in `components` are not operation occurrences.
 Repeated use of a callback definition creates separate occurrences; duplicate
@@ -93,8 +102,7 @@ These methods can contain further inline callbacks. A pointer selects the
 specified definition even if it is unused; operation-ID lookup still searches
 only API occurrences reachable through paths, webhooks and callbacks. Reusable
 definitions do not add candidates merely by existing in `components`.
-Full OpenAPI validation, including callback-expression syntax, and YAML parsing
-remain unsupported.
+Full OpenAPI validation and YAML parsing remain unsupported.
 
 For `AvroProtocol/1.12.0`, `#operations/GetUser` selects the exact `GetUser`
 member of `messages`. An absent or empty `messages` object has no selectable

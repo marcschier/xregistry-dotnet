@@ -112620,7 +112620,7 @@
       "text": "For OpenAPI, `operations/{operationId}` resolves an Operation Object with that `operationId` in the API described by the entry document, including referenced path items and operations. Publishers SHOULD supply `operationId`; when present it MUST be unique as specified by the native specification. An ambiguous match MUST fail.",
       "review": {
         "status": "reviewed",
-        "note": "The bounded JSON selector scans path operations, OpenAPI 3.1 webhooks and reachable nested OpenAPI callbacks with exact case-sensitive operation IDs. Caller-supplied Callback, Path Item and Operation references use their containing source base. Duplicate operation occurrences are ambiguous; malformed operations and unavailable or denied required references fail even after an earlier match. Callback graphs and reference chains have finite depth/work limits and explicit cycle failures; runtime expression keys are never evaluated as acquisition URLs. Webhook and callback map names, including x- names, remain native keys; Callback Object x- extensions are ignored. YAML and complete OpenAPI validation, including callback-expression syntax, remain unsupported, so this obligation stays pending without native qualification.",
+        "note": "The bounded JSON selector scans path operations, OpenAPI 3.1 webhooks and reachable nested OpenAPI callbacks with exact case-sensitive operation IDs. Caller-supplied Callback, Path Item and Operation references use their containing source base. Duplicate operation occurrences are ambiguous; malformed operations and unavailable or denied required references fail even after an earlier match. Callback graphs and reference chains have finite depth/work limits and explicit cycle failures. Bare and embedded callback runtime expressions check native source forms, HTTP header tokens and body JSON Pointer escapes without percent-decoding pointer text or evaluating runtime values/URLs. Malformed reachable expressions prevent earlier matches; literal callback text is not URL validation. Webhook and callback map names, including x- names, remain native keys; Callback Object x- extensions are ignored. YAML and complete OpenAPI validation remain unsupported, so this obligation stays pending without native qualification.",
         "roles": [
           "client"
         ]
@@ -112639,6 +112639,10 @@
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenApiCallbackOperationsRetainTheirNativeObjectAndPointer",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.NestedWebhookCallbacksSelectExactOperationsWithoutEvaluatingRuntimeExpressions",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.CallbackReferencesResolveRelativeToTheContainingReferencedDocument",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.CallbackRuntimeSyntaxPreservesNativeKeysWithoutEvaluation",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.MalformedCallbackExpressionsPreventEarlierMatchesAndInlineSelection",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.ReferencedCallbackExpressionsAreCheckedButExtensionsAndUnusedDefinitionsAreNotTraversed",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.DeepCallbackExpressionFailuresAreNotHiddenByValidOuterExpressions",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.CallbackSelectionDoesNotReturnPartialOrAmbiguousOperations",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.CallbackReferenceAndOperationCyclesAreIndeterminate",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.CallbackTraversalBoundsShallowReferencedGraphs",
@@ -112672,7 +112676,7 @@
       "text": "If an operation has no `operationId`, its reference MUST use a JSON Pointer to the operation object:",
       "review": {
         "status": "reviewed",
-        "note": "The bounded JSON selector accepts exact inline Operation Objects under paths, OpenAPI 3.1 webhooks, nested callbacks, OpenAPI 3.1 reusable Path Items and OpenAPI 3.0/3.1 reusable Callbacks, including methods without operationId. Native version/object positions are enforced; pointers never dereference Callback, Path Item or operation references. Unused component definitions can be selected explicitly without becoming operation-ID candidates. YAML and complete document validation remain unsupported, so the obligation remains pending without native qualification.",
+        "note": "The bounded JSON selector accepts exact inline Operation Objects under paths, OpenAPI 3.1 webhooks, nested callbacks, OpenAPI 3.1 reusable Path Items and OpenAPI 3.0/3.1 reusable Callbacks, including methods without operationId. Native version/object positions and each selected callback expression's runtime syntax are enforced; pointers never dereference Callback, Path Item or operation references. Unused component definitions can be selected explicitly without becoming operation-ID candidates. YAML and complete document validation remain unsupported, so the obligation remains pending without native qualification.",
         "roles": [
           "client"
         ]
@@ -112683,6 +112687,9 @@
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.ResolvesOnlyTheOperationSelectedByJsonPointer",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.WebhookJsonPointerSelectsAnOperationWithoutAnOperationId",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.CallbackSelectionIgnoresExtensionsAndUnusedDefinitionsAndPermitsAnonymousPointers",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.CallbackRuntimeSyntaxPreservesNativeKeysWithoutEvaluation",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.MalformedCallbackExpressionsPreventEarlierMatchesAndInlineSelection",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.DeepCallbackExpressionFailuresAreNotHiddenByValidOuterExpressions",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenApiPointersSelectInlineOperationsInReusableComponentDefinitions",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.ComponentOperationPointersEnforceNativeVersionAndObjectPositions",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.ComponentOperationPointersRejectReferencesAndMissingOrNonOperationTargets",

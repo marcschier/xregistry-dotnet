@@ -721,6 +721,17 @@ public static partial class ApiOperationDocumentResolver
                     "A nested operation pointer must select callbacks/{name}/{expression}/{http-method}.");
             }
         }
+        if (methodStart == 4 && !IsCallbackExpression(tokens[3]))
+        {
+            return InvalidCallbackExpression("$/components/callbacks/" + Escape(tokens[2]) + "/" + Escape(tokens[3]));
+        }
+        for (var index = methodStart + 1; index < tokens.Count; index += 4)
+        {
+            if (!IsCallbackExpression(tokens[index + 2]))
+            {
+                return InvalidCallbackExpression("$/" + string.Join("/", tokens.Take(index + 3).Select(Escape)));
+            }
+        }
 
         var pathPointer = "$";
         var pathItem = root;
