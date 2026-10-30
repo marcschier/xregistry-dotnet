@@ -1,6 +1,7 @@
 // Copyright (c) 2026 xregistry-dotnet contributors.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
@@ -16,6 +17,7 @@ public sealed partial class RegistryEngine
         private const string WotAllocationsKey = "$wotalloc";
         private readonly Dictionary<string, string> _wotAllocations = new(StringComparer.Ordinal);
         private readonly Dictionary<string, byte[]> _wotRevisionDocuments = new(StringComparer.Ordinal);
+        private readonly HashSet<string> _wotPublishedVersions = new(StringComparer.Ordinal);
         private sealed record WotVersionAssignment(string VersionId, string Origin, string WotId);
 
         private static bool IsWotResource(RegistryResourceDefinition definition) =>
@@ -37,8 +39,27 @@ public sealed partial class RegistryEngine
                 version.Attributes["versionorigin"] = assignment.Origin;
                 Touch(version);
             }
+            if (assignment is not null && IsIncrementalWot(definition))
+            {
+                _wotPublishedVersions.Add(version.Key);
+            }
 
             return version;
+        }
+
+        private ReadOnlyCollection<RegistryOperationNotice> WotPublicationNotices()
+        {
+            var notices = new List<RegistryOperationNotice>();
+            foreach (var key in _wotPublishedVersions.Order(StringComparer.Ordinal))
+            {
+                Work();
+                if (Find(key) is { } version && ServerJson.Text(version.Attributes, "compatibilityline") is null)
+                {
+                    notices.Add(new("wot-line-ineligible", key,
+                        "This revision is not eligible for automatic compatibility-line selection."));
+                }
+            }
+            return notices.AsReadOnly();
         }
 
         private bool IsIncrementalWot(RegistryResourceDefinition definition)

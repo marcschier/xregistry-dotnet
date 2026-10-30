@@ -184,6 +184,7 @@ public sealed partial class RegistryEngine
             if (write)
             {
                 SetOutcome(result);
+                result.Notices = WotPublicationNotices();
                 result.CorrelationId = NewCorrelationId();
                 preparedEvents = EventMutation(result.CorrelationId);
             }

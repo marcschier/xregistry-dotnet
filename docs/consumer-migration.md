@@ -136,8 +136,23 @@ creation. Authorized metadata can supply an absolute URI; a document declaration
 using the expanded `http://opcfoundation.org/UA/WoT-Binding/compatibilityLine`
 IRI must agree exactly. Compact JSON-LD terms are rejected until context
 processing is implemented. A lineless revision can be stored and read directly,
-but cannot satisfy automatic line selection; its publication diagnostic remains
-open.
+but cannot satisfy automatic line selection; its publication diagnostic is
+available through `RegistryResult.Notices`. A successful Document publication or
+exact replay without a line returns `wot-line-ineligible` against the assigned
+Version path, with the message "This revision is not eligible for automatic
+compatibility-line selection." Nested publications report each affected Version
+once. Reads, metadata-only changes, deletion and SemVer publication do not emit
+this notice.
+
+Notices are operation advisories, not stored Registry metadata or new wire
+fields. `PrepareResponseAsync` receives proposed notices before persistence
+publication; a host must not report them as committed until `ExecuteAsync`
+returns successfully. The HTTP adapter writes structured Warning events under
+`XRegistry.AspNetCore`, event `RegistryOperationNotice`, after that return.
+These events carry `Code`, `RegistryPath` and `Message`; HTTP status, headers
+and Document bytes retain their existing representation. Applications calling
+the engine directly consume the immutable notices from the returned result.
+
 The full managed gate passed 10,666 cases and 283 tooling tests for this
 publication slice at `7e84cad`. Complete Server and Storage.File suites also
 passed native execution on .NET 10/Windows x64 at `f97af1b`, including all 28

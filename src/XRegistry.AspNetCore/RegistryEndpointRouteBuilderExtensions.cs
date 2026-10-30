@@ -70,6 +70,9 @@ public static class RegistryEndpointRouteBuilderExtensions
     {
         private static readonly Action<ILogger, Exception?> s_infrastructureFailure = LoggerMessage.Define(
             LogLevel.Error, new EventId(1, "RegistryInfrastructureFailure"), "The registry request failed at the persistence boundary.");
+        private static readonly Action<ILogger, string, string, string, Exception?> s_operationNotice = LoggerMessage.Define<string, string, string>(
+            LogLevel.Warning, new EventId(2, "RegistryOperationNotice"),
+            "Registry operation advisory {Code} at {RegistryPath}: {Message}");
 
         internal async Task InvokeAsync(HttpContext http)
         {
@@ -250,7 +253,7 @@ public static class RegistryEndpointRouteBuilderExtensions
                     }
                 }
 
-                await backend.ExecuteAsync(new(action, path)
+                var result = await backend.ExecuteAsync(new(action, path)
                 {
                     Metadata = metadata,
                     Document = document,
@@ -259,6 +262,14 @@ public static class RegistryEndpointRouteBuilderExtensions
                     ExpectedModelRevision = route.ModelRevision
                 }, context, cancellationToken).ConfigureAwait(false);
                 executed = true;
+                if (result.Notices.Count != 0)
+                {
+                    var logger = http.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("XRegistry.AspNetCore");
+                    foreach (var notice in result.Notices)
+                    {
+                        s_operationNotice(logger, notice.Code, notice.Path, notice.Message, null);
+                    }
+                }
                 if (prepared is null)
                 {
                     throw new InvalidOperationException("The engine did not prepare a response.");

@@ -17,6 +17,81 @@ public class WotIncrementalPublicationTests
     private const string Line = """{"compatibilityline":"urn:example:line:a"}""";
 
     [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task LinelessPublicationAndExactReplayReportTheAssignedVersionWithoutChangingBytes(bool description)
+    {
+        var path = description ? "/thingdescriptiongroups/g/thingdescriptions/pump" : Resource;
+        var store = new InMemoryRegistryPersistence();
+        var engine = CreateEngine(store);
+        var created = await Publish(engine, path, Document, "{}");
+        var notice = created.Notices.Single();
+        await Assert.That(notice.Code).IsEqualTo("wot-line-ineligible");
+        await Assert.That(notice.Path).IsEqualTo(path + "/versions/1");
+        await Assert.That(notice.Message)
+            .IsEqualTo("This revision is not eligible for automatic compatibility-line selection.");
+        await Assert.That(created.Kind).IsEqualTo(RegistryResultKind.Created);
+        var replay = await Publish(engine, path + "/versions/1", Document, "{}");
+        await Assert.That(replay.Notices.Single()).IsEqualTo(notice);
+        var read = await Send(engine, RegistryAction.Read, path + "/versions/1");
+        using var reader = new StreamReader(read.Document!.OpenRead());
+        await Assert.That(await reader.ReadToEndAsync()).IsEqualTo(Document);
+        await Assert.That(read.Notices.Count).IsEqualTo(0);
+        var next = await Publish(engine, path, Document, Line, RegistryAction.Post);
+        await Assert.That(next.Path.VersionId!.Value).IsEqualTo("2");
+        await Assert.That(next.Notices.Count).IsEqualTo(0);
+        var details = await Send(engine, RegistryAction.Read, path + "/versions/1$details");
+        await Assert.That(details.Metadata!.RootElement.TryGetProperty("compatibilityline", out _)).IsFalse();
+    }
+
+    [Test]
+    public async Task NestedLinelessPublicationsReportOnlyTheirExactVersionsInStableOrder()
+    {
+        var result = await Send(CreateEngine(), RegistryAction.Replace, "/", """
+            {"thingmodelgroups":{"g":{"thingmodels":{
+              "z":{"thingmodel":{"id":"urn:example:z"}},
+              "a":{"thingmodel":{"id":"urn:example:a"}},
+              "lined":{"compatibilityline":"urn:example:line:a","thingmodel":{"id":"urn:example:lined"}}
+            }}}}
+            """);
+        await Assert.That(string.Join(",", result.Notices.Select(notice => notice.Path)))
+            .IsEqualTo("/thingmodelgroups/g/thingmodels/a/versions/1,/thingmodelgroups/g/thingmodels/z/versions/1");
+        await Assert.That(result.Notices.All(notice => notice.Code == "wot-line-ineligible")).IsTrue();
+    }
+
+    [Test]
+    public async Task MetadataChangesAndDeletionDoNotRepeatPublicationNotices()
+    {
+        var engine = CreateEngine();
+        await Publish(engine, Resource, Document, "{}");
+        var patched = await Send(engine, RegistryAction.Patch, Resource + "/versions/1$details",
+            """{"description":"updated metadata"}""");
+        await Assert.That(patched.Notices.Count).IsEqualTo(0);
+        var deleted = await Send(engine, RegistryAction.Delete, Resource);
+        await Assert.That(deleted.Notices.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task SemVerPublicationDoesNotReportAnIncrementalLineNotice()
+    {
+        var engine = Create(WotRegistryProfiles.Compile(WotVersionProfile.SemVer).Source.RootElement.GetRawText());
+        var result = await Publish(engine, Resource, Document, "{}");
+        await Assert.That(result.Notices.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task ResultNoticesAreIndependentOfTheSuppliedMutableCollection()
+    {
+        var notice = new RegistryOperationNotice("example", "/", "Example advisory.");
+        var supplied = new List<RegistryOperationNotice> { notice };
+        var result = new RegistryResult(RegistryResultKind.Success, RegistryPath.Parse("/"), notices: supplied);
+        supplied.Clear();
+        await Assert.That(result.Notices.Single()).IsEqualTo(notice);
+        await Assert.That(() => ((IList<RegistryOperationNotice>)result.Notices).Clear())
+            .Throws<NotSupportedException>();
+    }
+
+    [Test]
     [Arguments(WotVersionProfile.SemVer, "semver", true)]
     [Arguments(WotVersionProfile.Incremental, "manual", false)]
     public async Task ProfilePresetIsFixedAndDoesNotMutateThePackagedModel(
@@ -147,10 +222,12 @@ public class WotIncrementalPublicationTests
             {"id":"urn:example:pump",
              "http://opcfoundation.org/UA/WoT-Binding/compatibilityLine":"urn:example:line:a"}
             """;
-        await Publish(engine, Resource, document, Line);
+        var explicitLine = await Publish(engine, Resource, document, Line);
+        await Assert.That(explicitLine.Notices.Count).IsEqualTo(0);
         await ExpectCode(async () => await Publish(engine, Resource, document,
             """{"compatibilityline":"urn:example:line:A"}""", RegistryAction.Post), "invalid-line");
         var derived = await Publish(engine, Resource, document, "{}", RegistryAction.Post);
+        await Assert.That(derived.Notices.Count).IsEqualTo(0);
         var details = await Send(engine, RegistryAction.Read, derived.Path.EscapedPath + "$details");
         await Assert.That(details.Metadata!.RootElement.GetProperty("compatibilityline").GetString())
             .IsEqualTo("urn:example:line:a");
@@ -208,14 +285,21 @@ public class WotIncrementalPublicationTests
         var store = new InMemoryRegistryPersistence();
         var engine = CreateEngine(store);
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(Document));
+        RegistryOperationNotice? proposed = null;
         var context = new RegistryOperationContext(Writer().Caller)
         {
-            PrepareResponseAsync = (_, _) => throw new IOException("injected response failure")
+            PrepareResponseAsync = (result, _) =>
+            {
+                proposed = result.Notices.Single();
+                throw new IOException("injected response failure");
+            }
         };
         await Assert.That(async () => await engine.ExecuteAsync(new(RegistryAction.Post, RegistryPath.Parse(Resource))
         {
-            Metadata = RegistryJson.Parse(Line), Document = stream, ContentType = "application/json"
+            Metadata = RegistryJson.Parse("{}"), Document = stream, ContentType = "application/json"
         }, context)).Throws<IOException>();
+        await Assert.That(proposed!.Code).IsEqualTo("wot-line-ineligible");
+        await Assert.That(proposed.Path).IsEqualTo(Resource + "/versions/1");
         using var snapshot = await store.ReadSnapshotAsync();
         await Assert.That(snapshot.Generation).IsEqualTo(0L);
         await Assert.That(snapshot.Find("$wotalloc" + Resource)).IsNull();

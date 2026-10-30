@@ -123,9 +123,11 @@ vocabulary/source mapping. It does not supply their implementation.
   Parsed local references use the retained containing revision and its authored
   version fields. JSON Pointer fragments are applied after selection without
   changing full-document provenance. URI/base/JSON-LD context processing,
-  alias integration, line eligibility diagnostics and complete profile
-  qualification remain open. WoT publication closure needs the four contracts
-  above; do not substitute live targets for captured closure.
+  alias integration and complete profile qualification remain open. Lineless
+  publication now returns immutable engine advisories; HTTP reports them through
+  structured host logging after successful commit, without adding wire metadata.
+  Other adapters need their own advisory delivery. WoT publication closure needs
+  the four contracts above; do not substitute live targets for captured closure.
 - Add full API format validators and the remaining language resolvers. The
   OpenAPI/Swagger, OpenRPC and Avro Protocol JSON selectors do not establish
   full format validation, YAML support, or gRPC, Thrift, Avro IDL, GraphQL,

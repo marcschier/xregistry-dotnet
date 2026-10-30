@@ -143,6 +143,12 @@ public sealed class RegistryDocument
     internal ReadOnlyMemory<byte> Bytes => _bytes;
 }
 
+/// <summary>An advisory about a successful operation, not a validation failure or a wire metadata field.</summary>
+/// <param name="Code">The machine-readable advisory code.</param>
+/// <param name="Path">The affected Registry-relative entity path.</param>
+/// <param name="Message">The advisory without Document content or rejected values.</param>
+public sealed record RegistryOperationNotice(string Code, string Path, string Message);
+
 /// <summary>A fully prepared result. A mutation result is returned only after its atomic commit succeeds.</summary>
 public sealed class RegistryResult
 {
@@ -159,10 +165,12 @@ public sealed class RegistryResult
     /// <param name="resourceDefinition">The compiled Resource definition for model-aware representation encoding.</param>
     /// <param name="correlationId">The interaction ID shared by committed change events.</param>
     /// <param name="page">The frozen collection pagination metadata, when applicable.</param>
+    /// <param name="notices">Operation advisories, copied independently of the caller's collection.</param>
     public RegistryResult(RegistryResultKind kind, RegistryPath path, RegistryJson? metadata = null,
         RegistryDocument? document = null, bool isDocument = false, string? contentType = null, Uri? location = null,
         Uri? contentLocation = null, IReadOnlyList<RegistryAction>? allowedActions = null,
-        RegistryResourceDefinition? resourceDefinition = null, string? correlationId = null, RegistryPageInfo? page = null)
+        RegistryResourceDefinition? resourceDefinition = null, string? correlationId = null, RegistryPageInfo? page = null,
+        IReadOnlyList<RegistryOperationNotice>? notices = null)
     {
         if (!Enum.IsDefined(kind))
         {
@@ -182,6 +190,7 @@ public sealed class RegistryResult
         ResourceDefinition = resourceDefinition;
         CorrelationId = correlationId;
         Page = page;
+        Notices = notices is null ? [] : Array.AsReadOnly(notices.ToArray());
     }
 
     /// <summary>Gets the semantic outcome.</summary>
@@ -208,6 +217,11 @@ public sealed class RegistryResult
     public string? CorrelationId { get; internal set; }
     /// <summary>Gets frozen collection pagination metadata, if this is a paged collection read.</summary>
     public RegistryPageInfo? Page { get; internal init; }
+    /// <summary>
+    /// Gets immutable operation advisories. Preparation hooks see proposed advisories before commit;
+    /// callers must not report them as committed until ExecuteAsync succeeds.
+    /// </summary>
+    public IReadOnlyList<RegistryOperationNotice> Notices { get; internal set; } = [];
 }
 
 /// <summary>The public engine operation boundary.</summary>
