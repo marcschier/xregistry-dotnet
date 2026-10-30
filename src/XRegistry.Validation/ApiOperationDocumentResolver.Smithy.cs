@@ -2394,6 +2394,8 @@ public static partial class ApiOperationDocumentResolver
                         var numericComparator = '\0';
                         var inclusive = false;
                         List<JsonNumber?>? numericOperands = null;
+                        var stringComparator = '\0';
+                        List<string>? stringOperands = null;
                         if (position < text.Length && text[position] == '?')
                         {
                             position++;
@@ -2428,6 +2430,27 @@ public static partial class ApiOperationDocumentResolver
                                 position++;
                             }
                         }
+                        else if (position < text.Length && text[position] is '=' or '!' or '^' or '$' or '*')
+                        {
+                            stringComparator = text[position++];
+                            if (stringComparator != '=' &&
+                                (position == text.Length || text[position++] != '=')) { return null; }
+                            stringOperands = [];
+                            while (true)
+                            {
+                                SkipWhitespace();
+                                if (position == text.Length || char.IsAsciiDigit(text[position]) || text[position] == '-')
+                                {
+                                    return null;
+                                }
+                                var operand = AttributeName();
+                                if (operand is null) { return null; }
+                                stringOperands.Add(operand);
+                                SkipWhitespace();
+                                if (position == text.Length || text[position] != ',') { break; }
+                                position++;
+                            }
+                        }
                         if (position == text.Length || text[position++] != ']' ||
                             shape.ValueKind != JsonValueKind.Object)
                         {
@@ -2444,7 +2467,34 @@ public static partial class ApiOperationDocumentResolver
                         {
                             foreach (var property in properties) { node = Property(node, property); }
                         }
-                        if (numericOperands is null)
+                        if (stringOperands is not null)
+                        {
+                            if (node.ValueKind == JsonValueKind.Number) { return null; }
+                            current = false;
+                            if (node.ValueKind != JsonValueKind.Undefined)
+                            {
+                                var value = node.ValueKind switch
+                                {
+                                    JsonValueKind.String => node.GetString()!,
+                                    JsonValueKind.True => "true",
+                                    JsonValueKind.False => "false",
+                                    _ => ""
+                                };
+                                foreach (var operand in stringOperands)
+                                {
+                                    budget.Work(value.Length + operand.Length + 1L, path);
+                                    current |= stringComparator switch
+                                    {
+                                        '=' => value.Equals(operand, StringComparison.Ordinal),
+                                        '!' => !value.Equals(operand, StringComparison.Ordinal),
+                                        '^' => value.StartsWith(operand, StringComparison.Ordinal),
+                                        '$' => value.EndsWith(operand, StringComparison.Ordinal),
+                                        _ => value.Contains(operand, StringComparison.Ordinal)
+                                    };
+                                }
+                            }
+                        }
+                        else if (numericOperands is null)
                         {
                             current = node.ValueKind != JsonValueKind.Undefined ? acceptsPresent : acceptsAbsent;
                         }

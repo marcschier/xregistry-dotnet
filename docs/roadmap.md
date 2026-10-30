@@ -238,7 +238,13 @@ vocabulary/source mapping. It does not supply their implementation.
   decimal comparison and comma-separated alternatives. Both sides must contain
   Smithy number spellings; absent or nonnumeric values do not match.
   Numeric spellings have a 256-character limit, and repeated parsing/comparison
-  consumes the shared work budget. Other value comparators remain open.
+  consumes the shared work budget.
+  String trait/node predicates support ordinal `=`, `!=`, `^=`, `$=` and `*=`
+  with operand alternatives. Booleans use their lowercase text; present nulls
+  and aggregates compare as empty strings, while missing attributes never
+  match. Numeric rendering, unquoted numeric operands, empty quoted operands
+  and case-insensitive modifiers remain unsupported. Repeated text comparison
+  consumes the shared work budget.
   Each application is checked independently. Type mismatches are invalid;
   unsupported grammar reports `Unsupported` at the application without changing
   unapplied declaration checks or masking earlier missing schema dependencies.

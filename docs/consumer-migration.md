@@ -427,8 +427,16 @@ Comparisons use exact decimal values and accept comma-separated alternatives.
 Every operand is parsed, including alternatives after an earlier match.
 Numeric spellings are limited to 256 characters, and parsing and comparison
 consume the shared work budget. Existing document-ingestion limits still apply
-to numeric JSON tokens. These checks do not add string, projection or scoped
-comparators.
+to numeric JSON tokens.
+String predicates support `=`, `!=`, `^=`, `$=` and `*=` with ordinal,
+case-sensitive matching and comma-separated alternatives. Strings retain their
+decoded text; Booleans compare as `true` or `false`. Present nulls and
+aggregates compare as empty strings, but absent attributes never match any of
+these operators, including `!=`. Quoted numeric text is compared literally;
+numeric JSON values and unquoted numeric operands report `Unsupported` because
+numeric-to-string rendering is not implemented. Empty quoted operands,
+case-insensitive modifiers, projection and scoped comparisons remain
+unsupported. Text comparisons consume the shared work budget.
 A member is not matched as its target or container type. An omitted selector
 permits every shape; each reached application is checked independently.
 Type mismatches are invalid. Other selector expressions report `Unsupported`
