@@ -2500,8 +2500,17 @@ public static partial class ApiOperationDocumentResolver
                                 if (property.Length)
                                 {
                                     budget.Work(path: path);
-                                    if (node.ValueKind == JsonValueKind.String) { return null; }
-                                    if (node.ValueKind == JsonValueKind.Array) { nodeLength = node.GetArrayLength(); }
+                                    if (node.ValueKind == JsonValueKind.String)
+                                    {
+                                        var value = node.GetString()!;
+                                        budget.Work(value.Length, path);
+                                        foreach (var character in value)
+                                        {
+                                            if (!char.IsAscii(character)) { return null; }
+                                        }
+                                        nodeLength = value.Length;
+                                    }
+                                    else if (node.ValueKind == JsonValueKind.Array) { nodeLength = node.GetArrayLength(); }
                                     else if (node.ValueKind == JsonValueKind.Object)
                                     {
                                         nodeLength = ObjectLength(node);

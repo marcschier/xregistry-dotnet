@@ -233,7 +233,7 @@ vocabulary/source mapping. It does not supply their implementation.
   matching. Missing properties and descent through scalars or arrays yield
   absence; present nulls still exist. Property scans consume the shared work
   budget. Unquoted numeric path tokens, projections and function properties
-  other than aggregate `(length)` remain unsupported.
+  other than supported node `(length)` remain unsupported.
   Numeric trait/node predicates support `>`, `>=`, `<` and `<=` with exact
   decimal comparison and comma-separated alternatives. Both sides must contain
   Smithy number spellings; absent or nonnumeric values do not match.
@@ -244,7 +244,9 @@ vocabulary/source mapping. It does not supply their implementation.
   accept computed lengths, and subsequent property access yields absence.
   Object counting consumes the shared work budget. Computed counts use invariant
   decimal digits with supported string comparators and quoted numeric operands.
-  String length remains unsupported.
+  ASCII string length counts decoded characters, including empty strings and
+  escaped controls, against the work budget. Non-ASCII string length remains
+  unsupported.
   `[trait|(length)]` counts the selected shape's own applied traits, including
   a present zero when its traits object is omitted or empty. Payload truthiness
   does not affect the count. Malformed traits objects remain invalid; implicit

@@ -442,8 +442,10 @@ values. Empty aggregates have a present length of zero. Numeric comparisons
 and presence checks can use the result; further property access yields absence.
 Object-entry counting consumes the shared work budget. Computed lengths and
 trait counts use invariant decimal digits with the supported string comparators;
-numeric operands for those comparators still require quotes. String length
-remains unsupported. A quoted `'(length)'`
+numeric operands for those comparators still require quotes. ASCII string
+length counts decoded characters, including escaped controls and zero-length
+strings, and consumes the shared work budget. Non-ASCII string length remains
+unsupported. A quoted `'(length)'`
 is a literal object key, not a function property.
 The trait attribute also supports `[trait|(length)]`, which counts every trait
 applied directly to the selected shape, regardless of its payload value.

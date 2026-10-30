@@ -12119,8 +12119,8 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
-    [Arguments("\"\"")]
-    [Arguments("\"text\"")]
+    [Arguments("\"\\u00e9\"")]
+    [Arguments("\"e\\u0301\"")]
     [Arguments("\"\\ud83d\\ude00\"")]
     public async Task SmithyJsonAggregateLengthSelectorsDoNotGuessStringLengthSemantics(string value)
     {
@@ -12511,6 +12511,119 @@ public class ApiOperationReferenceTests
         await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Unsupported);
         await Assert.That(result.Diagnostic!.Code).IsEqualTo("smithy.id_ref_selector");
         await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("\"\"", 0)]
+    [Arguments("\"a\"", 1)]
+    [Arguments("\"text\"", 4)]
+    [Arguments("\"\\u0061\\u0062\"", 2)]
+    [Arguments("\"\\n\\r\\t\\b\\f\"", 5)]
+    [Arguments("\"\\u0000\\u001f\\u007f\"", 3)]
+    [Arguments("\"a\\\\b\\\"c\\/d\"", 7)]
+    [Arguments("\"  \"", 2)]
+    public async Task SmithyJsonAsciiLengthSelectorsCountDecodedCharactersAndExactBoundaries(string value, int length)
+    {
+        var document = SmithyIdRefTraitDocument("example#Target", "{}");
+        document["shapes"]!["example#Target"]!["traits"] = new JsonObject { ["example#Marker"] = JsonNode.Parse(value) };
+        foreach (var (comparison, matches) in new[]
+        {
+            ("", true), ("?= true", true), ("?= false", false),
+            (">= " + length, true), ("<= " + length, true),
+            ("> " + length, false), ("< " + length, false),
+            ("> " + (length - 1), true), ("< " + (length + 1), true),
+            ("= '" + length + "'", true), ("!= '" + length + "'", false)
+        })
+        {
+            document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#idRef"]!["selector"] =
+                "[trait|example#Marker|(length) " + comparison + "]";
+            var result = ResolveSmithy(document.ToJsonString());
+            await Assert.That(result.Status).IsEqualTo(matches ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+            if (matches)
+            {
+                await Assert.That(result.Diagnostic).IsNull();
+                await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+            }
+            else
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_id_ref_selector");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("[trait|example#Marker|text|(length) >= 5,4]", true)]
+    [Arguments("[trait|example#Marker|text|(length) = '4']", true)]
+    [Arguments("[trait|example#Marker|text|(length)|child ?= false]", true)]
+    [Arguments("[trait|example#Marker|text|(length)|(length) ?= false]", true)]
+    [Arguments(":test(number,[trait|example#Marker|text|(length) > 3])", true)]
+    [Arguments(":is([trait|example#Marker|text|(length) < 4],number)", false)]
+    [Arguments(":not([trait|example#Missing|(length) != '0'])", true)]
+    public async Task SmithyJsonAsciiLengthSelectorsComposeNestedAndBooleanPredicates(string selector, bool matches)
+    {
+        var document = SmithyCustomNodeDocument("string", "\"value\"");
+        document["shapes"]!["example#Marker"] = JsonNode.Parse("""{"type":"document","traits":{"smithy.api#trait":{}}}""");
+        document["shapes"]!["example#Get"]!["traits"]!["example#Marker"] = JsonNode.Parse("""{"text":"text"}""");
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!["selector"] = selector;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(matches ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (matches) { await Assert.That(result.Diagnostic).IsNull(); }
+        else { await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_selector_target"); }
+    }
+
+    [Test]
+    [Arguments("structure", "value")]
+    [Arguments("list", "member")]
+    [Arguments("map", "key")]
+    [Arguments("map", "value")]
+    public async Task SmithyJsonAsciiLengthSelectorsReadSelectedMembersOwnText(string container, string member)
+    {
+        var document = SmithyIdRefTraitDocument("example#Target$" + member,
+            """{"selector":"[trait|example#Marker|(length) >= 4]"}""");
+        var target = SmithyIdRefTarget(container);
+        if (container == "structure") { target["members"] = JsonNode.Parse("""{"value":{"target":"smithy.api#String"}}"""); }
+        var selected = container == "structure" ? target["members"]!["value"]! : target[member]!;
+        selected["traits"] = JsonNode.Parse("""{"example#Marker":"text"}""");
+        target["traits"] = JsonNode.Parse("""{"example#Marker":"x"}""");
+        document["shapes"]!["example#Target"] = target;
+        var own = ResolveSmithy(document.ToJsonString());
+        await Assert.That(own.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        selected["traits"]!["example#Marker"] = "x";
+        target["traits"]!["example#Marker"] = "text";
+        var containerOnly = ResolveSmithy(document.ToJsonString());
+        await Assert.That(containerOnly.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(containerOnly.Diagnostic!.Code).IsEqualTo("document.trait_id_ref_selector");
+    }
+
+    [Test]
+    [Arguments("\"\\u0080\"")]
+    [Arguments("\"ascii\\u00e9\"")]
+    [Arguments("\"e\\u0301\"")]
+    [Arguments("\"\\ud83d\\ude00\"")]
+    public async Task SmithyJsonAsciiLengthSelectorsDoNotShortCircuitNonAsciiCounting(string value)
+    {
+        var document = SmithyIdRefTraitDocument("example#Target", """{"selector":":is(*,[trait|example#Marker|(length) ?= true])"}""");
+        document["shapes"]!["example#Target"]!["traits"] = new JsonObject { ["example#Marker"] = JsonNode.Parse(value) };
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Unsupported);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("smithy.id_ref_selector");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonAsciiLengthSelectorsChargeRepeatedCharacterScans()
+    {
+        var document = SmithyIdRefTraitDocument("example#Target", """{"selector":"[trait|example#Marker|(length) >= 1000]"}""");
+        document["shapes"]!["example#Target"]!["traits"] = new JsonObject { ["example#Marker"] = new string('x', 1000) };
+        var control = ResolveSmithy(document.ToJsonString());
+        await Assert.That(control.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#idRef"]!["selector"] =
+            string.Concat(Enumerable.Repeat("[trait|example#Marker|(length) >= 1000]", 9000));
+        var bounded = ResolveSmithy(document.ToJsonString());
+        await Assert.That(bounded.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(bounded.Diagnostic!.Code).IsEqualTo("limit.work");
+        await Assert.That(bounded.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
     }
 
     private static JsonNode SmithyIdRefTarget(string kind)
