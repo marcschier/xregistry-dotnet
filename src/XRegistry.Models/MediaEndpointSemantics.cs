@@ -274,6 +274,7 @@ internal static class MediaEndpointSemantics
         {
             return;
         }
+        EndpointDefinitionSemantics.ValidateReference(value, path);
         if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps ||
             uri.Host.Length == 0 || uri.UserInfo.Length != 0)
         {

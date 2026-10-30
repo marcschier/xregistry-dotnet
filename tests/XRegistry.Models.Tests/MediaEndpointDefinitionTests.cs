@@ -522,7 +522,11 @@ public class MediaEndpointDefinitionTests
         {
             input["protocoloptions"]!["signaling"] = "external";
         }
-        foreach (var valid in new[] { "https://media.example.test/description", "https://media.example.test:8443/description?revision=2" })
+        foreach (var valid in new[]
+        {
+            "https://media.example.test/description", "https://media.example.test:8443/description?revision=2",
+            "https://media.example.test/has%20space?revision=%2F"
+        })
         {
             input["protocoloptions"]![name] = valid;
             var metadata = RegistryJson.Parse(input.ToJsonString());
@@ -533,7 +537,9 @@ public class MediaEndpointDefinitionTests
         foreach (var invalid in new[]
         {
             "", "description", "//media.example.test/description", "http://media.example.test/description",
-            "https://user@media.example.test/description", "https://user:password@media.example.test/description"
+            "https://user@media.example.test/description", "https://user:password@media.example.test/description",
+            "https://media.example.test/has space", "https://media.example.test/%ZZ",
+            "https://media.example.test/\n", "https://media.example.test/\\description"
         })
         {
             input["protocoloptions"]![name] = invalid;

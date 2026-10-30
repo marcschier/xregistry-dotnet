@@ -52,6 +52,12 @@ address lists defer network configuration; an authored address record without a
 URI still fails when materialized. Authorization metadata remains discovery
 information, not credentials or evidence that authorization succeeded.
 
+WebRTC `signalingreference` and RTP `sessiondescription` require absolute HTTPS
+URIs without embedded credentials. Both Media entry points reject malformed
+URI text before platform URI parsing can normalize it, including raw spaces,
+control characters, backslashes and invalid percent escapes. Valid escaped
+references retain their authored spelling; validation does not fetch them.
+
 Standalone Endpoint validation also checks the inherited `deprecated` object.
 `effective` and `removal` use Core timestamp syntax; `alternative`, the model's
 `docs` member and Core `documentation` use URI-reference syntax. Optional null
