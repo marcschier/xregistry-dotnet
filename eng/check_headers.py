@@ -19,6 +19,7 @@ SPDX = "SPDX-License-Identifier: MIT"
 PROTECTED = (
     Path("tests/Conformance/Sources"),
     Path("tests/Conformance/Corrections"),
+    Path("tests/Conformance/Successors"),
     Path("src/XRegistry.Models/Resources"),
 )
 PRUNED_NAMES = {

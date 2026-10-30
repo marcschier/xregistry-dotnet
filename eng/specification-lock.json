@@ -1640,5 +1640,6 @@
     "workingdrafts/bindings/file.md": "file",
     "workingdrafts/bindings/git.md": "git",
     "workingdrafts/bindings/oci.md": "oci"
-  }
+  },
+  "successorsSha256": "83ed1adccf829baecb2c033ea4662c78f7062aed859417f4789ce2bfbcdc79f1"
 }

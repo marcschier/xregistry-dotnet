@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 PROTECTED_DOCS = (
     Path("tests/Conformance/Sources"),
     Path("tests/Conformance/Corrections"),
+    Path("tests/Conformance/Successors"),
 )
 PRUNED = {".git", "artifacts", "bin", "obj", ".vs", ".idea", "__pycache__", ".pytest_cache"}
 

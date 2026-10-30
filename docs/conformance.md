@@ -11,27 +11,53 @@ not evidence that the client/server implements them. Keyword extraction can
 combine multiple obligations and miss procedural or artifact-only requirements;
 each family requires explicit semantic coverage review.
 
-Pinned source files: **318**. Normative documents: **17**. Extracted blocks: **1835**.
+Historical pinned files: **318**. Historical normative documents: **17**. Combined extracted blocks: **4233**.
+
+Historical sources and their reviews are retained separately from the
+successor composition; new source-qualified requirements do not inherit
+historical implementation claims.
+Successor files: **47**. Successor normative documents: **22**. Selected informative designs: **1**.
+
+A selected informative design is an implementation target, not an adopted
+standard. Its obligations still require explicit semantic review.
+
+The successor manifest in `eng/specification/successors.json` identifies
+the repository, immutable commit, exact file bytes and composition role.
+`eng/specification/scope.json` and `eng/specification-lock.json` pin its
+hash. PR #715 and #716 inputs remain review-only where PR #571 supplies
+the selected draft; they are not competing active requirements.
+
+Run `python eng\specification\freeze_successors.py` to reacquire the
+explicitly pinned sources. It refuses to overwrite changed evidence.
+Ordinary `verify`, `generate` and `check` operations use retained bytes
+without network access. Changing the source set requires renewed review;
+it does not transfer historical qualification to a successor.
 
 | Family | Blocks | Reviewed | Qualified |
 | --- | ---: | ---: | ---: |
+| api | 53 | 0 | 0 |
 | catalog | 141 | 141 | 0 |
-| cloudevents | 4 | 4 | 0 |
-| core | 602 | 602 | 0 |
-| endpoint | 95 | 95 | 0 |
-| events | 59 | 59 | 0 |
-| federation | 56 | 56 | 0 |
-| file | 19 | 19 | 0 |
-| git | 18 | 18 | 0 |
-| http | 258 | 258 | 0 |
-| http-federation | 36 | 36 | 0 |
-| mapping | 39 | 39 | 0 |
-| message | 91 | 91 | 0 |
-| model | 241 | 241 | 0 |
-| oci | 60 | 60 | 0 |
-| openusd | 59 | 59 | 0 |
-| pagination | 36 | 36 | 0 |
-| schema | 21 | 21 | 0 |
+| cloudevents | 8 | 4 | 0 |
+| core | 1209 | 602 | 0 |
+| endpoint | 189 | 95 | 0 |
+| events | 144 | 59 | 0 |
+| federation | 120 | 56 | 0 |
+| file | 41 | 19 | 0 |
+| git | 39 | 18 | 0 |
+| http | 520 | 258 | 0 |
+| http-federation | 84 | 36 | 0 |
+| mapping | 95 | 39 | 0 |
+| media-endpoints | 7 | 0 | 0 |
+| message | 178 | 91 | 0 |
+| model | 487 | 241 | 0 |
+| oci | 140 | 60 | 0 |
+| opcua | 205 | 0 | 0 |
+| openusd | 122 | 59 | 0 |
+| pagination | 88 | 36 | 0 |
+| publication | 65 | 0 | 0 |
+| registry | 143 | 0 | 0 |
+| schema | 45 | 21 | 0 |
+| wot | 110 | 0 | 0 |
 
 ## Artifacts and procedural coverage
 

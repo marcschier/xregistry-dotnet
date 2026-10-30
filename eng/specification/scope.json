@@ -28,5 +28,6 @@
   "excludeSuffixes": [
     ".png",
     ".pptx"
-  ]
+  ],
+  "successorsSha256": "83ed1adccf829baecb2c033ea4662c78f7062aed859417f4789ce2bfbcdc79f1"
 }

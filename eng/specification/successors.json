@@ -1,0 +1,603 @@
+{
+  "schemaVersion": 1,
+  "sources": [
+    {
+      "id": "upstream-4a7e7f5e",
+      "repository": "https://github.com/xregistry/spec",
+      "commit": "4a7e7f5e333f359e77d1bef5641d16120305352f",
+      "status": "merged",
+      "files": [
+        {
+          "path": "core/spec.md",
+          "owner": "core",
+          "kind": "normative",
+          "bytes": 244359,
+          "sha256": "77b0cf133996ae6c28316177e834e468c22e61b9c7e0aa49f8766b73218068b5"
+        },
+        {
+          "path": "core/model.md",
+          "owner": "model",
+          "kind": "normative",
+          "bytes": 68205,
+          "sha256": "2c073fc7a3b8252a77f2ea6cf1ddd1596770fa72fe86d54f93bd8fdcaea2eaa3"
+        },
+        {
+          "path": "core/http.md",
+          "owner": "http",
+          "kind": "normative",
+          "bytes": 104420,
+          "sha256": "5d2db740d225ee9e854a291007c55c44867fa6c3a27335e3e29dcdf41f65534e"
+        },
+        {
+          "path": "core/events.md",
+          "owner": "events",
+          "kind": "normative",
+          "bytes": 29273,
+          "sha256": "2c72e989e130b31de549fb1a4dbe034dcca43bace260eb0b816bee27215b699e"
+        },
+        {
+          "path": "endpoint/spec.md",
+          "owner": "endpoint",
+          "kind": "normative",
+          "bytes": 54561,
+          "sha256": "5bea51b69b83679fe322b94670f182812312394141d12627e9c05c99cab93e23"
+        },
+        {
+          "path": "message/spec.md",
+          "owner": "message",
+          "kind": "normative",
+          "bytes": 60967,
+          "sha256": "1cf2eab86d3d961bb0df6f5c0c24b4de92d3adcb4d5d5e16ded332a5f1eab3c1"
+        },
+        {
+          "path": "schema/spec.md",
+          "owner": "schema",
+          "kind": "normative",
+          "bytes": 29101,
+          "sha256": "1a0d0f73809e051a6e3c7385b2e3a54b1f0fb48ea7619dd4c20b9539807802a0"
+        },
+        {
+          "path": "cloudevents/spec.md",
+          "owner": "cloudevents",
+          "kind": "normative",
+          "bytes": 18521,
+          "sha256": "63679c887f9921601acd6769b5b6bbfdfd31795dcb1f28323d8613ca6212c497"
+        },
+        {
+          "path": "pagination/spec.md",
+          "owner": "pagination",
+          "kind": "normative",
+          "bytes": 12981,
+          "sha256": "ee8b6637949336c63906cdcf6150e10c87fb29c7cada9210ce8c6083bfafafec"
+        },
+        {
+          "path": "core/model.json",
+          "owner": "core",
+          "kind": "artifact",
+          "bytes": 1623,
+          "sha256": "00f9342b7ef4f65fcf3859632c909dacd3cb7f6d8b8c019e03ea1936cc307e6e"
+        },
+        {
+          "path": "endpoint/model.json",
+          "owner": "endpoint",
+          "kind": "artifact",
+          "bytes": 46033,
+          "sha256": "866663068e77a1a3a09489e4008f9e2ff7b7bbb5b0e1ff0c75bccec4390d3c74"
+        },
+        {
+          "path": "message/model.json",
+          "owner": "message",
+          "kind": "artifact",
+          "bytes": 66256,
+          "sha256": "0796b8f2c2134b27fbce34f00f73475b052ba109e386ed5b2b0df112239f90f8"
+        },
+        {
+          "path": "schema/model.json",
+          "owner": "schema",
+          "kind": "artifact",
+          "bytes": 1132,
+          "sha256": "b2e7efd1a89512c6a0a9731c6e868ce1785ec1923d0348527667d8e191e484f7"
+        },
+        {
+          "path": "cloudevents/model.json",
+          "owner": "cloudevents",
+          "kind": "artifact",
+          "bytes": 249,
+          "sha256": "8000babf16b868ff97144b534b0639a68d408285c9ced823e5d5c3414eff08f7"
+        },
+        {
+          "path": "core/model.schema.json",
+          "owner": "model",
+          "kind": "artifact",
+          "bytes": 16329,
+          "sha256": "37cfac8ad69a00976c10dc1f612ed8de1f059a832fd0750d75d05795a782c69e"
+        },
+        {
+          "path": "LICENSE",
+          "owner": "license",
+          "kind": "license",
+          "bytes": 11349,
+          "sha256": "c07c2bf22d1b6eadecdbc008b0693c9a876f85c1485c375ff57301085ffc8db9"
+        }
+      ]
+    },
+    {
+      "id": "pr571-811de7d2",
+      "repository": "https://github.com/xregistry/spec",
+      "commit": "811de7d20711dd3edc8c676ae634adebee235188",
+      "status": "working-draft",
+      "files": [
+        {
+          "path": "workingdrafts/models/registry/spec.md",
+          "owner": "registry",
+          "kind": "normative",
+          "bytes": 48519,
+          "sha256": "9bb42df5b36773f5510ce2237197ff9a059ad09a45f24d589ec062b85586c769"
+        },
+        {
+          "path": "workingdrafts/models/registry/model.json",
+          "owner": "registry",
+          "kind": "artifact",
+          "bytes": 4073,
+          "sha256": "47bafa8618545f0f5bfb80f234117fed66f3008dddd11102c3cc406f46052b74"
+        },
+        {
+          "path": "workingdrafts/models/openusd/spec.md",
+          "owner": "openusd",
+          "kind": "normative",
+          "bytes": 49192,
+          "sha256": "561c8e8b98047016c941708e626b674f7b623503c377db536ec3cdd7a2ee8950"
+        },
+        {
+          "path": "workingdrafts/models/openusd/model.json",
+          "owner": "openusd",
+          "kind": "artifact",
+          "bytes": 4866,
+          "sha256": "bd2209ff833d3016809eb699330c5ebf798f610925a583796998427eff7a242d"
+        },
+        {
+          "path": "workingdrafts/models/wot/spec.md",
+          "owner": "wot",
+          "kind": "normative",
+          "bytes": 69703,
+          "sha256": "2d353fdd5f5632e7173e6dc0999abc8480de170c5422ee5279fffe4420cea8ea"
+        },
+        {
+          "path": "workingdrafts/models/wot/model.json",
+          "owner": "wot",
+          "kind": "artifact",
+          "bytes": 9582,
+          "sha256": "5a1cd2f60e8b54dd7151d6be25d033701a251780c14468711227b2e69a86d832"
+        },
+        {
+          "path": "workingdrafts/models/api/spec.md",
+          "owner": "api",
+          "kind": "normative",
+          "bytes": 34003,
+          "sha256": "f3e750d342e3bdeb3a61e3464c9c9154540a9cf15394c40a0c6ffe4fe358dce5"
+        },
+        {
+          "path": "workingdrafts/models/api/model.json",
+          "owner": "api",
+          "kind": "artifact",
+          "bytes": 1663,
+          "sha256": "116e659d1552491852669bdd677d869af5539e4956c2de1eb7e9226492cfe935"
+        },
+        {
+          "path": "workingdrafts/models/media-endpoints/spec.md",
+          "owner": "media-endpoints",
+          "kind": "normative",
+          "bytes": 3739,
+          "sha256": "1cddf8440d33f329e5d0a8b9e9f6a844dfb13c90f8a6b21556bc5685fcf1cf1d"
+        },
+        {
+          "path": "workingdrafts/models/media-endpoints/model.json",
+          "owner": "media-endpoints",
+          "kind": "artifact",
+          "bytes": 13799,
+          "sha256": "f8a0fa6cbd975f4c38ee211d291d5b64416bccc4d9a7242eaf4f9da34367cfa8"
+        },
+        {
+          "path": "workingdrafts/bindings/http-federation.md",
+          "owner": "http-federation",
+          "kind": "normative",
+          "bytes": 31460,
+          "sha256": "8b111a6687aff5f66a6e8a8450ba499c0963d5dcf42f2b26713133e2c5ec4faf"
+        },
+        {
+          "path": "workingdrafts/bindings/mapping.md",
+          "owner": "mapping",
+          "kind": "normative",
+          "bytes": 48873,
+          "sha256": "24895df9b2a5929c94c72f6f5e5747e43cf1bba8fbd5a6768f59059cd51c3c08"
+        },
+        {
+          "path": "workingdrafts/bindings/file.md",
+          "owner": "file",
+          "kind": "normative",
+          "bytes": 15710,
+          "sha256": "dbe1a444f72ff874cb4d8f21c04dd8dd933de9acef1012b333a321bcf236690c"
+        },
+        {
+          "path": "workingdrafts/bindings/git.md",
+          "owner": "git",
+          "kind": "normative",
+          "bytes": 15369,
+          "sha256": "df70344e018644c346c6941114246e0fc1b210978d5226d5b7b12ce8f0494d04"
+        },
+        {
+          "path": "workingdrafts/bindings/oci.md",
+          "owner": "oci",
+          "kind": "normative",
+          "bytes": 58573,
+          "sha256": "7ed69a7ba91d4d1cd860fa8e3fe5aa2470247aac02ab57c86a6a2cc545a0f4ac"
+        },
+        {
+          "path": "workingdrafts/bindings/opcua.md",
+          "owner": "opcua",
+          "kind": "normative",
+          "bytes": 177354,
+          "sha256": "0047420ed1b2d4692396e94aee7696177bfffb75a2084726f5d8ce47d348f398"
+        },
+        {
+          "path": "workingdrafts/federation/spec.md",
+          "owner": "federation",
+          "kind": "normative",
+          "bytes": 53680,
+          "sha256": "5d8dc7c35979310771b55a669c5a249cebc3e88280681cf6f454cccd864524d6"
+        },
+        {
+          "path": "workingdrafts/publication/spec.md",
+          "owner": "publication",
+          "kind": "normative",
+          "bytes": 49850,
+          "sha256": "f4a8887755450e2b3108eff837d2c2687e56b0163f7639a070672e54eb9bf3f4"
+        },
+        {
+          "path": "workingdrafts/publication/model.json",
+          "owner": "publication",
+          "kind": "artifact",
+          "bytes": 2747,
+          "sha256": "f287f3c0972e5fda9a8e3c5e8a727ecc43c536f254795cf6a6433a4d69e6d134"
+        },
+        {
+          "path": "workingdrafts/publication/design/design.md",
+          "owner": "wot",
+          "kind": "informative",
+          "bytes": 92966,
+          "sha256": "af33011ae922abb38dc29d5b95c5fbb32aafcc8ed4ec59404f83d5a0b0db66fc"
+        },
+        {
+          "path": "workingdrafts/models/wot/tests/resolution/vectors.json",
+          "owner": "wot",
+          "kind": "artifact",
+          "bytes": 36031,
+          "sha256": "115f7fa97b2aa33fbae2441ff4c672153512a18cf99c695460d238437d6c8f0c"
+        },
+        {
+          "path": "workingdrafts/models/wot/schemas/publication-closure.schema.json",
+          "owner": "wot",
+          "kind": "artifact",
+          "bytes": 1271,
+          "sha256": "e46ec7b967046009979dfb43f3c000236496cfd84ed0f70e370cea5b2f05d364"
+        },
+        {
+          "path": "workingdrafts/models/media-endpoints/protocol-options.json",
+          "owner": "media-endpoints",
+          "kind": "artifact",
+          "bytes": 1380,
+          "sha256": "4fcf905ad2ca26ea8ce03d5ee0a92338622733f313bbca8dd7543a7b2f04d8fb"
+        },
+        {
+          "path": "workingdrafts/models/media-endpoints/source.json",
+          "owner": "media-endpoints",
+          "kind": "artifact",
+          "bytes": 1724,
+          "sha256": "25b81164dddc47a694670a1f388764eb9e01aac3105e7fe02bc66e1932ef57f6"
+        },
+        {
+          "path": "workingdrafts/models/media-endpoints/tests/validation-vectors.json",
+          "owner": "media-endpoints",
+          "kind": "artifact",
+          "bytes": 2270,
+          "sha256": "f140a1f1f38190ed87e83579e7207a2492db44ce1b7c9934081e85c25484b260"
+        },
+        {
+          "path": "LICENSE",
+          "owner": "license",
+          "kind": "license",
+          "bytes": 11349,
+          "sha256": "c07c2bf22d1b6eadecdbc008b0693c9a876f85c1485c375ff57301085ffc8db9"
+        }
+      ]
+    },
+    {
+      "id": "pr715-5f9d0134",
+      "repository": "https://github.com/xregistry/spec",
+      "commit": "5f9d0134407927c0fae3b95e0aa844548e3756d6",
+      "status": "working-draft",
+      "files": [
+        {
+          "path": "workingdrafts/models/api/spec.md",
+          "owner": "api",
+          "kind": "normative",
+          "bytes": 33897,
+          "sha256": "253732e233028095681895c3f726f57609a4a1fb05e95767363ff2579308bd94"
+        },
+        {
+          "path": "workingdrafts/models/api/model.json",
+          "owner": "api",
+          "kind": "artifact",
+          "bytes": 1700,
+          "sha256": "d447c25150027e9e97185451c29d5fc2328507364b4b74f8ebceb8fa96d54d15"
+        },
+        {
+          "path": "LICENSE",
+          "owner": "license",
+          "kind": "license",
+          "bytes": 11349,
+          "sha256": "c07c2bf22d1b6eadecdbc008b0693c9a876f85c1485c375ff57301085ffc8db9"
+        }
+      ]
+    },
+    {
+      "id": "pr716-9613f002",
+      "repository": "https://github.com/xregistry/spec",
+      "commit": "9613f002c82c9568fbefc5f1f0cf0490d6df572a",
+      "status": "working-draft",
+      "files": [
+        {
+          "path": "workingdrafts/models/media-endpoints.md",
+          "owner": "media-endpoints",
+          "kind": "normative",
+          "bytes": 45684,
+          "sha256": "14673a4081d5d00c698ea719c98f3306e947c2c8cb10b058334ac345fd79df93"
+        },
+        {
+          "path": "LICENSE",
+          "owner": "license",
+          "kind": "license",
+          "bytes": 11349,
+          "sha256": "c07c2bf22d1b6eadecdbc008b0693c9a876f85c1485c375ff57301085ffc8db9"
+        }
+      ]
+    }
+  ],
+  "composition": [
+    {
+      "source": "upstream-4a7e7f5e",
+      "path": "core/spec.md",
+      "role": "normative"
+    },
+    {
+      "source": "upstream-4a7e7f5e",
+      "path": "core/model.md",
+      "role": "normative"
+    },
+    {
+      "source": "upstream-4a7e7f5e",
+      "path": "core/http.md",
+      "role": "normative"
+    },
+    {
+      "source": "upstream-4a7e7f5e",
+      "path": "core/events.md",
+      "role": "normative"
+    },
+    {
+      "source": "upstream-4a7e7f5e",
+      "path": "endpoint/spec.md",
+      "role": "normative"
+    },
+    {
+      "source": "upstream-4a7e7f5e",
+      "path": "message/spec.md",
+      "role": "normative"
+    },
+    {
+      "source": "upstream-4a7e7f5e",
+      "path": "schema/spec.md",
+      "role": "normative"
+    },
+    {
+      "source": "upstream-4a7e7f5e",
+      "path": "cloudevents/spec.md",
+      "role": "normative"
+    },
+    {
+      "source": "upstream-4a7e7f5e",
+      "path": "pagination/spec.md",
+      "role": "normative"
+    },
+    {
+      "source": "upstream-4a7e7f5e",
+      "path": "core/model.json",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-4a7e7f5e",
+      "path": "endpoint/model.json",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-4a7e7f5e",
+      "path": "message/model.json",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-4a7e7f5e",
+      "path": "schema/model.json",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-4a7e7f5e",
+      "path": "cloudevents/model.json",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-4a7e7f5e",
+      "path": "core/model.schema.json",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-4a7e7f5e",
+      "path": "LICENSE",
+      "role": "review-only"
+    },
+    {
+      "source": "pr571-811de7d2",
+      "path": "workingdrafts/models/registry/spec.md",
+      "role": "normative"
+    },
+    {
+      "source": "pr571-811de7d2",
+      "path": "workingdrafts/models/registry/model.json",
+      "role": "review-only"
+    },
+    {
+      "source": "pr571-811de7d2",
+      "path": "workingdrafts/models/openusd/spec.md",
+      "role": "normative"
+    },
+    {
+      "source": "pr571-811de7d2",
+      "path": "workingdrafts/models/openusd/model.json",
+      "role": "review-only"
+    },
+    {
+      "source": "pr571-811de7d2",
+      "path": "workingdrafts/models/wot/spec.md",
+      "role": "normative"
+    },
+    {
+      "source": "pr571-811de7d2",
+      "path": "workingdrafts/models/wot/model.json",
+      "role": "review-only"
+    },
+    {
+      "source": "pr571-811de7d2",
+      "path": "workingdrafts/models/api/spec.md",
+      "role": "normative"
+    },
+    {
+      "source": "pr571-811de7d2",
+      "path": "workingdrafts/models/api/model.json",
+      "role": "review-only"
+    },
+    {
+      "source": "pr571-811de7d2",
+      "path": "workingdrafts/models/media-endpoints/spec.md",
+      "role": "normative"
+    },
+    {
+      "source": "pr571-811de7d2",
+      "path": "workingdrafts/models/media-endpoints/model.json",
+      "role": "review-only"
+    },
+    {
+      "source": "pr571-811de7d2",
+      "path": "workingdrafts/bindings/http-federation.md",
+      "role": "normative"
+    },
+    {
+      "source": "pr571-811de7d2",
+      "path": "workingdrafts/bindings/mapping.md",
+      "role": "normative"
+    },
+    {
+      "source": "pr571-811de7d2",
+      "path": "workingdrafts/bindings/file.md",
+      "role": "normative"
+    },
+    {
+      "source": "pr571-811de7d2",
+      "path": "workingdrafts/bindings/git.md",
+      "role": "normative"
+    },
+    {
+      "source": "pr571-811de7d2",
+      "path": "workingdrafts/bindings/oci.md",
+      "role": "normative"
+    },
+    {
+      "source": "pr571-811de7d2",
+      "path": "workingdrafts/bindings/opcua.md",
+      "role": "normative"
+    },
+    {
+      "source": "pr571-811de7d2",
+      "path": "workingdrafts/federation/spec.md",
+      "role": "normative"
+    },
+    {
+      "source": "pr571-811de7d2",
+      "path": "workingdrafts/publication/spec.md",
+      "role": "normative"
+    },
+    {
+      "source": "pr571-811de7d2",
+      "path": "workingdrafts/publication/model.json",
+      "role": "review-only"
+    },
+    {
+      "source": "pr571-811de7d2",
+      "path": "workingdrafts/publication/design/design.md",
+      "role": "selected-design"
+    },
+    {
+      "source": "pr571-811de7d2",
+      "path": "workingdrafts/models/wot/tests/resolution/vectors.json",
+      "role": "review-only"
+    },
+    {
+      "source": "pr571-811de7d2",
+      "path": "workingdrafts/models/wot/schemas/publication-closure.schema.json",
+      "role": "review-only"
+    },
+    {
+      "source": "pr571-811de7d2",
+      "path": "workingdrafts/models/media-endpoints/protocol-options.json",
+      "role": "review-only"
+    },
+    {
+      "source": "pr571-811de7d2",
+      "path": "workingdrafts/models/media-endpoints/source.json",
+      "role": "review-only"
+    },
+    {
+      "source": "pr571-811de7d2",
+      "path": "workingdrafts/models/media-endpoints/tests/validation-vectors.json",
+      "role": "review-only"
+    },
+    {
+      "source": "pr571-811de7d2",
+      "path": "LICENSE",
+      "role": "review-only"
+    },
+    {
+      "source": "pr715-5f9d0134",
+      "path": "workingdrafts/models/api/spec.md",
+      "role": "review-only"
+    },
+    {
+      "source": "pr715-5f9d0134",
+      "path": "workingdrafts/models/api/model.json",
+      "role": "review-only"
+    },
+    {
+      "source": "pr715-5f9d0134",
+      "path": "LICENSE",
+      "role": "review-only"
+    },
+    {
+      "source": "pr716-9613f002",
+      "path": "workingdrafts/models/media-endpoints.md",
+      "role": "review-only"
+    },
+    {
+      "source": "pr716-9613f002",
+      "path": "LICENSE",
+      "role": "review-only"
+    }
+  ]
+}

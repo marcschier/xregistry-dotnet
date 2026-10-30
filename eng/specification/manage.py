@@ -25,6 +25,8 @@ LEDGER = Path("tests") / "Conformance" / "requirements.json"
 REPORT = Path("docs") / "conformance.md"
 CORRECTIONS = Path("eng") / "specification" / "corrections.json"
 CORRECTED_SOURCES = Path("tests") / "Conformance" / "Corrections"
+SUCCESSORS = Path("eng") / "specification" / "successors.json"
+SUCCESSOR_CORPUS = Path("tests") / "Conformance" / "Successors"
 STRENGTH = re.compile(
     r"\b(MUST NOT|SHALL NOT|SHOULD NOT|NOT RECOMMENDED|MUST|SHALL|SHOULD|"
     r"RECOMMENDED|MAY|OPTIONAL|REQUIRED)\b"
@@ -234,6 +236,7 @@ def verify_corpus(root: Path) -> dict[str, Any]:
     for key in (
         "sourceRepository", "upstreamRepository", "commit", "branch",
         "includesUncommittedChanges", "baselineManifestSha256", "normative",
+        "successorsSha256",
     ):
         if lock.get(key) != scope.get(key):
             raise SpecificationError(f"Specification lock/scope mismatch: {key}")
@@ -252,7 +255,131 @@ def verify_corpus(root: Path) -> dict[str, Any]:
     if actual != set(records):
         raise SpecificationError("The corpus contains missing or unlisted files.")
     correction_records(root, records)
+    successors = successor_sources(root, scope)
+    if successors:
+        lock["successorInventory"] = {
+            "pinnedFiles": sum(1 for path in (root / SUCCESSOR_CORPUS).rglob("*") if path.is_file()),
+            "normativeDocuments": sum(source["role"] == "normative" for source in successors),
+            "selectedDesignDocuments": sum(source["role"] == "selected-design" for source in successors),
+            "reviewOnlyDocuments": sum(source["role"] == "review-only" for source in successors),
+        }
     return lock
+
+
+def successor_sources(root: Path, scope: dict[str, Any]) -> list[dict[str, Any]]:
+    """Verify separate immutable sources without replacing the historical corpus."""
+    manifest_path = root / SUCCESSORS
+    expected_hash = scope.get("successorsSha256")
+    if expected_hash is None:
+        if manifest_path.exists() or (root / SUCCESSOR_CORPUS).exists():
+            raise SpecificationError("Successor sources require a scope-pinned manifest.")
+        return []
+    if not isinstance(expected_hash, str) or not HASH.fullmatch(expected_hash):
+        raise SpecificationError("Invalid successor manifest hash.")
+    if not manifest_path.is_file() or sha256(manifest_path.read_bytes()) != expected_hash:
+        raise SpecificationError("Successor manifest is missing or changed.")
+    manifest = read_json(manifest_path)
+    if (
+        not isinstance(manifest, dict)
+        or set(manifest) != {"schemaVersion", "sources", "composition"}
+        or type(manifest["schemaVersion"]) is not int
+        or manifest["schemaVersion"] != 1
+        or not isinstance(manifest["sources"], list)
+        or not manifest["sources"]
+        or not isinstance(manifest["composition"], list)
+        or not manifest["composition"]
+    ):
+        raise SpecificationError("Invalid successor source manifest.")
+    records: dict[tuple[str, str], dict[str, Any]] = {}
+    source_ids: set[str] = set()
+    expected_files: set[str] = set()
+    for source in manifest["sources"]:
+        if (
+            not isinstance(source, dict)
+            or set(source) != {"id", "repository", "commit", "status", "files"}
+            or not isinstance(source["id"], str)
+            or not re.fullmatch(r"[a-z0-9][a-z0-9-]*", source["id"])
+            or source["id"] in source_ids
+            or not isinstance(source["repository"], str)
+            or not re.fullmatch(r"https://github\.com/[A-Za-z0-9-]+/[A-Za-z0-9._-]+", source["repository"])
+            or not isinstance(source["commit"], str)
+            or not re.fullmatch(r"[a-f0-9]{40}", source["commit"])
+            or source["status"] not in ("merged", "working-draft")
+            or not isinstance(source["files"], list)
+            or not source["files"]
+        ):
+            raise SpecificationError("Invalid successor source provenance.")
+        source_id = source["id"]
+        source_ids.add(source_id)
+        paths: set[str] = set()
+        for entry in source["files"]:
+            if (
+                not isinstance(entry, dict)
+                or set(entry) != {"path", "bytes", "sha256", "kind", "owner"}
+                or not isinstance(entry["path"], str)
+                or "\\" in entry["path"]
+                or entry["path"].casefold() in paths
+                or type(entry["bytes"]) is not int
+                or not 0 <= entry["bytes"] <= MAX_JSON_BYTES
+                or not isinstance(entry["sha256"], str)
+                or not HASH.fullmatch(entry["sha256"])
+                or entry["kind"] not in ("normative", "informative", "artifact", "license")
+                or not isinstance(entry["owner"], str)
+                or not re.fullmatch(r"[a-z][a-z0-9-]*", entry["owner"])
+            ):
+                raise SpecificationError(f"Invalid successor file entry: {source_id}")
+            relative = f"{source_id}/{entry['path']}"
+            path = contained(root / SUCCESSOR_CORPUS, relative)
+            if (
+                not path.is_file()
+                or path.stat().st_size != entry["bytes"]
+                or sha256(path.read_bytes()) != entry["sha256"]
+            ):
+                raise SpecificationError(f"Successor source is missing or changed: {relative}")
+            paths.add(entry["path"].casefold())
+            expected_files.add(relative)
+            records[(source_id, entry["path"])] = {
+                **entry, "file": (SUCCESSOR_CORPUS / relative).as_posix(),
+                "repository": source["repository"], "commit": source["commit"],
+                "status": source["status"], "sourceId": source_id,
+            }
+        license_record = records.get((source_id, "LICENSE"))
+        if license_record is None or license_record["kind"] != "license":
+            raise SpecificationError(f"Successor source license is missing: {source_id}")
+    actual_files = {
+        path.relative_to(root / SUCCESSOR_CORPUS).as_posix()
+        for path in (root / SUCCESSOR_CORPUS).rglob("*") if path.is_file()
+    }
+    if actual_files != expected_files:
+        raise SpecificationError("Successor corpus contains unlisted or missing files.")
+    selected: list[dict[str, Any]] = []
+    selected_keys: set[tuple[str, str]] = set()
+    normative_paths: set[str] = set()
+    for selection in manifest["composition"]:
+        if (
+            not isinstance(selection, dict)
+            or set(selection) != {"source", "path", "role"}
+            or not isinstance(selection["source"], str)
+            or not isinstance(selection["path"], str)
+            or selection["role"] not in ("normative", "selected-design", "review-only")
+        ):
+            raise SpecificationError("Invalid successor composition entry.")
+        key = (selection["source"], selection["path"])
+        if key in selected_keys or key not in records:
+            raise SpecificationError("Duplicate or unknown successor composition source.")
+        selected_keys.add(key)
+        record = records[key]
+        role = selection["role"]
+        if role == "normative":
+            if record["kind"] != "normative" or record["path"] in normative_paths:
+                raise SpecificationError("Competing or non-normative successor selection.")
+            normative_paths.add(record["path"])
+        elif role == "selected-design" and record["kind"] != "informative":
+            raise SpecificationError("Selected designs must retain informative source status.")
+        selected.append({**record, "role": role})
+    if selected_keys != set(records):
+        raise SpecificationError("Every successor file requires an explicit composition role.")
+    return selected
 
 
 def correction_files(root: Path) -> set[str]:
@@ -548,6 +675,8 @@ def generate_ledger(root: Path, lock: dict[str, Any]) -> dict[str, Any]:
     previous: dict[str, dict[str, Any]] = {}
     semantic_reviewed = False
     correction_hash = sha256((root / CORRECTIONS).read_bytes()) if (root / CORRECTIONS).exists() else None
+    successors = successor_sources(root, lock)
+    successor_hash = lock.get("successorsSha256")
     if (root / LEDGER).exists():
         old = read_json(root / LEDGER)
         if (
@@ -563,6 +692,8 @@ def generate_ledger(root: Path, lock: dict[str, Any]) -> dict[str, Any]:
         corrections_changed = old.get("correctionsSha256") != correction_hash
         if semantic_reviewed and corrections_changed:
             raise SpecificationError("The corrected specification baseline changed; reset and repeat semantic coverage review explicitly.")
+        if semantic_reviewed and old.get("successorsSha256") != successor_hash:
+            raise SpecificationError("The successor source set changed; reset and repeat semantic coverage review explicitly.")
         for row in old["requirements"]:
             if not isinstance(row, dict) or not isinstance(row.get("id"), str):
                 raise SpecificationError("Malformed requirement entry.")
@@ -588,12 +719,29 @@ def generate_ledger(root: Path, lock: dict[str, Any]) -> dict[str, Any]:
                 row["review"] = old["review"]
                 row["implementation"] = old["implementation"]
             rows.append(row)
+    for source in successors:
+        if source["role"] == "review-only":
+            continue
+        data = contained(root, source["file"]).read_bytes()
+        extracted = extract_requirements(source["file"], data.decode("utf-8"), source["sha256"], source["owner"])
+        for row in extracted:
+            row["source"].update({
+                key: source[key] for key in ("repository", "commit", "status", "sourceId", "role")
+            })
+            row["source"]["originalPath"] = source["path"]
+            old = previous.pop(row["id"], None)
+            if old is not None:
+                if old["source"] != row["source"] and old["review"]["status"] != "unreviewed":
+                    raise SpecificationError(f"Reviewed successor source changed: {row['id']}")
+                row["review"] = old["review"]
+                row["implementation"] = old["implementation"]
+            rows.append(row)
     if previous:
         raise SpecificationError(
             "Existing requirements disappeared; review the baseline change explicitly: "
             + ", ".join(list(previous)[:5])
         )
-    return {
+    result = {
         "schemaVersion": 1,
         "baselineManifestSha256": lock["baselineManifestSha256"],
         "correctionsSha256": correction_hash,
@@ -601,6 +749,9 @@ def generate_ledger(root: Path, lock: dict[str, Any]) -> dict[str, Any]:
         "semanticCoverageReviewed": semantic_reviewed,
         "requirements": rows,
     }
+    if successor_hash is not None:
+        result["successorsSha256"] = successor_hash
+    return result
 
 
 def render_report(ledger: dict[str, Any], lock: dict[str, Any]) -> bytes:
@@ -620,9 +771,39 @@ def render_report(ledger: dict[str, Any], lock: dict[str, Any]) -> bytes:
         "not evidence that the client/server implements them. Keyword extraction can",
         "combine multiple obligations and miss procedural or artifact-only requirements;",
         "each family requires explicit semantic coverage review.", "",
-        f"Pinned source files: **{lock['fileCount']}**. "
-        f"Normative documents: **{len(lock['normative'])}**. "
-        f"Extracted blocks: **{len(rows)}**.", "",
+    ]
+    if "successorInventory" in lock:
+        successor = lock["successorInventory"]
+        lines += [
+            f"Historical pinned files: **{lock['fileCount']}**. "
+            f"Historical normative documents: **{len(lock['normative'])}**. "
+            f"Combined extracted blocks: **{len(rows)}**.", "",
+            "Historical sources and their reviews are retained separately from the",
+            "successor composition; new source-qualified requirements do not inherit",
+            "historical implementation claims.",
+            f"Successor files: **{successor['pinnedFiles']}**. "
+            f"Successor normative documents: **{successor['normativeDocuments']}**. "
+            f"Selected informative designs: **{successor['selectedDesignDocuments']}**.", "",
+            "A selected informative design is an implementation target, not an adopted",
+            "standard. Its obligations still require explicit semantic review.", "",
+            "The successor manifest in `eng/specification/successors.json` identifies",
+            "the repository, immutable commit, exact file bytes and composition role.",
+            "`eng/specification/scope.json` and `eng/specification-lock.json` pin its",
+            "hash. PR #715 and #716 inputs remain review-only where PR #571 supplies",
+            "the selected draft; they are not competing active requirements.", "",
+            "Run `python eng\\specification\\freeze_successors.py` to reacquire the",
+            "explicitly pinned sources. It refuses to overwrite changed evidence.",
+            "Ordinary `verify`, `generate` and `check` operations use retained bytes",
+            "without network access. Changing the source set requires renewed review;",
+            "it does not transfer historical qualification to a successor.", "",
+        ]
+    else:
+        lines += [
+            f"Pinned source files: **{lock['fileCount']}**. "
+            f"Normative documents: **{len(lock['normative'])}**. "
+            f"Extracted blocks: **{len(rows)}**.", "",
+        ]
+    lines += [
         "| Family | Blocks | Reviewed | Qualified |",
         "| --- | ---: | ---: | ---: |",
     ]
@@ -706,7 +887,7 @@ def accounting(ledger: dict[str, Any], lock: dict[str, Any]) -> dict[str, Any]:
             if review["status"] != "informative" and status != "qualified":
                 target["qualificationGaps"] += 1
 
-    return {
+    result = {
         "schemaVersion": 1,
         "baselineManifestSha256": ledger["baselineManifestSha256"],
         "correctionsSha256": ledger.get("correctionsSha256"),
@@ -716,6 +897,12 @@ def accounting(ledger: dict[str, Any], lock: dict[str, Any]) -> dict[str, Any]:
         "totals": totals,
         "byOwner": by_owner,
     }
+    if "successorInventory" in lock:
+        result["successorsSha256"] = ledger.get("successorsSha256")
+        result["successorInventory"] = lock["successorInventory"]
+        result["historicalRequirements"] = sum("sourceId" not in row["source"] for row in rows)
+        result["successorRequirements"] = sum("sourceId" in row["source"] for row in rows)
+    return result
 
 
 def source_version_is_alpha(root: Path) -> bool:
@@ -808,8 +995,10 @@ def main(argv: list[str] | None = None) -> int:
                         file=sys.stderr,
                     )
                 release_check(ROOT, ledger, alpha=alpha)
+        successor_count = lock.get("successorInventory", {}).get("pinnedFiles", 0)
         print(
-            f"Specification {args.operation}: {lock['fileCount']} pinned files verified. "
+            f"Specification {args.operation}: {lock['fileCount']} historical and "
+            f"{successor_count} successor pinned files verified. "
             "This is provenance consistency, not implemented conformance."
         )
         return 0

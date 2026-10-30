@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import importlib.util
+import copy
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -110,6 +112,217 @@ class ProvenanceAndReviewTests(unittest.TestCase):
         path = self.root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(tool.encoded(document))
+
+    def pin_successors(self) -> dict:
+        files = {
+            "LICENSE": (b"Independent successor license.\n", "license", "license"),
+            "workingdrafts/bindings/opcua.md": (
+                b"# Contract\n\nA reader MUST verify exact bytes.\n", "normative", "opcua"),
+            "design.md": (b"# Proposal\n\nA publisher MUST retain its counter.\n", "informative", "wot"),
+            "model.json": (b'{"groups":{}}\n', "artifact", "wot"),
+        }
+        entries = []
+        for path, (data, kind, owner) in files.items():
+            target = self.root / tool.SUCCESSOR_CORPUS / "pr571" / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+            entries.append({"path": path, "bytes": len(data), "sha256": tool.sha256(data),
+                            "kind": kind, "owner": owner})
+        manifest = {
+            "schemaVersion": 1,
+            "sources": [{"id": "pr571", "repository": "https://github.com/xregistry/spec",
+                         "commit": "c" * 40, "status": "working-draft", "files": entries}],
+            "composition": [
+                {"source": "pr571", "path": "workingdrafts/bindings/opcua.md", "role": "normative"},
+                {"source": "pr571", "path": "design.md", "role": "selected-design"},
+                {"source": "pr571", "path": "model.json", "role": "review-only"},
+                {"source": "pr571", "path": "LICENSE", "role": "review-only"},
+            ],
+        }
+        self.write_successors(manifest)
+        return manifest
+
+    def write_successors(self, manifest: dict) -> None:
+        self.write_json(tool.SUCCESSORS, manifest)
+        digest = tool.sha256((self.root / tool.SUCCESSORS).read_bytes())
+        self.scope["successorsSha256"] = digest
+        self.lock["successorsSha256"] = digest
+        self.write_json(Path("eng/specification/scope.json"), self.scope)
+        self.write_json(tool.LOCK, self.lock)
+
+    def test_successors_append_source_qualified_unreviewed_obligations_without_rewriting_history(self) -> None:
+        original = tool.generate_ledger(self.root, self.lock)
+        original["requirements"][0]["review"] = {
+            "status": "reviewed", "note": "Historical source only.", "roles": ["client"]}
+        self.write_json(tool.LEDGER, original)
+        self.pin_successors()
+        verified = tool.verify_corpus(self.root)
+        ledger = tool.generate_ledger(self.root, verified)
+        self.assertEqual(ledger["requirements"][0], original["requirements"][0])
+        self.assertEqual(len(ledger["requirements"]), 3)
+        for row in ledger["requirements"][1:]:
+            self.assertEqual(row["review"]["status"], "unreviewed")
+            self.assertEqual(row["implementation"], {"status": "pending", "testIds": [], "nativeEvidence": []})
+            self.assertEqual(row["source"]["commit"], "c" * 40)
+            self.assertEqual(row["source"]["repository"], "https://github.com/xregistry/spec")
+        self.assertEqual(ledger["requirements"][1]["source"]["status"], "working-draft")
+        self.assertEqual(ledger["requirements"][2]["source"]["role"], "selected-design")
+        status = tool.accounting(ledger, verified)
+        self.assertEqual(status["historicalRequirements"], 1)
+        self.assertEqual(status["successorRequirements"], 2)
+        self.assertEqual(status["successorInventory"],
+                         {"pinnedFiles": 4, "normativeDocuments": 1,
+                          "selectedDesignDocuments": 1, "reviewOnlyDocuments": 2})
+
+    def test_successor_manifest_requires_scope_pin_and_matching_lock(self) -> None:
+        self.pin_successors()
+        scope = dict(self.scope)
+        del scope["successorsSha256"]
+        with self.assertRaisesRegex(tool.SpecificationError, "scope-pinned"):
+            tool.successor_sources(self.root, scope)
+        self.lock["successorsSha256"] = "f" * 64
+        self.write_json(tool.LOCK, self.lock)
+        with self.assertRaisesRegex(tool.SpecificationError, "lock/scope mismatch"):
+            tool.verify_corpus(self.root)
+        (self.root / tool.SUCCESSORS).write_bytes(b"{}")
+        with self.assertRaisesRegex(tool.SpecificationError, "manifest is missing or changed"):
+            tool.successor_sources(self.root, self.scope)
+
+    def test_successor_source_bytes_license_and_unlisted_files_fail_closed(self) -> None:
+        manifest = self.pin_successors()
+        target = self.root / tool.SUCCESSOR_CORPUS / "pr571" / "design.md"
+        original = target.read_bytes()
+        target.write_bytes(b"tampered")
+        with self.assertRaisesRegex(tool.SpecificationError, "missing or changed"):
+            tool.verify_corpus(self.root)
+        target.write_bytes(original)
+        extra = target.parent / "unlisted.json"
+        extra.write_bytes(b"{}")
+        with self.assertRaisesRegex(tool.SpecificationError, "unlisted"):
+            tool.verify_corpus(self.root)
+        extra.unlink()
+        manifest["sources"][0]["files"] = [
+            item for item in manifest["sources"][0]["files"] if item["path"] != "LICENSE"]
+        self.write_successors(manifest)
+        with self.assertRaisesRegex(tool.SpecificationError, "license is missing"):
+            tool.verify_corpus(self.root)
+
+    def test_successor_provenance_rejects_moving_refs_unsafe_paths_and_duplicate_records(self) -> None:
+        manifest = self.pin_successors()
+        changes = [
+            ("commit", "main"), ("repository", "https://example.invalid/spec"),
+            ("id", "../outside"), ("status", "accepted"),
+        ]
+        for key, value in changes:
+            with self.subTest(key=key):
+                invalid = copy.deepcopy(manifest)
+                invalid["sources"][0][key] = value
+                self.write_successors(invalid)
+                with self.assertRaises(tool.SpecificationError):
+                    tool.verify_corpus(self.root)
+        for entry in (
+            {**manifest["sources"][0]["files"][0], "path": "../LICENSE"},
+            {**manifest["sources"][0]["files"][0], "bytes": True},
+            {**manifest["sources"][0]["files"][0], "sha256": "bad"},
+        ):
+            with self.subTest(entry=entry):
+                invalid = copy.deepcopy(manifest)
+                invalid["sources"][0]["files"][0] = entry
+                self.write_successors(invalid)
+                with self.assertRaises(tool.SpecificationError):
+                    tool.verify_corpus(self.root)
+        duplicate = copy.deepcopy(manifest)
+        duplicate["sources"][0]["files"].append(dict(duplicate["sources"][0]["files"][0]))
+        self.write_successors(duplicate)
+        with self.assertRaises(tool.SpecificationError):
+            tool.verify_corpus(self.root)
+
+    def test_successor_composition_rejects_unknown_duplicate_and_informative_normative_selections(self) -> None:
+        manifest = self.pin_successors()
+        for selection in (
+            {"source": "unknown", "path": "design.md", "role": "selected-design"},
+            {"source": "pr571", "path": "design.md", "role": "normative"},
+            {"source": "pr571", "path": "model.json", "role": "selected-design"},
+            dict(manifest["composition"][0]),
+        ):
+            with self.subTest(selection=selection):
+                invalid = copy.deepcopy(manifest)
+                invalid["composition"].append(selection)
+                self.write_successors(invalid)
+                with self.assertRaises(tool.SpecificationError):
+                    tool.verify_corpus(self.root)
+
+    def test_successor_review_only_sources_do_not_become_normative_obligations(self) -> None:
+        manifest = self.pin_successors()
+        manifest["composition"][1]["role"] = "review-only"
+        self.write_successors(manifest)
+        ledger = tool.generate_ledger(self.root, tool.verify_corpus(self.root))
+        self.assertEqual(len(ledger["requirements"]), 2)
+        self.assertFalse(any(row["owner"] == "wot" for row in ledger["requirements"]))
+
+    def test_successor_composition_requires_explicit_disposition_for_every_file(self) -> None:
+        manifest = self.pin_successors()
+        manifest["composition"].pop()
+        self.write_successors(manifest)
+        with self.assertRaisesRegex(tool.SpecificationError, "explicit composition role"):
+            tool.verify_corpus(self.root)
+
+    def test_successor_composition_change_invalidates_completed_semantic_review(self) -> None:
+        self.pin_successors()
+        ledger = tool.generate_ledger(self.root, tool.verify_corpus(self.root))
+        ledger["semanticCoverageReviewed"] = True
+        self.write_json(tool.LEDGER, ledger)
+        manifest = tool.read_json(self.root / tool.SUCCESSORS)
+        manifest["composition"][1]["role"] = "review-only"
+        self.write_successors(manifest)
+        with self.assertRaisesRegex(tool.SpecificationError, "repeat semantic coverage review"):
+            tool.generate_ledger(self.root, tool.verify_corpus(self.root))
+
+    def test_successor_freeze_is_idempotent_and_refuses_overwriting_evidence(self) -> None:
+        manifest = self.pin_successors()
+        spec = importlib.util.spec_from_file_location("freeze_successors", ROOT / "eng/specification/freeze_successors.py")
+        freezer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(freezer)
+        sources = copy.deepcopy(manifest["sources"])
+        for source in sources:
+            for entry in source["files"]:
+                entry["role"] = next((item["role"] for item in manifest["composition"]
+                                      if item["source"] == source["id"] and item["path"] == entry["path"]),
+                                     "review-only")
+
+        def acquire(source, entry):
+            path = self.root / tool.SUCCESSOR_CORPUS / source["id"] / entry["path"]
+            return source, entry, path.read_bytes()
+
+        with mock.patch.object(freezer, "sources", return_value=sources), \
+                mock.patch.object(freezer, "acquire", side_effect=acquire):
+            freezer.freeze(self.root)
+            before = (self.root / tool.SUCCESSORS).read_bytes()
+            freezer.freeze(self.root)
+            self.assertEqual((self.root / tool.SUCCESSORS).read_bytes(), before)
+            self.assertEqual(tool.verify_corpus(self.root)["successorInventory"]["pinnedFiles"], 4)
+
+        def changed_acquisition(source, entry):
+            return source, entry, b"changed bytes"
+
+        with mock.patch.object(freezer, "sources", return_value=sources), \
+                mock.patch.object(freezer, "acquire", side_effect=changed_acquisition):
+            with self.assertRaisesRegex(freezer.tool.SpecificationError, "Refusing to overwrite"):
+                freezer.freeze(self.root)
+        self.assertEqual((self.root / tool.SUCCESSORS).read_bytes(), before)
+        self.assertEqual(tool.verify_corpus(self.root)["successorInventory"]["pinnedFiles"], 4)
+
+    def test_successor_acquisition_failure_does_not_change_selected_sources(self) -> None:
+        self.pin_successors()
+        spec = importlib.util.spec_from_file_location("freeze_successors", ROOT / "eng/specification/freeze_successors.py")
+        freezer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(freezer)
+        before = (self.root / tool.SUCCESSORS).read_bytes()
+        with mock.patch.object(freezer, "acquire", side_effect=OSError("download failed")):
+            with self.assertRaisesRegex(OSError, "download failed"):
+                freezer.freeze(self.root)
+        self.assertEqual((self.root / tool.SUCCESSORS).read_bytes(), before)
+        self.assertEqual(tool.verify_corpus(self.root)["successorInventory"]["pinnedFiles"], 4)
 
     def test_corpus_verifies_and_modified_bytes_are_rejected(self) -> None:
         self.assertEqual(tool.verify_corpus(self.root)["fileCount"], 2)
