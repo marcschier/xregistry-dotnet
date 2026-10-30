@@ -7,7 +7,7 @@ using System.Text.Json;
 using TUnit.Assertions;
 using TUnit.Core;
 
-namespace XRegistry.Models.Tests;
+namespace XRegistry.Tests;
 
 /// <summary>
 /// Opt-in native-execution proof consumed by <c>eng/specification/native_receipt.py</c>.

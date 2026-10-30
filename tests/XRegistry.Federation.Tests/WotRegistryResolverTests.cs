@@ -748,7 +748,7 @@ public class WotRegistryResolverTests
     {
         var tree = new MemoryTreeReader();
         const string resource = "/gs/tenant/models/assigned";
-        JsonObject Put(string file, JsonObject record)
+        JsonNode Put(string file, JsonObject record)
         {
             record["format"] = "xregistry-document-tree";
             record["formatversion"] = "1";
