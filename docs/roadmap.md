@@ -36,8 +36,17 @@ The selected generic package, model, client/bridge sample and storage matrix
 passed all 28 jobs at `1bdfa6f` on Windows/Linux x64 and ARM64. The four complete
 .NET 10 module-suite cells also passed at that source. See
 [native evidence](native-aot.md#current-evidence-and-uncovered-cells).
+The corrected run at `e502e5d` has passed both Linux .NET 10 suite cells.
+The downloaded ARM64 cell passed all thirteen suites and 9,118 cases; every
+retained managed control DLL matches its summary hash. Its source inventories,
+native binaries, reports, proofs and receipts were also checked, including
+complete managed/native case parity and rejection of managed proofs.
+This closes the artifact-retention check, not the native matrix or requirement
+qualification. The inspected Linux ARM64/.NET 8 cell still fails the four
+framework JSON warning gates, while Windows ARM64/.NET 8 failed SDK setup
+before any harness ran. The evidence predates later scoped-selector changes.
 Full native TUnit requirement receipts remain incomplete. All four .NET 8
-complete-suite summaries failed for AspNetCore, HTTP, Federation and Git
+complete-suite summaries at `1bdfa6f` failed for AspNetCore, HTTP, Federation and Git
 test-host IL warnings. Their other nine suites passed, but those partial
 successes do not qualify a complete cell.
 

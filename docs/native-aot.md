@@ -139,7 +139,28 @@ development cell, not requirement-level release qualification.
 
 ## Current evidence and uncovered cells
 
-The [native matrix at `1bdfa6f`](https://github.com/marcschier/xregistry-dotnet/actions/runs/41054105332)
+The [corrected matrix at `e502e5d`](https://github.com/marcschier/xregistry-dotnet/actions/runs/41133118088)
+has completed both Linux .NET 10 cells successfully. The downloaded Linux ARM64
+cell passed all thirteen suites, with 9,118 native cases and 2,636 methods.
+Each retained managed control DLL matches its summary hash. Native executable,
+TRX, proof and receipt hashes also match; complete native/managed case
+inventories agree, managed proofs are rejected, publications have no IL
+diagnostics, and source inventories remain unchanged. The artifact is retained
+at `D:\temp\xregistry-native-41133118088-linux-arm64-net10\native-suites-68p2vdvt`.
+This demonstrates the managed-assembly retention rule for all thirteen suites.
+
+At the same source, the downloaded Linux ARM64/.NET 8 cell passed nine suites
+and 7,675 cases, including all 4,563 Validation cases. Its retained managed
+controls, proofs and receipts match their recorded hashes. AspNetCore, HTTP,
+Federation and Git still fail publication with IL2026/IL3050 diagnostics from
+`JsonOptions.CreateDefaultTypeResolver`. The Windows ARM64/.NET 8 job failed
+earlier, during SDK installation, with an internal CLR error; no suite harness
+ran in that job. Other cells remain unresolved at this inspection checkpoint.
+These results belong to `e502e5d`, before the subsequent scoped-selector
+changes. They remain development evidence with `releaseQualified: false`;
+no per-requirement native qualification has been promoted.
+
+The earlier [native matrix at `1bdfa6f`](https://github.com/marcschier/xregistry-dotnet/actions/runs/41054105332)
 completed with 32 successful jobs and four failed jobs. All four .NET 10
 complete-suite cells passed on Windows/Linux x64 and ARM64, as did the 28
 separate package, sample and storage jobs. Each .NET 8 complete-suite cell
@@ -154,7 +175,7 @@ All eight downloaded summaries were audited against their retained native
 executables, TRX files, proofs and receipts, including complete managed/native
 case inventories and rejection of managed proofs. This run did not retain the
 managed assemblies themselves; their recorded hashes cannot be independently
-rechecked. The upload rule now retains them for future runs.
+rechecked. The corrected run above demonstrates the replacement upload rule.
 These results belong to `1bdfa6f`, before the W25 source reconciliation was
 retained locally. They do not establish native qualification against that
 later source inventory or complete requirement mappings.
