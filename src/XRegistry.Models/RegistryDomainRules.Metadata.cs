@@ -53,6 +53,7 @@ public static partial class RegistryDomainRules
         ValidateSelector(endpoint, "envelope", false);
         ValidateSelector(endpoint, "protocol", false);
         _ = OptionalText(endpoint, "channel", "/channel");
+        ValidateEndpointDeprecation(endpoint, cancellationToken);
         if (SelectorIs(endpoint, "envelope", "CloudEvents/1.0") &&
             TryObject(endpoint, "envelopeoptions", out var envelopeOptions) &&
             envelopeOptions.TryGetProperty("mode", out var mode) && mode.ValueKind == JsonValueKind.String &&
@@ -83,6 +84,35 @@ public static partial class RegistryDomainRules
             foreach (var name in new[] { "type", "mechanism", "resourceuri", "authorityuri" })
             {
                 _ = OptionalText(entry, name, At(path, name));
+            }
+        }
+    }
+
+    private static void ValidateEndpointDeprecation(JsonElement endpoint, CancellationToken cancellationToken)
+    {
+        if (!Present(endpoint, "deprecated"))
+        {
+            return;
+        }
+        var deprecated = endpoint.GetProperty("deprecated");
+        if (deprecated.ValueKind != JsonValueKind.Object)
+        {
+            throw Invalid("Endpoint deprecation metadata must be an object.", "/deprecated");
+        }
+        foreach (var member in deprecated.EnumerateObject())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (member.Value.ValueKind == JsonValueKind.Null)
+            {
+                continue;
+            }
+            if (member.Name is "effective" or "removal")
+            {
+                Scalar("timestamp", member.Value, At("/deprecated", member.Name), cancellationToken);
+            }
+            else if (member.Name is "alternative" or "docs" or "documentation")
+            {
+                Scalar("uri", member.Value, At("/deprecated", member.Name), cancellationToken);
             }
         }
     }

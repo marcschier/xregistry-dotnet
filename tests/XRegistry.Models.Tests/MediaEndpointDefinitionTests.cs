@@ -707,6 +707,90 @@ public class MediaEndpointDefinitionTests
         await Rejects(missingUri, "/protocoloptions/endpoints/0/uri");
     }
 
+    [Test]
+    [Arguments("null")]
+    [Arguments("true")]
+    [Arguments("false")]
+    [Arguments("42")]
+    [Arguments("\"text\"")]
+    [Arguments("[]")]
+    public async Task EndpointDeprecationRejectsNonObjectValuesWithoutTreatingNullAsADeclaration(string json)
+    {
+        var input = ProducerOptions("SRT");
+        input["deprecated"] = JsonNode.Parse(json);
+        var metadata = RegistryJson.Parse(input.ToJsonString());
+        if (json == "null")
+        {
+            await Assert.That(() => RegistryDomainRules.ValidateMediaEndpointMetadata(metadata.RootElement)).ThrowsNothing();
+            await Assert.That(EndpointDefinition.MaterializeMedia(metadata).Authored.RootElement.GetProperty("deprecated").ValueKind)
+                .IsEqualTo(JsonValueKind.Null);
+        }
+        else
+        {
+            await Rejects(metadata, "/deprecated");
+            await RejectsCanonicalMediaMetadata(metadata, "/deprecated");
+            await Assert.That(() => EndpointDefinition.ValidateAuthored(metadata)).Throws<RegistryException>();
+        }
+    }
+
+    [Test]
+    [Arguments("effective")]
+    [Arguments("removal")]
+    [Arguments("alternative")]
+    [Arguments("docs")]
+    [Arguments("documentation")]
+    public async Task EndpointDeprecationRejectsInvalidKnownMemberKindsAndSyntax(string name)
+    {
+        foreach (var invalid in new[] { "true", "false", "42", "[]", "{}", "\"not a timestamp or URI\"" })
+        {
+            var input = ProducerOptions("SRT");
+            input["deprecated"] = new JsonObject { [name] = JsonNode.Parse(invalid) };
+            var metadata = RegistryJson.Parse(input.ToJsonString());
+            await Rejects(metadata, "/deprecated/" + name);
+            await RejectsCanonicalMediaMetadata(metadata, "/deprecated/" + name);
+            var failure = await Assert.That(() => EndpointDefinition.Materialize(metadata)).Throws<RegistryException>()
+                ?? throw new InvalidOperationException("The ordinary Endpoint path accepted invalid deprecation metadata.");
+            await Assert.That(failure.Diagnostic.Code).IsEqualTo("invalid_attribute");
+            await Assert.That(failure.Diagnostic.Path).IsEqualTo("/deprecated/" + name);
+        }
+    }
+
+    [Test]
+    [Arguments("effective", "2026-02-29T00:00:00Z")]
+    [Arguments("removal", "2026-10-30T25:00:00Z")]
+    [Arguments("effective", "2026-10-30T12:00:00")]
+    [Arguments("alternative", "https://media.example.test/%ZZ")]
+    [Arguments("docs", "https://docs.example.test/has space")]
+    [Arguments("documentation", "https://docs.example.test/\n")]
+    public async Task EndpointDeprecationUsesCoreTimestampAndUrlSyntax(string name, string value)
+    {
+        var input = ProducerOptions("SRT");
+        input["deprecated"] = new JsonObject { [name] = value };
+        var metadata = RegistryJson.Parse(input.ToJsonString());
+        await Rejects(metadata, "/deprecated/" + name);
+        await RejectsCanonicalMediaMetadata(metadata, "/deprecated/" + name);
+    }
+
+    [Test]
+    [Arguments("{}")]
+    [Arguments("""{"effective":null,"removal":null,"alternative":null,"docs":null,"documentation":null}""")]
+    [Arguments("""{"effective":"2026-10-30T23:59:59.123456789Z","removal":"2026-10-30T22:00:00+02:00","alternative":"../replacement","docs":"/docs/deprecation","documentation":"https://docs.example.test/deprecation","vendor-metadata":{"reason":["maintenance",2,false]}}""")]
+    public async Task EndpointDeprecationPreservesOptionalValuesExtensionsAndIndependentDates(string declaration)
+    {
+        var input = ProducerOptions("SRT");
+        input["deprecated"] = JsonNode.Parse(declaration);
+        var metadata = RegistryJson.Parse(input.ToJsonString());
+        await Assert.That(() => RegistryDomainRules.ValidateMediaEndpointMetadata(metadata.RootElement)).ThrowsNothing();
+        await Assert.That(() => EndpointDefinition.ValidateAuthored(metadata)).ThrowsNothing();
+        foreach (var result in new[] { EndpointDefinition.MaterializeMedia(metadata), EndpointDefinition.Materialize(metadata) })
+        {
+            await Assert.That(result.Authored.RootElement.GetProperty("deprecated").GetRawText())
+                .IsEqualTo(metadata.RootElement.GetProperty("deprecated").GetRawText());
+            await Assert.That(result.Resolved.RootElement.GetProperty("deprecated").GetRawText())
+                .IsEqualTo(metadata.RootElement.GetProperty("deprecated").GetRawText());
+        }
+    }
+
     private static JsonDocument CanonicalMediaVectors() => ReadCanonicalMediaSource("MediaValidationVectors",
         "F140A1F1F38190ED87E83579E7207A2492DB44CE1B7C9934081E85C25484B260", 2270);
 

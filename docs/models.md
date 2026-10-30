@@ -52,6 +52,13 @@ address lists defer network configuration; an authored address record without a
 URI still fails when materialized. Authorization metadata remains discovery
 information, not credentials or evidence that authorization succeeded.
 
+Standalone Endpoint validation also checks the inherited `deprecated` object.
+`effective` and `removal` use Core timestamp syntax; `alternative`, the model's
+`docs` member and Core `documentation` use URI-reference syntax. Optional null
+values and extension members remain unchanged. Validation does not infer a
+chronological ordering, expand templates outside protocol options or acquire
+deprecation references.
+
 SPEC-008 aligns Message declaration names and shapes with the domain prose:
 `basemessage`, HTTP `status` and string-map `query`, NATS `reply-to`, optional
 AMQP `subject`, and Endpoint Group-target references. Corrected source bytes

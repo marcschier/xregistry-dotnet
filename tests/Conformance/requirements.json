@@ -114134,7 +114134,11 @@
           "XRegistry.Models.Tests.BuiltInRegistryModelsTests.CompiledMediaModelRetainsProtocolOptionsAndExactStreamEnums",
           "XRegistry.Models.Tests.BuiltInRegistryModelsTests.MediaPackagedDependencyBytesMatchPublisherSnapshotDigests",
           "XRegistry.Models.Tests.MediaEndpointDefinitionTests.InheritedMediaOptionShapesRejectInvalidJsonKindsAtExactPaths",
-          "XRegistry.Models.Tests.MediaEndpointDefinitionTests.InheritedMediaOptionsPreservePreferenceAndDeferAuthorizationWithoutLivenessClaims"
+          "XRegistry.Models.Tests.MediaEndpointDefinitionTests.InheritedMediaOptionsPreservePreferenceAndDeferAuthorizationWithoutLivenessClaims",
+          "XRegistry.Models.Tests.MediaEndpointDefinitionTests.EndpointDeprecationRejectsNonObjectValuesWithoutTreatingNullAsADeclaration",
+          "XRegistry.Models.Tests.MediaEndpointDefinitionTests.EndpointDeprecationRejectsInvalidKnownMemberKindsAndSyntax",
+          "XRegistry.Models.Tests.MediaEndpointDefinitionTests.EndpointDeprecationUsesCoreTimestampAndUrlSyntax",
+          "XRegistry.Models.Tests.MediaEndpointDefinitionTests.EndpointDeprecationPreservesOptionalValuesExtensionsAndIndependentDates"
         ],
         "nativeEvidence": []
       }
