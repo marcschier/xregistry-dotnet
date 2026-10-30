@@ -340,9 +340,34 @@ public static partial class ApiOperationDocumentResolver
                 budget.Work();
                 ValidationContext.Require(IsSmithyShapeId(trait.Name), path + "/traits", "document.trait_id",
                     "A Smithy trait ID must be an absolute root shape ID.");
-                if (trait.Name is "smithy.api#error" or "smithy.api#documentation" or "smithy.api#required" or
-                    "smithy.api#input" or "smithy.api#output" or "smithy.api#readonly" or "smithy.api#idempotent" or
-                    "smithy.api#default" or "smithy.api#enumValue" or "smithy.api#trait") { continue; }
+                var traitPath = path + "/traits/" + Escape(trait.Name);
+                switch (trait.Name)
+                {
+                    case "smithy.api#documentation":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.String, traitPath,
+                            "document.trait_value", "The Smithy documentation trait requires a string value.");
+                        continue;
+                    case "smithy.api#error":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.String &&
+                            trait.Value.GetString() is "client" or "server", traitPath,
+                            "document.trait_value", "The Smithy error trait requires client or server.");
+                        continue;
+                    case "smithy.api#required":
+                    case "smithy.api#input":
+                    case "smithy.api#output":
+                    case "smithy.api#readonly":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
+                            "document.trait_value", "Smithy annotation traits require object values.");
+                        continue;
+                    case "smithy.api#idempotent":
+                    case "smithy.api#trait":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
+                            "document.trait_value", "The Smithy idempotent and trait traits require object values.");
+                        continue;
+                    case "smithy.api#default":
+                    case "smithy.api#enumValue":
+                        continue;
+                }
                 if (shapes.TryGetProperty(trait.Name, out var definition))
                 {
                     ValidationContext.Require(definition.TryGetProperty("traits", out var markers) &&

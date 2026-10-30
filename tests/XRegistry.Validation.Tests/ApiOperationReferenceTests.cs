@@ -2084,6 +2084,107 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
+    [Arguments("operation", "documentation", "null")]
+    [Arguments("operation", "documentation", "0")]
+    [Arguments("operation", "documentation", "false")]
+    [Arguments("operation", "documentation", "[]")]
+    [Arguments("operation", "documentation", "{}")]
+    [Arguments("operation", "readonly", "true")]
+    [Arguments("operation", "readonly", "null")]
+    [Arguments("operation", "readonly", "[]")]
+    [Arguments("operation", "idempotent", "false")]
+    [Arguments("operation", "idempotent", "\"marker\"")]
+    [Arguments("structure", "input", "true")]
+    [Arguments("structure", "input", "[]")]
+    [Arguments("structure", "output", "null")]
+    [Arguments("member", "required", "true")]
+    [Arguments("member", "required", "null")]
+    [Arguments("member", "required", "[]")]
+    [Arguments("member", "required", "1")]
+    [Arguments("member", "required", "\"required\"")]
+    [Arguments("member", "documentation", "{}")]
+    [Arguments("payload", "error", "\"Client\"")]
+    [Arguments("payload", "error", "\"service\"")]
+    [Arguments("payload", "error", "null")]
+    [Arguments("payload", "error", "{}")]
+    [Arguments("definition", "trait", "true")]
+    [Arguments("definition", "trait", "null")]
+    [Arguments("definition", "trait", "[]")]
+    public async Task SmithyJsonRejectsMalformedPreludeTraitValuesInTheSelectedClosure(
+        string position, string name, string value)
+    {
+        var document = JsonNode.Parse("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"example#Input"},
+                "traits":{"example#Custom":{}}},
+              "example#Input":{"type":"structure","members":{"value":{"target":"example#Payload"}}},
+              "example#Payload":{"type":"structure"},
+              "example#Custom":{"type":"structure","traits":{"smithy.api#trait":{}}}}}
+            """)!.AsObject();
+        var shapes = document["shapes"]!.AsObject();
+        var item = position switch
+        {
+            "operation" => shapes["example#Get"]!.AsObject(),
+            "structure" => shapes["example#Input"]!.AsObject(),
+            "payload" => shapes["example#Payload"]!.AsObject(),
+            "definition" => shapes["example#Custom"]!.AsObject(),
+            _ => shapes["example#Input"]!["members"]!["value"]!.AsObject()
+        };
+        var traits = item["traits"] as JsonObject ?? new JsonObject();
+        item["traits"] = traits;
+        traits["smithy.api#" + name] = JsonNode.Parse(value);
+        var result = ResolveSmithy(document.ToJsonString());
+        var path = position switch
+        {
+            "operation" => "$/shapes/example#Get",
+            "structure" => "$/shapes/example#Input",
+            "payload" => "$/shapes/example#Payload",
+            "definition" => "$/shapes/example#Custom",
+            _ => "$/shapes/example#Input/members/value"
+        };
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_value");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo(path + "/traits/smithy.api#" + name);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        await Assert.That(result.DocumentPath).IsNull();
+    }
+
+    [Test]
+    [Arguments("client", "readonly")]
+    [Arguments("server", "readonly")]
+    [Arguments("client", "idempotent")]
+    [Arguments("server", "idempotent")]
+    public async Task SmithyJsonPreservesValidPreludeTraitValuesWithoutInterpretingPayloadReferences(
+        string error, string behavior)
+    {
+        var document = """
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"example#Input"},
+                "output":{"target":"example#Output"},
+                "traits":{"smithy.api#documentation":"","smithy.api#BEHAVIOR":{},
+                  "example#Custom":{"$ref":"https://must-not-load.example/data"}}},
+              "example#Input":{"type":"structure","traits":{"smithy.api#input":{}},
+                "members":{"value":{"target":"example#Payload",
+                  "traits":{"smithy.api#required":{},"smithy.api#documentation":"Payload"}}}},
+              "example#Output":{"type":"structure","traits":{"smithy.api#output":{}}},
+              "example#Payload":{"type":"structure","traits":{"smithy.api#error":"ERROR"}},
+              "example#Custom":{"type":"document","traits":{"smithy.api#trait":{}}},
+              "example#Unused":{"type":"string","traits":{"smithy.api#documentation":false}}}}
+            """.Replace("ERROR", error, StringComparison.Ordinal).Replace("BEHAVIOR", behavior, StringComparison.Ordinal);
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Trait payloads are not imports."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        using var original = JsonDocument.Parse(document);
+        await Assert.That(result.Operation.GetRawText())
+            .IsEqualTo(original.RootElement.GetProperty("shapes").GetProperty("example#Get").GetRawText());
+        await Assert.That(result.Operation.GetProperty("traits").GetProperty("smithy.api#documentation").GetString()).IsEqualTo("");
+        await Assert.That(result.Operation.GetProperty("traits").GetProperty("example#Custom").GetProperty("$ref").GetString())
+            .IsEqualTo("https://must-not-load.example/data");
+    }
+
+    [Test]
     [Arguments("""{"type":"operation","input":{"target":"example#Missing"}}""", "", ApiOperationResolutionStatus.Indeterminate, "dependency.unresolved")]
     [Arguments("""{"type":"operation","input":{"target":"smithy.api#String"}}""", "", ApiOperationResolutionStatus.Invalid, "document.target_type")]
     [Arguments("""{"type":"operation","input":null}""", "", ApiOperationResolutionStatus.Invalid, "document.target")]

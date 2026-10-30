@@ -275,6 +275,15 @@ must be supplied in the AST. These checks do not validate every Smithy shape
 constraint, trait value or selector. Full Smithy validation and model assembly
 remain unsupported.
 
+Within the selected closure, `documentation` values must be strings and
+`error` values must be exactly `client` or `server`. The recognized `required`,
+`input`, `output` and `readonly` annotation traits require object values, as do
+the structured `idempotent` and `trait` traits. These checks also apply to
+reachable member declarations and custom-trait definitions. They do not check
+every trait member, selector, conflict or default constraint. Unreachable
+declarations are not validated, and literal members inside trait payloads do
+not become dependency references.
+
 SemVer-profile WoT minimum-version floors exclude build metadata and fit the
 128-character Core id limit. Generated `0.0.0-N` floors are forbidden, with
 positive `N` as defined by the draft's assignment rule; `0.0.0-0` is an
