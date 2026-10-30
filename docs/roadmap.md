@@ -209,6 +209,16 @@ vocabulary/source mapping. It does not supply their implementation.
   `longPoll` requires an operation object annotation with a positive signed
   32-bit integer `timeoutMillis`, checked exactly without rounding. The check
   does not execute polling or modify request timeout configuration.
+  `http` checks operation applicability, required string method/URI values and
+  exact success codes from 100 to 999. Methods remain literal. Local URI rules
+  reject invalid origin-form syntax, dot/empty segments, fragments, query labels
+  and malformed or duplicate labels. Required top-level input `httpLabel`
+  members must match labels in both directions. Scalar targets and the single
+  greedy string label are checked, without requiring the greedy label to be
+  last. All seven message-binding traits conflict pairwise on a member.
+  Nested/output/error labels do not bind the operation URI. Service-wide route
+  comparison, endpoint resolution and runtime HTTP serialization remain outside
+  this selector.
   `httpError` checks error-structure applicability and exact signed-32-bit
   integer values without converting recommended client/server ranges into
   mandatory bounds. `httpResponseCode` checks object-valued integer-targeting

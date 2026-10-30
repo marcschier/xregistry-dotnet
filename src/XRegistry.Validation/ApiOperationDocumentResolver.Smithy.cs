@@ -163,6 +163,11 @@ public static partial class ApiOperationDocumentResolver
             "smithy.api#PrimitiveInteger" or "smithy.api#PrimitiveLong" or "smithy.api#PrimitiveFloat" or
             "smithy.api#PrimitiveDouble";
 
+    private static bool IsSmithyHttpBinding(string id) =>
+        id is "smithy.api#httpLabel" or "smithy.api#httpQuery" or "smithy.api#httpHeader" or
+            "smithy.api#httpPrefixHeaders" or "smithy.api#httpPayload" or
+            "smithy.api#httpQueryParams" or "smithy.api#httpResponseCode";
+
     private sealed class SmithyClosure(JsonElement shapes, ValidationContext budget)
     {
         private readonly Dictionary<string, JsonElement> _visited = new(StringComparer.Ordinal);
@@ -237,6 +242,7 @@ public static partial class ApiOperationDocumentResolver
                         }
                     }
                     ValidateRequestCompression(shape, path);
+                    ValidateHttpOperation(shape, path);
                     break;
                 case "structure":
                 case "union":
@@ -1043,6 +1049,69 @@ public static partial class ApiOperationDocumentResolver
                 number.CompareTo(new(false, bounds.Value.Item2, 0)) <= 0;
         }
 
+        private void ValidateHttpOperation(JsonElement operation, string path)
+        {
+            if (!TryTrait(operation, "smithy.api#http", out var http)) { return; }
+            var uriPath = path + "/traits/smithy.api#http/uri";
+            var uri = http.GetProperty("uri").GetString()!;
+            budget.Work(uri.Length, uriPath);
+            var queryIndex = uri.IndexOf('?');
+            var pattern = queryIndex < 0 ? uri : uri[..queryIndex];
+            ValidationContext.Require(uri.StartsWith('/') && !pattern.Contains("//", StringComparison.Ordinal) &&
+                !uri.Contains('#') && !uri.EndsWith('?') &&
+                (queryIndex < 0 || SmithyUriFragment().IsMatch(uri.AsSpan(queryIndex + 1))),
+                uriPath, "document.http_uri", "A Smithy HTTP URI requires a valid origin-form pattern without empty path segments or fragments.");
+            var labels = new Dictionary<string, bool>(StringComparer.Ordinal);
+            var hasGreedyLabel = false;
+            foreach (var segment in pattern.Split('/'))
+            {
+                budget.Work(path: uriPath);
+                if (segment.StartsWith('{') && segment.EndsWith('}'))
+                {
+                    var name = segment[1..^1];
+                    var greedy = name.EndsWith('+');
+                    if (greedy) { name = name[..^1]; }
+                    ValidationContext.Require(IsSmithyShapeId("example#" + name) &&
+                        labels.TryAdd(name, greedy) && (!greedy || !hasGreedyLabel),
+                        uriPath, "document.http_uri", "HTTP URI labels require distinct member names and at most one greedy label.");
+                    hasGreedyLabel |= greedy;
+                }
+                else
+                {
+                    ValidationContext.Require(segment is not ("." or "..") && SmithyUriFragment().IsMatch(segment),
+                        uriPath, "document.http_uri", "HTTP path segments must be URI literals or whole-segment labels, without dot segments.");
+                }
+            }
+            var members = default(JsonElement);
+            if (operation.TryGetProperty("input", out var input) &&
+                shapes.TryGetProperty(input.GetProperty("target").GetString()!, out var inputShape))
+            {
+                inputShape.TryGetProperty("members", out members);
+            }
+            foreach (var (name, greedy) in labels)
+            {
+                budget.Work(path: uriPath);
+                ValidationContext.Require(members.ValueKind == JsonValueKind.Object &&
+                    members.TryGetProperty(name, out var member) &&
+                    TryTrait(member, "smithy.api#required", out _) &&
+                    TryTrait(member, "smithy.api#httpLabel", out _),
+                    uriPath, "document.http_label", "Every HTTP URI label requires an exact-name required input member marked with httpLabel.");
+                var targetId = members.GetProperty(name).GetProperty("target").GetString()!;
+                var targetKind = shapes.TryGetProperty(targetId, out var target)
+                    ? target.GetProperty("type").GetString() : SmithyPreludeKind(targetId);
+                ValidationContext.Require(!greedy || targetKind is "string" or "enum",
+                    uriPath, "document.http_label", "A greedy HTTP URI label must target a string.");
+            }
+            if (members.ValueKind != JsonValueKind.Object) { return; }
+            foreach (var member in members.EnumerateObject())
+            {
+                budget.Work(path: uriPath);
+                ValidationContext.Require(!TryTrait(member.Value, "smithy.api#httpLabel", out _) ||
+                    labels.ContainsKey(member.Name), uriPath, "document.http_label",
+                    "Every httpLabel input member requires a matching HTTP URI label.");
+            }
+        }
+
         private void RequiredReference(JsonElement shape, string name, string path, int depth, string sourceId,
             string? expected = null)
         {
@@ -1097,6 +1166,8 @@ public static partial class ApiOperationDocumentResolver
                         traits.TryGetProperty("smithy.api#error", out _),
                     "smithy.api#httpError" => memberContainer is null && kind == "structure" &&
                         traits.TryGetProperty("smithy.api#error", out _),
+                    "smithy.api#http" => memberContainer is null && kind == "operation",
+                    "smithy.api#httpLabel" => memberContainer == "structure",
                     "smithy.api#httpResponseCode" => memberContainer == "structure" &&
                         !TryTrait(shapes.GetProperty(sourceId), "smithy.api#input", out _),
                     "smithy.api#idempotencyToken" => memberContainer == "structure",
@@ -1143,15 +1214,8 @@ public static partial class ApiOperationDocumentResolver
                     "smithy.api#eventHeader" => traits.TryGetProperty("smithy.api#eventPayload", out _),
                     "smithy.api#xmlAttribute" => traits.TryGetProperty("smithy.api#xmlNamespace", out _),
                     "smithy.api#xmlNamespace" => traits.TryGetProperty("smithy.api#xmlAttribute", out _),
-                    "smithy.api#httpResponseCode" => traits.TryGetProperty("smithy.api#httpLabel", out _) ||
-                        traits.TryGetProperty("smithy.api#httpQuery", out _) ||
-                        traits.TryGetProperty("smithy.api#httpHeader", out _) ||
-                        traits.TryGetProperty("smithy.api#httpPrefixHeaders", out _) ||
-                        traits.TryGetProperty("smithy.api#httpPayload", out _) ||
-                        traits.TryGetProperty("smithy.api#httpQueryParams", out _),
-                    "smithy.api#httpLabel" or "smithy.api#httpQuery" or "smithy.api#httpHeader" or
-                        "smithy.api#httpPrefixHeaders" or "smithy.api#httpPayload" or "smithy.api#httpQueryParams" =>
-                        traits.TryGetProperty("smithy.api#httpResponseCode", out _),
+                    _ when IsSmithyHttpBinding(trait.Name) => traits.EnumerateObject().Any(other =>
+                        other.Name != trait.Name && IsSmithyHttpBinding(other.Name)),
                     "smithy.api#required" => traits.TryGetProperty("smithy.api#recommended", out _),
                     "smithy.api#readonly" => traits.TryGetProperty("smithy.api#idempotent", out _),
                     "smithy.api#input" => traits.TryGetProperty("smithy.api#output", out _) ||
@@ -1167,6 +1231,36 @@ public static partial class ApiOperationDocumentResolver
                     "Conflicting Smithy prelude traits cannot be applied to the same shape.");
                 switch (trait.Name)
                 {
+                    case "smithy.api#http":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
+                            "document.trait_value", "The Smithy http trait requires an object value.");
+                        foreach (var field in new[] { "method", "uri" })
+                        {
+                            ValidationContext.Require(trait.Value.TryGetProperty(field, out var text) &&
+                                text.ValueKind == JsonValueKind.String, traitPath + "/" + field,
+                                "document.http_binding", "The Smithy http trait requires string method and uri values.");
+                        }
+                        if (trait.Value.TryGetProperty("code", out var code))
+                        {
+                            ValidationContext.Require(code.ValueKind == JsonValueKind.Number, traitPath + "/code",
+                                "document.http_code", "The Smithy HTTP success code requires an integer from 100 to 999.");
+                            var status = JsonNumber.Read(code, budget, traitPath + "/code");
+                            ValidationContext.Require(status.IsInteger && status.CompareTo(new(false, "100", 0)) >= 0 &&
+                                status.CompareTo(new(false, "999", 0)) <= 0, traitPath + "/code",
+                                "document.http_code", "The Smithy HTTP success code requires an integer from 100 to 999.");
+                        }
+                        continue;
+                    case "smithy.api#httpLabel":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
+                            "document.trait_value", "The Smithy httpLabel annotation requires an object value.");
+                        var labelTargetId = shape.GetProperty("target").GetString()!;
+                        var labelKind = shapes.TryGetProperty(labelTargetId, out var labelTarget)
+                            ? labelTarget.GetProperty("type").GetString() : SmithyPreludeKind(labelTargetId);
+                        ValidationContext.Require(traits.TryGetProperty("smithy.api#required", out _) &&
+                            (labelKind is null or "string" or "enum" or "boolean" or "timestamp" or "intEnum" ||
+                                IsNumericKind(labelKind)),
+                            traitPath, "document.trait_target", "A Smithy httpLabel requires a required structure member targeting a string, number, boolean or timestamp.");
+                        continue;
                     case "smithy.api#httpError":
                         ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Number, traitPath,
                             "document.trait_value", "The Smithy httpError trait requires an integer value.");

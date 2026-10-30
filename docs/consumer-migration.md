@@ -499,6 +499,29 @@ including structures outside an event stream, without serializing events or
 choosing a framing protocol. Literal example content and unrelated event
 definitions remain outside the selected closure.
 
+The operation-only `http` trait requires an object with string `method` and
+`uri` values. Methods remain literal, without an allowlist or inferred safety
+traits. An explicit success `code` must be an exact integer from 100 to 999;
+the recommended 200-299 range is not mandatory. Selection does not insert the
+default code.
+
+URI patterns must use origin-form syntax, without empty path segments,
+dot segments, fragments or a trailing `?`. Query literals remain authored,
+including percent-encoded characters, but cannot contain labels. Labels must
+occupy whole path segments and have distinct names. Each label requires an
+exact-name, required top-level input member marked with the object-valued
+`httpLabel` annotation; every such input member must also appear in the pattern.
+Ordinary labels accept string, numeric, boolean and timestamp targets,
+including enum specializations. A pattern can contain at most one greedy
+label, which must target a string; selection does not enforce the recommendation
+that it be the last label.
+
+All seven HTTP message-binding traits conflict pairwise on a single member.
+Nested, output and error members do not participate in operation URI matching,
+although their `httpLabel` annotations must still satisfy declaration rules.
+These checks do not compare routes across a service, resolve endpoints,
+normalize URI patterns or serialize HTTP messages.
+
 The `httpError` trait requires a numeric signed-32-bit integer on an
 error-marked structure. Decimal and exponent spellings are checked exactly,
 without rounding. The recommended 400-499 client and 500-599 server ranges
