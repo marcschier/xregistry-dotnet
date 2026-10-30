@@ -7,7 +7,6 @@
     <PackageId>XRegistry.Federation</PackageId>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="System.Text.Json" Condition="'$(TargetFramework)' == 'net8.0'" />
     <ProjectReference Include="..\XRegistry\XRegistry.csproj" />
     <ProjectReference Include="..\XRegistry.Client\XRegistry.Client.csproj" />
     <ProjectReference Include="..\XRegistry.Models\XRegistry.Models.csproj" />

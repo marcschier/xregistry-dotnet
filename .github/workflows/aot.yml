@@ -56,7 +56,7 @@ jobs:
           sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/xregistry-embedding-work"
       - name: Restore exact repository package graph
         run: dotnet restore XRegistry.slnx
-      - name: Pack and execute all eleven packages from a fresh feed/cache
+      - name: Pack and execute all thirteen generic packages from a fresh feed/cache
         shell: pwsh
         run: |
           $work = if ($IsLinux) { Join-Path $env:RUNNER_TEMP 'xregistry-embedding-work' } else { $env:RUNNER_TEMP }

@@ -38,9 +38,9 @@ release safeguards remain in their subject guides.
   cells and the .NET 10 principal-sample cells with real Native AOT binaries.
 - Refresh source-matched package-consumer and sample evidence after material
   package changes. Preserve exact source, package, executable, and report hashes.
-- Resolve the .NET 8 HTTP test-host warning gate caused by the packaged
-  System.Text.Json 10.0.x/framework combination without suppressing warnings or
-  weakening the clean package-consumer result.
+- Resolve the .NET 8 HTTP test-host warning gate caused by its own packaged
+  System.Text.Json 10.0.x dependency. The generic package-consumer gate now
+  passes using framework JSON; that does not qualify the TUnit test host.
 - Add the still-unexecuted Linux/ARM64 sample, storage, binding, federation,
   interoperability, and performance cells described in
   [native AOT qualification](native-aot.md).

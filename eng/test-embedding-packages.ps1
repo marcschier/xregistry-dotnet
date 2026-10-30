@@ -8,7 +8,9 @@ param(
     [ValidateSet('net8.0', 'net10.0')]
     [string[]]$Framework = @('net8.0', 'net10.0'),
     [ValidateNotNullOrEmpty()]
-    [string]$WorkRoot
+    [string]$WorkRoot,
+    [ValidateScript({ [IO.Path]::IsPathFullyQualified($_) -and (Test-Path -LiteralPath $_ -PathType Container) })]
+    [string]$ArtifactsRoot
 )
 
 $ErrorActionPreference = 'Stop'
@@ -26,7 +28,13 @@ if ($Framework.Count -eq 0 -or @($Framework | Select-Object -Unique).Count -ne $
 }
 
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$run = Join-Path $root ('artifacts\embedding\' + [Guid]::NewGuid().ToString('N').Substring(0, 12))
+$artifactDirectory = if ($PSBoundParameters.ContainsKey('ArtifactsRoot')) {
+    [IO.Path]::GetFullPath($ArtifactsRoot)
+}
+else {
+    Join-Path $root 'artifacts\embedding'
+}
+$run = Join-Path $artifactDirectory ([Guid]::NewGuid().ToString('N').Substring(0, 12))
 $feed = Join-Path $run 'feed'
 $cache = Join-Path $run 'cache'
 $packCache = Join-Path $run 'pack-cache'

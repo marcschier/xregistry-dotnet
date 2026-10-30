@@ -159,6 +159,12 @@ owned by the caller. Without `-WorkRoot`, the same policy uses the run's
 artifact directory. Selecting a path does not bypass the File store's NTFS/ext4
 policy.
 
+`-ArtifactsRoot <absolute-existing-directory>` places the unique evidence run,
+fresh feed, build outputs and run-owned caches below that directory instead of
+`artifacts\embedding`. The gate preserves the supplied parent. This also keeps
+temporary storage on a caller-selected volume without reusing another run's
+feed or cache.
+
 Each run:
 
 1. Fingerprints selected package source/configuration and probe inputs, then
@@ -180,16 +186,23 @@ explicitly owned caches and work children are removed.
 
 ## Current evidence and limits
 
-The latest retained development run is `artifacts\embedding\da6fb57037d0`,
-with source SHA-256
-`2d38796426466d95abca8a561acb4878f60e3ed14a9a8320d0059196b56c57e4`. Its
-net10.0/win-x64 NativeAOT consumer passed all 27 cases with zero JIT
-compilations; both managed controls produced the expected JIT-rejection
-results. The report is not release qualification. The OPC UA package was not
-included in that run and has no NativeAOT qualification. The focused OPC UA
-suite passed 464 cases across net8.0 and net10.0. The full Release suite passed
-9,912 managed cases, with 269 tooling tests and pinned-source/model checks
-passing.
+The development runs at `D:\temp\97aa2a5176f5` (net8.0/win-x64) and
+`D:\temp\cac5584c2f5c` (net10.0/win-x64) each passed all 27 native cases,
+with zero JIT compilations and no IL warnings. Ordinary and feature-masked
+managed controls produced the expected JIT-rejection results. The net8.0 run
+records source SHA-256
+`624cfa48c114fba88cb745b5b3c36550c9902441479ca4009693e129832e94ba`;
+each run retains its own source and package hashes. These are development
+receipts, not release qualification. The OPC UA package is excluded and has
+no NativeAOT qualification.
+
+The .NET 8 Federation and Publication packages use framework-provided
+System.Text.Json. Their previous unnecessary dependency on the 10.x package
+made the ASP.NET Core 8 JSON-option initializer emit IL2026/IL3050 during native
+compilation. Removing those dependencies resolves the package-consumer warning
+gate without suppressing warnings or altering the HTTP host. A test host or
+application that independently selects packaged System.Text.Json 10.x still
+requires separate qualification.
 
 This evidence does not establish Linux/ARM64 package qualification, power-loss
 durability, arbitrary authoritative dispatch, immutable live HTTP federation,

@@ -100,6 +100,25 @@ class EmbeddingWorkRootTests(unittest.TestCase):
             self.assertEqual(2, result["failures"])
             self.assertFalse(missing.exists())
 
+    def test_artifact_root_requires_an_existing_absolute_directory_before_running_the_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            missing = root / "missing"
+            file = root / "not-a-directory"
+            file.write_text("caller-owned", encoding="utf-8")
+            gate = ROOT / "eng" / "test-embedding-packages.ps1"
+            result = self.run_powershell(
+                f"$failures=0; foreach ($path in @({quote(missing)},'relative-artifacts',{quote(file)})) {{ "
+                f"try {{ & {quote(gate)} -ArtifactsRoot $path | Out-Null }} "
+                "catch [System.Management.Automation.ParameterBindingException] { "
+                "if ($_.Exception.Message -notmatch 'ArtifactsRoot') { throw }; $failures++ } }; "
+                "@{failures=$failures} | ConvertTo-Json -Compress"
+            )
+            self.assertEqual(3, result["failures"])
+            self.assertFalse(missing.exists())
+            self.assertEqual("caller-owned", file.read_text(encoding="utf-8"))
+            self.assertEqual(["not-a-directory"], [path.name for path in root.iterdir()])
+
     def test_cleanup_rejects_the_caller_root_and_a_sibling(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

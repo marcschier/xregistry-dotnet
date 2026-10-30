@@ -48,13 +48,12 @@ and executed-case evidence described by the
 
 ## Current evidence and uncovered cells
 
-The latest retained local source state has a fresh nonincremental build with
-zero warnings/errors, 8,967 managed cases, and 276 tooling tests. The exact CI
-formatting command and ordinary CI-equivalent build passed. Comparative
-allocation and stalled-body deadline fixtures use exclusive scheduling; their
-byte/deadline assertions are unchanged. A bounded review of materialization,
-source-capture, and producer-policy trust boundaries reported no
-high-confidence security findings; this is not a whole-product certification.
+The current generic package-consumer receipts cover Windows x64 on both target
+frameworks, as described in
+[consumer embedding](consumer-migration.md#current-evidence-and-limits).
+The module-level receipts below are historical and have not been refreshed
+against the complete successor source set. Do not treat their counts as
+qualification of the current implementation.
 
 | Windows x64 native suite | .NET 8 | .NET 10 |
 | --- | --- | --- |
@@ -70,7 +69,7 @@ The .NET 8 Git test host emitted two ASP.NET framework IL warnings and is not
 described as warning-free. No shipping package-consumer IL warning was
 suppressed.
 
-All eleven packages in `artifacts\embedding\29c45e4bd888` pass 25 native
+An earlier eleven-package run at `artifacts\embedding\29c45e4bd888` passed 25 native
 consumer cases per Windows x64 TFM and ordinary/feature-masked JIT rejection
 controls. The source fingerprint is
 `5328167584619aded4223746a71c1fe2ea0d48f201513a4e49cc7a61cc0946e5`.
@@ -78,11 +77,12 @@ The three principal samples pass 17/14/6 checks; native storage passes 28 tests
 and six process-crash/restart cases. Reference Git smart-HTTP interoperability
 passes 26 cases and 56 exchanges on each Windows x64 TFM.
 
-The corrected independent source oracle passes 976 explicit cases with the same
-38 OPC-UA exclusions through SPEC-020. All 1,835 extracted clauses have
-source-pinned reviews, but none is made release-qualified by that count. The
-strict tooling retains rejected receipts for a concurrently changed protected
-ledger and for pytest subtest/XML accounting disagreement.
+The historical source oracle passed 976 explicit cases with 38 OPC-UA
+exclusions through SPEC-020. The combined ledger now retains 1,835 historical
+blocks and 2,398 successor blocks; most successor obligations still require
+review and evidence mapping. Their count does not establish conformance.
+The strict tooling retains rejected receipts for a concurrently changed
+protected ledger and for pytest subtest/XML accounting disagreement.
 
 Linux/ARM64 package/sample cells, peer limitations, and release approvals are
 not covered by the current source-matched evidence. The complete outstanding
@@ -106,3 +106,13 @@ A clean-cache consumer of the actual Client/Core NuGets, using the framework
 JSON dependency, published without those warnings and passed 31 native Kestrel
 checks. See [HTTP compression](http-compression.md) for the causal evidence and
 exact qualification boundary.
+
+The generic all-package consumer also uses framework JSON on .NET 8.
+Federation and Publication no longer force a System.Text.Json 10.x dependency
+into an ASP.NET Core 8 application. Fresh Windows x64 development consumers
+pass all 27 cases on both target frameworks with zero IL warnings, while both
+managed controls fail native-only work as required. The source and package
+receipts are identified in
+[consumer embedding](consumer-migration.md#current-evidence-and-limits).
+This correction does not change the TUnit host's own dependency graph or
+qualify unexecuted platforms.
