@@ -298,9 +298,8 @@ vocabulary/source mapping. It does not supply their implementation.
   literal alternatives and the existing `id`/`trait`/`service` attribute paths.
   Each assertion retains the ordinary presence, numeric, string and ASCII `i`
   rules, and later assertions are checked even after a false result.
-  Unknown functions parse them without evaluation. Named/projected scope
-  contexts and projection set comparators remain
-  unsupported; scans and comparisons consume the shared work budget.
+  Unknown functions parse them without evaluation. Projection set comparators
+  remain unsupported; scans and comparisons consume the shared work budget.
   Scoped left operands also accept literal text, Booleans and root shape IDs.
   Quoted numeric text retains exact comparisons and numeric limits; unquoted
   numeric rendering, empty text and literal property paths remain unsupported.
@@ -311,6 +310,12 @@ vocabulary/source mapping. It does not supply their implementation.
   against an absent left side. Unknown functions parse the paths without
   accessing their values. Right-hand contexts for `?=` and projection set
   operators remain unsupported.
+  Named scopes resolve one attribute and use relative context paths on both
+  sides of comparisons. Projected scopes require one flattened element to
+  satisfy every assertion; assertions cannot combine different elements.
+  Absent and empty scopes do not match, including literal-only assertions,
+  but still parse their syntax. Later elements are checked after a match,
+  with numeric/work limits preserved; unknown functions do not resolve scopes.
   Each application is checked independently. Type mismatches are invalid;
   unsupported grammar reports `Unsupported` at the application without changing
   unapplied declaration checks or masking earlier missing schema dependencies.

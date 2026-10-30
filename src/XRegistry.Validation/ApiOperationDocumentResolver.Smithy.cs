@@ -2380,208 +2380,227 @@ public static partial class ApiOperationDocumentResolver
                         position++;
                         SkipWhitespace();
                         var scoped = position < text.Length && text[position] == '@';
+                        List<SmithyAttribute>? contexts = null;
                         if (scoped)
                         {
                             position++;
                             SkipWhitespace();
+                            if (position < text.Length && text[position] != ':')
+                            {
+                                if (!AttributePath(out var scopeAttribute, out var scopeProperties)) { return null; }
+                                contexts = evaluate ? AttributeValues(scopeAttribute, scopeProperties) : [];
+                                if (contexts is null) { return null; }
+                            }
                             if (position == text.Length || text[position++] != ':') { return null; }
                             SkipWhitespace();
                         }
-                        var assertionsMatch = true;
-                        bool moreAssertions;
+                        var assertionStart = position;
+                        var scopeIndex = 0;
+                        var scopeMatch = false;
                         do
                         {
-                            budget.Work(path: path);
-                            string? literal = null;
-                            if (scoped && position < text.Length && text[position] != '@')
+                            position = assertionStart;
+                            var evaluateAssertion = evaluate && (contexts is null || contexts.Count > 0);
+                            var context = contexts is { Count: > 0 } ? contexts[scopeIndex] : (SmithyAttribute?)null;
+                            var assertionsMatch = true;
+                            bool moreAssertions;
+                            do
                             {
-                                literal = AttributeName();
-                                if (literal is null) { return null; }
-                                SkipWhitespace();
-                            }
-                            else if (scoped)
-                            {
-                                if (position == text.Length || text[position++] != '@') { return null; }
-                                SkipWhitespace();
-                                if (position == text.Length || text[position++] != '{') { return null; }
-                                SkipWhitespace();
-                            }
-                            var attribute = "literal";
-                            List<(string Name, bool Function)>? properties = null;
-                            if (literal is null && !AttributePath(out attribute, out properties)) { return null; }
-                            if (scoped && literal is null)
-                            {
-                                if (position == text.Length || text[position++] != '}') { return null; }
-                                SkipWhitespace();
-                            }
-                            var acceptsPresent = true;
-                            var acceptsAbsent = false;
-                            var numericComparator = '\0';
-                            var inclusive = false;
-                            List<JsonNumber?>? numericOperands = null;
-                            var stringComparator = '\0';
-                            List<string>? stringOperands = null;
-                            if (position < text.Length && text[position] == '?')
-                            {
-                                position++;
-                                if (position == text.Length || text[position++] != '=') { return null; }
-                                acceptsPresent = false;
-                                while (true)
+                                budget.Work(path: path);
+                                string? literal = null;
+                                if (scoped && position < text.Length && text[position] != '@')
                                 {
+                                    literal = AttributeName();
+                                    if (literal is null) { return null; }
                                     SkipWhitespace();
-                                    var expected = AttributeName();
-                                    if (expected is not ("true" or "false")) { return null; }
-                                    acceptsPresent |= expected == "true";
-                                    acceptsAbsent |= expected == "false";
+                                }
+                                else if (scoped)
+                                {
+                                    if (position == text.Length || text[position++] != '@') { return null; }
                                     SkipWhitespace();
-                                    if (position == text.Length || text[position] != ',') { break; }
+                                    if (position == text.Length || text[position++] != '{') { return null; }
+                                    SkipWhitespace();
+                                }
+                                var attribute = "literal";
+                                List<(string Name, bool Function)>? properties = null;
+                                if (literal is null && !AttributePath(out attribute, out properties, contexts is not null)) { return null; }
+                                if (scoped && literal is null)
+                                {
+                                    if (position == text.Length || text[position++] != '}') { return null; }
+                                    SkipWhitespace();
+                                }
+                                var acceptsPresent = true;
+                                var acceptsAbsent = false;
+                                var numericComparator = '\0';
+                                var inclusive = false;
+                                List<JsonNumber?>? numericOperands = null;
+                                var stringComparator = '\0';
+                                List<string>? stringOperands = null;
+                                if (position < text.Length && text[position] == '?')
+                                {
                                     position++;
+                                    if (position == text.Length || text[position++] != '=') { return null; }
+                                    acceptsPresent = false;
+                                    while (true)
+                                    {
+                                        SkipWhitespace();
+                                        var expected = AttributeName();
+                                        if (expected is not ("true" or "false")) { return null; }
+                                        acceptsPresent |= expected == "true";
+                                        acceptsAbsent |= expected == "false";
+                                        SkipWhitespace();
+                                        if (position == text.Length || text[position] != ',') { break; }
+                                        position++;
+                                    }
                                 }
-                            }
-                            else if (position < text.Length && text[position] is '>' or '<')
-                            {
-                                numericComparator = text[position++];
-                                inclusive = position < text.Length && text[position] == '=';
-                                if (inclusive) { position++; }
-                                numericOperands = [];
-                                while (true)
+                                else if (position < text.Length && text[position] is '>' or '<')
                                 {
-                                    SkipWhitespace();
-                                    if (scoped && position < text.Length && text[position] == '@')
+                                    numericComparator = text[position++];
+                                    inclusive = position < text.Length && text[position] == '=';
+                                    if (inclusive) { position++; }
+                                    numericOperands = [];
+                                    while (true)
                                     {
-                                        var operands = ContextValues(evaluate);
-                                        if (operands is null) { return null; }
-                                        foreach (var operand in operands)
+                                        SkipWhitespace();
+                                        if (scoped && position < text.Length && text[position] == '@')
                                         {
-                                            budget.Work(path: path);
-                                            numericOperands.Add(AttributeNumber(operand));
+                                            var operands = ContextValues(evaluateAssertion, context, contexts is not null);
+                                            if (operands is null) { return null; }
+                                            foreach (var operand in operands)
+                                            {
+                                                budget.Work(path: path);
+                                                numericOperands.Add(AttributeNumber(operand));
+                                            }
                                         }
+                                        else
+                                        {
+                                            var operand = NumericOperand();
+                                            if (operand is null) { return null; }
+                                            numericOperands.Add(evaluateAssertion ? SelectorNumber(operand) : null);
+                                        }
+                                        SkipWhitespace();
+                                        if (position == text.Length || text[position] != ',') { break; }
+                                        position++;
                                     }
-                                    else
+                                }
+                                else if (position < text.Length && text[position] is '=' or '!' or '^' or '$' or '*')
+                                {
+                                    stringComparator = text[position++];
+                                    if (stringComparator != '=' &&
+                                        (position == text.Length || text[position++] != '=')) { return null; }
+                                    stringOperands = [];
+                                    while (true)
                                     {
-                                        var operand = NumericOperand();
-                                        if (operand is null) { return null; }
-                                        numericOperands.Add(evaluate ? SelectorNumber(operand) : null);
+                                        SkipWhitespace();
+                                        if (scoped && position < text.Length && text[position] == '@')
+                                        {
+                                            var operands = ContextValues(evaluateAssertion, context, contexts is not null);
+                                            if (operands is null) { return null; }
+                                            foreach (var operand in operands)
+                                            {
+                                                budget.Work(path: path);
+                                                var value = AttributeText(operand);
+                                                if (value is null) { return null; }
+                                                stringOperands.Add(value);
+                                            }
+                                        }
+                                        else
+                                        {
+                                            if (position == text.Length || char.IsAsciiDigit(text[position]) || text[position] == '-')
+                                            {
+                                                return null;
+                                            }
+                                            var operand = AttributeName();
+                                            if (operand is null) { return null; }
+                                            stringOperands.Add(operand);
+                                        }
+                                        SkipWhitespace();
+                                        if (position == text.Length || text[position] != ',') { break; }
+                                        position++;
                                     }
-                                    SkipWhitespace();
-                                    if (position == text.Length || text[position] != ',') { break; }
+                                }
+                                else if (scoped) { return null; }
+                                var ignoreCase = stringOperands is not null && position < text.Length && text[position] == 'i';
+                                if (ignoreCase)
+                                {
                                     position++;
-                                }
-                            }
-                            else if (position < text.Length && text[position] is '=' or '!' or '^' or '$' or '*')
-                            {
-                                stringComparator = text[position++];
-                                if (stringComparator != '=' &&
-                                    (position == text.Length || text[position++] != '=')) { return null; }
-                                stringOperands = [];
-                                while (true)
-                                {
                                     SkipWhitespace();
-                                    if (scoped && position < text.Length && text[position] == '@')
+                                    foreach (var operand in stringOperands!)
                                     {
-                                        var operands = ContextValues(evaluate);
-                                        if (operands is null) { return null; }
-                                        foreach (var operand in operands)
-                                        {
-                                            budget.Work(path: path);
-                                            var value = AttributeText(operand);
-                                            if (value is null) { return null; }
-                                            stringOperands.Add(value);
-                                        }
+                                        if (evaluateAssertion && !AsciiText(operand)) { return null; }
                                     }
-                                    else
-                                    {
-                                        if (position == text.Length || char.IsAsciiDigit(text[position]) || text[position] == '-')
-                                        {
-                                            return null;
-                                        }
-                                        var operand = AttributeName();
-                                        if (operand is null) { return null; }
-                                        stringOperands.Add(operand);
-                                    }
+                                }
+                                moreAssertions = scoped && position + 1 < text.Length &&
+                                    text[position] == '&' && text[position + 1] == '&';
+                                if (moreAssertions)
+                                {
+                                    position += 2;
                                     SkipWhitespace();
-                                    if (position == text.Length || text[position] != ',') { break; }
-                                    position++;
                                 }
-                            }
-                            else if (scoped) { return null; }
-                            var ignoreCase = stringOperands is not null && position < text.Length && text[position] == 'i';
-                            if (ignoreCase)
-                            {
-                                position++;
-                                SkipWhitespace();
-                                foreach (var operand in stringOperands!)
+                                else if (position == text.Length || text[position++] != ']') { return null; }
+                                if (!evaluateAssertion)
                                 {
-                                    if (evaluate && !AsciiText(operand)) { return null; }
+                                    assertionsMatch = false;
+                                    continue;
                                 }
-                            }
-                            moreAssertions = scoped && position + 1 < text.Length &&
-                                text[position] == '&' && text[position + 1] == '&';
-                            if (moreAssertions)
-                            {
-                                position += 2;
-                                SkipWhitespace();
-                            }
-                            else if (position == text.Length || text[position++] != ']') { return null; }
-                            if (!evaluate)
-                            {
-                                assertionsMatch = false;
-                                continue;
-                            }
-                            var values = literal is not null
-                                ? [new SmithyAttribute(SmithyAttributeKind.Text, Text: literal)]
-                                : AttributeValues(attribute, properties);
-                            if (values is null) { return null; }
-                            current = false;
-                            if (stringOperands is not null)
-                            {
-                                foreach (var selected in values)
+                                var values = literal is not null
+                                    ? [new SmithyAttribute(SmithyAttributeKind.Text, Text: literal)]
+                                    : AttributeValues(attribute, properties, context);
+                                if (values is null) { return null; }
+                                current = false;
+                                if (stringOperands is not null)
                                 {
-                                    budget.Work(path: path);
-                                    var value = AttributeText(selected);
-                                    if (value is null) { return null; }
-                                    if (ignoreCase && !AsciiText(value)) { return null; }
-                                    var comparison = ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-                                    foreach (var operand in stringOperands)
-                                    {
-                                        budget.Work(value.Length + operand.Length + 1L, path);
-                                        current |= stringComparator switch
-                                        {
-                                            '=' => value.Equals(operand, comparison),
-                                            '!' => !value.Equals(operand, comparison),
-                                            '^' => value.StartsWith(operand, comparison),
-                                            '$' => value.EndsWith(operand, comparison),
-                                            _ => value.Contains(operand, comparison)
-                                        };
-                                    }
-                                }
-                            }
-                            else if (numericOperands is null)
-                            {
-                                current = values.Count > 0 ? acceptsPresent : acceptsAbsent;
-                            }
-                            else
-                            {
-                                foreach (var selected in values)
-                                {
-                                    budget.Work(path: path);
-                                    var number = AttributeNumber(selected);
-                                    if (number is not { } left) { continue; }
-                                    foreach (var operand in numericOperands)
+                                    foreach (var selected in values)
                                     {
                                         budget.Work(path: path);
-                                        if (operand is not { } right) { continue; }
-                                        budget.Work(left.Digits.Length + right.Digits.Length, path);
-                                        var comparison = left.CompareTo(right);
-                                        current |= (inclusive && comparison == 0) ||
-                                            (numericComparator == '>' ? comparison > 0 : comparison < 0);
+                                        var value = AttributeText(selected);
+                                        if (value is null) { return null; }
+                                        if (ignoreCase && !AsciiText(value)) { return null; }
+                                        var comparison = ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+                                        foreach (var operand in stringOperands)
+                                        {
+                                            budget.Work(value.Length + operand.Length + 1L, path);
+                                            current |= stringComparator switch
+                                            {
+                                                '=' => value.Equals(operand, comparison),
+                                                '!' => !value.Equals(operand, comparison),
+                                                '^' => value.StartsWith(operand, comparison),
+                                                '$' => value.EndsWith(operand, comparison),
+                                                _ => value.Contains(operand, comparison)
+                                            };
+                                        }
                                     }
                                 }
+                                else if (numericOperands is null)
+                                {
+                                    current = values.Count > 0 ? acceptsPresent : acceptsAbsent;
+                                }
+                                else
+                                {
+                                    foreach (var selected in values)
+                                    {
+                                        budget.Work(path: path);
+                                        var number = AttributeNumber(selected);
+                                        if (number is not { } left) { continue; }
+                                        foreach (var operand in numericOperands)
+                                        {
+                                            budget.Work(path: path);
+                                            if (operand is not { } right) { continue; }
+                                            budget.Work(left.Digits.Length + right.Digits.Length, path);
+                                            var comparison = left.CompareTo(right);
+                                            current |= (inclusive && comparison == 0) ||
+                                                (numericComparator == '>' ? comparison > 0 : comparison < 0);
+                                        }
+                                    }
+                                }
+                                assertionsMatch &= current.Value;
                             }
-                            assertionsMatch &= current.Value;
+                            while (moreAssertions);
+                            scopeMatch |= assertionsMatch;
+                            scopeIndex++;
                         }
-                        while (moreAssertions);
-                        current = assertionsMatch;
+                        while (contexts is not null && scopeIndex < contexts.Count);
+                        current = scopeMatch;
                     }
                     else if (text[position] == ':')
                     {
@@ -2622,16 +2641,18 @@ public static partial class ApiOperationDocumentResolver
                 return count == 0 ? null : matched;
             }
 
-            bool AttributePath(out string attribute, out List<(string Name, bool Function)>? properties)
+            bool AttributePath(out string attribute, out List<(string Name, bool Function)>? properties, bool relative = false)
             {
-                attribute = Identifier();
+                attribute = relative ? "context" : Identifier();
                 properties = null;
-                if (attribute is not ("trait" or "id" or "service")) { return false; }
+                if (!relative && attribute is not ("trait" or "id" or "service")) { return false; }
                 SkipWhitespace();
                 var projection = false;
-                while (position < text.Length && text[position] == '|')
+                var first = relative;
+                while (first || position < text.Length && text[position] == '|')
                 {
-                    position++;
+                    if (!first) { position++; }
+                    first = false;
                     SkipWhitespace();
                     var function = position < text.Length && text[position] == '(';
                     string? property;
@@ -2662,22 +2683,24 @@ public static partial class ApiOperationDocumentResolver
                 return true;
             }
 
-            List<SmithyAttribute>? ContextValues(bool evaluate)
+            List<SmithyAttribute>? ContextValues(bool evaluate, SmithyAttribute? context, bool relative)
             {
                 position++;
                 SkipWhitespace();
                 if (position == text.Length || text[position++] != '{') { return null; }
                 SkipWhitespace();
-                if (!AttributePath(out var attribute, out var properties)) { return null; }
+                if (!AttributePath(out var attribute, out var properties, relative)) { return null; }
                 if (position == text.Length || text[position++] != '}') { return null; }
                 SkipWhitespace();
-                return evaluate ? AttributeValues(attribute, properties) : [];
+                return evaluate ? AttributeValues(attribute, properties, context) : [];
             }
 
-            List<SmithyAttribute>? AttributeValues(string attribute, List<(string Name, bool Function)>? properties)
+            List<SmithyAttribute>? AttributeValues(string attribute, List<(string Name, bool Function)>? properties,
+                SmithyAttribute? context = null)
             {
                 List<SmithyAttribute> values = [];
-                if (attribute == "trait")
+                if (context is { } scopedValue) { values.Add(scopedValue); }
+                else if (attribute == "trait")
                 {
                     if (shape.ValueKind != JsonValueKind.Object) { return null; }
                     if (shape.TryGetProperty("traits", out var traits))

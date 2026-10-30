@@ -528,8 +528,8 @@ Literal alternatives, presence checks, numeric comparisons and per-assertion
 ASCII `i` modifiers retain their ordinary attribute semantics. Every assertion
 is parsed and checked, including after a false assertion; unknown functions
 parse these assertions without evaluating them. Assertion scans and
-comparisons consume the shared work budget. Named or projected scope contexts
-and projection set operators remain unsupported.
+comparisons consume the shared work budget. Projection set operators remain
+unsupported.
 The left operand can also be quoted text, an unquoted Boolean or a root shape
 ID, for example `[@: '10' > 9 && true ?= true]`. These are present text values;
 quoted numeric text uses the same exact numeric comparison and 256-character
@@ -548,6 +548,17 @@ comparisons retain exact decimal values and numeric limits on both sides.
 Unknown functions parse context paths without accessing their values.
 Right-hand context expressions for `?=` and projection set operators remain
 unsupported.
+Named scopes resolve an attribute once, then evaluate relative context paths
+against that value; for example, `[@trait|example#Custom: @{min} < @{max}]`.
+This also applies to the `id` and `service` attributes and trait-key identities.
+For projected scopes, every flattened element is checked independently, and
+one element must satisfy all `&&` assertions. Values from different elements
+cannot satisfy separate assertions in the same scope. An absent scope or empty
+projection never matches, even when its assertions contain only literals or
+absence checks. Its assertion syntax is still parsed. Later elements remain
+subject to unsupported-value checks and shared numeric/work limits after an
+earlier element matches. Unknown functions parse named scopes without resolving
+their values.
 
 After schema-closure checks, each custom trait application is checked against
 its declared node types. Scalar checks cover Boolean/string values, base64
