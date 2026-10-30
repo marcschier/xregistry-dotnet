@@ -59,7 +59,9 @@ public static partial class ApiOperationDocumentResolver
                 return Failure(ApiOperationResolutionStatus.Invalid, "selection.not_operation",
                     "The selected Smithy shape is not an operation.", "$/shapes/" + Escape(shapeId));
             }
-            new SmithyClosure(shapes, budget).Visit(shapeId, 0, "operation");
+            var closure = new SmithyClosure(shapes, budget);
+            closure.Visit(shapeId, 0, "operation");
+            closure.ValidateRecursion();
             return Selected(operation, "$/shapes/" + Escape(shapeId), documentUri);
         }
         catch (ValidationFailure failure)
@@ -77,7 +79,7 @@ public static partial class ApiOperationDocumentResolver
 
     private sealed class SmithyClosure(JsonElement shapes, ValidationContext budget)
     {
-        private readonly HashSet<string> _visited = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, JsonElement> _visited = new(StringComparer.Ordinal);
 
         internal void Visit(string id, int depth, string? expected = null, bool error = false, bool traitDefinition = false)
         {
@@ -122,7 +124,7 @@ public static partial class ApiOperationDocumentResolver
                     value.ValueKind == JsonValueKind.String && value.GetString() is "client" or "server",
                     path, "document.error_trait", "A declared Smithy error must be a structure marked with an error trait.");
             }
-            if (!_visited.Add(id)) { return; }
+            if (!_visited.TryAdd(id, shape)) { return; }
             Traits(shape, path, depth);
             switch (kind)
             {
@@ -183,6 +185,97 @@ public static partial class ApiOperationDocumentResolver
                     ValidationContext.Fail(DocumentValidationStatus.Unsupported, path, "smithy.shape_type",
                         "The required Smithy shape type is not supported.");
                     break;
+            }
+        }
+
+        internal void ValidateRecursion()
+        {
+            var containers = new Dictionary<string, (bool AnyTarget, List<string> Targets)>(StringComparer.Ordinal);
+            var values = new Dictionary<string, (bool AnyTarget, List<string> Targets)>(StringComparer.Ordinal);
+            foreach (var (id, shape) in _visited)
+            {
+                budget.Work();
+                var kind = shape.GetProperty("type").GetString();
+                if (kind is "list" or "map")
+                {
+                    var targets = new List<string>();
+                    foreach (var name in kind == "list" ? new[] { "member" } : new[] { "key", "value" })
+                    {
+                        targets.Add(shape.GetProperty(name).GetProperty("target").GetString()!);
+                    }
+                    containers.Add(id, (false, targets));
+                }
+                else if (kind is "structure" or "union")
+                {
+                    var targets = new List<string>();
+                    if (shape.TryGetProperty("members", out var members))
+                    {
+                        foreach (var member in members.EnumerateObject())
+                        {
+                            budget.Work();
+                            if (kind == "union" || member.Value.TryGetProperty("traits", out var traits) &&
+                                traits.TryGetProperty("smithy.api#required", out _))
+                            {
+                                targets.Add(member.Value.GetProperty("target").GetString()!);
+                            }
+                        }
+                    }
+                    values.Add(id, (kind == "union", targets));
+                }
+            }
+            RequireTerminatingShapes(containers,
+                "A recursive Smithy list or map must pass through a structure or union.");
+            RequireTerminatingShapes(values,
+                "Recursive Smithy structures and unions must permit a finite value.");
+        }
+
+        private void RequireTerminatingShapes(
+            Dictionary<string, (bool AnyTarget, List<string> Targets)> nodes, string detail)
+        {
+            var remaining = new Dictionary<string, int>(StringComparer.Ordinal);
+            var parents = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+            var ready = new Queue<string>();
+            foreach (var (id, node) in nodes)
+            {
+                budget.Work();
+                var pending = 0;
+                var terminal = false;
+                foreach (var target in node.Targets)
+                {
+                    budget.Work();
+                    if (!nodes.ContainsKey(target))
+                    {
+                        terminal = true;
+                        continue;
+                    }
+                    pending++;
+                    if (!parents.TryGetValue(target, out var references))
+                    {
+                        references = [];
+                        parents.Add(target, references);
+                    }
+                    references.Add(id);
+                }
+                remaining.Add(id, pending);
+                if (node.AnyTarget ? terminal : pending == 0) { ready.Enqueue(id); }
+            }
+
+            var terminating = new HashSet<string>(StringComparer.Ordinal);
+            while (ready.TryDequeue(out var id))
+            {
+                budget.Work();
+                if (!terminating.Add(id) || !parents.TryGetValue(id, out var references)) { continue; }
+                foreach (var parent in references)
+                {
+                    budget.Work();
+                    if (nodes[parent].AnyTarget || --remaining[parent] == 0) { ready.Enqueue(parent); }
+                }
+            }
+            foreach (var id in nodes.Keys)
+            {
+                budget.Work();
+                ValidationContext.Require(terminating.Contains(id), "$/shapes/" + Escape(id),
+                    "document.recursion", detail);
             }
         }
 

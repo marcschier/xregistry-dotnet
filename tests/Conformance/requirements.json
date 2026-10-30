@@ -113163,7 +113163,7 @@
       "text": "The ID MUST resolve to an operation shape in the assembled model, not a service, resource, or data shape. Assembly MUST resolve the model files needed for that operation. Input, output, errors, and traits retain their Smithy meaning.",
       "review": {
         "status": "reviewed",
-        "note": "The bounded JSON selector resolves an exact absolute operation shape ID in a caller-assembled Smithy 2 AST and checks its transitive data/custom-trait dependencies without treating shape IDs as retrieval URLs. Public tests cover native shape preservation, wrong-kind rejection, missing dependencies, recursion and traversal limits. Full model assembly, mixins/apply processing, IDL parsing, complete prelude and trait/schema validation remain unsupported. Keep this obligation pending; partial selection is not complete Smithy conformance.",
+        "note": "The bounded JSON selector resolves an exact absolute operation shape ID in a caller-assembled Smithy 2 AST and checks its transitive data/custom-trait dependencies without treating shape IDs as retrieval URLs. Public tests cover native shape preservation, wrong-kind rejection, missing dependencies, traversal limits and recursive validity within the selected closure: container-only cycles and types without finite values are rejected while terminating recursion is preserved. Full model assembly, mixins/apply processing, IDL parsing, complete prelude and trait/schema validation remain unsupported. Keep this obligation pending; partial selection is not complete Smithy conformance.",
         "roles": [
           "client",
           "server",
@@ -113180,7 +113180,13 @@
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.SmithyJsonOnlyAcceptsItsAbsoluteOperationShapeLocator",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.SmithyJsonTraversesAggregateDependenciesButNotTraitPayloadsAsShapeReferences",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.SmithyJsonUsesTheSharedByteLimitAndPropagatesCallerCancellation",
-          "XRegistry.Validation.Tests.ApiOperationReferenceTests.SmithyJsonDoesNotAdvertiseOtherReleasesOrIdlParsing"
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.SmithyJsonDoesNotAdvertiseOtherReleasesOrIdlParsing",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.SmithyJsonRejectsNonterminatingRecursiveDataDefinitions",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.SmithyJsonChecksEveryUnionAlternativeForInvalidRecursion",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.SmithyJsonPreservesTerminatingRecursiveDataDefinitions",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.SmithyJsonChecksRecursionInCustomTraitDefinitions",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.SmithyJsonPropagatesTerminationThroughRequiredShapeChains",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.SmithyJsonDoesNotClaimRecursionValidationOutsideTheSelectedClosure"
         ],
         "nativeEvidence": []
       }

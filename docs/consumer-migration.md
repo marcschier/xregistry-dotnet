@@ -66,6 +66,12 @@ input, output, errors and trait values without inferring an endpoint or binding.
 The caller supplies an already assembled AST. Selection checks the operation's
 transitive data and custom-trait shape references, including recursive types,
 with a 64-edge traversal depth limit and the shared parser/work budgets.
+Within that closure, list/map cycles must pass through a structure or union,
+and structures and unions must permit a finite value. Container-only cycles,
+required structure cycles and unions with no terminating alternative report
+`Invalid` with `document.recursion`. Optional structure members, empty containers
+and terminating union alternatives allow recursion. These checks do not inspect
+unreachable shape definitions for recursive validity.
 Missing required shapes report `Indeterminate`, not a successful partial result.
 Mixins and `apply` entries report `Unsupported`; this resolver does not merge
 model files or parse IDL. Smithy shape IDs are not retrieval URLs and never

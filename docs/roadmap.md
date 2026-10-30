@@ -135,8 +135,9 @@ vocabulary/source mapping. It does not supply their implementation.
   selection preserves the declared native message but does not check all schema
   definitions, name binding or defaults.
   Smithy selection checks required operation/data/custom-trait dependencies in
-  an already assembled non-mixin AST; its implicit prelude is limited, and full
-  trait/schema validation remains open.
+  an already assembled non-mixin AST and rejects invalid recursion in that
+  closure; its implicit prelude is limited, and full trait/schema validation
+  remains open.
 - Complete end-to-end event/outbox delivery qualification while preserving
   atomic mutation publication and caller-visible failure semantics.
 - Provide an application-specific adapter or forwarding layer when an existing

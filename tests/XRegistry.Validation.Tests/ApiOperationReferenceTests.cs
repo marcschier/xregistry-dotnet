@@ -990,6 +990,159 @@ public class ApiOperationReferenceTests
         await Assert.That(result.Diagnostic!.Code).IsEqualTo("selector.unsupported");
     }
 
+    [Test]
+    [Arguments("""{"example#A":{"type":"list","member":{"target":"example#A"}}}""")]
+    [Arguments("""{"example#A":{"type":"map","key":{"target":"smithy.api#String"},"value":{"target":"example#A"}}}""")]
+    [Arguments("""{"example#A":{"type":"list","member":{"target":"example#B"}},"example#B":{"type":"list","member":{"target":"example#A"}}}""")]
+    [Arguments("""{"example#A":{"type":"list","member":{"target":"example#B"}},"example#B":{"type":"map","key":{"target":"smithy.api#String"},"value":{"target":"example#A"}}}""")]
+    [Arguments("""{"example#A":{"type":"structure","members":{"next":{"target":"example#A","traits":{"smithy.api#required":{}}}}}}""")]
+    [Arguments("""{"example#A":{"type":"structure","members":{"next":{"target":"example#B","traits":{"smithy.api#required":{}}}}},"example#B":{"type":"structure","members":{"next":{"target":"example#A","traits":{"smithy.api#required":{}}}}}}""")]
+    [Arguments("""{"example#A":{"type":"union","members":{"next":{"target":"example#A"}}}}""")]
+    [Arguments("""{"example#A":{"type":"union","members":{"next":{"target":"example#B"}}},"example#B":{"type":"union","members":{"next":{"target":"example#A"}}}}""")]
+    [Arguments("""{"example#A":{"type":"union","members":{"next":{"target":"example#B"}}},"example#B":{"type":"structure","members":{"next":{"target":"example#A","traits":{"smithy.api#required":{}}}}}}""")]
+    [Arguments("""{"example#A":{"type":"union","members":{"a":{"target":"example#A"},"b":{"target":"example#B"}}},"example#B":{"type":"structure","members":{"next":{"target":"example#A","traits":{"smithy.api#required":{}}}}}}""")]
+    [Arguments("""{"example#A":{"type":"structure","members":{"good":{"target":"smithy.api#String","traits":{"smithy.api#required":{}}},"bad":{"target":"example#A","traits":{"smithy.api#required":{}}},"optional":{"target":"smithy.api#String"}}}}""")]
+    public async Task SmithyJsonRejectsNonterminatingRecursiveDataDefinitions(string definitions)
+    {
+        var result = ResolveSmithy("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"example#Input"}},
+              "example#Input":{"type":"structure","members":{"value":{"target":"example#A"}}},
+            """ + definitions[1..^1] + "}}");
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.recursion");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#A");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        await Assert.That(result.DocumentPath).IsNull();
+    }
+
+    [Test]
+    public async Task SmithyJsonChecksEveryUnionAlternativeForInvalidRecursion()
+    {
+        var result = ResolveSmithy("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"example#Input"}},
+              "example#Input":{"type":"structure","members":{"value":{"target":"example#Choice"}}},
+              "example#Choice":{"type":"union","members":{
+                "good":{"target":"smithy.api#Unit"},"bad":{"target":"example#Loop"}}},
+              "example#Loop":{"type":"list","member":{"target":"example#Loop"}}
+            }}
+            """);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.recursion");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Loop");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("""{"example#A":{"type":"structure","members":{"next":{"target":"example#A"}}}}""")]
+    [Arguments("""{"example#A":{"type":"structure","members":{"next":{"target":"example#B","traits":{"smithy.api#required":{}}}}},"example#B":{"type":"structure","members":{"next":{"target":"example#A"}}}}""")]
+    [Arguments("""{"example#A":{"type":"list","member":{"target":"example#B"}},"example#B":{"type":"structure","members":{"next":{"target":"example#A","traits":{"smithy.api#required":{}}}}}}""")]
+    [Arguments("""{"example#A":{"type":"map","key":{"target":"smithy.api#String"},"value":{"target":"example#B"}},"example#B":{"type":"union","members":{"next":{"target":"example#A"}}}}""")]
+    [Arguments("""{"example#A":{"type":"union","members":{"next":{"target":"example#A"},"done":{"target":"smithy.api#Unit"}}}}""")]
+    [Arguments("""{"example#A":{"type":"union","members":{"next":{"target":"example#B"}}},"example#B":{"type":"union","members":{"next":{"target":"example#A"},"done":{"target":"smithy.api#String"}}}}""")]
+    [Arguments("""{"example#A":{"type":"union","members":{"next":{"target":"example#B"}}},"example#B":{"type":"structure","members":{"next":{"target":"example#A"}}}}""")]
+    [Arguments("""{"example#A":{"type":"structure","members":{"a":{"target":"example#B","traits":{"smithy.api#required":{}}},"b":{"target":"example#B","traits":{"smithy.api#required":{}}}}},"example#B":{"type":"union","members":{"next":{"target":"example#A"},"done":{"target":"smithy.api#Unit"}}}}""")]
+    public async Task SmithyJsonPreservesTerminatingRecursiveDataDefinitions(string definitions)
+    {
+        var result = ResolveSmithy("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"example#Input"}},
+              "example#Input":{"type":"structure","members":{"value":{"target":"example#A"}}},
+            """ + definitions[1..^1] + "}}");
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.DocumentPath).IsEqualTo("$/shapes/example#Get");
+        await Assert.That(result.Operation.GetProperty("input").GetProperty("target").GetString())
+            .IsEqualTo("example#Input");
+    }
+
+    [Test]
+    [Arguments(false, ApiOperationResolutionStatus.Selected)]
+    [Arguments(true, ApiOperationResolutionStatus.Invalid)]
+    public async Task SmithyJsonChecksRecursionInCustomTraitDefinitions(bool required, ApiOperationResolutionStatus expected)
+    {
+        var document = """
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","traits":{"example#Custom":{}}},
+              "example#Custom":{"type":"structure","traits":{"smithy.api#trait":{}},
+                "members":{"value":{"target":"example#Node","traits":{"smithy.api#required":{}}}}},
+              "example#Node":{"type":"structure","members":{"next":{"target":"example#Node"REQUIRED}}}
+            }}
+            """.Replace("REQUIRED", required ? ""","traits":{"smithy.api#required":{}}""" : "", StringComparison.Ordinal);
+        var result = ResolveSmithy(document);
+        await Assert.That(result.Status).IsEqualTo(expected);
+        if (required)
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.recursion");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+        else
+        {
+            await Assert.That(result.Operation.GetProperty("traits").GetProperty("example#Custom").GetRawText())
+                .IsEqualTo("{}");
+        }
+    }
+
+    [Test]
+    [Arguments(1, true)]
+    [Arguments(32, true)]
+    [Arguments(63, true)]
+    [Arguments(1, false)]
+    [Arguments(32, false)]
+    [Arguments(63, false)]
+    public async Task SmithyJsonPropagatesTerminationThroughRequiredShapeChains(int depth, bool terminating)
+    {
+        var shapes = new System.Text.Json.Nodes.JsonObject
+        {
+            ["example#Get"] = System.Text.Json.Nodes.JsonNode.Parse("""{"type":"operation","input":{"target":"example#S1"}}""")
+        };
+        for (var index = 1; index <= depth; index++)
+        {
+            var target = index < depth ? "example#S" + (index + 1) :
+                terminating ? "smithy.api#String" : "example#S1";
+            shapes["example#S" + index] = new System.Text.Json.Nodes.JsonObject
+            {
+                ["type"] = "structure",
+                ["members"] = new System.Text.Json.Nodes.JsonObject
+                {
+                    ["next"] = new System.Text.Json.Nodes.JsonObject
+                    {
+                        ["target"] = target,
+                        ["traits"] = System.Text.Json.Nodes.JsonNode.Parse("""{"smithy.api#required":{}}""")
+                    }
+                }
+            };
+        }
+        var result = ResolveSmithy(new System.Text.Json.Nodes.JsonObject
+        {
+            ["smithy"] = "2.0",
+            ["shapes"] = shapes
+        }.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(terminating ?
+            ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (!terminating)
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.recursion");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#S1");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    public async Task SmithyJsonDoesNotClaimRecursionValidationOutsideTheSelectedClosure()
+    {
+        var result = ResolveSmithy("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation"},
+              "example#Unreachable":{"type":"list","member":{"target":"example#Unreachable"}}
+            }}
+            """);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Operation.GetProperty("type").GetString()).IsEqualTo("operation");
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
     private static ApiOperationResolutionResult ResolveSmithy(string document, string selector = "example%23Get") =>
         ApiOperationDocumentResolver.Resolve("Smithy/2.0", "application/json",
             System.Text.Encoding.UTF8.GetBytes(document),
