@@ -2410,9 +2410,14 @@ public static partial class ApiOperationDocumentResolver
                                 string? literal = null;
                                 if (scoped && position < text.Length && text[position] != '@')
                                 {
-                                    literal = AttributeName();
+                                    var numericLiteral = char.IsAsciiDigit(text[position]) || text[position] == '-';
+                                    literal = numericLiteral ? NumericOperand() : AttributeName();
                                     if (literal is null) { return null; }
                                     SkipWhitespace();
+                                    if (numericLiteral && (position == text.Length || text[position] is not ('>' or '<')))
+                                    {
+                                        return null;
+                                    }
                                 }
                                 else if (scoped)
                                 {

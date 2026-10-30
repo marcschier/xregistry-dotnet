@@ -540,9 +540,13 @@ comparisons consume the shared work budget.
 The left operand can also be quoted text, an unquoted Boolean or a root shape
 ID, for example `[@: '10' > 9 && true ?= true]`. These are present text values;
 quoted numeric text uses the same exact numeric comparison and 256-character
-limit as attribute values. Literal text has no property path. Unquoted numeric
-left operands remain unsupported because numeric-to-string rendering is not
-implemented. Empty quoted text remains unsupported.
+limit as attribute values. Scoped numeric comparisons also accept unquoted
+numeric left operands, including negative values, fractions and exponents;
+`[@: 9007199254740993 > 9007199254740992]` compares exactly without binary
+floating-point rounding. Named and projected scopes retain their context rules,
+and every reached numeric left operand has the same 256-character source limit.
+Literal text has no property path. Numeric-to-string rendering for unquoted
+numbers and empty quoted text remain unsupported.
 String and numeric comparisons also accept right-hand context paths, such as
 `[@: @{id} = @{service|id}]`, mixed with literal alternatives. Both sides use
 the same attribute properties, including `(keys)`, `(values)` and projection

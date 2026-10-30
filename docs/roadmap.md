@@ -318,8 +318,11 @@ vocabulary/source mapping. It does not supply their implementation.
   Unknown functions parse them without evaluation; scans and comparisons
   consume the shared work budget.
   Scoped left operands also accept literal text, Booleans and root shape IDs.
-  Quoted numeric text retains exact comparisons and numeric limits; unquoted
-  numeric rendering, empty text and literal property paths remain unsupported.
+  Quoted numeric text and unquoted numeric left operands support exact numeric
+  comparisons with signed, fractional and exponent values. The same
+  256-character numeric limit applies, including after an earlier match.
+  Unquoted numeric string rendering, empty text and literal property paths
+  remain unsupported.
   String/numeric comparisons accept right-hand context paths mixed with literal
   alternatives. Scalar and projected values use any-pair comparisons, including
   `!=`; absent values produce no pairs. Both sides share attribute paths and
