@@ -13,6 +13,243 @@ namespace XRegistry.Federation.Tests;
 
 public class WotRegistryResolverTests
 {
+    private static readonly byte[] FragmentBytes = Encoding.UTF8.GetBytes("""
+        {"id":"urn:test:device:v1","version":{"model":"2.0.0"},
+        "properties":{"a/b":{"~name":42},"":null,"~1":true,"%2F":"once","a+b":"plus",
+        "\u00e9":"unicode","#":"hash","01":"object-key","a b":"space","-":"dash"},
+        "items":[{"x":1},false,null],"empty":[]}
+        """);
+
+    [Test]
+    [Arguments("#/properties/a~1b/~0name", "42")]
+    [Arguments("#%2Fproperties%2Fa~1b%2F~0name", "42")]
+    [Arguments("#/properties/", "null")]
+    [Arguments("#/properties/~01", "true")]
+    [Arguments("#/properties/%252F", "\"once\"")]
+    [Arguments("#/properties/a+b", "\"plus\"")]
+    [Arguments("#/properties/%C3%A9", "\"unicode\"")]
+    [Arguments("#/properties/%23", "\"hash\"")]
+    [Arguments("#/properties/01", "\"object-key\"")]
+    [Arguments("#/properties/a%20b", "\"space\"")]
+    [Arguments("#/properties/-", "\"dash\"")]
+    [Arguments("#/items/0/x", "1")]
+    [Arguments("#/items/1", "false")]
+    [Arguments("#/items/2", "null")]
+    [Arguments("#/empty", "[]")]
+    public async Task FragmentsDecodeOnceAndSelectExactJsonValuesWithoutChangingProvenance(string fragment, string expected)
+    {
+        var source = new Source { SecondBytes = FragmentBytes };
+        var selected = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var reads = source.Reads.Count;
+        var result = await WotRegistryResolver.SelectFragmentAsync(selected, fragment);
+        await Assert.That(result.Value.GetRawText()).IsEqualTo(expected);
+        await Assert.That(ReferenceEquals(result.ContainingDocument, selected)).IsTrue();
+        await Assert.That(result.ContainingDocument.Version.ContentDigest).IsEqualTo(Digest(FragmentBytes));
+        await Assert.That(result.ContainingDocument.Version.VersionId).IsEqualTo("2.0.0");
+        await Assert.That(result.ContainingDocument.Version.Origin).IsEqualTo(source.Context.Source);
+        await Assert.That(source.Reads.Count).IsEqualTo(reads);
+    }
+
+    [Test]
+    public async Task RootAndNestedFragmentsRemainOwnedAfterNativeSourceDisposal()
+    {
+        var tree = CreateDirectoryTree(FragmentBytes);
+        await using var mapping = await DirectoryMapping.OpenAsync(tree);
+        var request = new WotVersionResolutionRequest(Source.Identity,
+            WotReferenceTargetKind.ThingModel, WotReferenceOperator.ThingModel);
+        var selected = await WotRegistryResolver.ResolveAsync(mapping, "/gs/tenant/models", request);
+        await mapping.DisposeAsync();
+        var reads = tree.Reads.Count;
+        var root = await WotRegistryResolver.SelectFragmentAsync(selected, "#");
+        var nested = await WotRegistryResolver.SelectFragmentAsync(selected, "#/items/0");
+        await Assert.That(root.Value.GetProperty("id").GetString()).IsEqualTo(Source.Identity);
+        await Assert.That(nested.Value.GetProperty("x").GetInt32()).IsEqualTo(1);
+        await Assert.That(ReferenceEquals(root.ContainingDocument, nested.ContainingDocument)).IsTrue();
+        await Assert.That(tree.Reads.Count).IsEqualTo(reads);
+        using var content = selected.Document.OpenRead();
+        await Assert.That("sha256:" + Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant())
+            .IsEqualTo(nested.ContainingDocument.Version.ContentDigest);
+    }
+
+    [Test]
+    [Arguments("")]
+    [Arguments("/properties")]
+    [Arguments("#anchor")]
+    [Arguments("##/properties")]
+    [Arguments("#/%")]
+    [Arguments("#/%0")]
+    [Arguments("#/%GG")]
+    [Arguments("#/% A")]
+    [Arguments("#/%C3%28")]
+    [Arguments("#/%C0%AF")]
+    [Arguments("#/%ED%A0%80")]
+    [Arguments("#/%FF")]
+    [Arguments("#/raw space")]
+    [Arguments("#/\u00e9")]
+    [Arguments("#/a\\b")]
+    [Arguments("#/a\nb")]
+    [Arguments("#/a~")]
+    [Arguments("#/a~2")]
+    [Arguments("#/a%7E2")]
+    public async Task InvalidFragmentSyntaxFailsBeforeParsingTheAcquiredDocument(string fragment)
+    {
+        var source = new Source { SecondBytes = [] };
+        var selected = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var failure = await Assert.That(async () =>
+            await WotRegistryResolver.SelectFragmentAsync(selected, fragment)).Throws<RegistryException>()
+            ?? throw new InvalidOperationException("Expected invalid fragment syntax.");
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo("invalid-fragment");
+    }
+
+    [Test]
+    [Arguments("#/absent")]
+    [Arguments("#/Properties")]
+    [Arguments("#/items/-")]
+    [Arguments("#/items/01")]
+    [Arguments("#/items/+1")]
+    [Arguments("#/items/-1")]
+    [Arguments("#/items/3")]
+    [Arguments("#/items/2147483648")]
+    [Arguments("#/items/%D9%A1")]
+    [Arguments("#/items/1/x")]
+    [Arguments("#/items/2/x")]
+    [Arguments("#/empty/0")]
+    public async Task MissingFragmentTargetsCannotFallbackOrChangeTheSelectedVersion(string fragment)
+    {
+        var source = new Source { SecondBytes = FragmentBytes };
+        var selected = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var reads = source.Reads.Count;
+        var failure = await Assert.That(async () =>
+            await WotRegistryResolver.SelectFragmentAsync(selected, fragment)).Throws<RegistryException>()
+            ?? throw new InvalidOperationException("Expected an unresolved fragment.");
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo("not-found");
+        await Assert.That(source.Reads.Count).IsEqualTo(reads);
+        await Assert.That(selected.Version.VersionId).IsEqualTo("2.0.0");
+    }
+
+    [Test]
+    [Arguments(0)]
+    [Arguments(1)]
+    [Arguments(2)]
+    public async Task FragmentResultsAreBoundedByTheirOwnOutputAndCumulativeParsingWork(int bound)
+    {
+        var source = new Source { SecondBytes = FragmentBytes };
+        var selected = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var baseline = new FederationReadBudget();
+        var first = await WotRegistryResolver.SelectFragmentAsync(selected, "#/items/0/x", baseline);
+        await Assert.That(first.Value.GetInt32()).IsEqualTo(1);
+        await Assert.That(baseline.Requests).IsEqualTo(0L);
+        await Assert.That(baseline.ObjectsRead).IsEqualTo(1L);
+        await Assert.That(baseline.BytesRead).IsEqualTo((long)"#/items/0/x".Length);
+        for (var delta = -1; delta <= 1; delta++)
+        {
+            var limits = bound switch
+            {
+                0 => new FederationReadLimits(maxWork: baseline.Work + delta),
+                1 => new FederationReadLimits(maxDepth: 3 + delta),
+                _ => new FederationReadLimits(maxTotalBytes: baseline.BytesRead + delta)
+            };
+            if (delta < 0)
+            {
+                var failure = await Assert.That(async () => await WotRegistryResolver.SelectFragmentAsync(
+                    selected, "#/items/0/x", new(limits))).Throws<FederationException>()
+                    ?? throw new InvalidOperationException("Expected an exhausted fragment budget.");
+                await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+            }
+            else
+            {
+                var result = await WotRegistryResolver.SelectFragmentAsync(selected, "#/items/0/x", new(limits));
+                await Assert.That(result.Value.GetInt32()).IsEqualTo(1);
+            }
+        }
+        var tinyOutput = await WotRegistryResolver.SelectFragmentAsync(selected, "#/items/0/x",
+            new(new(maxResultBytes: 1)));
+        await Assert.That(tinyOutput.Value.GetRawText()).IsEqualTo("1");
+        var tooLarge = await Assert.That(async () => await WotRegistryResolver.SelectFragmentAsync(
+            selected, "#/items/0", new(new(maxResultBytes: 1)))).Throws<FederationException>()
+            ?? throw new InvalidOperationException("Expected a fragment result limit.");
+        await Assert.That(tooLarge.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+    }
+
+    [Test]
+    [Arguments(-1)]
+    [Arguments(0)]
+    [Arguments(1)]
+    public async Task FragmentOutputLimitsApplyToExactEncodedSelectedValueBytes(int delta)
+    {
+        var source = new Source { SecondBytes = FragmentBytes };
+        var selected = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        const string fragment = "#/properties/a%20b";
+        const string expected = "\"space\"";
+        var budget = new FederationReadBudget(new(maxResultBytes: Encoding.UTF8.GetByteCount(expected) + delta));
+        if (delta < 0)
+        {
+            var failure = await Assert.That(async () =>
+                await WotRegistryResolver.SelectFragmentAsync(selected, fragment, budget)).Throws<FederationException>()
+                ?? throw new InvalidOperationException("Expected an output-byte boundary failure.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        }
+        else
+        {
+            var result = await WotRegistryResolver.SelectFragmentAsync(selected, fragment, budget);
+            await Assert.That(result.Value.GetRawText()).IsEqualTo(expected);
+            await Assert.That(result.ContainingDocument.Document.Length).IsGreaterThan((long)expected.Length);
+        }
+    }
+
+    [Test]
+    public async Task FragmentInputAndDocumentLimitsCannotBeBypassedByASmallSelectedValue()
+    {
+        var source = new Source { SecondBytes = FragmentBytes };
+        var selected = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var documentFailure = await Assert.That(async () => await WotRegistryResolver.SelectFragmentAsync(
+            selected, "#/items/0/x", new(new(maxObjectBytes: FragmentBytes.Length - 1))))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected the input-document limit.");
+        await Assert.That(documentFailure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        var oversizedFragment = "#" + new string('/', FragmentBytes.Length);
+        var inputBudget = new FederationReadBudget(new(maxObjectBytes: FragmentBytes.Length));
+        var inputFailure = await Assert.That(async () =>
+            await WotRegistryResolver.SelectFragmentAsync(selected, oversizedFragment, inputBudget))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected the input-fragment limit.");
+        await Assert.That(inputFailure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        await Assert.That(inputBudget.BytesRead).IsEqualTo(0L);
+    }
+
+    [Test]
+    [Arguments("{")]
+    [Arguments("""{"id":"urn:wrong","value":1}""")]
+    [Arguments("""{"id":"urn:test:device:v1","value":1,"value":2}""")]
+    public async Task FragmentSelectionValidatesTheCompleteDocumentBeforeReturningAMatch(string json)
+    {
+        var source = new Source { SecondBytes = Encoding.UTF8.GetBytes(json) };
+        var selected = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var failure = await Assert.That(async () => await WotRegistryResolver.SelectFragmentAsync(selected, "#/value"))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected invalid retained JSON.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    public async Task FragmentCancellationAndRepeatedWorkDoNotReopenTheSource()
+    {
+        var source = new Source { SecondBytes = FragmentBytes };
+        var selected = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var baseline = new FederationReadBudget();
+        await WotRegistryResolver.SelectFragmentAsync(selected, "#/items/0/x", baseline);
+        var shared = new FederationReadBudget(new(maxWork: baseline.Work));
+        await WotRegistryResolver.SelectFragmentAsync(selected, "#/items/0/x", shared);
+        var reads = source.Reads.Count;
+        var failure = await Assert.That(async () =>
+            await WotRegistryResolver.SelectFragmentAsync(selected, "#/items/0/x", shared))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected cumulative work exhaustion.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        var cancelledBudget = new FederationReadBudget();
+        await Assert.That(async () => await WotRegistryResolver.SelectFragmentAsync(selected, "#",
+            cancelledBudget, new CancellationToken(true))).Throws<OperationCanceledException>();
+        await Assert.That(cancelledBudget.Work).IsEqualTo(0L);
+        await Assert.That(cancelledBudget.BytesRead).IsEqualTo(0L);
+        await Assert.That(source.Reads.Count).IsEqualTo(reads);
+    }
+
     [Test]
     public async Task LocalRevisionSurvivesNativeSourceDisposalWithoutReopeningOrRechargingBytes()
     {

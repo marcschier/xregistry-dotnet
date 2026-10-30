@@ -1,6 +1,7 @@
 // Copyright (c) 2026 xregistry-dotnet contributors.
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -33,9 +34,76 @@ public sealed class WotResolvedDocument
     public FederationDocument Document { get; }
 }
 
+/// <summary>A selected JSON value and the acquired document whose bytes establish its provenance.</summary>
+public sealed class WotResolvedFragment
+{
+    internal WotResolvedFragment(WotResolvedDocument document, JsonElement value)
+    {
+        ContainingDocument = document;
+        Value = value;
+    }
+
+    /// <summary>Gets the complete selected Version; its digest covers the full document, not the fragment.</summary>
+    public WotResolvedDocument ContainingDocument { get; }
+    /// <summary>Gets an independently owned JSON value, including explicit null.</summary>
+    public JsonElement Value { get; }
+}
+
 /// <summary>Resolves parsed SemVer WoT references through a selected native source or retained revision.</summary>
 public static class WotRegistryResolver
 {
+    /// <summary>Applies an RFC 6901 URI-fragment pointer after Version or local-revision selection.</summary>
+    /// <remarks>
+    /// The fragment includes its leading '#'; '#' selects the whole document. Percent decoding is
+    /// strict UTF-8 and precedes pointer-token decoding. This method never opens a source or changes
+    /// the selected Version. Its returned value retains the full document's digest and origin.
+    /// </remarks>
+    public static async ValueTask<WotResolvedFragment> SelectFragmentAsync(WotResolvedDocument document,
+        string fragment, FederationReadBudget? budget = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(fragment);
+        cancellationToken.ThrowIfCancellationRequested();
+        budget ??= new();
+        budget.CheckObjectBytes(fragment.Length);
+        budget.ChargeBytes(fragment.Length);
+        budget.ChargeObject();
+        var pointer = DecodeFragment(fragment, budget, cancellationToken);
+        var depth = pointer.Count(character => character == '/');
+        budget.CheckDepth(depth);
+        var tokens = pointer.Length == 0 ? [] : pointer[1..].Split('/');
+        for (var index = 0; index < tokens.Length; index++)
+        {
+            tokens[index] = DecodePointerToken(tokens[index], budget, cancellationToken);
+        }
+
+        var value = await ParseAcquiredDocumentAsync(document, budget, cancellationToken).ConfigureAwait(false);
+        foreach (var token in tokens)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            budget.ChargeWork();
+            if (value.ValueKind == JsonValueKind.Object && value.TryGetProperty(token, out var property))
+            {
+                value = property;
+            }
+            else if (value.ValueKind == JsonValueKind.Array && token.Length > 0 &&
+                (token == "0" || token[0] is >= '1' and <= '9') &&
+                token.All(char.IsAsciiDigit) &&
+                int.TryParse(token, NumberStyles.None, CultureInfo.InvariantCulture, out var index) &&
+                index < value.GetArrayLength())
+            {
+                value = value[index];
+            }
+            else
+            {
+                throw new RegistryException(new("not-found", "", "The fragment does not identify a stored JSON value."));
+            }
+        }
+        budget.CheckResultBytes(Encoding.UTF8.GetByteCount(value.GetRawText()));
+        cancellationToken.ThrowIfCancellationRequested();
+        return new(document, value);
+    }
+
     /// <summary>Resolves a parsed document-local reference against an already acquired containing revision.</summary>
     /// <remarks>
     /// The caller establishes locality through URI/base/context processing. This method never opens
@@ -72,31 +140,7 @@ public static class WotRegistryResolver
         }
 
         budget ??= new();
-        budget.CheckObjectBytes(containingRevision.Document.Length);
-        RegistryJson parsed;
-        using (var stream = containingRevision.Document.OpenRead())
-        {
-            try
-            {
-                parsed = await RegistryJson.ParseAsync(stream, new RegistryJsonLimits
-                {
-                    MaxBytes = budget.Limits.MaxObjectBytes,
-                    MaxDepth = budget.Limits.MaxJsonDepth,
-                    MaxNodes = (int)Math.Min(int.MaxValue, budget.Limits.MaxWork)
-                }, cancellationToken).ConfigureAwait(false);
-            }
-            catch (RegistryException exception)
-            {
-                throw FederationJson.FromCore(exception);
-            }
-        }
-        var root = parsed.RootElement;
-        FederationJson.CountWork(root, budget, cancellationToken);
-        FederationJson.RequireObject(root);
-        if (FederationJson.String(root, "id") != captured.WotId)
-        {
-            throw FederationJson.Invalid("The containing document's id differs from its acquired WoT identity.");
-        }
+        var root = await ParseAcquiredDocumentAsync(containingRevision, budget, cancellationToken).ConfigureAwait(false);
 
         if (request.MinimumVersion is not null && root.TryGetProperty("version", out var version))
         {
@@ -117,6 +161,105 @@ public static class WotRegistryResolver
         cancellationToken.ThrowIfCancellationRequested();
         return containingRevision;
     }
+
+    private static async ValueTask<JsonElement> ParseAcquiredDocumentAsync(WotResolvedDocument document,
+        FederationReadBudget budget, CancellationToken cancellationToken)
+    {
+        budget.CheckObjectBytes(document.Document.Length);
+        RegistryJson parsed;
+        using (var stream = document.Document.OpenRead())
+        {
+            try
+            {
+                parsed = await RegistryJson.ParseAsync(stream, new RegistryJsonLimits
+                {
+                    MaxBytes = budget.Limits.MaxObjectBytes,
+                    MaxDepth = budget.Limits.MaxJsonDepth,
+                    MaxNodes = (int)Math.Min(int.MaxValue, budget.Limits.MaxWork)
+                }, cancellationToken).ConfigureAwait(false);
+            }
+            catch (RegistryException exception)
+            {
+                throw FederationJson.FromCore(exception);
+            }
+        }
+        var root = parsed.RootElement;
+        FederationJson.CountWork(root, budget, cancellationToken);
+        FederationJson.RequireObject(root);
+        if (FederationJson.String(root, "id") != document.Version.WotId)
+        {
+            throw FederationJson.Invalid("The document's id differs from its acquired WoT identity.");
+        }
+        return root;
+    }
+
+    private static string DecodeFragment(string fragment, FederationReadBudget budget, CancellationToken token)
+    {
+        if (fragment.Length == 0 || fragment[0] != '#')
+        {
+            throw InvalidFragment("A URI fragment must begin with '#'.");
+        }
+        var bytes = new byte[fragment.Length - 1];
+        var count = 0;
+        for (var index = 1; index < fragment.Length; index++)
+        {
+            token.ThrowIfCancellationRequested();
+            budget.ChargeWork();
+            var character = fragment[index];
+            if (character == '%')
+            {
+                if (index + 2 >= fragment.Length || !char.IsAsciiHexDigit(fragment[index + 1]) ||
+                    !char.IsAsciiHexDigit(fragment[index + 2]))
+                {
+                    throw InvalidFragment("The fragment contains an invalid percent escape.");
+                }
+                bytes[count++] = byte.Parse(fragment.AsSpan(index + 1, 2),
+                    NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+                index += 2;
+            }
+            else if (char.IsAsciiLetterOrDigit(character) || "-._~!$&'()*+,;=:@/?".Contains(character))
+            {
+                bytes[count++] = (byte)character;
+            }
+            else
+            {
+                throw InvalidFragment("The fragment contains a character that must be percent-encoded.");
+            }
+        }
+        string pointer;
+        try { pointer = new UTF8Encoding(false, true).GetString(bytes, 0, count); }
+        catch (DecoderFallbackException exception)
+        {
+            throw new RegistryException(new("invalid-fragment", "", "The fragment is not valid UTF-8."), exception);
+        }
+        if (pointer.Length > 0 && pointer[0] != '/')
+        {
+            throw InvalidFragment("A nonempty JSON Pointer must begin with '/'.");
+        }
+        return pointer;
+    }
+
+    private static string DecodePointerToken(string value, FederationReadBudget budget, CancellationToken token)
+    {
+        var decoded = new StringBuilder(value.Length);
+        for (var index = 0; index < value.Length; index++)
+        {
+            token.ThrowIfCancellationRequested();
+            budget.ChargeWork();
+            if (value[index] != '~') { decoded.Append(value[index]); }
+            else
+            {
+                if (++index >= value.Length || value[index] is not ('0' or '1'))
+                {
+                    throw InvalidFragment("The JSON Pointer contains an invalid tilde escape.");
+                }
+                decoded.Append(value[index] == '0' ? '~' : '/');
+            }
+        }
+        return decoded.ToString();
+    }
+
+    private static RegistryException InvalidFragment(string message) => new(new("invalid-fragment", "", message));
 
     /// <summary>Resolves a parsed, nonlocal reference within one explicitly selected Resource collection.</summary>
     /// <remarks>

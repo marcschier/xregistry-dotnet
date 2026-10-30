@@ -18,6 +18,7 @@ complete xRegistry conformance.
 | WoT Version selection | `XRegistry.Models.WotVersionResolver.Resolve` and `SelectVersionId` | Applies typed floors, pins, sticky defaults and prerelease policy to caller-captured Resource Versions. `SelectVersionId` returns a selection without asserting byte provenance; `Resolve` requires the caller's captured digest and origin. Neither method parses reference URIs or acquires documents. |
 | WoT Registry acquisition | `XRegistry.Federation.WotRegistryResolver.ResolveAsync` | Resolves a parsed, nonlocal reference within one authorized source and Group Resource collection. Requires the source's captured SemVer WoT model, rejects competing Resources, and returns exact bytes with their computed SHA-256 digest and retained Registry origin. |
 | WoT containing-revision resolution | `XRegistry.Federation.WotRegistryResolver.ResolveLocalAsync` | Resolves a parsed local reference against an already acquired `WotResolvedDocument`. Uses its retained bytes and kind, applies local floors to the authored version, and cannot select another Registry Version. |
+| WoT JSON Pointer selection | `XRegistry.Federation.WotRegistryResolver.SelectFragmentAsync` | Applies an RFC 6901 URI-fragment pointer to the acquired document after Version or local-revision selection. Returns the selected JSON value with the containing document's full-byte digest and origin. |
 | Generic operation dispatch | `RegistryEngine.ExecuteAsync(RegistryOperation, RegistryOperationContext, CancellationToken)` in `XRegistry.Server` | The engine owns model, lifecycle, versions, validation and atomic change preparation. |
 | HTTP client | `XRegistry.Client.XRegistryHttpClient` | One explicit HTTP operation, unchanged status/headers and bounded metadata/Document consumption. |
 | HTTP serving | `XRegistry.AspNetCore.MapXRegistry` | Maps a concrete `RegistryEngine`; it does not start or secure a host. |
@@ -67,15 +68,29 @@ Version. Parsing consumes cumulative work but does not recharge input bytes,
 objects or requests already consumed by acquisition. Object, JSON-depth, work
 and output limits remain finite; cancellation propagates.
 
+`SelectFragmentAsync` accepts a leading `#`, with `#` alone selecting the root.
+It decodes percent-encoded UTF-8 once before decoding JSON Pointer tokens.
+Object names are case-sensitive; array indices use canonical nonnegative decimal
+syntax. Explicit JSON null is a successful selection; a missing target fails
+without selecting another Version. Malformed fragments, duplicate JSON names
+and document-identity mismatches fail before a value is returned. The input
+fragment consumes bytes and an object from the shared budget; the retained
+document is parsed again with cumulative work and depth limits but is not
+recharged as acquired input. The output limit applies to the selected value's
+encoded JSON bytes. Fragment selection does not change the full-document digest
+or require a live source.
+
 The caller still processes URI references, document bases and JSON-LD contexts
 to establish locality, then names the containing WoT identity in a local
 request. `ResolveAsync` rejects local requests; `ResolveLocalAsync` rejects
 Registry pins. Resource aliases must first be resolved to an authorized source,
 and external document descriptors are not dereferenced. Incremental-profile
-selection and publication closure remain unimplemented. These resolver cases
-passed managed execution on both frameworks and native execution in the complete
-Federation suite on .NET 10/Windows x64 at `1c62700`. The other native cells remain
-unqualified; the package-consumer fixture does not yet exercise these methods.
+selection and publication closure remain unimplemented. Acquisition and local
+resolver cases passed managed execution on both frameworks and native execution
+in the complete Federation suite on .NET 10/Windows x64 at `1c62700`. Fragment
+selection has managed evidence on both frameworks; that older native receipt
+does not cover it. Other native cells remain unqualified; the package-consumer
+fixture does not yet exercise these methods.
 See [native evidence](native-aot.md#current-evidence-and-uncovered-cells).
 
 ## Choose the real seam

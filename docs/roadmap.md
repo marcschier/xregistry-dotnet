@@ -101,8 +101,9 @@ refresh the package-consumer matrix or qualify the remaining cells.
 - Implement the selected incremental WoT profile. SemVer provider acquisition now
   performs scoped native-source lookup and verifies acquired byte digests.
   Parsed local references use the retained containing revision and its authored
-  version fields. URI/base/JSON-LD context processing, fragment application and
-  alias integration remain open.
+  version fields. JSON Pointer fragments are applied after selection without
+  changing full-document provenance; their current evidence is managed execution.
+  URI/base/JSON-LD context processing and alias integration remain open.
   WoT publication closure also needs the unresolved source-occurrence and target
   mappings from the draft; do not substitute live targets for captured closure.
 - Add full API format validators and the remaining language resolvers. The
