@@ -395,6 +395,188 @@ public class MediaEndpointDefinitionTests
         }
     }
 
+    [Test]
+    [Arguments("SRT", "streamid,streamformat,videocodec,audiocodec")]
+    [Arguments("WebRTC", "signaling,signalingreference,streamformat,videocodec,audiocodec")]
+    [Arguments("RTSP/1.0", "streamformat,videocodec,audiocodec")]
+    [Arguments("RTP/2", "sessiondescription,streamformat,videocodec,audiocodec")]
+    [Arguments("MPEGTS-UDP", "streamformat,videocodec,audiocodec")]
+    [Arguments("RTMP/1.0", "application,streamname,streamformat,videocodec,audiocodec")]
+    [Arguments("RIST-Simple/2020", "streamformat,videocodec,audiocodec")]
+    [Arguments("RIST-Main/2024", "streamformat,videocodec,audiocodec")]
+    public async Task CanonicalMediaOptionTypesRejectEveryNonStringJsonKind(string protocol, string fields)
+    {
+        using var model = ReadCanonicalMediaSource("MediaValidationModel",
+            "F8A0FA6CBD975F4C38EE211D291D5B64416BCCC4D9A7242EAF4F9DA34367CFA8", 13799);
+        var attributes = model.RootElement.GetProperty("groups").GetProperty("endpoints")
+            .GetProperty("attributes").GetProperty("protocol").GetProperty("ifvalues")
+            .GetProperty(protocol).GetProperty("siblingattributes").GetProperty("protocoloptions")
+            .GetProperty("attributes");
+        var declarations = attributes.EnumerateObject().Where(static property => property.Name != "$include").ToArray();
+        await Assert.That(string.Join(",", declarations.Select(static property => property.Name))).IsEqualTo(fields);
+        foreach (var declaration in declarations)
+        {
+            var name = declaration.Name;
+            await Assert.That(declaration.Value.GetProperty("type").GetString() is "string" or "uri").IsTrue();
+            var input = ProducerOptions(protocol);
+            var options = input["protocoloptions"]!.AsObject();
+            var value = declaration.Value.TryGetProperty("enum", out var values)
+                ? values[0].GetString()!
+                : name switch
+                {
+                    "signalingreference" or "sessiondescription" => "https://media.example.test/description",
+                    "videocodec" => "VendorVideo/8",
+                    "audiocodec" => "VendorAudio/9",
+                    _ => "public-route"
+                };
+            if (name == "signalingreference")
+            {
+                options["signaling"] = "external";
+            }
+            options[name] = value;
+            var metadata = RegistryJson.Parse(input.ToJsonString());
+            await Assert.That(EndpointDefinition.MaterializeMedia(metadata).GetProtocolOption(name).GetString())
+                .IsEqualTo(value);
+            await Assert.That(() => RegistryDomainRules.ValidateMediaEndpointMetadata(metadata.RootElement)).ThrowsNothing();
+            foreach (var invalid in new[] { "null", "true", "false", "42", "[]", "{}" })
+            {
+                options[name] = JsonNode.Parse(invalid);
+                metadata = RegistryJson.Parse(input.ToJsonString());
+                await Rejects(metadata, "/protocoloptions/" + name);
+                await RejectsCanonicalMediaMetadata(metadata, "/protocoloptions/" + name);
+            }
+            if (declaration.Value.TryGetProperty("required", out var required) && required.GetBoolean())
+            {
+                options.Remove(name);
+                metadata = RegistryJson.Parse(input.ToJsonString());
+                await Rejects(metadata, "/protocoloptions/" + name);
+                await RejectsCanonicalMediaMetadata(metadata, "/protocoloptions/" + name);
+                options[name] = "";
+                metadata = RegistryJson.Parse(input.ToJsonString());
+                await Rejects(metadata, "/protocoloptions/" + name);
+                await RejectsCanonicalMediaMetadata(metadata, "/protocoloptions/" + name);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("producer")]
+    [Arguments("consumer")]
+    public async Task CanonicalMediaSignalingEnumEnforcesExactSpellingAndDirection(string usage)
+    {
+        using var model = ReadCanonicalMediaSource("MediaValidationModel",
+            "F8A0FA6CBD975F4C38EE211D291D5B64416BCCC4D9A7242EAF4F9DA34367CFA8", 13799);
+        var signaling = model.RootElement.GetProperty("groups").GetProperty("endpoints")
+            .GetProperty("attributes").GetProperty("protocol").GetProperty("ifvalues")
+            .GetProperty("WebRTC").GetProperty("siblingattributes").GetProperty("protocoloptions")
+            .GetProperty("attributes").GetProperty("signaling");
+        await Assert.That(signaling.GetProperty("strict").GetBoolean()).IsTrue();
+        await Assert.That(string.Join(",", signaling.GetProperty("enum").EnumerateArray()
+            .Select(static value => value.GetString()))).IsEqualTo("WHIP/RFC9725,WHEP/draft-ietf-wish-whep-03,external");
+        foreach (var value in signaling.GetProperty("enum").EnumerateArray())
+        {
+            var selector = value.GetString()!;
+            var options = new JsonObject { ["signaling"] = selector };
+            if (selector == "external")
+            {
+                options["signalingreference"] = "https://media.example.test/signaling";
+            }
+            var metadata = Endpoint("WebRTC", usage, options.ToJsonString());
+            if (selector == "WHIP/RFC9725" && usage == "consumer" ||
+                selector == "WHEP/draft-ietf-wish-whep-03" && usage == "producer")
+            {
+                await Rejects(metadata, "/usage");
+                await RejectsCanonicalMediaMetadata(metadata, "/usage");
+            }
+            else
+            {
+                await Assert.That(EndpointDefinition.MaterializeMedia(metadata).GetProtocolOption("signaling").GetString())
+                    .IsEqualTo(selector);
+                await Assert.That(() => RegistryDomainRules.ValidateMediaEndpointMetadata(metadata.RootElement)).ThrowsNothing();
+                if (selector != "external")
+                {
+                    options["signalingreference"] = "https://media.example.test/signaling";
+                    metadata = Endpoint("WebRTC", usage, options.ToJsonString());
+                    await Rejects(metadata, "/protocoloptions/signalingreference");
+                    await RejectsCanonicalMediaMetadata(metadata, "/protocoloptions/signalingreference");
+                }
+            }
+        }
+        foreach (var invalid in new[] { "", "EXTERNAL", "whip/RFC9725", "whep/draft-ietf-wish-whep-03", "unknown" })
+        {
+            var metadata = Endpoint("WebRTC", usage, new JsonObject { ["signaling"] = invalid }.ToJsonString());
+            await Rejects(metadata, "/protocoloptions/signaling");
+            await RejectsCanonicalMediaMetadata(metadata, "/protocoloptions/signaling");
+        }
+    }
+
+    [Test]
+    [Arguments("WebRTC", "producer", "signalingreference")]
+    [Arguments("WebRTC", "consumer", "signalingreference")]
+    [Arguments("RTP/2", "producer", "sessiondescription")]
+    [Arguments("RTP/2", "consumer", "sessiondescription")]
+    public async Task MediaDescriptionReferencesRequireAbsoluteHttpsWithoutCredentials(string protocol, string usage, string name)
+    {
+        var input = JsonNode.Parse(ValidEndpoint(protocol, usage).RootElement.GetRawText())!.AsObject();
+        if (protocol == "WebRTC")
+        {
+            input["protocoloptions"]!["signaling"] = "external";
+        }
+        foreach (var valid in new[] { "https://media.example.test/description", "https://media.example.test:8443/description?revision=2" })
+        {
+            input["protocoloptions"]![name] = valid;
+            var metadata = RegistryJson.Parse(input.ToJsonString());
+            await Assert.That(EndpointDefinition.MaterializeMedia(metadata).GetProtocolOption(name).GetString())
+                .IsEqualTo(valid);
+            await Assert.That(() => RegistryDomainRules.ValidateMediaEndpointMetadata(metadata.RootElement)).ThrowsNothing();
+        }
+        foreach (var invalid in new[]
+        {
+            "", "description", "//media.example.test/description", "http://media.example.test/description",
+            "https://user@media.example.test/description", "https://user:password@media.example.test/description"
+        })
+        {
+            input["protocoloptions"]![name] = invalid;
+            var metadata = RegistryJson.Parse(input.ToJsonString());
+            await Rejects(metadata, "/protocoloptions/" + name);
+            await RejectsCanonicalMediaMetadata(metadata, "/protocoloptions/" + name);
+        }
+    }
+
+    [Test]
+    [Arguments("SRT", "streamformat", "{value}", "mpegts", "mpegts", "flv")]
+    [Arguments("SRT", "videocodec", "{value}", "H264", "H264", "AAC")]
+    [Arguments("SRT", "audiocodec", "{value}", "AAC", "AAC", "H264")]
+    [Arguments("RTP/2", "sessiondescription", "{value}://media.example.test/session.sdp",
+        "https", "https://media.example.test/session.sdp", "http")]
+    [Arguments("RTMP/1.0", "application", "{value}", "live", "live", "")]
+    [Arguments("RTMP/1.0", "streamname", "{value}", "camera", "camera", "")]
+    [Arguments("WebRTC", "signaling", "{value}/RFC9725", "WHIP", "WHIP/RFC9725", "unknown")]
+    [Arguments("WebRTC", "signalingreference", "{value}://media.example.test/signaling",
+        "https", "https://media.example.test/signaling", "http")]
+    public async Task MediaOptionTemplatesAreCheckedAfterBinding(string protocol, string name, string template,
+        string valid, string expected, string invalid)
+    {
+        var input = ProducerOptions(protocol);
+        if (name == "signalingreference")
+        {
+            input["protocoloptions"]!["signaling"] = "external";
+        }
+        input["protocoloptions"]![name] = template;
+        var authored = RegistryJson.Parse(input.ToJsonString());
+        await Assert.That(() => RegistryDomainRules.ValidateMediaEndpointMetadata(authored.RootElement)).ThrowsNothing();
+        var arguments = RegistryJson.Parse(new JsonObject { ["value"] = valid }.ToJsonString());
+        var result = EndpointDefinition.MaterializeMedia(authored, arguments);
+        await Assert.That(result.GetProtocolOption(name).GetString()).IsEqualTo(expected);
+        await Assert.That(result.Authored.RootElement.GetProperty("protocoloptions").GetProperty(name).GetString())
+            .IsEqualTo(template);
+        arguments = RegistryJson.Parse(new JsonObject { ["value"] = invalid }.ToJsonString());
+        var failure = await Assert.That(() => EndpointDefinition.MaterializeMedia(authored, arguments))
+            .Throws<RegistryException>() ?? throw new InvalidOperationException("The invalid resolved Media option was accepted.");
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo("invalid_attribute");
+        await Assert.That(failure.Diagnostic.Path).IsEqualTo("/protocoloptions/" + name);
+    }
+
     private static JsonDocument CanonicalMediaVectors() => ReadCanonicalMediaSource("MediaValidationVectors",
         "F140A1F1F38190ED87E83579E7207A2492DB44CE1B7C9934081E85C25484B260", 2270);
 

@@ -114111,7 +114111,7 @@
       "text": "An xRegistry validator MUST enforce the types and enumerations declared by the Media Endpoints model. When the selected protocol defines `streamformat`, the validator MUST accept only values in that protocol's declared enumeration and MUST reject other values.",
       "review": {
         "status": "reviewed",
-        "note": "The focused public tests cover every declared streamformat value for all eight producer protocols, reject unknown/case-changed/empty/non-string values, and retain required options through the real materializer. The block also requires all model types and enumerations, whose complete per-field matrix has not been reviewed here. Keep the whole block pending rather than promoting it from the streamformat evidence alone.",
+        "note": "The focused public tests cover every declared streamformat value for all eight producer protocols. The pinned model drives a matrix for all 30 directly declared protocol-option fields, rejecting every nonstring JSON kind through both public validation paths and checking required-field absence and empty values. WebRTC signaling tests check the complete strict enum, exact spelling, direction and external-reference rules. Separate URI and binding cases check description references and post-expansion constraints. The block also includes inherited model fields; their complete type/enum matrix has not been reviewed. Keep the whole block pending.",
         "roles": [
           "server",
           "client"
@@ -114125,7 +114125,11 @@
           "RequiredAndProducerInputRulesFailAtTheOption",
           "XRegistry.Models.Tests.MediaEndpointDefinitionTests.CanonicalMediaVectorInventoryRetainsEveryPinnedCodecAndProtocol",
           "XRegistry.Models.Tests.MediaEndpointDefinitionTests.CanonicalMediaStreamFormatVectorsExerciseEveryDeclaredRuntimeAlternative",
-          "XRegistry.Models.Tests.MediaEndpointDefinitionTests.CanonicalMediaModelEnumsMatchVectorsWithoutInventingProducerSupport"
+          "XRegistry.Models.Tests.MediaEndpointDefinitionTests.CanonicalMediaModelEnumsMatchVectorsWithoutInventingProducerSupport",
+          "XRegistry.Models.Tests.MediaEndpointDefinitionTests.CanonicalMediaOptionTypesRejectEveryNonStringJsonKind",
+          "XRegistry.Models.Tests.MediaEndpointDefinitionTests.CanonicalMediaSignalingEnumEnforcesExactSpellingAndDirection",
+          "XRegistry.Models.Tests.MediaEndpointDefinitionTests.MediaDescriptionReferencesRequireAbsoluteHttpsWithoutCredentials",
+          "XRegistry.Models.Tests.MediaEndpointDefinitionTests.MediaOptionTemplatesAreCheckedAfterBinding"
         ],
         "nativeEvidence": []
       }
