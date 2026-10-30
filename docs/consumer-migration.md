@@ -101,8 +101,19 @@ member of `messages`. An absent or empty `messages` object has no selectable
 operations; an Avro data schema without a protocol declaration is rejected.
 The returned object preserves the native request, response, declared errors and
 one-way flag. A one-way message requires a null response and no declared errors.
-The resolver checks protocol/message shapes, not complete Avro schemas, name
-binding or defaults. Named types remain in the caller's original protocol;
+The resolver checks protocol/message declarations, not complete Avro schemas,
+name binding or defaults. Protocol names follow Avro fullname syntax; a qualified
+name supplies its own namespace. A `types` array contains named record, error,
+enum or fixed declarations with unique effective fullnames. Qualified type names
+likewise override a supplied namespace; unqualified names inherit it. Names that
+differ only in case remain distinct.
+Request parameters follow the anonymous-record field form: each is an object
+with a valid, unique field name and a type schema value. Optional documentation
+is a string, `order` is `ascending`, `descending` or `ignore`, and aliases are
+an array of strings. Parameter defaults and native schema values are preserved,
+not inferred or rewritten. Malformed declarations in another message prevent
+selection even after an exact match.
+Named types remain in the caller's original protocol;
 selection does not inline them or synthesize the implicit system-error branch.
 Avro JSON metadata, including a member named `$ref`, never triggers dependency
 acquisition. This does not add Avro IDL parsing or full protocol validation.

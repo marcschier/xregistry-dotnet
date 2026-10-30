@@ -112900,7 +112900,7 @@
       "text": "The `format` identifier for Apache Avro Protocol is `AvroProtocol`. The version identifies the Apache Avro release used to define the protocol. `AvroProtocol/1.12.0` identifies a JSON document conforming to the [Avro 1.12.0 protocol rules][avro]. The document MUST contain a protocol declaration; Avro data schemas are outside this API profile.",
       "review": {
         "status": "reviewed",
-        "note": "The JSON operation resolver requires a protocol declaration and selects exact native message names with bounded parsing and structural guards. The mapped tests establish selection, message preservation and rejection of schema-only inputs, not complete Avro 1.12.0 protocol conformance. Schema definitions, name binding and defaults are not fully validated; SupportsApiDocumentValidation remains false. Keep this format requirement pending.",
+        "note": "The JSON operation resolver requires a protocol declaration and selects exact native message names with bounded parsing and declaration guards. Protocol/type fullnames and effective namespace collisions are checked; a qualified name overrides a supplied namespace. Request parameters must be unique valid named typed fields with valid documentation/order/alias shapes; malformed later messages prevent an earlier selection. Defaults and native schemas remain unchanged. The mapped tests establish selection, message preservation and rejection of schema-only inputs, not complete Avro 1.12.0 protocol conformance. Schema definitions, name binding and defaults are not fully validated; SupportsApiDocumentValidation remains false. Keep this format requirement pending.",
         "roles": [
           "client",
           "server",
@@ -112912,6 +112912,10 @@
         "testIds": [
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.AvroProtocolSelectionPreservesTheDeclaredMessageWithoutResolvingMetadataReferences",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.AvroProtocolSelectionRejectsInvalidProtocolAndMessageShapes",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.AvroProtocolRejectsMalformedNamedDeclarationsBeforeMessageSelection",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.AvroRequestsRequireUniqueNamedTypedParameterFields",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.AvroRequestSelectionPreservesValidNativeFieldMetadata",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.AvroDeclarationChecksCannotBeBypassedByAnEarlierMatchingMessage",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.AvroProtocolMissingAndDifferentCaseMessagesDoNotSelectAResult",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.AvroProtocolDoesNotHideMalformedMessagesAfterAnEarlyMatch",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.AvroProtocolReturnsOwnedNativeResponseAndOneWayShapes",

@@ -244,7 +244,7 @@ public static partial class ApiOperationDocumentResolver
             {
                 return ResolveSmithyOperation(root, reference.Selector.Tokens[^1], documentUri, budget);
             }
-            var version = ValidateRoot(format, root);
+            var version = ValidateRoot(format, root, cancellationToken);
             if (version is not null)
             {
                 return version;
@@ -276,7 +276,8 @@ public static partial class ApiOperationDocumentResolver
         }
     }
 
-    private static ApiOperationResolutionResult? ValidateRoot(string format, JsonElement root)
+    private static ApiOperationResolutionResult? ValidateRoot(string format, JsonElement root,
+        CancellationToken cancellationToken)
     {
         if (root.ValueKind != JsonValueKind.Object)
         {
@@ -302,7 +303,7 @@ public static partial class ApiOperationDocumentResolver
                 return Failure(ApiOperationResolutionStatus.Invalid, "document.messages",
                     "Avro protocol messages must be a JSON object.", "$/messages");
             }
-            return null;
+            return ValidateAvroProtocolDeclarations(root, cancellationToken);
         }
         if (format == "OpenRPC/1.4")
         {
@@ -384,6 +385,8 @@ public static partial class ApiOperationDocumentResolver
                     return Failure(ApiOperationResolutionStatus.Invalid, "document.request",
                         "An Avro message must declare a request parameter array.", pointer + "/request");
                 }
+                var declarationFailure = ValidateAvroRequest(message.Value, request, pointer, cancellationToken);
+                if (declarationFailure is not null) { return declarationFailure; }
                 if (!message.Value.TryGetProperty("response", out var response) ||
                     response.ValueKind is not (JsonValueKind.String or JsonValueKind.Object or JsonValueKind.Array))
                 {

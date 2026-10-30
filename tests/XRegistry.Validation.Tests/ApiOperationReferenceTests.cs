@@ -1416,6 +1416,104 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
+    [Arguments("""{"protocol":"bad-name"}""", "document.protocol", "$/protocol")]
+    [Arguments("""{"protocol":"9Users"}""", "document.protocol", "$/protocol")]
+    [Arguments("""{"protocol":"com..Users"}""", "document.protocol", "$/protocol")]
+    [Arguments("""{"protocol":"Users","namespace":"bad-name"}""", "document.namespace", "$/namespace")]
+    [Arguments("""{"protocol":"Users","doc":null}""", "document.doc", "$/doc")]
+    [Arguments("""{"protocol":"Users","types":{}}""", "document.types", "$/types")]
+    [Arguments("""{"protocol":"Users","types":[null]}""", "document.type_declaration", "$/types/0")]
+    [Arguments("""{"protocol":"Users","types":["string"]}""", "document.type_declaration", "$/types/0")]
+    [Arguments("""{"protocol":"Users","types":[{"type":"array","items":"long"}]}""", "document.type_declaration", "$/types/0")]
+    [Arguments("""{"protocol":"Users","types":[{"type":"record"}]}""", "document.type_name", "$/types/0/name")]
+    [Arguments("""{"protocol":"Users","types":[{"type":"record","name":"bad-name"}]}""", "document.type_name", "$/types/0/name")]
+    [Arguments("""{"protocol":"Users","types":[{"type":"record","name":"User","namespace":1}]}""", "document.namespace", "$/types/0/namespace")]
+    [Arguments("""{"protocol":"Users","types":[{"type":"record","name":"User","namespace":"bad-name"}]}""", "document.namespace", "$/types/0/namespace")]
+    [Arguments("""{"protocol":"Users","namespace":"com.example","types":[{"type":"record","name":"User","fields":[]},{"type":"error","name":"com.example.User","fields":[]}]}""", "document.duplicate_type", "$/types/1/name")]
+    [Arguments("""{"protocol":"com.example.Users","namespace":"ignored","types":[{"type":"record","name":"User","fields":[]},{"type":"fixed","name":"com.example.User","size":1}]}""", "document.duplicate_type", "$/types/1/name")]
+    public async Task AvroProtocolRejectsMalformedNamedDeclarationsBeforeMessageSelection(
+        string document, string code, string path)
+    {
+        var result = ResolveAvroProtocol(document);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        await Assert.That(result.Diagnostic.Path).IsEqualTo(path);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("""[null]""", "document.parameter", "/request/0")]
+    [Arguments("""["long"]""", "document.parameter", "/request/0")]
+    [Arguments("""[{}]""", "document.parameter_name", "/request/0/name")]
+    [Arguments("""[{"name":true,"type":"long"}]""", "document.parameter_name", "/request/0/name")]
+    [Arguments("""[{"name":"","type":"long"}]""", "document.parameter_name", "/request/0/name")]
+    [Arguments("""[{"name":"bad-name","type":"long"}]""", "document.parameter_name", "/request/0/name")]
+    [Arguments("""[{"name":"x.id","type":"long"}]""", "document.parameter_name", "/request/0/name")]
+    [Arguments("""[{"name":"id"}]""", "document.parameter_type", "/request/0/type")]
+    [Arguments("""[{"name":"id","type":true}]""", "document.parameter_type", "/request/0/type")]
+    [Arguments("""[{"name":"id","type":null}]""", "document.parameter_type", "/request/0/type")]
+    [Arguments("""[{"name":"id","type":"long"},{"name":"id","type":"string"}]""", "document.duplicate_parameter", "/request/1/name")]
+    [Arguments("""[{"name":"id","type":"long","doc":false}]""", "document.doc", "/request/0/doc")]
+    [Arguments("""[{"name":"id","type":"long","order":1}]""", "document.parameter_order", "/request/0/order")]
+    [Arguments("""[{"name":"id","type":"long","order":"Ascending"}]""", "document.parameter_order", "/request/0/order")]
+    [Arguments("""[{"name":"id","type":"long","aliases":"previous"}]""", "document.parameter_aliases", "/request/0/aliases")]
+    [Arguments("""[{"name":"id","type":"long","aliases":["previous",null]}]""", "document.parameter_aliases", "/request/0/aliases")]
+    public async Task AvroRequestsRequireUniqueNamedTypedParameterFields(string request, string code, string path)
+    {
+        var document = """{"protocol":"Users","messages":{"GetUser":{"request":REQUEST,"response":"null"}}}"""
+            .Replace("REQUEST", request, StringComparison.Ordinal);
+        var result = ResolveAvroProtocol(document);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/messages/GetUser" + path);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("ascending")]
+    [Arguments("descending")]
+    [Arguments("ignore")]
+    public async Task AvroRequestSelectionPreservesValidNativeFieldMetadata(string order)
+    {
+        var document = """
+            {"protocol":"com.example.Users","namespace":"ignored-when-qualified","doc":"Protocol",
+             "types":[{"type":"record","name":"a.User","namespace":"ignored-when-qualified","fields":[]},
+                      {"type":"record","name":"b.User","fields":[]},
+                      {"type":"error","name":"Denied","fields":[]},
+                      {"type":"enum","name":"Status","symbols":["Ok"]},
+                      {"type":"fixed","name":"Token","size":16}],
+             "messages":{"GetUser":{"doc":"Message","request":[
+               {"name":"id","type":"long","doc":"Field","default":0,"aliases":["old-name"],"order":"ORDER"},
+               {"name":"Id","type":["null","string"],"default":null},
+               {"name":"_value","type":{"type":"array","items":"a.User"}}
+             ],"response":"null"}}}
+            """.Replace("ORDER", order, StringComparison.Ordinal);
+        var result = ResolveAvroProtocol(document);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Operation.GetProperty("request").GetArrayLength()).IsEqualTo(3);
+        await Assert.That(result.Operation.GetProperty("request")[0].GetProperty("order").GetString()).IsEqualTo(order);
+        await Assert.That(result.Operation.GetProperty("request")[0].GetProperty("aliases")[0].GetString()).IsEqualTo("old-name");
+        await Assert.That(result.Operation.GetProperty("request")[0].GetProperty("default").GetInt32()).IsEqualTo(0);
+        await Assert.That(result.Operation.GetProperty("request")[1].GetProperty("default").ValueKind).IsEqualTo(JsonValueKind.Null);
+        await Assert.That(result.Operation.GetProperty("doc").GetString()).IsEqualTo("Message");
+    }
+
+    [Test]
+    [Arguments("""{"doc":false,"request":[],"response":"null"}""", "document.doc", "$/messages/Other/doc")]
+    [Arguments("""{"request":[{"name":"id"}],"response":"null"}""", "document.parameter_type", "$/messages/Other/request/0/type")]
+    public async Task AvroDeclarationChecksCannotBeBypassedByAnEarlierMatchingMessage(
+        string other, string code, string path)
+    {
+        var document = """{"protocol":"Users","messages":{"GetUser":{"request":[],"response":"null"},"Other":OTHER}}"""
+            .Replace("OTHER", other, StringComparison.Ordinal);
+        var result = ResolveAvroProtocol(document);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        await Assert.That(result.Diagnostic.Path).IsEqualTo(path);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
     [Arguments("""{"type":"record","name":"Users","fields":[]}""", "document.protocol", "$/protocol")]
     [Arguments("""{"protocol":null}""", "document.protocol", "$/protocol")]
     [Arguments("""{"protocol":""}""", "document.protocol", "$/protocol")]
