@@ -2294,7 +2294,10 @@ public static partial class ApiOperationDocumentResolver
             }
             else { found |= implicitKind is not null; }
             var required = reference.TryGetProperty("failWhenMissing", out var missing) && missing.GetBoolean();
-            var wildcard = !reference.TryGetProperty("selector", out var selector) || selector.GetString() == "*";
+            var selectorText = reference.TryGetProperty("selector", out var selector) ? selector.GetString()! : "*";
+            budget.Work(selectorText.Length, path);
+            selectorText = selectorText.Trim(' ', '\t', '\r', '\n');
+            var wildcard = selectorText == "*";
             if (!found && implicitKind is null && rootId.StartsWith("smithy.api#", StringComparison.Ordinal) &&
                 !shapes.TryGetProperty(rootId, out _) && (required || !wildcard))
             {
@@ -2305,9 +2308,38 @@ public static partial class ApiOperationDocumentResolver
                 "A required Smithy idRef trait target is absent from the assembled model.");
             if (found && !wildcard)
             {
-                ValidationContext.Fail(DocumentValidationStatus.Unsupported, path, "smithy.id_ref_selector",
-                    "Non-wildcard selectors on Smithy idRef trait values are not supported.");
+                var kind = member is not null ? "member" : implicitKind ?? target.GetProperty("type").GetString()!;
+                var matches = MatchSmithyTypeSelector(selectorText, kind);
+                if (matches is null)
+                {
+                    ValidationContext.Fail(DocumentValidationStatus.Unsupported, path, "smithy.id_ref_selector",
+                        "This Smithy idRef selector requires unsupported selector evaluation.");
+                }
+                ValidationContext.Require(matches.Value, path, "document.trait_id_ref_selector",
+                    "The Smithy idRef target must match its type selector.");
             }
+        }
+
+        private static bool? MatchSmithyTypeSelector(string selector, string kind)
+        {
+            var simple = IsNumericKind(kind) || kind is "blob" or "boolean" or "document" or "string" or "enum" or "timestamp";
+            var aggregate = kind is "list" or "map" or "structure" or "union";
+            return selector switch
+            {
+                "*" => true,
+                "number" => IsNumericKind(kind),
+                "simpleType" => simple,
+                "aggregateType" => aggregate,
+                "dataType" => simple || aggregate,
+                "serviceType" => kind is "service" or "operation" or "resource",
+                "collection" or "set" => kind == "list",
+                "string" => kind is "string" or "enum",
+                "integer" => kind is "integer" or "intEnum",
+                "blob" or "boolean" or "document" or "byte" or "short" or "long" or "float" or "double" or
+                    "bigDecimal" or "bigInteger" or "timestamp" or "list" or "map" or "structure" or "union" or
+                    "service" or "operation" or "resource" or "member" => selector == kind,
+                _ => null
+            };
         }
 
         private bool MatchesLegacyEnum(string value, JsonElement declaration, string path)

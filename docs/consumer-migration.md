@@ -580,12 +580,18 @@ Checks include nested values and decoded map keys before sparse null values are
 skipped. A reference does not add the identified shape to the schema traversal
 or trigger acquisition, and custom error messages are not emitted.
 
-An omitted selector or exact `*` needs no selector evaluation. Other selectors
-report `Unsupported` when their target exists; an optional absent target does
-not require evaluation. Well-formed relative IDs report `Unsupported` because
-this selector does not perform IDL assembly. Required references to implicit
+An omitted selector or `*` matches every found target. Single type tokens from
+the publisher's selector table also match declared types, including `number`,
+`simpleType`, `aggregateType`, `dataType`, `serviceType` and the `collection`/`set`
+aliases for lists. `string` includes enum specializations and `integer` includes
+intEnum specializations. A member ID matches `member`, not the member's target
+type. Surrounding ASCII whitespace is ignored; names remain case-sensitive.
+A type mismatch is invalid. Other selector expressions report `Unsupported`
+when their target exists; an optional absent target does not require evaluation.
+Well-formed relative IDs report `Unsupported` because this selector does not
+perform IDL assembly. Required references to implicit
 prelude shapes outside the supported prelude table also report `Unsupported`,
-rather than claiming those shapes are absent. Selector syntax and general
+rather than claiming those shapes are absent. General selector syntax and
 evaluation remain unvalidated.
 
 Reached `traitValidators` declarations require trait-definition targets and

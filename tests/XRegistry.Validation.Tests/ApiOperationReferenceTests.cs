@@ -10390,7 +10390,7 @@ public class ApiOperationReferenceTests
     [Test]
     [Arguments("Target", "{}", "smithy.relative_id_ref")]
     [Arguments("Target$value", "{}", "smithy.relative_id_ref")]
-    [Arguments("example#Target", """{"selector":"string"}""", "smithy.id_ref_selector")]
+    [Arguments("example#Target", """{"selector":"string [trait|sensitive]"}""", "smithy.id_ref_selector")]
     [Arguments("smithy.api#String", """{"selector":":is(string)"}""", "smithy.id_ref_selector")]
     [Arguments("smithy.api#required", """{"failWhenMissing":true}""", "smithy.prelude_id_ref")]
     [Arguments("smithy.api#required", """{"selector":"* :test(string)"}""", "smithy.prelude_id_ref")]
@@ -10495,6 +10495,168 @@ public class ApiOperationReferenceTests
         await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_id_ref_missing");
         await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Input/members/value/traits/example#Custom");
         await Assert.That(result.Diagnostic.Detail.Contains("secret-value", StringComparison.Ordinal)).IsFalse();
+    }
+
+    [Test]
+    [Arguments("string", "string", true)]
+    [Arguments("enum", "string", true)]
+    [Arguments("integer", "integer", true)]
+    [Arguments("intEnum", "integer", true)]
+    [Arguments("string", "integer", false)]
+    [Arguments("integer", "string", false)]
+    [Arguments("blob", "blob", true)]
+    [Arguments("boolean", "boolean", true)]
+    [Arguments("document", "document", true)]
+    [Arguments("byte", "byte", true)]
+    [Arguments("short", "short", true)]
+    [Arguments("long", "long", true)]
+    [Arguments("float", "float", true)]
+    [Arguments("double", "double", true)]
+    [Arguments("bigDecimal", "bigDecimal", true)]
+    [Arguments("bigInteger", "bigInteger", true)]
+    [Arguments("timestamp", "timestamp", true)]
+    [Arguments("list", "list", true)]
+    [Arguments("map", "map", true)]
+    [Arguments("structure", "structure", true)]
+    [Arguments("union", "union", true)]
+    [Arguments("service", "service", true)]
+    [Arguments("operation", "operation", true)]
+    [Arguments("resource", "resource", true)]
+    [Arguments("byte", "short", false)]
+    [Arguments("double", "float", false)]
+    [Arguments("list", "map", false)]
+    [Arguments("structure", "union", false)]
+    [Arguments("operation", "service", false)]
+    [Arguments("blob", "string", false)]
+    public async Task SmithyJsonCustomTraitIdRefTypeSelectorsMatchDeclaredTypes(string kind, string selector, bool matches)
+    {
+        var document = SmithyIdRefTraitDocument("example#Target", "{}");
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#idRef"]!["selector"] = selector;
+        document["shapes"]!["example#Target"] = SmithyIdRefTarget(kind);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(matches ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (matches)
+        {
+            await Assert.That(result.Diagnostic).IsNull();
+            await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_id_ref_selector");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/example#Custom");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("byte", "number", true)]
+    [Arguments("intEnum", "number", true)]
+    [Arguments("bigInteger", "number", true)]
+    [Arguments("timestamp", "number", false)]
+    [Arguments("boolean", "number", false)]
+    [Arguments("document", "simpleType", true)]
+    [Arguments("enum", "simpleType", true)]
+    [Arguments("timestamp", "simpleType", true)]
+    [Arguments("map", "simpleType", false)]
+    [Arguments("map", "aggregateType", true)]
+    [Arguments("union", "aggregateType", true)]
+    [Arguments("integer", "aggregateType", false)]
+    [Arguments("enum", "dataType", true)]
+    [Arguments("structure", "dataType", true)]
+    [Arguments("operation", "dataType", false)]
+    [Arguments("operation", "serviceType", true)]
+    [Arguments("service", "serviceType", true)]
+    [Arguments("resource", "serviceType", true)]
+    [Arguments("structure", "serviceType", false)]
+    [Arguments("list", "collection", true)]
+    [Arguments("map", "collection", false)]
+    [Arguments("list", "set", true)]
+    [Arguments("map", "set", false)]
+    [Arguments("operation", "*", true)]
+    public async Task SmithyJsonCustomTraitIdRefTypeSelectorsMatchCategoriesAndCollectionAliases(string kind, string selector, bool matches)
+    {
+        var document = SmithyIdRefTraitDocument("example#Target", "{}");
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#idRef"]!["selector"] = selector;
+        document["shapes"]!["example#Target"] = SmithyIdRefTarget(kind);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(matches ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (matches) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_id_ref_selector");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("member", true)]
+    [Arguments("dataType", false)]
+    [Arguments("simpleType", false)]
+    [Arguments("string", false)]
+    [Arguments("*", true)]
+    public async Task SmithyJsonCustomTraitIdRefTypeSelectorsMatchMemberRatherThanItsTarget(string selector, bool matches)
+    {
+        var document = SmithyIdRefTraitDocument("example#Target$value", "{}");
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#idRef"]!["selector"] = selector;
+        document["shapes"]!["example#Target"] = JsonNode.Parse("""
+            {"type":"structure","members":{"value":{"target":"smithy.api#String"}}}
+            """);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(matches ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (!matches) { await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_id_ref_selector"); }
+        else { await Assert.That(result.Diagnostic).IsNull(); }
+    }
+
+    [Test]
+    [Arguments("String", "string", true)]
+    [Arguments("Integer", "number", true)]
+    [Arguments("Unit", "aggregateType", true)]
+    [Arguments("Unit", "simpleType", false)]
+    [Arguments("Timestamp", "number", false)]
+    public async Task SmithyJsonCustomTraitIdRefTypeSelectorsCheckImplicitPreludeKinds(string name, string selector, bool matches)
+    {
+        var document = SmithyIdRefTraitDocument("smithy.api#" + name, "{}");
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#idRef"]!["selector"] = selector;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(matches ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (!matches) { await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_id_ref_selector"); }
+        else { await Assert.That(result.Diagnostic).IsNull(); }
+    }
+
+    [Test]
+    [Arguments(" \tstring\r\n", true)]
+    [Arguments("\n* ", true)]
+    [Arguments("String", false)]
+    [Arguments("string integer", false)]
+    [Arguments(":is(string)", false)]
+    [Arguments("[trait|required]", false)]
+    [Arguments("member > string", false)]
+    [Arguments("", false)]
+    public async Task SmithyJsonCustomTraitIdRefTypeSelectorsTrimTokenWhitespaceWithoutApproximatingGrammar(string selector, bool supported)
+    {
+        var document = SmithyIdRefTraitDocument("example#Target", "{}");
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#idRef"]!["selector"] = selector;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(supported ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Unsupported);
+        if (!supported)
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("smithy.id_ref_selector");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+        else { await Assert.That(result.Diagnostic).IsNull(); }
+    }
+
+    private static JsonNode SmithyIdRefTarget(string kind)
+    {
+        var target = SmithyCustomNodeDocument(kind, "{}")["shapes"]!["example#Custom"]!.DeepClone();
+        target.AsObject().Remove("traits");
+        if (kind is "enum" or "intEnum")
+        {
+            target["members"] = JsonNode.Parse("""{"VALUE":{"target":"smithy.api#Unit","traits":{"smithy.api#enumValue":1}}}""");
+            if (kind == "enum") { target["members"]!["VALUE"]!["traits"]!["smithy.api#enumValue"] = "value"; }
+        }
+        if (kind == "service") { target["version"] = "1"; }
+        return target;
     }
 
     private static JsonObject SmithyIdRefTraitDocument(string value, string declaration)

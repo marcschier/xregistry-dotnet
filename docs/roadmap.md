@@ -247,10 +247,12 @@ vocabulary/source mapping. It does not supply their implementation.
   optional string/Boolean fields. Custom application values check absolute
   root/member ID syntax and exact-case local presence, with whole-member
   overrides and optional missing targets. References do not trigger schema
-  traversal or acquisition. Relative ID assembly, non-wildcard evaluation on
-  existing targets and required references to unindexed implicit prelude
-  shapes report `Unsupported`. Selector syntax and general evaluation remain
-  unvalidated.
+  traversal or acquisition. Single type selectors match concrete types and
+  documented categories, including enum/intEnum specializations and list aliases.
+  Member IDs match the member shape rather than its target. Relative ID assembly,
+  compound selectors on existing targets and required references to unindexed
+  implicit prelude shapes report `Unsupported`. General selector syntax and
+  evaluation remain unvalidated.
   `traitValidators` checks trait-definition targets, nonempty event IDs and rule
   objects with required string selectors, optional string messages and explicit
   recognized severities. Selector syntax/execution and configured validation
