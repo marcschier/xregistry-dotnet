@@ -92,7 +92,7 @@ public sealed partial class RegistryEngine
                 var candidate = requestedVersionId ?? submittedVersionId;
                 if (candidate is not null && !StringComparer.Ordinal.Equals(candidate, versionId))
                 {
-                    throw ServerErrors.With("mismatched_id", resource.Key,
+                    throw ServerErrors.With("version-mismatch", resource.Key,
                         "versionid does not match the WoT Document's assigned Version id.",
                         ("singular", "version"), ("invalid_id", candidate), ("expected_id", versionId));
                 }
@@ -193,7 +193,7 @@ public sealed partial class RegistryEngine
 
             if (hasBuild || value.Length > 128)
             {
-                throw ServerErrors.With("invalid_attribute", path,
+                throw ServerErrors.With("invalid-version", path,
                     "A WoT authored Version must be SemVer 2.0.0 without build metadata and fit the Core id limit.",
                     ("name", "versionid"));
             }

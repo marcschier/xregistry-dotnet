@@ -10,5 +10,10 @@
   <ItemGroup>
     <PackageReference Include="TUnit" />
     <ProjectReference Include="..\..\src\XRegistry.Models\XRegistry.Models.csproj" />
+    <Compile Include="..\Conformance\Vectors\WotResolution\WotResolutionVectors.cs"
+             Link="WotResolutionVectors.cs" />
+    <Content Include="..\Conformance\Vectors\WotResolution\vectors.json"
+             Link="Conformance\Vectors\WotResolution\vectors.json"
+             CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

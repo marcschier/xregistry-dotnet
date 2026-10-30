@@ -1,0 +1,20 @@
+WoT Resolution Vectors Provenance
+=================================
+
+The `vectors.json` file in this directory is copied byte-for-byte from
+`xregistry/spec` at immutable commit
+`811de7d20711dd3edc8c676ae634adebee235188`.
+
+- Source path: `workingdrafts/models/wot/tests/resolution/vectors.json`
+- Source URL: `https://raw.githubusercontent.com/xregistry/spec/811de7d20711dd3edc8c676ae634adebee235188/workingdrafts/models/wot/tests/resolution/vectors.json`
+- Fixture size: 36,031 bytes
+- Fixture SHA-256: `115f7fa97b2aa33fbae2441ff4c672153512a18cf99c695460d238437d6c8f0c`
+- Applicable license: Apache License 2.0, retained as `LICENSE`
+- License source path: `LICENSE` at the same upstream commit
+- License source URL: `https://raw.githubusercontent.com/xregistry/spec/811de7d20711dd3edc8c676ae634adebee235188/LICENSE`
+- Retained license SHA-256: `c07c2bf22d1b6eadecdbc008b0693c9a876f85c1485c375ff57301085ffc8db9`
+- NOTICE: The same upstream commit has no root `NOTICE` file (the pinned raw URL returns HTTP 404).
+
+Copyright and attribution remain with the xregistry/spec contributors. The
+upstream Apache-2.0 license is retained without applying this repository's
+MIT source-file header to the canonical JSON.

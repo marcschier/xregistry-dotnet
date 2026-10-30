@@ -349,4 +349,51 @@ public class WotVersionResolverTests
             referencingThingDescriptionModelVersion, thingModelTypeLinkCount,
             allThingModelTypeLinksHaveMinimumVersion, versionIdPin, digestPin, allowPrerelease,
             isDocumentLocal, containingRevision);
+
+    [Test]
+    [Arguments("001-floor-met")]
+    [Arguments("002-floor-unmet")]
+    [Arguments("004-digest-pin")]
+    [Arguments("005-digest-pin-mismatch")]
+    [Arguments("008-sticky-above-floor")]
+    [Arguments("009-prerelease-excluded")]
+    [Arguments("013-implicit-type-floor")]
+    [Arguments("015-multiple-types-partly-specified")]
+    [Arguments("017-deprecated-successor")]
+    [Arguments("020-generated-floor-rejected")]
+    [Arguments("024-not-found")]
+    [Arguments("026-pin-overrides-floor-and-sticky")]
+    [Arguments("027-generated-opt-in")]
+    [Arguments("043-single-type-greater-floor-sticky")]
+    [Arguments("046-multiple-types-greater-model-floor")]
+    [Arguments("049-pin-bypasses-type-floor-derivation")]
+    [Arguments("050-td-caret-within-major")]
+    [Arguments("052-td-unfloored-crosses-majors")]
+    [Arguments("055-td-prerelease-floor")]
+    [Arguments("057-td-subthing-floor")]
+    [Arguments("063-tm-minversion-on-td-reference-invalid-floor")]
+    [Arguments("064-local-tm-ref-uses-containing-revision")]
+    [Arguments("065-local-tm-ref-below-floor")]
+    [Arguments("066-local-td-ref-next-major")]
+    [Arguments("067-digest-pin-duplicate-highest-version")]
+    [Arguments("068-local-tm-ref-missing-authored-version")]
+    [Arguments("069-local-tm-ref-invalid-authored-version")]
+    public async Task CanonicalSelectionVector(string vectorId)
+    {
+        var vector = XRegistry.WotResolution.Testing.WotResolutionVectors.Selection(vectorId);
+        if (vector.ExpectedError is { } expectedError)
+        {
+            var failure = await Assert.That(() =>
+                    WotVersionResolver.Resolve(vector.Resource, vector.Request))
+                .Throws<RegistryException>()
+                ?? throw new InvalidOperationException($"Vector '{vectorId}' expected diagnostic '{expectedError}'.");
+            await Assert.That(failure.Diagnostic.Code).IsEqualTo(expectedError);
+            return;
+        }
+
+        var result = WotVersionResolver.Resolve(vector.Resource, vector.Request);
+        await Assert.That(result.WotId).IsEqualTo(vector.ExpectedResult.GetProperty("wotid").GetString());
+        await Assert.That(result.VersionId).IsEqualTo(vector.ExpectedResult.GetProperty("versionid").GetString());
+        await Assert.That(result.ContentDigest).IsEqualTo(vector.ExpectedResult.GetProperty("contentdigest").GetString());
+    }
 }

@@ -113,8 +113,8 @@ public class WotVersionAssignmentContractTests
             fixture.ResourcePath("thingdescription", "build"), buildMetadata, "{}"))
             .Throws<RegistryException>() ?? throw new InvalidOperationException("Expected build metadata to be rejected.");
 
-        await Assert.That(mismatch.Diagnostic.Code).IsEqualTo("mismatched_id");
-        await Assert.That(invalid.Diagnostic.Code).IsEqualTo("invalid_attribute");
+        await Assert.That(mismatch.Diagnostic.Code).IsEqualTo("version-mismatch");
+        await Assert.That(invalid.Diagnostic.Code).IsEqualTo("invalid-version");
     }
 
     [Test]
@@ -200,5 +200,107 @@ public class WotVersionAssignmentContractTests
             return RegistryPath.ForResource(target.GroupPlural, RegistryId.Parse("group"), target.ResourcePlural,
                 RegistryId.Parse(resourceId));
         }
+    }
+
+    [Test]
+    [Arguments("012-late-patch-default")]
+    [Arguments("019-generated-skip-occupied")]
+    [Arguments("036-publish-authored-assignment")]
+    [Arguments("058-td-publish-authored-assignment")]
+    [Arguments("060-td-publish-version-mismatch")]
+    [Arguments("061-td-publish-build-metadata")]
+    public async Task CanonicalAssignmentVector(string vectorId)
+    {
+        var vector = XRegistry.WotResolution.Testing.WotResolutionVectors.Assignment(vectorId);
+        var fixture = CreateWotFixture();
+        var resourcePath = fixture.ResourcePath(vector.ResourceKind, "canonical-wot");
+        await SeedCanonicalRegistryAsync(fixture.Engine, resourcePath, vector);
+        var metadataPath = RegistryPath.Parse(resourcePath.EscapedPath + "/meta");
+        var initialMetadata = await fixture.Engine.ExecuteAsync(new(RegistryAction.Read, metadataPath), Reader());
+        await Assert.That(initialMetadata.Metadata!.RootElement.GetProperty("defaultversionid").GetString())
+            .IsEqualTo(vector.Registry.GetProperty("defaultversionid").GetString());
+        await Assert.That(initialMetadata.Metadata.RootElement.GetProperty("defaultversionsticky").GetBoolean())
+            .IsEqualTo(vector.Registry.GetProperty("defaultversionsticky").GetBoolean());
+
+        var document = XRegistry.WotResolution.Testing.WotResolutionVectors.AssignmentDocument(vector);
+        var requestedVersionId = vector.Publish.TryGetProperty("versionid", out var versionIdElement)
+            ? versionIdElement.GetString()
+            : null;
+        var action = requestedVersionId is null ? RegistryAction.Post : RegistryAction.Replace;
+        var path = requestedVersionId is null ? resourcePath : VersionPath(resourcePath, requestedVersionId);
+
+        if (vector.Expected.TryGetProperty("error", out var expectedError))
+        {
+            var failure = await Assert.That(async () =>
+                    await ExecuteDocumentAsync(fixture.Engine, action, path, document, "{}"))
+                .Throws<RegistryException>()
+                ?? throw new InvalidOperationException(
+                    $"Vector '{vectorId}' expected diagnostic '{expectedError.GetString()}'.");
+            await Assert.That(failure.Diagnostic.Code).IsEqualTo(expectedError.GetString());
+            var unchangedMetadata = await fixture.Engine.ExecuteAsync(
+                new(RegistryAction.Read, metadataPath), Reader());
+            await Assert.That(unchangedMetadata.Metadata!.RootElement.GetRawText())
+                .IsEqualTo(initialMetadata.Metadata.RootElement.GetRawText());
+            return;
+        }
+
+        var assigned = vector.Expected.GetProperty("assigned");
+        var expectedVersion = assigned.GetProperty("versionid").GetString()!;
+        var expectedOrigin = assigned.GetProperty("versionorigin").GetString()!;
+        var expectedDefaultVersion = assigned.GetProperty("defaultversionid").GetString()!;
+        var result = await ExecuteDocumentAsync(fixture.Engine, action, path, document, "{}");
+        var expectedVersionPath = VersionPath(resourcePath, expectedVersion);
+        await Assert.That(result.Path.EscapedPath).IsEqualTo(expectedVersionPath.EscapedPath);
+        await AssertStoredAssignmentAsync(fixture.Engine, resourcePath, expectedVersion, expectedOrigin,
+            vector.WotId, document);
+
+        var resourceMetadata = await fixture.Engine.ExecuteAsync(new(RegistryAction.Read,
+            RegistryPath.Parse(resourcePath.EscapedPath + "/meta")), Reader());
+        await Assert.That(resourceMetadata.Metadata!.RootElement
+            .GetProperty("defaultversionid").GetString()).IsEqualTo(expectedDefaultVersion);
+    }
+
+    private static async Task SeedCanonicalRegistryAsync(RegistryEngine engine, RegistryPath resourcePath,
+        XRegistry.WotResolution.Testing.CanonicalWotAssignment vector)
+    {
+        var versions = vector.Registry.GetProperty("versions").EnumerateArray().ToArray();
+        if (versions.Length == 0)
+        {
+            throw new InvalidDataException("A canonical assignment vector must seed at least one version.");
+        }
+
+        if (StringComparer.Ordinal.Equals(vector.Id, "019-generated-skip-occupied"))
+        {
+            var authoredGeneratedSlot = versions.Single(version =>
+                version.GetProperty("versionid").GetString() == "0.0.0-1");
+            var stableVersion = versions.Single(version =>
+                version.GetProperty("versionid").GetString() == "1.1.0");
+            var generatedThirdSlot = versions.Single(version =>
+                version.GetProperty("versionid").GetString() == "0.0.0-3");
+
+            await SeedCanonicalVersionAsync(engine, resourcePath, vector.WotId, authoredGeneratedSlot, first: true);
+            await SeedCanonicalVersionAsync(engine, resourcePath, vector.WotId, stableVersion, first: false);
+
+            // Fill the lower generated slot so the public assignment path can create the canonical generated 0.0.0-3.
+            await ExecuteDocumentAsync(engine, RegistryAction.Post, resourcePath,
+                XRegistry.WotResolution.Testing.WotResolutionVectors.Document(vector.WotId, default), "{}");
+            await SeedCanonicalVersionAsync(engine, resourcePath, vector.WotId, generatedThirdSlot, first: false);
+            await engine.ExecuteAsync(new(RegistryAction.Delete, VersionPath(resourcePath, "0.0.0-2")), Writer());
+            return;
+        }
+
+        for (var index = 0; index < versions.Length; index++)
+        {
+            await SeedCanonicalVersionAsync(engine, resourcePath, vector.WotId, versions[index], first: index == 0);
+        }
+    }
+
+    private static async Task SeedCanonicalVersionAsync(RegistryEngine engine, RegistryPath resourcePath,
+        string wotId, System.Text.Json.JsonElement version, bool first)
+    {
+        var sourceDocument = XRegistry.WotResolution.Testing.WotResolutionVectors.Document(wotId, version);
+        var versionId = version.GetProperty("versionid").GetString()!;
+        var path = first ? resourcePath : VersionPath(resourcePath, versionId);
+        await ExecuteDocumentAsync(engine, RegistryAction.Replace, path, sourceDocument, "{}");
     }
 }

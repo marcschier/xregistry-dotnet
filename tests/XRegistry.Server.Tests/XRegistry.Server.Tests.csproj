@@ -12,6 +12,11 @@
     <ProjectReference Include="..\..\src\XRegistry.Server\XRegistry.Server.csproj" />
     <ProjectReference Include="..\..\src\XRegistry.Models\XRegistry.Models.csproj" />
     <ProjectReference Include="..\..\src\XRegistry.Validation\XRegistry.Validation.csproj" />
+    <Compile Include="..\Conformance\Vectors\WotResolution\WotResolutionVectors.cs"
+             Link="WotResolutionVectors.cs" />
+    <Content Include="..\Conformance\Vectors\WotResolution\vectors.json"
+             Link="Conformance\Vectors\WotResolution\vectors.json"
+             CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\samples\XRegistry.FileServer\models\xrproxy-model.json"
              Link="Documentation\xrproxy-model.json"
              CopyToOutputDirectory="PreserveNewest" />

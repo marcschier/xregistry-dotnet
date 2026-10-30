@@ -14,6 +14,31 @@ namespace XRegistry.AspNetCore.Tests;
 public class RegistryErrorContractHttpTests
 {
     [Test]
+    [Arguments("1.2.3", "/versions/1.2.4", "mismatched_id")]
+    [Arguments("1.2.3+build.7", "", "invalid_attribute")]
+    public async Task WotAssignmentDiagnosticsUseCoreHttpErrors(string authoredVersion, string suffix, string expectedCode)
+    {
+        var model = XRegistry.Models.BuiltInRegistryModels.Compile(XRegistry.Models.RegistryModelKind.Wot);
+        var target = model.Groups.Values.SelectMany(group => group.Resources.Values
+            .Select(resource => (Group: group, Resource: resource)))
+            .Single(item => item.Resource.Singular == "thingdescription");
+        var path = $"/{target.Group.Plural}/group/{target.Resource.Plural}/rejected";
+        await using var host = await HttpTests.TestHost.StartAsync(model: model);
+        using var content = new StringContent(
+            $$$"""{"id":"urn:example:td","version":{"instance":"{{{authoredVersion}}}"}}""",
+            Encoding.UTF8, "application/json");
+        using var response = await host.Client.PutAsync(path + suffix, content);
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.BadRequest);
+        var problem = RegistryJson.Parse(await response.Content.ReadAsByteArrayAsync()).RootElement;
+        await Assert.That(problem.GetProperty("code").GetString()).IsEqualTo(expectedCode);
+        await Assert.That(problem.GetProperty("type").GetString())
+            .IsEqualTo("https://github.com/xregistry/spec/blob/main/core/spec.md#" + expectedCode);
+        using var missing = await host.Client.GetAsync(path + "$details");
+        await Assert.That(missing.StatusCode).IsEqualTo(HttpStatusCode.NotFound);
+    }
+
+    [Test]
     [Arguments("DELETE", "/", null, 405, "action_not_supported", "spec.md",
         "The specified action (DELETE) is not supported for: /.", "/", """{"action":"DELETE"}""")]
     [Arguments("TRACE", "/", null, 405, "action_not_supported", "spec.md",
