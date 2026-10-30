@@ -176,6 +176,10 @@ public static partial class ApiOperationDocumentResolver
             "smithy.api#httpPrefixHeaders" or "smithy.api#httpPayload" or
             "smithy.api#httpQueryParams" or "smithy.api#httpResponseCode";
 
+    private static bool IsSmithyAuthenticationScheme(string id) =>
+        id is "smithy.api#httpBasicAuth" or "smithy.api#httpDigestAuth" or
+            "smithy.api#httpBearerAuth" or "smithy.api#httpApiKeyAuth";
+
     private sealed class SmithyClosure(JsonElement shapes, ValidationContext budget)
     {
         private readonly Dictionary<string, JsonElement> _visited = new(StringComparer.Ordinal);
@@ -1336,6 +1340,9 @@ public static partial class ApiOperationDocumentResolver
                 {
                     "smithy.api#unitType" => memberContainer is null && kind == "structure" &&
                         sourceId == "smithy.api#Unit",
+                    "smithy.api#auth" => memberContainer is null && kind is "service" or "operation",
+                    "smithy.api#authDefinition" => memberContainer is null && kind == "structure" &&
+                        traits.TryGetProperty("smithy.api#trait", out _),
                     "smithy.api#retryable" => memberContainer is null && kind == "structure" &&
                         traits.TryGetProperty("smithy.api#error", out _),
                     "smithy.api#httpError" => memberContainer is null && kind == "structure" &&
@@ -1410,6 +1417,66 @@ public static partial class ApiOperationDocumentResolver
                     "Conflicting Smithy prelude traits cannot be applied to the same shape.");
                 switch (trait.Name)
                 {
+                    case "smithy.api#auth":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Array, traitPath,
+                            "document.trait_value", "The Smithy auth trait requires an ordered array of authentication scheme IDs.");
+                        var schemes = new HashSet<string>(StringComparer.Ordinal);
+                        var schemeIndex = 0;
+                        foreach (var scheme in trait.Value.EnumerateArray())
+                        {
+                            var schemePath = traitPath + "/" +
+                                (schemeIndex++).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                            budget.Work(path: schemePath);
+                            ValidationContext.Require(scheme.ValueKind == JsonValueKind.String &&
+                                IsSmithyShapeId(scheme.GetString()!) && schemes.Add(scheme.GetString()!),
+                                schemePath, "document.auth_scheme",
+                                "Smithy authentication scheme IDs must be absolute root IDs without duplicates.");
+                            var schemeId = scheme.GetString()!;
+                            if (shapes.TryGetProperty(schemeId, out var schemeShape))
+                            {
+                                ValidationContext.Require(TryTrait(schemeShape, "smithy.api#trait", out _) &&
+                                    TryTrait(schemeShape, "smithy.api#authDefinition", out _),
+                                    schemePath, "document.auth_scheme",
+                                    "An explicit authentication scheme must be a trait marked with authDefinition.");
+                                Visit(schemeId, depth + 1, traitDefinition: true, sourceId: sourceId,
+                                    referencePath: schemePath);
+                            }
+                            else if (!IsSmithyAuthenticationScheme(schemeId))
+                            {
+                                Visit(schemeId, depth + 1, traitDefinition: true, sourceId: sourceId,
+                                    referencePath: schemePath);
+                            }
+                        }
+                        continue;
+                    case "smithy.api#authDefinition":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
+                            "document.trait_value", "The Smithy authDefinition trait requires an object value.");
+                        if (trait.Value.TryGetProperty("traits", out var requiredTraits))
+                        {
+                            ValidationContext.Require(requiredTraits.ValueKind == JsonValueKind.Array,
+                                traitPath + "/traits", "document.trait_value",
+                                "Smithy authentication required traits must be an array of trait shape IDs.");
+                            var requiredIndex = 0;
+                            foreach (var requiredTrait in requiredTraits.EnumerateArray())
+                            {
+                                var requiredPath = traitPath + "/traits/" +
+                                    (requiredIndex++).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                                budget.Work(path: requiredPath);
+                                ValidationContext.Require(requiredTrait.ValueKind == JsonValueKind.String &&
+                                    IsSmithyShapeId(requiredTrait.GetString()!), requiredPath,
+                                    "document.auth_required_trait", "An authentication dependency requires an absolute trait shape ID.");
+                                var requiredId = requiredTrait.GetString()!;
+                                if (shapes.TryGetProperty(requiredId, out var requiredShape))
+                                {
+                                    ValidationContext.Require(TryTrait(requiredShape, "smithy.api#trait", out _),
+                                        requiredPath, "document.auth_required_trait",
+                                        "An authentication dependency must refer to a trait definition.");
+                                }
+                                Visit(requiredId, depth + 1, traitDefinition: true, sourceId: sourceId,
+                                    referencePath: requiredPath);
+                            }
+                        }
+                        continue;
                     case "smithy.api#unstable":
                         ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
                             "document.trait_value", "The Smithy unstable trait requires an object value.");

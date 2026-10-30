@@ -499,6 +499,23 @@ including structures outside an event stream, without serializing events or
 choosing a framing protocol. Literal example content and unrelated event
 definitions remain outside the selected closure.
 
+The `auth` trait requires an ordered array of unique absolute scheme IDs on
+operations. Empty arrays remain valid, and selection preserves authored order.
+The four implicit HTTP schemes (`httpBasicAuth`, `httpDigestAuth`,
+`httpBearerAuth` and `httpApiKeyAuth`) are recognized without supplied
+definitions. Explicit scheme definitions must carry both `trait` and
+`authDefinition`; the latter requires a structure trait with an object value.
+Its optional `traits` array identifies required trait definitions. Those
+definitions and their schema dependencies are traversed with the existing
+private-access checks. Repeated entries in this dependency array are not
+prohibited.
+
+Missing scheme or required-trait definitions remain unresolved without network
+acquisition. This includes implicit required traits not yet represented by the
+resolver's prelude registry. Selection does not establish that schemes are
+applied to every enclosing service, compute inherited authentication priorities
+or validate complete custom trait application schemas.
+
 The operation-only `optionalAuth` annotation requires an object value.
 Selection preserves that declaration without copying enclosing-service schemes,
 inferring an empty `auth` list or changing authentication behavior. Supporting

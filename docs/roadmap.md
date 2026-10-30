@@ -209,6 +209,14 @@ vocabulary/source mapping. It does not supply their implementation.
   `longPoll` requires an operation object annotation with a positive signed
   32-bit integer `timeoutMillis`, checked exactly without rounding. The check
   does not execute polling or modify request timeout configuration.
+  `auth` checks ordered unique absolute scheme IDs, including empty lists and
+  the four implicit HTTP authentication schemes. Explicit schemes must be
+  structure traits marked with object-valued `authDefinition`; required trait
+  IDs are traversed with schema dependencies and private-access checks, without
+  requiring that dependency list to be unique. Missing definitions remain
+  unresolved without acquisition. Complete implicit required-trait coverage,
+  enclosing-service scheme application/inheritance and custom application
+  schemas remain unvalidated.
   `optionalAuth` checks operation applicability and object annotations without
   copying service schemes, inferring disabled authentication or changing runtime
   enforcement. Effective service authentication remains unvalidated.

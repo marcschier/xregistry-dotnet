@@ -8669,6 +8669,271 @@ public class ApiOperationReferenceTests
         await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
     }
 
+    [Test]
+    [Arguments("[]")]
+    [Arguments("""["smithy.api#httpBasicAuth"]""")]
+    [Arguments("""["smithy.api#httpDigestAuth","smithy.api#httpBearerAuth","smithy.api#httpApiKeyAuth","smithy.api#httpBasicAuth"]""")]
+    [Arguments("""["example#Scheme"]""")]
+    [Arguments("""["example#Scheme","smithy.api#httpBasicAuth"]""")]
+    public async Task SmithyJsonAuthPreservesEmptyAndOrderedSchemeListsWithoutServiceInheritance(string schemes)
+    {
+        var document = SmithyAuthenticationDocument();
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#auth"] = JsonNode.Parse(schemes);
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#optionalAuth"] = new JsonObject();
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
+    [Test]
+    [Arguments("null", "document.trait_value")]
+    [Arguments("{}", "document.trait_value")]
+    [Arguments("true", "document.trait_value")]
+    [Arguments("\"smithy.api#httpBasicAuth\"", "document.trait_value")]
+    [Arguments("[null]", "document.auth_scheme")]
+    [Arguments("[42]", "document.auth_scheme")]
+    [Arguments("[{}]", "document.auth_scheme")]
+    [Arguments("""[""]""", "document.auth_scheme")]
+    [Arguments("""["relative"]""", "document.auth_scheme")]
+    [Arguments("""["example#Scheme$member"]""", "document.auth_scheme")]
+    [Arguments("""["example#Scheme","example#Scheme"]""", "document.auth_scheme")]
+    [Arguments("""["smithy.api#httpBasicAuth","smithy.api#httpBasicAuth"]""", "document.auth_scheme")]
+    public async Task SmithyJsonAuthRejectsMalformedAndDuplicateSchemeDeclarations(string schemes, string diagnostic)
+    {
+        var document = SmithyAuthenticationDocument();
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#auth"] = JsonNode.Parse(schemes);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(diagnostic);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("structure")]
+    [Arguments("member")]
+    public async Task SmithyJsonAuthRejectsDataTargets(string location)
+    {
+        var document = SmithyAuthenticationDocument();
+        var target = location == "structure" ? document["shapes"]!["example#Input"]! :
+            document["shapes"]!["example#Input"]!["members"]!["id"]!;
+        target["traits"] ??= new JsonObject();
+        target["traits"]!["smithy.api#auth"] = new JsonArray();
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("trait")]
+    [Arguments("authDefinition")]
+    [Arguments("both")]
+    public async Task SmithyJsonAuthRequiresExplicitSchemeDefinitionsToCarryBothMarkers(string missing)
+    {
+        var document = SmithyAuthenticationDocument();
+        var markers = document["shapes"]!["example#Scheme"]!["traits"]!.AsObject();
+        if (missing is "trait" or "both") { markers.Remove("smithy.api#trait"); }
+        if (missing is "authDefinition" or "both") { markers.Remove("smithy.api#authDefinition"); }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.auth_scheme");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/smithy.api#auth/0");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("string")]
+    [Arguments("integer")]
+    [Arguments("list")]
+    [Arguments("map")]
+    [Arguments("union")]
+    public async Task SmithyJsonAuthDefinitionRequiresAStructureTrait(string kind)
+    {
+        var document = SmithyAuthenticationDocument();
+        var markers = document["shapes"]!["example#Scheme"]!["traits"]!.DeepClone();
+        document["shapes"]!["example#Scheme"] = SmithyHttpBindingTarget(kind);
+        document["shapes"]!["example#Scheme"]!["traits"] = markers;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Scheme/traits/smithy.api#authDefinition");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("null", "document.trait_value")]
+    [Arguments("[]", "document.trait_value")]
+    [Arguments("true", "document.trait_value")]
+    [Arguments("""{"traits":null}""", "document.trait_value")]
+    [Arguments("""{"traits":{}}""", "document.trait_value")]
+    [Arguments("""{"traits":[null]}""", "document.auth_required_trait")]
+    [Arguments("""{"traits":["relative"]}""", "document.auth_required_trait")]
+    [Arguments("""{"traits":["example#Dependency$member"]}""", "document.auth_required_trait")]
+    public async Task SmithyJsonAuthDefinitionChecksObjectAndRequiredTraitListValues(string value, string diagnostic)
+    {
+        var document = SmithyAuthenticationDocument();
+        document["shapes"]!["example#Scheme"]!["traits"]!["smithy.api#authDefinition"] = JsonNode.Parse(value);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(diagnostic);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("""{"traits":[]}""")]
+    [Arguments("""{"traits":["example#Dependency"]}""")]
+    [Arguments("""{"traits":["example#Dependency","example#Dependency"]}""")]
+    [Arguments("""{"traits":["example#Scheme"]}""")]
+    public async Task SmithyJsonAuthDefinitionTraversesRequiredTraitsWithoutInventingUniqueness(string value)
+    {
+        var document = SmithyAuthenticationDocument();
+        document["shapes"]!["example#Scheme"]!["traits"]!["smithy.api#authDefinition"] = JsonNode.Parse(value);
+        document["shapes"]!["example#Dependency"] = JsonNode.Parse("""
+            {"type":"string","traits":{"smithy.api#trait":{}}}
+            """);
+        var selected = ResolveSmithy(document.ToJsonString());
+        await Assert.That(selected.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(selected.Diagnostic).IsNull();
+        if (value.Contains("Dependency", StringComparison.Ordinal))
+        {
+            document["shapes"]!["example#Dependency"]!["traits"]!["smithy.api#documentation"] = false;
+            var invalid = ResolveSmithy(document.ToJsonString());
+            await Assert.That(invalid.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+            await Assert.That(invalid.Diagnostic!.Code).IsEqualTo("document.trait_value");
+            await Assert.That(invalid.Diagnostic.Path).IsEqualTo("$/shapes/example#Dependency/traits/smithy.api#documentation");
+        }
+    }
+
+    [Test]
+    public async Task SmithyJsonAuthDefinitionRejectsNonTraitDependencies()
+    {
+        var document = SmithyAuthenticationDocument();
+        document["shapes"]!["example#Scheme"]!["traits"]!["smithy.api#authDefinition"] =
+            JsonNode.Parse("""{"traits":["example#Identifier"]}""");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.auth_required_trait");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Scheme/traits/smithy.api#authDefinition/traits/0");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("scheme")]
+    [Arguments("dependency")]
+    [Arguments("case")]
+    public async Task SmithyJsonAuthReferencesPreserveMissingAndExactCaseSemanticsWithoutAcquisition(string missing)
+    {
+        var document = SmithyAuthenticationDocument();
+        string id;
+        if (missing == "scheme")
+        {
+            id = "example#Scheme";
+            document["shapes"]!.AsObject().Remove(id);
+        }
+        else if (missing == "dependency")
+        {
+            id = "example#Missing";
+            document["shapes"]!["example#Scheme"]!["traits"]!["smithy.api#authDefinition"] =
+                JsonNode.Parse("""{"traits":["example#Missing"]}""");
+        }
+        else
+        {
+            id = "smithy.api#httpbasicauth";
+            document["shapes"]!["example#Get"]!["traits"]!["smithy.api#auth"] =
+                new JsonArray(JsonValue.Create(id));
+        }
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Authentication IDs cannot be acquired."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("dependency.unresolved");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/" + id);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonAuthRetainsPrivateTraitAccessChecks()
+    {
+        var document = SmithyAuthenticationDocument();
+        document["shapes"]!["other#Scheme"] = document["shapes"]!["example#Scheme"]!.DeepClone();
+        document["shapes"]!["other#Scheme"]!["traits"]!["smithy.api#private"] = new JsonObject();
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#auth"] = JsonNode.Parse("""["other#Scheme"]""");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.private_access");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/smithy.api#auth/0");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonAuthIgnoresUnrelatedServiceMembershipAndLiteralExampleMetadata()
+    {
+        var document = SmithyAuthenticationDocument();
+        document["shapes"]!["example#Service"] = JsonNode.Parse("""
+            {"type":"service","version":"1","operations":[{"target":"example#Get"}]}
+            """);
+        document["shapes"]!["example#Unused"] = JsonNode.Parse("""
+            {"type":"operation","traits":{"smithy.api#auth":false}}
+            """);
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#examples"] = JsonNode.Parse("""
+            [{"title":"literal metadata","input":{"smithy.api#auth":["example#Missing"]}}]
+            """);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
+    [Test]
+    public async Task SmithyJsonAuthDoesNotBypassAuthMarkersOnExplicitPreludeSchemeDefinitions()
+    {
+        var document = SmithyAuthenticationDocument();
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#auth"] = JsonNode.Parse("""["smithy.api#httpBasicAuth"]""");
+        document["shapes"]!["smithy.api#httpBasicAuth"] = JsonNode.Parse("""
+            {"type":"structure","traits":{"smithy.api#trait":{"selector":"service"}}}
+            """);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.auth_scheme");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonAuthRequiredTraitsRetainPrivateAccessAndTransitiveSchemaDependencies()
+    {
+        var document = SmithyAuthenticationDocument();
+        document["shapes"]!["example#Scheme"]!["traits"]!["smithy.api#authDefinition"] =
+            JsonNode.Parse("""{"traits":["other#Dependency"]}""");
+        document["shapes"]!["other#Dependency"] = JsonNode.Parse("""
+            {"type":"structure","traits":{"smithy.api#trait":{},"smithy.api#private":{}},
+             "members":{"value":{"target":"other#Missing"}}}
+            """);
+        var privateResult = ResolveSmithy(document.ToJsonString());
+        await Assert.That(privateResult.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(privateResult.Diagnostic!.Code).IsEqualTo("document.private_access");
+        await Assert.That(privateResult.Diagnostic.Path).IsEqualTo("$/shapes/example#Scheme/traits/smithy.api#authDefinition/traits/0");
+        document["shapes"]!["other#Dependency"]!["traits"]!.AsObject().Remove("smithy.api#private");
+        var unresolved = ResolveSmithy(document.ToJsonString());
+        await Assert.That(unresolved.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(unresolved.Diagnostic!.Code).IsEqualTo("dependency.unresolved");
+        await Assert.That(unresolved.Diagnostic.Path).IsEqualTo("$/shapes/other#Missing");
+        await Assert.That(unresolved.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    private static JsonNode SmithyAuthenticationDocument()
+    {
+        var document = SmithyEndpointDocument();
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#auth"] = JsonNode.Parse("""["example#Scheme"]""");
+        document["shapes"]!["example#Scheme"] = JsonNode.Parse("""
+            {"type":"structure","traits":{"smithy.api#trait":{"selector":"service"},"smithy.api#authDefinition":{}}}
+            """);
+        return document;
+    }
+
     private static JsonNode SmithyEndpointDocument()
     {
         var document = SmithyHttpOperationDocument();
