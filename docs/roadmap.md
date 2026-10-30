@@ -301,6 +301,10 @@ vocabulary/source mapping. It does not supply their implementation.
   Unknown functions parse them without evaluation. Named/projected scope
   contexts, right-hand context expressions and projection comparators remain
   unsupported; scans and comparisons consume the shared work budget.
+  Scoped left operands also accept literal text, Booleans and root shape IDs.
+  Quoted numeric text retains exact comparisons and numeric limits; unquoted
+  numeric rendering, empty text, literal property paths and right-hand context
+  expressions remain unsupported.
   Each application is checked independently. Type mismatches are invalid;
   unsupported grammar reports `Unsupported` at the application without changing
   unapplied declaration checks or masking earlier missing schema dependencies.

@@ -531,6 +531,13 @@ parse these assertions without evaluating them. Assertion scans and
 comparisons consume the shared work budget. Named or projected scope contexts,
 right-hand context expressions such as `@{id}` and projection-to-projection
 operators remain unsupported.
+The left operand can also be quoted text, an unquoted Boolean or a root shape
+ID, for example `[@: '10' > 9 && true ?= true]`. These are present text values;
+quoted numeric text uses the same exact numeric comparison and 256-character
+limit as attribute values. Literal text has no property path. Unquoted numeric
+left operands remain unsupported because numeric-to-string rendering is not
+implemented. Empty quoted text and right-hand context expressions remain
+unsupported.
 
 After schema-closure checks, each custom trait application is checked against
 its declared node types. Scalar checks cover Boolean/string values, base64

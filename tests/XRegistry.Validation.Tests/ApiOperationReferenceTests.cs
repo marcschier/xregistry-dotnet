@@ -13862,6 +13862,80 @@ public class ApiOperationReferenceTests
         await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
     }
 
+    [Test]
+    [Arguments("[@: abc = abc]", true)]
+    [Arguments("[@: 'abc' = other,abc]", true)]
+    [Arguments("[@: \"abc\" != abc]", false)]
+    [Arguments("[@: abc ^= a && abc $= c && abc *= b]", true)]
+    [Arguments("[@: abc = ABC i && abc != ABC]", true)]
+    [Arguments("[@: abc = ABC && @{id|name} = Get]", false)]
+    [Arguments("[@: true ?= true && false ?= true]", true)]
+    [Arguments("[@: 'null' ?= false]", false)]
+    [Arguments("[@: '10' > 9 && '10' >= 10 && '10' < 11 && '10' <= 10]", true)]
+    [Arguments("[@: '1e100' > 1e99 && '1e100' < 1e101]", true)]
+    [Arguments("[@: abc > 1]", false)]
+    [Arguments("[@: example#Get = 'example#Get' && @{id|name} = Get]", true)]
+    [Arguments(":not([@: abc = other])", true)]
+    [Arguments(":future([@: abc = abc])", false)]
+    [Arguments(":not(:future([@: '\u00e9' = E i]))", true)]
+    public async Task SmithyJsonScopedLiteralLeftOperandsUseTextPresenceNumericAndBooleanRules(string selector, bool matches)
+    {
+        var document = SmithyCustomNodeDocument("string", "\"value\"");
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!["selector"] = selector;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(matches ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (matches)
+        {
+            await Assert.That(result.Diagnostic).IsNull();
+            await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_selector_target");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("[@: '' = abc]")]
+    [Arguments("[@: 'abc'|name = abc]")]
+    [Arguments("[@: abc]")]
+    [Arguments("[@: 10 = '10']")]
+    [Arguments("[@: -1 > 0]")]
+    [Arguments("[@: abc = abc && '\u00e9' = E i]")]
+    [Arguments("[@: abc = other && '\u00e9' = E i]")]
+    [Arguments("[@: abc = abc && abc = @{id}]")]
+    [Arguments("[@: abc = abc && abc = abc ii]")]
+    [Arguments("[@: abc = abc && 'abc]")]
+    public async Task SmithyJsonScopedLiteralLeftOperandsRejectUnsupportedRenderingAndIncompleteSyntax(string selector)
+    {
+        var document = SmithyCustomNodeDocument("string", "\"value\"");
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!["selector"] = ":is(*," + selector + ")";
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Unsupported);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("smithy.trait_selector");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task SmithyJsonScopedLiteralLeftOperandsRetainNumericLimitsUnlessParsedWithoutEvaluation(bool parseOnly)
+    {
+        var document = SmithyCustomNodeDocument("string", "\"value\"");
+        var selector = "[@: '" + new string('1', 257) + "' > 0]";
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!["selector"] =
+            parseOnly ? ":not(:future(" + selector + "))" : selector;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(parseOnly ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Indeterminate);
+        if (parseOnly) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("limit.number");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
     private static JsonNode SmithyIdRefTarget(string kind)
     {
         var target = SmithyCustomNodeDocument(kind, "{}")["shapes"]!["example#Custom"]!.DeepClone();

@@ -2392,19 +2392,26 @@ public static partial class ApiOperationDocumentResolver
                         do
                         {
                             budget.Work(path: path);
-                            if (scoped)
+                            string? literal = null;
+                            if (scoped && position < text.Length && text[position] != '@')
+                            {
+                                literal = AttributeName();
+                                if (literal is null) { return null; }
+                                SkipWhitespace();
+                            }
+                            else if (scoped)
                             {
                                 if (position == text.Length || text[position++] != '@') { return null; }
                                 SkipWhitespace();
                                 if (position == text.Length || text[position++] != '{') { return null; }
                                 SkipWhitespace();
                             }
-                            var attribute = Identifier();
-                            if (attribute is not ("trait" or "id" or "service")) { return null; }
+                            var attribute = literal is null ? Identifier() : "literal";
+                            if (literal is null && attribute is not ("trait" or "id" or "service")) { return null; }
                             SkipWhitespace();
                             List<(string Name, bool Function)>? properties = null;
                             var projection = false;
-                            while (position < text.Length && text[position] == '|')
+                            while (literal is null && position < text.Length && text[position] == '|')
                             {
                                 position++;
                                 SkipWhitespace();
@@ -2434,7 +2441,7 @@ public static partial class ApiOperationDocumentResolver
                                 (properties ??= []).Add((property, functionProperty));
                                 SkipWhitespace();
                             }
-                            if (scoped)
+                            if (scoped && literal is null)
                             {
                                 if (position == text.Length || text[position++] != '}') { return null; }
                                 SkipWhitespace();
@@ -2530,7 +2537,8 @@ public static partial class ApiOperationDocumentResolver
                                 continue;
                             }
                             List<SmithyAttribute> values = [];
-                            if (attribute == "trait" && shape.TryGetProperty("traits", out var traits))
+                            if (literal is not null) { values.Add(new(SmithyAttributeKind.Text, Text: literal)); }
+                            else if (attribute == "trait" && shape.TryGetProperty("traits", out var traits))
                             {
                                 ValidationContext.Require(traits.ValueKind == JsonValueKind.Object,
                                     path, "document.traits", "Smithy traits must be an object.");
