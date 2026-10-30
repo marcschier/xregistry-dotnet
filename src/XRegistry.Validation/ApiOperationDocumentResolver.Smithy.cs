@@ -2044,12 +2044,14 @@ public static partial class ApiOperationDocumentResolver
                 if (TryTrait(shape, "smithy.api#uniqueItems", out _))
                 {
                     var target = shape.GetProperty("member").GetProperty("target").GetString()!;
-                    for (var current = 1; current < value.GetArrayLength(); current++)
+                    var items = value.EnumerateArray().ToArray();
+                    budget.Work(items.Length, path);
+                    for (var current = 1; current < items.Length; current++)
                     {
                         var itemPath = path + "/" + current.ToString(System.Globalization.CultureInfo.InvariantCulture);
                         for (var previous = 0; previous < current; previous++)
                         {
-                            ValidationContext.Require(!TraitNodeEquals(target, value[previous], value[current], itemPath, depth + 1),
+                            ValidationContext.Require(!TraitNodeEquals(target, items[previous], items[current], itemPath, depth + 1),
                                 itemPath, "document.trait_unique_items",
                                 "A Smithy uniqueItems trait list must not contain equal values.");
                         }
@@ -2145,9 +2147,11 @@ public static partial class ApiOperationDocumentResolver
             {
                 if (left.GetArrayLength() != right.GetArrayLength()) { return false; }
                 var target = shape.GetProperty("member").GetProperty("target").GetString()!;
-                for (var index = 0; index < left.GetArrayLength(); index++)
+                var otherItems = right.EnumerateArray();
+                foreach (var item in left.EnumerateArray())
                 {
-                    if (!TraitNodeEquals(target, left[index], right[index], path, depth + 1)) { return false; }
+                    otherItems.MoveNext();
+                    if (!TraitNodeEquals(target, item, otherItems.Current, path, depth + 1)) { return false; }
                 }
                 return true;
             }
