@@ -11,7 +11,7 @@ NuGet restore with centrally managed package versions, matching native
 toolchains, and the actual published binaries:
 
 ```powershell
-pwsh -NoProfile -File eng\test-model-packages.ps1 -RuntimeIdentifier win-x64
+pwsh -NoProfile -File eng\test-model-packages.ps1 -RuntimeIdentifier win-x64 -ArtifactsRoot D:\temp
 pwsh -NoProfile -File eng\test-client-sample.ps1 -RuntimeIdentifier win-x64
 pwsh -NoProfile -File eng\test-storage-native.ps1 -RuntimeIdentifier win-x64 -Framework net10.0 -DataRoot D:\xregistry-test-data
 pwsh -NoProfile -File eng\test-git-interop.ps1 -RuntimeIdentifier win-x64 -Framework net10.0
@@ -22,6 +22,12 @@ compiler can find `vswhere`. Do not inherit a `vcvars64` Platform setting for
 ordinary managed builds. Linux compilation needs clang and zlib development
 headers. Durable-storage tests require local ext4 rather than an overlay
 filesystem; their CI job provisions a separate per-job ext4 data volume.
+
+The model-package gate accepts an existing absolute `-ArtifactsRoot` parent
+and creates a fresh child for its feed, consumers and cache. Use a short path
+on Windows: the SDK's runtime-copy step can report a present file as missing
+when its cache path reaches the 260-character Win32 boundary. The default
+remains `artifacts\package-smoke`; selecting a parent does not reuse an old feed.
 
 NuGet restore is lockfile-free. Native/RID and portable restores use isolated
 project output and package-cache locations where the qualification scripts

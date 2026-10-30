@@ -106,15 +106,16 @@ class EmbeddingWorkRootTests(unittest.TestCase):
             missing = root / "missing"
             file = root / "not-a-directory"
             file.write_text("caller-owned", encoding="utf-8")
-            gate = ROOT / "eng" / "test-embedding-packages.ps1"
+            gates = [ROOT / "eng" / name for name in ("test-embedding-packages.ps1", "test-model-packages.ps1")]
             result = self.run_powershell(
-                f"$failures=0; foreach ($path in @({quote(missing)},'relative-artifacts',{quote(file)})) {{ "
-                f"try {{ & {quote(gate)} -ArtifactsRoot $path | Out-Null }} "
+                f"$failures=0; foreach ($gate in @({','.join(quote(gate) for gate in gates)})) {{ "
+                f"foreach ($path in @({quote(missing)},'relative-artifacts',{quote(file)})) {{ "
+                "try { & $gate -ArtifactsRoot $path | Out-Null } "
                 "catch [System.Management.Automation.ParameterBindingException] { "
-                "if ($_.Exception.Message -notmatch 'ArtifactsRoot') { throw }; $failures++ } }; "
+                "if ($_.Exception.Message -notmatch 'ArtifactsRoot') { throw }; $failures++ } } }; "
                 "@{failures=$failures} | ConvertTo-Json -Compress"
             )
-            self.assertEqual(3, result["failures"])
+            self.assertEqual(6, result["failures"])
             self.assertFalse(missing.exists())
             self.assertEqual("caller-owned", file.read_text(encoding="utf-8"))
             self.assertEqual(["not-a-directory"], [path.name for path in root.iterdir()])

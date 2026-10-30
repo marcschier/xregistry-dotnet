@@ -133,6 +133,13 @@ A packaged draft model is an implementation input, not a released requirement
 or conformance result. Its API validation and operation behavior still require
 separate implementation and tests.
 
+Retained draft sources and packaged model resources disable Git text conversion.
+Their pinned hashes cover exact upstream bytes, including CRLF line endings
+where present. Tooling checks the retained files' Git attributes and staged blob
+hashes as well as their worktree bytes, so a locally passing copy cannot hide
+normalization in a fresh checkout. Do not change provenance hashes to accommodate
+line-ending conversion.
+
 ## Review workflow
 
 `generate` extracts uppercase normative keywords from prose blocks and table

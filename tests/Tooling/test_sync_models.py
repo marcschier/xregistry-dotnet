@@ -6,6 +6,7 @@ from __future__ import annotations
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -19,6 +20,42 @@ SPEC.loader.exec_module(tool)
 
 
 class ModelResourceSynchronizationTests(unittest.TestCase):
+    def test_retained_draft_sources_disable_git_text_conversion(self) -> None:
+        manifest = json.loads((ROOT / tool.DRAFT_MODELS).read_text(encoding="utf-8"))
+        for entry in manifest["models"].values():
+            path = entry["file"]
+            with self.subTest(path=path):
+                result = subprocess.run(
+                    ["git", "check-attr", "text", "--", path], cwd=ROOT,
+                    capture_output=True, text=True, check=True, timeout=10,
+                )
+                self.assertEqual(f"{path}: text: unset", result.stdout.strip())
+
+    def test_staged_draft_model_bytes_match_the_pinned_hashes(self) -> None:
+        manifest = json.loads((ROOT / tool.DRAFT_MODELS).read_text(encoding="utf-8"))
+        for entry in manifest["models"].values():
+            with self.subTest(path=entry["file"]):
+                result = subprocess.run(
+                    ["git", "show", ":" + entry["file"]], cwd=ROOT,
+                    capture_output=True, check=True, timeout=10,
+                )
+                self.assertEqual(entry["sha256"], tool.source_tool.sha256(result.stdout))
+
+    def test_durable_http_probe_requires_every_scoped_model_group(self) -> None:
+        spec = importlib.util.spec_from_file_location("file_server_probe", ROOT / "eng" / "verify_file_server.py")
+        assert spec is not None and spec.loader is not None
+        probe = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(probe)
+        expected = set()
+        for path in (ROOT / "src" / "XRegistry.Models" / "Resources").glob("*.json"):
+            model = json.loads(path.read_text(encoding="utf-8"))
+            expected.update(group for group in model.get("groups", {}) if not group.startswith("$"))
+        self.assertIn("apigroups", expected)
+        self.assertIn("publications", expected)
+        self.assertIn("thingmodelgroups", expected)
+        self.assertIn("thingdescriptiongroups", expected)
+        self.assertEqual(expected, probe.GROUPS)
+
     def setUp(self) -> None:
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)

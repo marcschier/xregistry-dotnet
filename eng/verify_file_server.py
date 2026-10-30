@@ -21,7 +21,10 @@ from urllib.parse import urlsplit
 
 MODEL = {"groups": {"dirs": {"singular": "dir", "resources": {"files": {"singular": "file", "maxversions": 2}}}}}
 BINARY = bytes.fromhex("00FF7F0D0A41")
-GROUPS = {"categories", "endpoints", "messagegroups", "schemagroups", "usdassetgroups", "usdschemaplugingroups"}
+GROUPS = {
+    "apigroups", "categories", "endpoints", "messagegroups", "publications", "schemagroups",
+    "thingdescriptiongroups", "thingmodelgroups", "usdassetgroups", "usdschemaplugingroups",
+}
 
 
 def require(condition: bool, message: str) -> None:

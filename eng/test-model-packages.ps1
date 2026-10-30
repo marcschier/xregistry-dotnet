@@ -4,7 +4,9 @@
 [CmdletBinding()]
 param(
     [ValidateSet('win-x64', 'win-arm64', 'linux-x64', 'linux-arm64')]
-    [string]$RuntimeIdentifier
+    [string]$RuntimeIdentifier,
+    [ValidateScript({ [IO.Path]::IsPathFullyQualified($_) -and (Test-Path -LiteralPath $_ -PathType Container) })]
+    [string]$ArtifactsRoot
 )
 
 $ErrorActionPreference = 'Stop'
@@ -16,7 +18,13 @@ if ($RuntimeIdentifier -ne $hostRuntime) {
     throw 'This qualification probe must execute on the requested native architecture, not cross-compile only.'
 }
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$run = Join-Path $root ('artifacts\package-smoke\' + [Guid]::NewGuid().ToString('N'))
+$artifactDirectory = if ($PSBoundParameters.ContainsKey('ArtifactsRoot')) {
+    [IO.Path]::GetFullPath($ArtifactsRoot)
+}
+else {
+    Join-Path $root 'artifacts\package-smoke'
+}
+$run = Join-Path $artifactDirectory ([Guid]::NewGuid().ToString('N'))
 $feed = Join-Path $run 'feed'
 $consumer = Join-Path $run 'consumer'
 $cache = Join-Path $run 'cache'
