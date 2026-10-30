@@ -299,12 +299,18 @@ vocabulary/source mapping. It does not supply their implementation.
   Each assertion retains the ordinary presence, numeric, string and ASCII `i`
   rules, and later assertions are checked even after a false result.
   Unknown functions parse them without evaluation. Named/projected scope
-  contexts, right-hand context expressions and projection comparators remain
+  contexts and projection set comparators remain
   unsupported; scans and comparisons consume the shared work budget.
   Scoped left operands also accept literal text, Booleans and root shape IDs.
   Quoted numeric text retains exact comparisons and numeric limits; unquoted
-  numeric rendering, empty text, literal property paths and right-hand context
-  expressions remain unsupported.
+  numeric rendering, empty text and literal property paths remain unsupported.
+  String/numeric comparisons accept right-hand context paths mixed with literal
+  alternatives. Scalar and projected values use any-pair comparisons, including
+  `!=`; absent values produce no pairs. Both sides share attribute paths and
+  numeric limits, and every right-hand value is checked even after a match or
+  against an absent left side. Unknown functions parse the paths without
+  accessing their values. Right-hand contexts for `?=` and projection set
+  operators remain unsupported.
   Each application is checked independently. Type mismatches are invalid;
   unsupported grammar reports `Unsupported` at the application without changing
   unapplied declaration checks or masking earlier missing schema dependencies.

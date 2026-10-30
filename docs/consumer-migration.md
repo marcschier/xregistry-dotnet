@@ -439,7 +439,7 @@ aggregates compare as empty strings, but absent attributes never match any of
 these operators, including `!=`. Quoted numeric text is compared literally;
 numeric JSON values and unquoted numeric operands report `Unsupported` because
 numeric-to-string rendering is not implemented. Empty quoted operands,
-projection-to-projection comparisons remain unsupported. The `i` modifier enables
+projection set comparisons remain unsupported. The `i` modifier enables
 case-insensitive string comparison when every operand and the selected value
 contain only ASCII characters. Non-ASCII case folding remains unsupported,
 including an operand after an earlier match or on an absent attribute. Trait
@@ -483,7 +483,7 @@ type. Projections are unordered, so selectors must not depend on which value is
 returned when more than one exists. Use `(first)` when the projection is known
 to contain a single value. Subsequent property access applies to the extracted
 value, not the former projection. Expansion still consumes the shared work
-budget before extraction. Projection-to-projection operators and named scoped
+budget before extraction. Projection set operators and named scoped
 selectors remain unsupported.
 The `id` attribute exposes the selected shape's absolute identity. Its
 `namespace`, `name` and `member` properties return the corresponding text;
@@ -528,15 +528,25 @@ Literal alternatives, presence checks, numeric comparisons and per-assertion
 ASCII `i` modifiers retain their ordinary attribute semantics. Every assertion
 is parsed and checked, including after a false assertion; unknown functions
 parse these assertions without evaluating them. Assertion scans and
-comparisons consume the shared work budget. Named or projected scope contexts,
-right-hand context expressions such as `@{id}` and projection-to-projection
-operators remain unsupported.
+comparisons consume the shared work budget. Named or projected scope contexts
+and projection set operators remain unsupported.
 The left operand can also be quoted text, an unquoted Boolean or a root shape
 ID, for example `[@: '10' > 9 && true ?= true]`. These are present text values;
 quoted numeric text uses the same exact numeric comparison and 256-character
 limit as attribute values. Literal text has no property path. Unquoted numeric
 left operands remain unsupported because numeric-to-string rendering is not
-implemented. Empty quoted text and right-hand context expressions remain
+implemented. Empty quoted text remains unsupported.
+String and numeric comparisons also accept right-hand context paths, such as
+`[@: @{id} = @{service|id}]`, mixed with literal alternatives. Both sides use
+the same attribute properties, including `(keys)`, `(values)` and projection
+`(first)`. A comparison matches any left value against any right value;
+`!=` also uses this any-pair rule. An absent value or empty projection supplies
+no pairs and does not match. Every right-hand value is checked, including
+alternatives after a match and values compared against an absent left side.
+Numeric JSON values remain unsupported in string comparisons; numeric
+comparisons retain exact decimal values and numeric limits on both sides.
+Unknown functions parse context paths without accessing their values.
+Right-hand context expressions for `?=` and projection set operators remain
 unsupported.
 
 After schema-closure checks, each custom trait application is checked against
