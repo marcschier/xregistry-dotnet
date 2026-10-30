@@ -219,6 +219,17 @@ vocabulary/source mapping. It does not supply their implementation.
   Nested/output/error labels do not bind the operation URI. Service-wide route
   comparison, endpoint resolution and runtime HTTP serialization remain outside
   this selector.
+  Header/query bindings check scalar and list targets, annotation values and
+  their respective case-insensitive/case-sensitive name uniqueness. Headers
+  require valid HTTP field-name tokens. Query-map bindings accept string or
+  string-list map values; header-prefix bindings accept only non-sparse
+  string-valued maps, with one member per structure and no overlap between a
+  nonempty prefix and explicit header names. `httpPayload` accepts any data
+  target but only one member per structure. Top-level input/output/error
+  sibling bindings follow their respective allowed locations, without applying
+  those sibling rules to nested structures. HTTP-bound streaming inputs and
+  outputs require payload annotations; non-HTTP streams remain valid without
+  them. These checks do not perform runtime serialization or binding precedence.
   `httpError` checks error-structure applicability and exact signed-32-bit
   integer values without converting recommended client/server ranges into
   mandatory bounds. `httpResponseCode` checks object-valued integer-targeting

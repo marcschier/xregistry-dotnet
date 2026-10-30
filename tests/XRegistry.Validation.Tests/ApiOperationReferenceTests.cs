@@ -7512,6 +7512,588 @@ public class ApiOperationReferenceTests
         await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
     }
 
+    [Test]
+    [Arguments("null")]
+    [Arguments("true")]
+    [Arguments("\"body\"")]
+    [Arguments("42")]
+    [Arguments("[]")]
+    public async Task SmithyJsonHttpPayloadRequiresAnObjectAnnotation(string annotation)
+    {
+        var document = SmithyHttpPayloadDocument("input");
+        document["shapes"]!["example#Container"]!["members"]!["body"]!["traits"]!["smithy.api#httpPayload"] = JsonNode.Parse(annotation);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_value");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Container/members/body/traits/smithy.api#httpPayload");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("structure")]
+    [Arguments("operation")]
+    [Arguments("union")]
+    [Arguments("list")]
+    [Arguments("map")]
+    public async Task SmithyJsonHttpPayloadRequiresAStructureMember(string container)
+    {
+        var document = SmithyHttpPayloadDocument("input");
+        if (container is "structure" or "operation")
+        {
+            var id = container == "structure" ? "example#Container" : "example#Get";
+            document["shapes"]![id]!["traits"] = JsonNode.Parse("""{"smithy.api#httpPayload":{}}""");
+        }
+        else
+        {
+            document["shapes"]!["example#Body"] = JsonNode.Parse(container switch
+            {
+                "union" => """{"type":"union","members":{"value":{"target":"smithy.api#String","traits":{"smithy.api#httpPayload":{}}}}}""",
+                "list" => """{"type":"list","member":{"target":"smithy.api#String","traits":{"smithy.api#httpPayload":{}}}}""",
+                _ => """{"type":"map","key":{"target":"smithy.api#String"},"value":{"target":"smithy.api#String","traits":{"smithy.api#httpPayload":{}}}}"""
+            });
+        }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("blob")]
+    [Arguments("string")]
+    [Arguments("boolean")]
+    [Arguments("byte")]
+    [Arguments("short")]
+    [Arguments("integer")]
+    [Arguments("long")]
+    [Arguments("float")]
+    [Arguments("double")]
+    [Arguments("bigInteger")]
+    [Arguments("bigDecimal")]
+    [Arguments("timestamp")]
+    [Arguments("document")]
+    [Arguments("enum")]
+    [Arguments("intEnum")]
+    [Arguments("list")]
+    [Arguments("map")]
+    [Arguments("structure")]
+    [Arguments("union")]
+    public async Task SmithyJsonHttpPayloadAllowsEveryDataTargetWithoutInventingRawBodyRestrictions(string kind)
+    {
+        var document = SmithyHttpPayloadDocument("input");
+        document["shapes"]!["example#Body"] = SmithyHttpBindingTarget(kind);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+    }
+
+    [Test]
+    [Arguments("input", "httpHeader", true)]
+    [Arguments("input", "httpPrefixHeaders", true)]
+    [Arguments("input", "httpQuery", true)]
+    [Arguments("input", "httpQueryParams", true)]
+    [Arguments("input", "httpLabel", true)]
+    [Arguments("input", "httpResponseCode", false)]
+    [Arguments("input", "none", false)]
+    [Arguments("output", "httpHeader", true)]
+    [Arguments("output", "httpPrefixHeaders", true)]
+    [Arguments("output", "httpQuery", false)]
+    [Arguments("output", "httpQueryParams", false)]
+    [Arguments("output", "httpLabel", false)]
+    [Arguments("output", "httpResponseCode", false)]
+    [Arguments("output", "none", false)]
+    [Arguments("error", "httpHeader", true)]
+    [Arguments("error", "httpPrefixHeaders", true)]
+    [Arguments("error", "httpQuery", false)]
+    [Arguments("error", "httpQueryParams", false)]
+    [Arguments("error", "httpLabel", false)]
+    [Arguments("error", "httpResponseCode", false)]
+    [Arguments("error", "none", false)]
+    public async Task SmithyJsonHttpPayloadChecksSiblingBindingsForEachOperationRole(string role, string binding, bool valid)
+    {
+        var document = SmithyHttpPayloadDocument(role);
+        var sibling = document["shapes"]!["example#Container"]!["members"]!["metadata"]!;
+        var traits = new JsonObject();
+        if (binding != "none")
+        {
+            traits["smithy.api#" + binding] = binding is "httpHeader" or "httpPrefixHeaders" or "httpQuery"
+                ? JsonValue.Create("metadata") : new JsonObject();
+            if (binding == "httpLabel")
+            {
+                traits["smithy.api#required"] = new JsonObject();
+                if (role == "input") { document["shapes"]!["example#Get"]!["traits"]!["smithy.api#http"]!["uri"] = "/{metadata}"; }
+            }
+            if (binding is "httpPrefixHeaders" or "httpQueryParams")
+            {
+                sibling["target"] = "example#Metadata";
+                document["shapes"]!["example#Metadata"] = JsonNode.Parse("""
+                    {"type":"map","key":{"target":"smithy.api#String"},"value":{"target":"smithy.api#String"}}
+                    """);
+            }
+            else if (binding == "httpResponseCode") { sibling["target"] = "smithy.api#Integer"; }
+        }
+        sibling["traits"] = traits;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.http_payload_binding");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Container/members/metadata");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments(false, false)]
+    [Arguments(false, true)]
+    [Arguments(true, false)]
+    [Arguments(true, true)]
+    public async Task SmithyJsonHttpPayloadIsExclusivePerStructureRegardlessOfTargetIdentity(bool separate, bool differentTarget)
+    {
+        var document = SmithyHttpPayloadDocument("input");
+        var second = document["shapes"]!["example#Container"]!["members"]!["body"]!.DeepClone();
+        if (differentTarget) { second["target"] = "smithy.api#Integer"; }
+        if (separate)
+        {
+            document["shapes"]!["example#Output"] = new JsonObject
+            {
+                ["type"] = "structure",
+                ["members"] = new JsonObject { ["second"] = second }
+            };
+            document["shapes"]!["example#Get"]!["output"] = JsonNode.Parse("""{"target":"example#Output"}""");
+        }
+        else { document["shapes"]!["example#Container"]!["members"]!["second"] = second; }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(separate
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (separate) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_exclusivity");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Container/members/second");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    public async Task SmithyJsonHttpPayloadDoesNotApplyTopLevelSiblingRulesToNestedStructures()
+    {
+        var document = SmithyHttpPayloadDocument("input");
+        document["shapes"]!["example#Nested"] = document["shapes"]!["example#Container"]!.DeepClone();
+        document["shapes"]!["example#Nested"]!["members"]!["metadata"]!.AsObject().Remove("traits");
+        document["shapes"]!["example#Container"]!["members"] = JsonNode.Parse("""{"nested":{"target":"example#Nested"}}""");
+        document["shapes"]!["example#Unused"] = JsonNode.Parse("""{"type":"string","traits":{"smithy.api#httpPayload":false}}""");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
+    [Test]
+    [Arguments("input", "blob", true, true)]
+    [Arguments("input", "blob", true, false)]
+    [Arguments("output", "blob", true, true)]
+    [Arguments("output", "blob", true, false)]
+    [Arguments("input", "union", true, true)]
+    [Arguments("input", "union", true, false)]
+    [Arguments("output", "union", true, true)]
+    [Arguments("output", "union", true, false)]
+    [Arguments("input", "blob", false, false)]
+    [Arguments("output", "blob", false, false)]
+    [Arguments("input", "union", false, false)]
+    [Arguments("output", "union", false, false)]
+    public async Task SmithyJsonHttpStreamingRequiresPayloadForInputAndOutputOnlyWhenHttpBound(
+        string role, string kind, bool http, bool payload)
+    {
+        var document = JsonNode.Parse(SmithyStreamingDocument())!;
+        if (role == "output")
+        {
+            document["shapes"]!["example#Get"]!.AsObject().Remove("input");
+            document["shapes"]!["example#Get"]!["output"] = JsonNode.Parse("""{"target":"example#Input"}""");
+        }
+        if (http)
+        {
+            document["shapes"]!["example#Get"]!["traits"] =
+                JsonNode.Parse("""{"smithy.api#http":{"method":"POST","uri":"/messages"}}""");
+        }
+        if (payload)
+        {
+            document["shapes"]!["example#Input"]!["members"]!["data"]!["traits"]!["smithy.api#httpPayload"] = new JsonObject();
+        }
+        if (kind == "union")
+        {
+            document["shapes"]!["example#Stream"] = JsonNode.Parse("""
+                {"type":"union","traits":{"smithy.api#streaming":{}},"members":{"event":{"target":"example#Event"}}}
+                """);
+            document["shapes"]!["example#Event"] = JsonNode.Parse("""{"type":"structure"}""");
+        }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(http && !payload
+            ? ApiOperationResolutionStatus.Invalid : ApiOperationResolutionStatus.Selected);
+        if (!http || payload) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.http_streaming_payload");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Input/members/data");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("body")]
+    [Arguments("metadata")]
+    public async Task SmithyJsonHttpPayloadRetainsMissingTargetSemanticsWithoutAcquisition(string member)
+    {
+        var document = SmithyHttpPayloadDocument("input");
+        document["shapes"]!["example#Container"]!["members"]![member]!["target"] = "example#Missing";
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Payload shape IDs cannot be acquired."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("dependency.unresolved");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Missing");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonHttpPayloadSiblingRulesDoNotDependOnMethodOrExecuteSerialization()
+    {
+        var document = SmithyHttpPayloadDocument("input");
+        document["shapes"]!["example#Get"]!.AsObject().Remove("traits");
+        document["shapes"]!["example#Get"]!["traits"] = JsonNode.Parse("""
+            {"smithy.api#examples":[{"title":"literal","input":{"httpPayload":false,"target":"example#Missing"}}]}
+            """);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        document["shapes"]!["example#Container"]!["members"]!["metadata"]!.AsObject().Remove("traits");
+        var invalid = ResolveSmithy(document.ToJsonString());
+        await Assert.That(invalid.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(invalid.Diagnostic!.Code).IsEqualTo("document.http_payload_binding");
+        await Assert.That(invalid.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("string", true)]
+    [Arguments("enum", true)]
+    [Arguments("boolean", true)]
+    [Arguments("timestamp", true)]
+    [Arguments("byte", true)]
+    [Arguments("short", true)]
+    [Arguments("integer", true)]
+    [Arguments("intEnum", true)]
+    [Arguments("long", true)]
+    [Arguments("float", true)]
+    [Arguments("double", true)]
+    [Arguments("bigInteger", true)]
+    [Arguments("bigDecimal", true)]
+    [Arguments("blob", false)]
+    [Arguments("document", false)]
+    [Arguments("structure", false)]
+    [Arguments("union", false)]
+    [Arguments("map", false)]
+    [Arguments("list", false)]
+    public async Task SmithyJsonHttpQueryAndHeaderTargetsFollowScalarAndListRules(string kind, bool scalar)
+    {
+        foreach (var binding in new[] { "httpHeader", "httpQuery" })
+        {
+            foreach (var list in new[] { false, true })
+            {
+                var document = SmithyHttpNamedBindingDocument(binding);
+                document["shapes"]!["example#Value"] = list
+                    ? JsonNode.Parse("""{"type":"list","member":{"target":"example#Element"}}""")
+                    : SmithyHttpBindingTarget(kind);
+                if (list) { document["shapes"]!["example#Element"] = SmithyHttpBindingTarget(kind); }
+                var valid = scalar || kind == "list" && !list;
+                var result = ResolveSmithy(document.ToJsonString());
+                await Assert.That(result.Status).IsEqualTo(valid
+                    ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+                if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+                else
+                {
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Container/members/metadata/traits/smithy.api#" + binding);
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("httpPrefixHeaders", "string", false, false, true)]
+    [Arguments("httpPrefixHeaders", "enum", false, false, true)]
+    [Arguments("httpPrefixHeaders", "string", true, false, false)]
+    [Arguments("httpPrefixHeaders", "string", false, true, false)]
+    [Arguments("httpPrefixHeaders", "integer", false, false, false)]
+    [Arguments("httpPrefixHeaders", "structure", false, false, false)]
+    [Arguments("httpQueryParams", "string", false, false, true)]
+    [Arguments("httpQueryParams", "enum", false, false, true)]
+    [Arguments("httpQueryParams", "string", true, false, true)]
+    [Arguments("httpQueryParams", "enum", true, false, true)]
+    [Arguments("httpQueryParams", "string", false, true, true)]
+    [Arguments("httpQueryParams", "string", true, true, true)]
+    [Arguments("httpQueryParams", "integer", false, false, false)]
+    [Arguments("httpQueryParams", "integer", true, false, false)]
+    [Arguments("httpQueryParams", "map", false, false, false)]
+    [Arguments("httpQueryParams", "list", true, false, false)]
+    public async Task SmithyJsonHttpMapBindingsCheckValueCollectionsAndSparseEligibility(
+        string binding, string kind, bool list, bool sparse, bool valid)
+    {
+        var document = SmithyHttpNamedBindingDocument(binding);
+        document["shapes"]!["example#Value"] = JsonNode.Parse("""
+            {"type":"map","key":{"target":"smithy.api#String"},"value":{"target":"example#Element"}}
+            """);
+        if (sparse) { document["shapes"]!["example#Value"]!["traits"] = JsonNode.Parse("""{"smithy.api#sparse":{}}"""); }
+        document["shapes"]!["example#Element"] = list
+            ? JsonNode.Parse("""{"type":"list","member":{"target":"example#Item"}}""") : SmithyHttpBindingTarget(kind);
+        if (list) { document["shapes"]!["example#Item"] = SmithyHttpBindingTarget(kind); }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+        document["shapes"]!["example#Value"] = SmithyHttpBindingTarget("string");
+        var nonMap = ResolveSmithy(document.ToJsonString());
+        await Assert.That(nonMap.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(nonMap.Diagnostic!.Code).IsEqualTo("document.trait_target");
+    }
+
+    [Test]
+    [Arguments("httpHeader", "\"X-Name\"", true)]
+    [Arguments("httpHeader", "\"Authorization\"", true)]
+    [Arguments("httpHeader", "\"!#$%&'*+.^_`|~0-9AZaz-\"", true)]
+    [Arguments("httpHeader", "\"\"", false)]
+    [Arguments("httpHeader", "\"has space\"", false)]
+    [Arguments("httpHeader", "\"bad:colon\"", false)]
+    [Arguments("httpHeader", "\"bad\\r\\n\"", false)]
+    [Arguments("httpHeader", "\"bad\\u00e9\"", false)]
+    [Arguments("httpHeader", "null", false)]
+    [Arguments("httpHeader", "{}", false)]
+    [Arguments("httpQuery", "\"\"", false)]
+    [Arguments("httpQuery", "\"reserved?& =/%\"", true)]
+    [Arguments("httpQuery", "null", false)]
+    [Arguments("httpQuery", "[]", false)]
+    [Arguments("httpPrefixHeaders", "\"\"", true)]
+    [Arguments("httpPrefixHeaders", "\"X-\"", true)]
+    [Arguments("httpPrefixHeaders", "null", false)]
+    [Arguments("httpPrefixHeaders", "42", false)]
+    [Arguments("httpQueryParams", "{}", true)]
+    [Arguments("httpQueryParams", "null", false)]
+    [Arguments("httpQueryParams", "[]", false)]
+    [Arguments("httpQueryParams", "true", false)]
+    public async Task SmithyJsonHttpNamedBindingsCheckValueKindsAndHeaderTokenSyntax(string binding, string value, bool valid)
+    {
+        var document = SmithyHttpNamedBindingDocument(binding);
+        document["shapes"]!["example#Container"]!["members"]!["metadata"]!["traits"]!["smithy.api#" + binding] = JsonNode.Parse(value);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            var tokenFailure = binding == "httpHeader" && value.StartsWith('"') && value != "\"\"";
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo(tokenFailure
+                ? "document.http_header_name" : "document.trait_value");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("httpHeader", "Name", "Name", false)]
+    [Arguments("httpHeader", "Name", "name", false)]
+    [Arguments("httpHeader", "Name", "Other", true)]
+    [Arguments("httpQuery", "Name", "Name", false)]
+    [Arguments("httpQuery", "Name", "name", true)]
+    [Arguments("httpQuery", "a", "%61", true)]
+    public async Task SmithyJsonHttpHeaderAndQueryNamesUseTheirDeclaredCaseComparison(
+        string binding, string first, string second, bool valid)
+    {
+        var document = SmithyHttpNamedBindingDocument(binding);
+        var member = document["shapes"]!["example#Container"]!["members"]!["metadata"]!;
+        member["traits"]!["smithy.api#" + binding] = first;
+        var other = member.DeepClone();
+        other["traits"]!["smithy.api#" + binding] = second;
+        document["shapes"]!["example#Container"]!["members"]!["other"] = other;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo(binding == "httpHeader"
+                ? "document.http_header_name" : "document.http_query_name");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Container/members/other/traits/smithy.api#" + binding);
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+        document["shapes"]!["example#Container"]!["members"]!.AsObject().Remove("other");
+        document["shapes"]!["example#Output"] = document["shapes"]!["example#Container"]!.DeepClone();
+        document["shapes"]!["example#Get"]!["output"] = JsonNode.Parse("""{"target":"example#Output"}""");
+        await Assert.That(ResolveSmithy(document.ToJsonString()).Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+    }
+
+    [Test]
+    [Arguments("", "X-Name", true, false)]
+    [Arguments("X-", "Other", true, false)]
+    [Arguments("X-", "X-Name", false, false)]
+    [Arguments("X-", "x-name", false, false)]
+    [Arguments("", "X-Name", true, true)]
+    [Arguments("X-", "Other", true, true)]
+    [Arguments("X-", "X-Name", false, true)]
+    [Arguments("X-", "x-name", false, true)]
+    public async Task SmithyJsonHttpHeaderPrefixDisambiguationIsOrderIndependentAndAllowsAnEmptyPrefix(
+        string prefix, string name, bool valid, bool reverse)
+    {
+        var document = SmithyHttpNamedBindingDocument("httpPrefixHeaders");
+        var map = document["shapes"]!["example#Container"]!["members"]!["metadata"]!.DeepClone();
+        map["traits"]!["smithy.api#httpPrefixHeaders"] = prefix;
+        var header = JsonNode.Parse("""{"target":"smithy.api#String","traits":{"smithy.api#httpHeader":"header"}}""")!;
+        header["traits"]!["smithy.api#httpHeader"] = name;
+        var members = new JsonObject();
+        if (reverse) { members["header"] = header; }
+        members["metadata"] = map;
+        if (!reverse) { members["header"] = header; }
+        document["shapes"]!["example#Container"]!["members"] = members;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.http_header_prefix");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Container/members");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("httpQueryParams", false)]
+    [Arguments("httpQueryParams", true)]
+    [Arguments("httpPrefixHeaders", false)]
+    [Arguments("httpPrefixHeaders", true)]
+    public async Task SmithyJsonHttpMapBindingsAreExclusivePerStructure(string binding, bool separate)
+    {
+        var document = SmithyHttpNamedBindingDocument(binding);
+        if (separate)
+        {
+            document["shapes"]!["example#Output"] = document["shapes"]!["example#Container"]!.DeepClone();
+            document["shapes"]!["example#Get"]!["output"] = JsonNode.Parse("""{"target":"example#Output"}""");
+        }
+        else
+        {
+            document["shapes"]!["example#Container"]!["members"]!["other"] =
+                document["shapes"]!["example#Container"]!["members"]!["metadata"]!.DeepClone();
+        }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(separate
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (separate) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_exclusivity");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Container/members/other");
+        }
+    }
+
+    [Test]
+    [Arguments("httpHeader")]
+    [Arguments("httpQuery")]
+    [Arguments("httpPrefixHeaders")]
+    [Arguments("httpQueryParams")]
+    public async Task SmithyJsonHttpNamedBindingsRequireStructureMembers(string binding)
+    {
+        var document = SmithyHttpNamedBindingDocument(binding);
+        var annotation = document["shapes"]!["example#Container"]!["members"]!["metadata"]!["traits"]!.DeepClone();
+        document["shapes"]!["example#Container"]!["traits"] = annotation;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("map")]
+    [Arguments("list")]
+    public async Task SmithyJsonHttpCollectionBindingsPreserveMissingAndMalformedReferenceDiagnostics(string kind)
+    {
+        var document = SmithyHttpNamedBindingDocument(kind == "map" ? "httpQueryParams" : "httpHeader");
+        document["shapes"]!["example#Value"] = kind == "map"
+            ? JsonNode.Parse("""{"type":"map","key":{"target":"smithy.api#String"},"value":{"target":"example#Missing"}}""")
+            : JsonNode.Parse("""{"type":"list","member":{"target":"example#Missing"}}""");
+        var unresolved = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Collection IDs cannot be acquired."));
+        await Assert.That(unresolved.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(unresolved.Diagnostic!.Code).IsEqualTo("dependency.unresolved");
+        await Assert.That(unresolved.Diagnostic.Path).IsEqualTo("$/shapes/example#Missing");
+        foreach (var malformed in new[] { "absent", "null", "true", "{}" })
+        {
+            var property = kind == "map" ? "value" : "member";
+            if (malformed == "absent") { document["shapes"]!["example#Value"]!.AsObject().Remove(property); }
+            else { document["shapes"]!["example#Value"]![property] = JsonNode.Parse(malformed); }
+            var invalid = ResolveSmithy(document.ToJsonString());
+            await Assert.That(invalid.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+            await Assert.That(invalid.Diagnostic!.Code).IsEqualTo("document.target");
+            await Assert.That(invalid.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    private static JsonNode SmithyHttpNamedBindingDocument(string binding)
+    {
+        var document = SmithyHttpPayloadDocument("input");
+        document["shapes"]!["example#Container"]!["members"]!.AsObject().Remove("body");
+        document["shapes"]!["example#Container"]!["members"]!["metadata"]!["target"] = "example#Value";
+        document["shapes"]!["example#Container"]!["members"]!["metadata"]!["traits"] = new JsonObject
+        {
+            ["smithy.api#" + binding] = binding == "httpQueryParams" ? new JsonObject() : JsonValue.Create("name")
+        };
+        document["shapes"]!["example#Value"] = SmithyHttpBindingTarget(
+            binding is "httpQueryParams" or "httpPrefixHeaders" ? "map" : "string");
+        return document;
+    }
+
+    private static JsonNode SmithyHttpBindingTarget(string kind) => JsonNode.Parse(kind switch
+    {
+        "enum" => """{"type":"enum","members":{"ONE":{"target":"smithy.api#Unit"}}}""",
+        "intEnum" => """{"type":"intEnum","members":{"ONE":{"target":"smithy.api#Unit","traits":{"smithy.api#enumValue":1}}}}""",
+        "list" => """{"type":"list","member":{"target":"smithy.api#String"}}""",
+        "map" => """{"type":"map","key":{"target":"smithy.api#String"},"value":{"target":"smithy.api#String"}}""",
+        "union" => """{"type":"union","members":{"value":{"target":"smithy.api#String"}}}""",
+        _ => """{"type":"KIND"}""".Replace("KIND", kind, StringComparison.Ordinal)
+    })!;
+
+    private static JsonNode SmithyHttpPayloadDocument(string role)
+    {
+        var document = JsonNode.Parse("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","traits":{"smithy.api#http":{"method":"GET","uri":"/"}}},
+              "example#Container":{"type":"structure","members":{
+                "body":{"target":"example#Body","traits":{"smithy.api#httpPayload":{}}},
+                "metadata":{"target":"smithy.api#String","traits":{"smithy.api#httpHeader":"X-Metadata"}}}},
+              "example#Body":{"type":"string"}}}
+            """)!;
+        if (role == "error")
+        {
+            document["shapes"]!["example#Get"]!["errors"] = JsonNode.Parse("""[{"target":"example#Container"}]""");
+            document["shapes"]!["example#Container"]!["traits"] = JsonNode.Parse("""{"smithy.api#error":"server"}""");
+        }
+        else
+        {
+            document["shapes"]!["example#Get"]![role] = JsonNode.Parse("""{"target":"example#Container"}""");
+        }
+        return document;
+    }
+
     private static JsonNode SmithyHttpOperationDocument() => JsonNode.Parse("""
         {"smithy":"2.0","shapes":{
           "example#Get":{"type":"operation","input":{"target":"example#Input"},

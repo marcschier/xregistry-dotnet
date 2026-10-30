@@ -41,6 +41,10 @@ public static partial class ApiOperationDocumentResolver
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
     private static partial Regex SmithyMediaTypeComponent();
 
+    [GeneratedRegex(@"\A[!#$%&'*+.^_`|~0-9A-Za-z-]+\z",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
+    private static partial Regex SmithyHttpHeaderName();
+
     private static bool IsSmithyMediaTypeName(string value)
     {
         var slash = value.IndexOf('/');
@@ -243,6 +247,7 @@ public static partial class ApiOperationDocumentResolver
                     }
                     ValidateRequestCompression(shape, path);
                     ValidateHttpOperation(shape, path);
+                    ValidateHttpPayloads(shape);
                     break;
                 case "structure":
                 case "union":
@@ -256,6 +261,9 @@ public static partial class ApiOperationDocumentResolver
                             path + "/members", "document.members", "Smithy union and enum shapes require at least one member.");
                         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                         var jsonNames = new HashSet<string>(StringComparer.Ordinal);
+                        var queryNames = new HashSet<string>(StringComparer.Ordinal);
+                        var headerNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        string? headerPrefix = null;
                         var enumStrings = new HashSet<string>(StringComparer.Ordinal);
                         var enumIntegers = new HashSet<JsonNumber>();
                         foreach (var member in members.EnumerateObject())
@@ -271,6 +279,22 @@ public static partial class ApiOperationDocumentResolver
                                 budget.Work(jsonName.GetString()!.Length, memberPath);
                                 ValidationContext.Require(jsonNames.Add(jsonName.GetString()!), memberPath + "/traits/smithy.api#jsonName",
                                     "document.json_name", "Smithy structure or union members cannot repeat an explicit JSON name.");
+                            }
+                            if (TryTrait(member.Value, "smithy.api#httpQuery", out var queryName))
+                            {
+                                ValidationContext.Require(queryNames.Add(queryName.GetString()!),
+                                    memberPath + "/traits/smithy.api#httpQuery", "document.http_query_name",
+                                    "Smithy HTTP query names must be case-sensitively unique within a structure.");
+                            }
+                            if (TryTrait(member.Value, "smithy.api#httpHeader", out var headerName))
+                            {
+                                ValidationContext.Require(headerNames.Add(headerName.GetString()!),
+                                    memberPath + "/traits/smithy.api#httpHeader", "document.http_header_name",
+                                    "Smithy HTTP header names must be case-insensitively unique within a structure.");
+                            }
+                            if (TryTrait(member.Value, "smithy.api#httpPrefixHeaders", out var prefix))
+                            {
+                                headerPrefix = prefix.GetString()!;
                             }
                             if (kind is "enum" or "intEnum")
                             {
@@ -303,6 +327,10 @@ public static partial class ApiOperationDocumentResolver
                                 }
                             }
                         }
+                        ValidationContext.Require(string.IsNullOrEmpty(headerPrefix) ||
+                            !headerNames.Any(name => name.StartsWith(headerPrefix, StringComparison.OrdinalIgnoreCase)),
+                            path + "/members", "document.http_header_prefix",
+                            "An explicit HTTP header cannot start with a nonempty httpPrefixHeaders prefix.");
                     }
                     else
                     {
@@ -612,7 +640,8 @@ public static partial class ApiOperationDocumentResolver
                     {
                         budget.Work(path: path);
                         if (trait.Name is "smithy.api#idempotencyToken" or "smithy.api#eventPayload" or
-                            "smithy.api#httpResponseCode" && mode == "member")
+                            "smithy.api#httpResponseCode" or "smithy.api#httpPayload" or
+                            "smithy.api#httpQueryParams" or "smithy.api#httpPrefixHeaders" && mode == "member")
                         {
                             ValidationContext.Require(owners.TryAdd(trait.Name, memberName), path,
                                 "document.trait_exclusivity",
@@ -1049,6 +1078,98 @@ public static partial class ApiOperationDocumentResolver
                 number.CompareTo(new(false, bounds.Value.Item2, 0)) <= 0;
         }
 
+        private void ValidateHttpBindingTarget(JsonElement member, string trait, string path)
+        {
+            var kind = TargetKind(member, out var target);
+            if (trait is "smithy.api#httpPrefixHeaders" or "smithy.api#httpQueryParams")
+            {
+                ValidationContext.Require(kind is null or "map", path, "document.trait_target",
+                    "This Smithy HTTP binding requires a map target.");
+                if (kind is null) { return; }
+                ValidationContext.Require(trait != "smithy.api#httpPrefixHeaders" ||
+                    !TryTrait(target, "smithy.api#sparse", out _), path, "document.trait_target",
+                    "Smithy httpPrefixHeaders cannot target a sparse map.");
+                if (!target.TryGetProperty("value", out var value)) { return; }
+                kind = TargetKind(value, out target);
+            }
+            if (kind == "list" && trait != "smithy.api#httpPrefixHeaders")
+            {
+                if (!target.TryGetProperty("member", out var item)) { return; }
+                kind = TargetKind(item, out _);
+            }
+            var allowed = kind is null or "string" or "enum" ||
+                trait is "smithy.api#httpHeader" or "smithy.api#httpQuery" &&
+                (kind is "boolean" or "timestamp" or "intEnum" || IsNumericKind(kind));
+            ValidationContext.Require(allowed, path, "document.trait_target",
+                "The Smithy HTTP binding target does not match its required scalar, list or map value types.");
+
+            string? TargetKind(JsonElement reference, out JsonElement shape)
+            {
+                shape = default;
+                if (reference.ValueKind != JsonValueKind.Object ||
+                    !reference.TryGetProperty("target", out var id) || id.ValueKind != JsonValueKind.String) { return null; }
+                return shapes.TryGetProperty(id.GetString()!, out shape)
+                    ? shape.GetProperty("type").GetString() : SmithyPreludeKind(id.GetString()!);
+            }
+        }
+
+        private void ValidateHttpPayloads(JsonElement operation)
+        {
+            var httpBound = TryTrait(operation, "smithy.api#http", out _);
+            foreach (var name in new[] { "input", "output" })
+            {
+                if (operation.TryGetProperty(name, out var reference))
+                {
+                    ValidateContainer(reference, isInput: name == "input", requireStreamingPayload: httpBound);
+                }
+            }
+            if (operation.TryGetProperty("errors", out var errors))
+            {
+                foreach (var reference in errors.EnumerateArray())
+                {
+                    ValidateContainer(reference, isInput: false, requireStreamingPayload: false);
+                }
+            }
+
+            void ValidateContainer(JsonElement reference, bool isInput, bool requireStreamingPayload)
+            {
+                var id = reference.GetProperty("target").GetString()!;
+                if (!shapes.TryGetProperty(id, out var container) ||
+                    !container.TryGetProperty("members", out var members)) { return; }
+                var path = "$/shapes/" + Escape(id) + "/members";
+                var hasPayload = false;
+                foreach (var member in members.EnumerateObject())
+                {
+                    var memberPath = path + "/" + Escape(member.Name);
+                    budget.Work(path: memberPath);
+                    var payload = TryTrait(member.Value, "smithy.api#httpPayload", out _);
+                    hasPayload |= payload;
+                    if (requireStreamingPayload)
+                    {
+                        var targetId = member.Value.GetProperty("target").GetString()!;
+                        ValidationContext.Require(payload || !shapes.TryGetProperty(targetId, out var target) ||
+                            !TryTrait(target, "smithy.api#streaming", out _),
+                            memberPath, "document.http_streaming_payload",
+                            "An HTTP-bound operation must mark streaming input and output members with httpPayload.");
+                    }
+                }
+                if (!hasPayload) { return; }
+                foreach (var member in members.EnumerateObject())
+                {
+                    var memberPath = path + "/" + Escape(member.Name);
+                    budget.Work(path: memberPath);
+                    ValidationContext.Require(TryTrait(member.Value, "smithy.api#httpPayload", out _) ||
+                        TryTrait(member.Value, "smithy.api#httpHeader", out _) ||
+                        TryTrait(member.Value, "smithy.api#httpPrefixHeaders", out _) ||
+                        isInput && (TryTrait(member.Value, "smithy.api#httpLabel", out _) ||
+                            TryTrait(member.Value, "smithy.api#httpQuery", out _) ||
+                            TryTrait(member.Value, "smithy.api#httpQueryParams", out _)),
+                        memberPath, "document.http_payload_binding",
+                        "A top-level HTTP payload requires every sibling member to use an allowed non-body binding.");
+                }
+            }
+        }
+
         private void ValidateHttpOperation(JsonElement operation, string path)
         {
             if (!TryTrait(operation, "smithy.api#http", out var http)) { return; }
@@ -1167,7 +1288,9 @@ public static partial class ApiOperationDocumentResolver
                     "smithy.api#httpError" => memberContainer is null && kind == "structure" &&
                         traits.TryGetProperty("smithy.api#error", out _),
                     "smithy.api#http" => memberContainer is null && kind == "operation",
-                    "smithy.api#httpLabel" => memberContainer == "structure",
+                    "smithy.api#httpLabel" or "smithy.api#httpPayload" or "smithy.api#httpHeader" or
+                        "smithy.api#httpPrefixHeaders" or "smithy.api#httpQuery" or "smithy.api#httpQueryParams" =>
+                        memberContainer == "structure",
                     "smithy.api#httpResponseCode" => memberContainer == "structure" &&
                         !TryTrait(shapes.GetProperty(sourceId), "smithy.api#input", out _),
                     "smithy.api#idempotencyToken" => memberContainer == "structure",
@@ -1231,6 +1354,26 @@ public static partial class ApiOperationDocumentResolver
                     "Conflicting Smithy prelude traits cannot be applied to the same shape.");
                 switch (trait.Name)
                 {
+                    case "smithy.api#httpHeader":
+                    case "smithy.api#httpPrefixHeaders":
+                    case "smithy.api#httpQuery":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.String, traitPath,
+                            "document.trait_value", "Smithy named HTTP bindings require string values.");
+                        var bindingName = trait.Value.GetString()!;
+                        budget.Work(bindingName.Length, traitPath);
+                        ValidationContext.Require(trait.Name == "smithy.api#httpPrefixHeaders" ||
+                            bindingName.Length > 0, traitPath, "document.trait_value",
+                            "A Smithy HTTP header or query binding name cannot be empty.");
+                        ValidationContext.Require(trait.Name != "smithy.api#httpHeader" ||
+                            SmithyHttpHeaderName().IsMatch(bindingName), traitPath, "document.http_header_name",
+                            "The Smithy HTTP header name must satisfy the HTTP field-name token grammar.");
+                        ValidateHttpBindingTarget(shape, trait.Name, traitPath);
+                        continue;
+                    case "smithy.api#httpQueryParams":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
+                            "document.trait_value", "The Smithy httpQueryParams annotation requires an object value.");
+                        ValidateHttpBindingTarget(shape, trait.Name, traitPath);
+                        continue;
                     case "smithy.api#http":
                         ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
                             "document.trait_value", "The Smithy http trait requires an object value.");
@@ -1516,6 +1659,7 @@ public static partial class ApiOperationDocumentResolver
                             "document.trait_value", "The Smithy error trait requires client or server.");
                         continue;
                     case "smithy.api#required":
+                    case "smithy.api#httpPayload":
                     case "smithy.api#streaming":
                     case "smithy.api#requiresLength":
                     case "smithy.api#unitType":

@@ -516,9 +516,30 @@ including enum specializations. A pattern can contain at most one greedy
 label, which must target a string; selection does not enforce the recommendation
 that it be the last label.
 
+The `httpQuery` and `httpHeader` traits require structure members targeting a
+string, number, boolean or timestamp, or a list of these types. Query names
+must be nonempty and case-sensitively unique within the structure. Header names
+must satisfy the HTTP field-name token grammar and be case-insensitively unique.
+Discouraged header names such as `Authorization` are not prohibited.
+
+The object-valued `httpQueryParams` annotation requires a map of strings or
+lists of strings. The string-valued `httpPrefixHeaders` trait requires a
+non-sparse map of strings. Enum specializations retain their string meaning.
+Each annotation can appear on only one member per structure. A nonempty header
+prefix cannot overlap an explicit header name, compared without regard to case;
+an empty prefix is permitted.
+
+The object-valued `httpPayload` annotation accepts any data target and can
+appear on only one member per structure. A top-level input payload requires
+every sibling member to use a header, header-prefix, query, query-map or label
+binding. For top-level outputs and declared errors, sibling bindings are limited
+to headers and header prefixes. These sibling rules do not apply to nested
+structures. An operation with an `http` trait must bind streaming input and
+output members to `httpPayload`; non-HTTP streams do not acquire that requirement.
+
 All seven HTTP message-binding traits conflict pairwise on a single member.
 Nested, output and error members do not participate in operation URI matching,
-although their `httpLabel` annotations must still satisfy declaration rules.
+although their annotations must still satisfy declaration rules.
 These checks do not compare routes across a service, resolve endpoints,
 normalize URI patterns or serialize HTTP messages.
 
