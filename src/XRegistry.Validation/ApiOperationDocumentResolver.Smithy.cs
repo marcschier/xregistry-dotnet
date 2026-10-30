@@ -2383,6 +2383,7 @@ public static partial class ApiOperationDocumentResolver
                         if (attribute is not ("trait" or "id" or "service")) { return null; }
                         SkipWhitespace();
                         List<(string Name, bool Function)>? properties = null;
+                        var projection = false;
                         while (position < text.Length && text[position] == '|')
                         {
                             position++;
@@ -2395,8 +2396,14 @@ public static partial class ApiOperationDocumentResolver
                                 SkipWhitespace();
                                 property = Identifier();
                                 SkipWhitespace();
-                                if (property is not ("length" or "keys" or "values") ||
+                                if (property is not ("length" or "keys" or "values" or "first") ||
                                     position == text.Length || text[position++] != ')') { return null; }
+                                if (property == "first")
+                                {
+                                    if (!projection) { return null; }
+                                    projection = false;
+                                }
+                                else if (property is "keys" or "values") { projection = true; }
                             }
                             else { property = AttributeName(); }
                             if (property is null) { return null; }
@@ -2498,6 +2505,12 @@ public static partial class ApiOperationDocumentResolver
                         {
                             foreach (var property in properties)
                             {
+                                if (property.Function && property.Name == "first")
+                                {
+                                    budget.Work(values.Count, path);
+                                    if (values.Count > 1) { values.RemoveRange(1, values.Count - 1); }
+                                    continue;
+                                }
                                 var next = new List<SmithyAttribute>();
                                 foreach (var value in values)
                                 {

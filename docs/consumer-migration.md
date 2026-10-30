@@ -418,8 +418,9 @@ cannot be empty or contain backslashes or control characters below U+0020.
 Names match exactly without Unicode normalization or JSON Pointer decoding.
 Missing properties and descent through scalars or arrays yield absence; a
 property containing null still exists. Unquoted numeric keys and
-function properties other than `(keys)`, `(values)` and the `(length)` checks below remain
-unsupported. Property scans consume the shared work budget.
+function properties other than `(keys)`, `(values)`, projection `(first)` and
+the `(length)` checks below remain unsupported. Property scans consume the
+shared work budget.
 Trait and nested-property predicates also support `>`, `>=`, `<` and `<=`.
 Both sides must contain Smithy number spellings, either as numbers or strings;
 other node kinds, missing properties and nonnumeric strings do not match.
@@ -473,8 +474,14 @@ match any projected value against any operand, so `!=` does not mean that every
 value differs. Every value is checked before accepting a match; unsupported
 numeric rendering or non-ASCII folding in a later value still reports
 `Unsupported`. Expansion and comparison consume the shared work budget.
-`(first)`, projection-to-projection operators and scoped selectors remain
-unsupported.
+The projection `(first)` property extracts one value from the flattened results.
+An empty projection yields absence; a singleton retains its node or identity
+type. Projections are unordered, so selectors must not depend on which value is
+returned when more than one exists. Use `(first)` when the projection is known
+to contain a single value. Subsequent property access applies to the extracted
+value, not the former projection. Expansion still consumes the shared work
+budget before extraction. Projection-to-projection operators and scoped
+selectors remain unsupported.
 The `id` attribute exposes the selected shape's absolute identity. Its
 `namespace`, `name` and `member` properties return the corresponding text;
 `member` is absent on a root shape. `(length)` counts the full identity or a
