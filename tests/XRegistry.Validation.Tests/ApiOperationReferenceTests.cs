@@ -6419,6 +6419,166 @@ public class ApiOperationReferenceTests
         await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
     }
 
+    [Test]
+    [Arguments("urn:example:events", null)]
+    [Arguments("https://example.test/Events/%7e?q=Value#Part", "P_ref-09")]
+    [Arguments("../events", "_")]
+    [Arguments("events", "ns")]
+    [Arguments("#fragment", "fragment")]
+    [Arguments("#", "emptyFragment")]
+    [Arguments("../events?q=One#Part%20Two/?more", "relative")]
+    [Arguments("?query#fragment", "query")]
+    public async Task SmithyJsonXmlNamespaceRetainsUriReferencesAndOptionalPrefixes(string uri, string? prefix)
+    {
+        var document = SmithyEventBindingDocument("xmlNamespace");
+        var annotation = new JsonObject { ["uri"] = uri };
+        if (prefix is not null) { annotation["prefix"] = prefix; }
+        document["shapes"]!["example#Event"]!["members"]!["data"]!["traits"]!["smithy.api#xmlNamespace"] = annotation;
+        document["shapes"]!["example#Event"]!["traits"] = new JsonObject
+        { ["smithy.api#xmlNamespace"] = annotation.DeepClone() };
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Namespace references are not imports."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+    }
+
+    [Test]
+    [Arguments("null", "", "document.trait_value")]
+    [Arguments("[]", "", "document.trait_value")]
+    [Arguments("\"urn:example\"", "", "document.trait_value")]
+    [Arguments("{}", "/uri", "document.xml_namespace")]
+    [Arguments("""{"uri":null}""", "/uri", "document.xml_namespace")]
+    [Arguments("""{"uri":1}""", "/uri", "document.xml_namespace")]
+    [Arguments("""{"uri":""}""", "/uri", "document.xml_namespace")]
+    [Arguments("""{"uri":"not a uri"}""", "/uri", "document.xml_namespace")]
+    [Arguments("""{"uri":"http://["}""", "/uri", "document.xml_namespace")]
+    [Arguments("""{"uri":"https://example.test/%zz"}""", "/uri", "document.xml_namespace")]
+    [Arguments("""{"uri":"events#bad fragment"}""", "/uri", "document.xml_namespace")]
+    [Arguments("""{"uri":"events#bad%zz"}""", "/uri", "document.xml_namespace")]
+    [Arguments("""{"uri":"#one#two"}""", "/uri", "document.xml_namespace")]
+    [Arguments("""{"uri":"bad path#fragment"}""", "/uri", "document.xml_namespace")]
+    [Arguments("""{"uri":"urn:example","prefix":null}""", "/prefix", "document.xml_namespace")]
+    [Arguments("""{"uri":"urn:example","prefix":1}""", "/prefix", "document.xml_namespace")]
+    [Arguments("""{"uri":"urn:example","prefix":""}""", "/prefix", "document.xml_namespace")]
+    [Arguments("""{"uri":"urn:example","prefix":"0name"}""", "/prefix", "document.xml_namespace")]
+    [Arguments("""{"uri":"urn:example","prefix":"a:b"}""", "/prefix", "document.xml_namespace")]
+    [Arguments("""{"uri":"urn:example","prefix":"a.b"}""", "/prefix", "document.xml_namespace")]
+    [Arguments("""{"uri":"urn:example","prefix":"a "}""", "/prefix", "document.xml_namespace")]
+    [Arguments("""{"uri":"urn:example","prefix":"caf\u00e9"}""", "/prefix", "document.xml_namespace")]
+    public async Task SmithyJsonXmlNamespaceChecksRequiredUriAndPrefixGrammar(string annotation, string suffix, string code)
+    {
+        var document = SmithyEventBindingDocument("xmlNamespace");
+        document["shapes"]!["example#Event"]!["members"]!["data"]!["traits"]!["smithy.api#xmlNamespace"] = JsonNode.Parse(annotation);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Event/members/data/traits/smithy.api#xmlNamespace" + suffix);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("blob")]
+    [Arguments("boolean")]
+    [Arguments("document")]
+    [Arguments("string")]
+    [Arguments("byte")]
+    [Arguments("short")]
+    [Arguments("integer")]
+    [Arguments("long")]
+    [Arguments("float")]
+    [Arguments("double")]
+    [Arguments("bigInteger")]
+    [Arguments("bigDecimal")]
+    [Arguments("timestamp")]
+    [Arguments("list")]
+    [Arguments("map")]
+    [Arguments("structure")]
+    [Arguments("union")]
+    [Arguments("enum")]
+    [Arguments("intEnum")]
+    public async Task SmithyJsonXmlNamespaceSupportsDataRootsAndTheirMembers(string kind)
+    {
+        var document = SmithyEventBindingDocument("xmlNamespace");
+        document["shapes"]!["example#Event"]!["members"]!["data"]!["traits"]!["smithy.api#xmlNamespace"] =
+            JsonNode.Parse("""{"uri":"urn:member","prefix":"m"}""");
+        var target = JsonNode.Parse(kind switch
+        {
+            "list" => """{"type":"list","member":{"target":"smithy.api#String"}}""",
+            "map" => """{"type":"map","key":{"target":"smithy.api#String"},"value":{"target":"smithy.api#String"}}""",
+            "union" => """{"type":"union","members":{"one":{"target":"smithy.api#Unit"}}}""",
+            "enum" => """{"type":"enum","members":{"one":{"target":"smithy.api#Unit"}}}""",
+            "intEnum" => """{"type":"intEnum","members":{"one":{"target":"smithy.api#Unit","traits":{"smithy.api#enumValue":1}}}}""",
+            _ => """{"type":"KIND"}""".Replace("KIND", kind, StringComparison.Ordinal)
+        })!;
+        target["traits"] = JsonNode.Parse("""{"smithy.api#xmlNamespace":{"uri":"urn:root","prefix":"r"}}""");
+        IEnumerable<JsonNode> members = kind switch
+        {
+            "list" => new[] { target["member"]! },
+            "map" => new[] { target["key"]!, target["value"]! },
+            "union" or "enum" or "intEnum" => new[] { target["members"]!["one"]! },
+            _ => []
+        };
+        foreach (var member in members)
+        {
+            member["traits"] ??= new JsonObject();
+            member["traits"]!["smithy.api#xmlNamespace"] = JsonNode.Parse("""{"uri":"urn:nested"}""");
+        }
+        document["shapes"]!["example#Target"] = target;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+    }
+
+    [Test]
+    public async Task SmithyJsonXmlNamespaceCannotAnnotateAnOperation()
+    {
+        var document = SmithyEventBindingDocument("eventHeader");
+        document["shapes"]!["example#Get"]!["traits"] = JsonNode.Parse("""{"smithy.api#xmlNamespace":{"uri":"urn:operation"}}""");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/smithy.api#xmlNamespace");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonXmlNamespaceDoesNotReplaceMissingMemberTargetDependencies()
+    {
+        var document = SmithyEventBindingDocument("xmlNamespace");
+        document["shapes"]!["example#Event"]!["members"]!["data"]!["traits"]!["smithy.api#xmlNamespace"] =
+            JsonNode.Parse("""{"uri":"https://example.test/namespace","prefix":"n"}""");
+        document["shapes"]!.AsObject().Remove("example#Target");
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Namespaces cannot supply missing shape definitions."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("dependency.unresolved");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Target");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonXmlNamespaceDoesNotBindPrefixesOrInterpretLiteralReferences()
+    {
+        var document = SmithyEventBindingDocument("xmlNamespace");
+        document["shapes"]!["example#Event"]!["members"]!["data"]!["traits"] =
+            JsonNode.Parse("""{"smithy.api#xmlNamespace":{"uri":"urn:unfetched","prefix":"declared"},"smithy.api#xmlName":"other:Data"}""");
+        document["shapes"]!["example#Get"]!["traits"] = JsonNode.Parse("""
+            {"smithy.api#examples":[{"title":"literal","input":{"smithy.api#xmlNamespace":{"uri":null},"target":"example#Absent"}}]}
+            """);
+        document["shapes"]!["example#Unused"] = JsonNode.Parse(
+            """{"type":"string","traits":{"smithy.api#xmlNamespace":{"prefix":"bad prefix"}}}""");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
     private static JsonNode SmithyEventBindingDocument(string trait)
     {
         var document = JsonNode.Parse(SmithyStreamingDocument())!;

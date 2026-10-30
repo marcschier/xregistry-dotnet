@@ -32,6 +32,20 @@ public static partial class ApiOperationDocumentResolver
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
     private static partial Regex SmithyXmlName();
 
+    [GeneratedRegex(@"\A(?:[A-Za-z0-9._~!$&'()*+,;=:@/?-]|%[A-Fa-f0-9]{2})*\z",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
+    private static partial Regex SmithyUriFragment();
+
+    private static bool IsSmithyNamespaceUri(string value)
+    {
+        if (Uri.IsWellFormedUriString(value, UriKind.RelativeOrAbsolute)) { return true; }
+        // System.Uri rejects fragments on relative references; validate the RFC 3986 fragment separately.
+        var fragment = value.IndexOf('#');
+        return fragment >= 0 &&
+            (fragment == 0 || Uri.IsWellFormedUriString(value[..fragment], UriKind.Relative)) &&
+            SmithyUriFragment().IsMatch(value[(fragment + 1)..]);
+    }
+
     private static ApiOperationResolutionResult ResolveSmithyOperation(JsonElement root, string shapeId,
         Uri? documentUri, ValidationContext budget)
     {
@@ -1074,6 +1088,11 @@ public static partial class ApiOperationDocumentResolver
                         kind is "structure" or "union",
                     "smithy.api#xmlAttribute" => memberContainer == "structure",
                     "smithy.api#xmlFlattened" => memberContainer is "structure" or "union",
+                    "smithy.api#xmlNamespace" => memberContainer is not null || kind is
+                        "service" or "blob" or "boolean" or "document" or "string" or
+                        "byte" or "short" or "integer" or "long" or "float" or "double" or
+                        "bigInteger" or "bigDecimal" or "timestamp" or "enum" or "intEnum" or
+                        "list" or "map" or "structure" or "union",
                     "smithy.api#requestCompression" => memberContainer is null && kind == "operation",
                     "smithy.api#streaming" => memberContainer is null && kind is "blob" or "union",
                     "smithy.api#requiresLength" => memberContainer is null && kind == "blob" &&
@@ -1131,6 +1150,27 @@ public static partial class ApiOperationDocumentResolver
                         ValidationContext.Require(millis.IsInteger && FitsNumericRange("integer", millis) &&
                             millis.CompareTo(new(false, "1", 0)) >= 0, timeoutPath, "document.long_poll_timeout",
                             "Smithy longPoll timeoutMillis must be a positive signed 32-bit integer.");
+                        continue;
+                    case "smithy.api#xmlNamespace":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
+                            "document.trait_value", "The Smithy xmlNamespace trait requires an object value.");
+                        ValidationContext.Require(trait.Value.TryGetProperty("uri", out var namespaceUri) &&
+                            namespaceUri.ValueKind == JsonValueKind.String && namespaceUri.GetString()!.Length > 0,
+                            traitPath + "/uri", "document.xml_namespace", "An XML namespace requires a nonempty URI reference.");
+                        var namespaceText = namespaceUri.GetString()!;
+                        budget.Work(namespaceText.Length, traitPath + "/uri");
+                        ValidationContext.Require(IsSmithyNamespaceUri(namespaceText),
+                            traitPath + "/uri", "document.xml_namespace", "The XML namespace URI reference is malformed.");
+                        if (trait.Value.TryGetProperty("prefix", out var namespacePrefix))
+                        {
+                            ValidationContext.Require(namespacePrefix.ValueKind == JsonValueKind.String,
+                                traitPath + "/prefix", "document.xml_namespace", "An XML namespace prefix must be a string.");
+                            var prefixText = namespacePrefix.GetString()!;
+                            budget.Work(prefixText.Length, traitPath + "/prefix");
+                            ValidationContext.Require(!prefixText.Contains(':') && SmithyXmlName().IsMatch(prefixText),
+                                traitPath + "/prefix", "document.xml_namespace",
+                                "An XML namespace prefix must follow the Smithy ASCII identifier grammar.");
+                        }
                         continue;
                     case "smithy.api#xmlName":
                         ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.String, traitPath,

@@ -520,8 +520,19 @@ property order. The object-valued `xmlFlattened` annotation applies to structure
 or union members targeting lists or maps. Multiple attributes or flattened
 members are permitted; these checks do not impose XML-name uniqueness.
 Unresolved targets remain unresolved dependencies. Names and annotations stay
-in the native model; the resolver does not emit XML, bind namespace prefixes or
-qualify `xmlNamespace` declarations.
+in the native model; the resolver does not emit XML or bind namespace prefixes.
+
+The `xmlNamespace` annotation requires an object on data roots or members.
+Its required `uri` must be a nonempty, well-formed URI reference. Absolute URIs
+and relative references are accepted without retrieval, base resolution or
+normalization; XML Namespaces deprecates relative references but does not forbid
+them. Relative fragments follow the RFC 3986 fragment grammar rather than
+`System.Uri`'s narrower relative-reference handling. An optional `prefix` must
+be a nonempty Smithy XML identifier, without a colon. An operation cannot carry
+this annotation. Service annotations remain outside the selected data closure.
+These declaration checks do not bind prefixes to `xmlName` values, enforce XML
+namespace scopes or retrieve schemas. A namespace URI cannot supply a missing
+member target definition.
 
 The `timestampFormat` trait applies to a timestamp root or a member targeting
 a timestamp, including list, map-value and union members. Its exact string

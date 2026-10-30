@@ -233,8 +233,12 @@ vocabulary/source mapping. It does not supply their implementation.
   specializations, and its conflict with `xmlNamespace` in either property order.
   `xmlFlattened` checks object-valued structure/union members targeting lists
   or maps. Multiple annotated members remain valid, without inferred name
-  uniqueness. No XML serialization, prefix binding or namespace declaration
-  qualification is added.
+  uniqueness. `xmlNamespace` checks object values on data roots/members,
+  required nonempty URI references and optional ASCII identifier prefixes.
+  Relative references, including RFC 3986 fragments, remain accepted without
+  resolution or normalization. Namespace URIs are not dependency-acquisition
+  URLs. No XML serialization, prefix binding, namespace scope validation or
+  service protocol qualification is added.
   Recognized prelude traits now check documentation/error values and the object
   shape of annotation, idempotent and trait-marker values throughout the
   selected closure. Explicit recognized prelude targets and their declared
