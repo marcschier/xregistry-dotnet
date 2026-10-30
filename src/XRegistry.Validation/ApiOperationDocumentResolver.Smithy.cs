@@ -639,15 +639,25 @@ public static partial class ApiOperationDocumentResolver
                 "document" => value.ValueKind != JsonValueKind.Array && value.ValueKind != JsonValueKind.Object ||
                     value.ValueKind == JsonValueKind.Array && value.GetArrayLength() == 0 ||
                     value.ValueKind == JsonValueKind.Object && !value.EnumerateObject().Any(),
-                "timestamp" => true,
+                "timestamp" => value.ValueKind is JsonValueKind.Number or JsonValueKind.String,
                 _ => value.ValueKind == JsonValueKind.Number
             };
             ValidationContext.Require(valid, path, "document.default_value",
                 "The Smithy default value is incompatible with its target type.");
             if (kind == "timestamp")
             {
-                ValidationContext.Fail(DocumentValidationStatus.Unsupported, path, "smithy.timestamp_default",
-                    "Timestamp default validation is not supported.");
+                if (value.ValueKind == JsonValueKind.String)
+                {
+                    ValidationContext.Fail(DocumentValidationStatus.Unsupported, path, "smithy.timestamp_default",
+                        "String timestamp default validation is not supported.");
+                }
+                var seconds = JsonNumber.Read(value, budget, path);
+                ValidationContext.Require((seconds.IsZero || seconds.Exponent >= -3) &&
+                    seconds.CompareTo(new(true, "62135596800", 0)) >= 0 &&
+                    seconds.CompareTo(new(false, "253402300799999", -3)) <= 0,
+                    path, "document.default_timestamp",
+                    "A Smithy timestamp default must be epoch seconds within years 0001 through 9999 at millisecond resolution.");
+                return;
             }
             var length = 0;
             if (kind == "blob")

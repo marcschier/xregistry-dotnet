@@ -455,7 +455,12 @@ defaults must be empty containers. Document defaults permit scalar values or
 empty containers, not nested content. These checks do not apply defaults to
 the returned operation or treat literal values as imports.
 
-Timestamp and string-encoded bigInteger/bigDecimal defaults report `Unsupported`.
+Numeric timestamp defaults use Unix epoch seconds at millisecond resolution,
+with exact inclusive bounds of `-62135596800` and `253402300799.999` for years
+0001 through 9999. Decimal and exponent spellings with the same mathematical
+value compare equally; sub-millisecond values and values outside those bounds
+report `Invalid`. Null member overrides remain valid.
+String timestamp and string-encoded bigInteger/bigDecimal defaults report `Unsupported`.
 Complete timestamp handling and applied pattern constraints remain
 open; these checks do not establish full Smithy validity.
 

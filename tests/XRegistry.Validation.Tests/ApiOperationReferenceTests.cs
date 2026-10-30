@@ -4191,6 +4191,102 @@ public class ApiOperationReferenceTests
         await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
     }
 
+    [Test]
+    [Arguments("0", true)]
+    [Arguments("-0", true)]
+    [Arguments("0e-1000", true)]
+    [Arguments("0.001", true)]
+    [Arguments("-0.001", true)]
+    [Arguments("1.234000", true)]
+    [Arguments("1234e-3", true)]
+    [Arguments("-62135596800", true)]
+    [Arguments("-62135596799.999", true)]
+    [Arguments("-62135596800.001", false)]
+    [Arguments("253402300799.998", true)]
+    [Arguments("253402300799.999", true)]
+    [Arguments("253402300800", false)]
+    [Arguments("0.0001", false)]
+    [Arguments("-0.0001", false)]
+    [Arguments("1.2341", false)]
+    [Arguments("1e1000", false)]
+    [Arguments("-1e1000", false)]
+    [Arguments("1e-1000", false)]
+    public async Task SmithyJsonNumericTimestampDefaultsUseExactEpochRangeAndMilliseconds(string value, bool valid)
+    {
+        foreach (var rootDefault in new[] { false, true })
+        {
+            var document = JsonNode.Parse(SmithyDefaultDocument("timestamp", value, rootDefault))!;
+            if (rootDefault)
+            {
+                document["shapes"]!["example#Input"]!["members"]!["value"]!["traits"]!["smithy.api#default"] = null;
+            }
+            var result = ResolveSmithy(document.ToJsonString());
+            await Assert.That(result.Status).IsEqualTo(valid
+                ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+            if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+            else
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.default_timestamp");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo((rootDefault
+                    ? "$/shapes/example#Value" : "$/shapes/example#Input/members/value") + "/traits/smithy.api#default");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("true")]
+    [Arguments("false")]
+    [Arguments("[]")]
+    [Arguments("{}")]
+    public async Task SmithyJsonTimestampDefaultsRejectNonTimestampNodeKinds(string value)
+    {
+        var result = ResolveSmithy(SmithyDefaultDocument("timestamp", value, false));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.default_value");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Input/members/value/traits/smithy.api#default");
+    }
+
+    [Test]
+    [Arguments("null")]
+    [Arguments("1.234")]
+    public async Task SmithyJsonImplicitTimestampDefaultsPreserveNativeSelectionWithoutAcquisition(string value)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("timestamp", value, false))!;
+        document["shapes"]!["example#Input"]!["members"]!["value"]!["target"] = "smithy.api#Timestamp";
+        document["shapes"]!["example#Unused"] = JsonNode.Parse("""
+            {"type":"timestamp","traits":{"smithy.api#default":0.0001}}
+            """);
+        document["metadata"] = JsonNode.Parse("""
+            {"literal":{"target":"https://example.test/not-an-import","traits":{"smithy.api#default":1e1000}}}
+            """);
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Epoch values are not imports."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
+    [Test]
+    public async Task SmithyJsonNumericTimestampRootDefaultsRequireExactMemberRepetition()
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("timestamp", "1.234", true))!;
+        var member = document["shapes"]!["example#Input"]!["members"]!["value"]!;
+        member["traits"]!["smithy.api#default"] = JsonNode.Parse("1234e-3");
+        var same = ResolveSmithy(document.ToJsonString());
+        await Assert.That(same.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        member["traits"]!["smithy.api#default"] = JsonNode.Parse("1.235");
+        var different = ResolveSmithy(document.ToJsonString());
+        await Assert.That(different.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(different.Diagnostic!.Code).IsEqualTo("document.default_repeat");
+        member["traits"]!["smithy.api#default"] = null;
+        var optional = ResolveSmithy(document.ToJsonString());
+        await Assert.That(optional.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+    }
+
     private static string SmithyDefaultDocument(string kind, string value, bool rootDefault)
     {
         var target = new JsonObject { ["type"] = kind };

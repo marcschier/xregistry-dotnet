@@ -249,7 +249,9 @@ vocabulary/source mapping. It does not supply their implementation.
   overrides, explicit repetition of root defaults, native scalar types,
   integer ranges, finite float/double numbers and exact special-value strings,
   base64 blobs, enum membership and empty list/map/document containers. Defaults
-  are not inserted into operations. Timestamp and string-encoded
+  are not inserted into operations. Numeric timestamp defaults check exact
+  epoch-second bounds for years 0001 through 9999 and millisecond resolution.
+  Null overrides and exact default repetition remain supported. String timestamp and string-encoded
   bigInteger/bigDecimal defaults report unsupported; applied pattern
   constraints and full default validation remain open.
 - Complete end-to-end event/outbox delivery qualification while preserving
