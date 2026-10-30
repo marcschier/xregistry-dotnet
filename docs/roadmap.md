@@ -148,6 +148,7 @@ vocabulary/source mapping. It does not supply their implementation.
   reusable Path Item and Callback component methods without dereferencing or
   making unused definitions into operation-ID candidates.
   OpenRPC selection checks resolved parameter/result descriptors and errors,
+  exact method-name uniqueness across all resolved method occurrences,
   parameter name uniqueness and required-before-optional ordering, and exact
   integer error-code uniqueness within each method before selection. Descriptor
   and error references use caller-controlled acquisition; schema values remain

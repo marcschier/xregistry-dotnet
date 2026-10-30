@@ -2555,6 +2555,55 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
+    [Arguments("Target", true)]
+    [Arguments("Missing", true)]
+    [Arguments("Target", false)]
+    [Arguments("Missing", false)]
+    public async Task OpenRpcUnrelatedDuplicateMethodNamesPreventSelectionOrNotFound(
+        string requested, bool referenced)
+    {
+        var document = new JsonObject
+        {
+            ["openrpc"] = "1.4.0",
+            ["methods"] = new JsonArray(
+                new JsonObject { ["name"] = "Target", ["params"] = new JsonArray() },
+                new JsonObject { ["name"] = "Other", ["params"] = new JsonArray() },
+                referenced
+                    ? new JsonObject { ["$ref"] = "https://api.example/other.json" }
+                    : new JsonObject { ["name"] = "Other", ["params"] = new JsonArray() })
+        };
+        var calls = 0;
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenRPC/1.4", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/" + requested),
+            resolveReference: (uri, _) =>
+            {
+                calls++;
+                if (uri != "https://api.example/other.json") { throw new InvalidOperationException(uri); }
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+                    """{"name":"Other","params":[]}"""u8.ToArray());
+            });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.method_duplicate");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo(referenced ? "$/name" : "$/methods/2/name");
+        await Assert.That(calls).IsEqualTo(referenced ? 1 : 0);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        await Assert.That(result.DocumentPath).IsNull();
+    }
+
+    [Test]
+    public async Task OpenRpcMethodNameUniquenessUsesExactCaseAndIgnoresUnusedDefinitions()
+    {
+        var result = ApiOperationDocumentResolver.Resolve("OpenRPC/1.4", "application/json", """
+            {"openrpc":"1.4.0","methods":[{"name":"Target","params":[]},{"name":"target","params":[]}],
+             "components":{"methods":{"unused":{"name":"Target","params":[]}}}}
+            """u8.ToArray(), ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Operation.GetProperty("name").GetString()).IsEqualTo("Target");
+        await Assert.That(result.DocumentPath).IsEqualTo("$/methods/0");
+    }
+
+    [Test]
     [Arguments("""{"info":null}""", "document.info", "$/info")]
     [Arguments("""{"info":[]}""", "document.info", "$/info")]
     [Arguments("""{"info":{}}""", "document.info_title", "$/info/title")]
@@ -3546,7 +3595,7 @@ public class ApiOperationReferenceTests
             ApiOperationReference.Parse("/apigroups/users/apis/Profile#operations/Target"),
             resolveReference: (_, _) =>
             {
-                var name = loads++ == 0 ? "Target" : "Other";
+                var name = loads++ == 0 ? "Target" : "Other" + loads.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 var prefix = "{\"name\":\"" + name + "\",\"params\":[],\"description\":\"";
                 const string suffix = "\"}";
                 return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(prefix +

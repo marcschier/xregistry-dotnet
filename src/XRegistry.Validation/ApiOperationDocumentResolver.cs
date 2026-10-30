@@ -462,6 +462,7 @@ public static partial class ApiOperationDocumentResolver
         var matches = new List<OperationLocation>();
         var methodCounts = new Dictionary<string, int>(StringComparer.Ordinal);
         var links = new List<OperationLocation>();
+        OperationLocation? duplicate = null;
         var index = 0;
         foreach (var method in root.GetProperty("methods").EnumerateArray())
         {
@@ -485,6 +486,11 @@ public static partial class ApiOperationDocumentResolver
             if (contractFailure is not null) { return contractFailure; }
             var nativeName = name.GetString()!;
             methodCounts[nativeName] = Math.Min(2, methodCounts.GetValueOrDefault(nativeName) + 1);
+            if (methodCounts[nativeName] > 1 &&
+                !string.Equals(nativeName, methodName, StringComparison.Ordinal))
+            {
+                duplicate ??= location;
+            }
             if (string.Equals(name.GetString(), methodName, StringComparison.Ordinal))
             {
                 if (matches.Count < 2) { matches.Add(location); }
@@ -501,6 +507,12 @@ public static partial class ApiOperationDocumentResolver
                     "An OpenRPC link method must name exactly one resolved Method Object.",
                     link.Pointer + "/method");
             }
+        }
+        if (duplicate is not null)
+        {
+            return Failure(ApiOperationResolutionStatus.Invalid, "document.method_duplicate",
+                "OpenRPC method names must be unique within the resolved methods array.",
+                duplicate.Pointer + "/name");
         }
         return matches.Count switch
         {

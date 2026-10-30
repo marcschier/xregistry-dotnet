@@ -111,6 +111,13 @@ response descriptor. `paramStructure`, when supplied, must be `by-name`,
 `by-position` or `either`. Method and content-descriptor annotations have their
 declared string or boolean types.
 
+Method names are case-sensitive and must be unique across the resolved
+`methods` array. A duplicate requested name reports `Ambiguous`; duplicates
+of other names report `Invalid`, even when the requested method exists or is
+absent. Repeated references create separate method occurrences, so retrieval
+caching does not waive uniqueness. Unused component definitions do not create
+method occurrences.
+
 Parameters require distinct exact names and an object or boolean `schema`.
 Required parameters must precede optional parameters; an omitted `required`
 flag means optional. Results use the same content-descriptor shape. Errors
