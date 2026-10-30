@@ -233,8 +233,8 @@ vocabulary/source mapping. It does not supply their implementation.
   remain distinct from supplied defaults. Comparisons consume the shared work
   and depth budgets. Deprecated string `enum` constraints check exact membership
   for custom values and decoded map keys, with the same helper used for defaults.
-  Native `enum`/`intEnum` membership, `idRef` value resolution and complete custom
-  application schemas remain unvalidated.
+  Native `enum`/`intEnum` membership and complete custom application schemas
+  remain unvalidated.
   Reached `protocolDefinition` declarations share the structure-trait target
   and required-trait reference checks; `noInlineDocumentSupport` requires a
   Boolean. Protocol selection and the service-closure document prohibition
@@ -244,8 +244,13 @@ vocabulary/source mapping. It does not supply their implementation.
   Configurable validators, hierarchical warning suppression and metadata
   severity overrides remain unvalidated.
   `idRef` checks string/member-string declaration targets, object values and
-  optional string/Boolean fields. Reference semantics of custom application
-  values and selector syntax/evaluation remain unvalidated.
+  optional string/Boolean fields. Custom application values check absolute
+  root/member ID syntax and exact-case local presence, with whole-member
+  overrides and optional missing targets. References do not trigger schema
+  traversal or acquisition. Relative ID assembly, non-wildcard evaluation on
+  existing targets and required references to unindexed implicit prelude
+  shapes report `Unsupported`. Selector syntax and general evaluation remain
+  unvalidated.
   `traitValidators` checks trait-definition targets, nonempty event IDs and rule
   objects with required string selectors, optional string messages and explicit
   recognized severities. Selector syntax/execution and configured validation

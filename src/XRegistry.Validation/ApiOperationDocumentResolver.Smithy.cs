@@ -2257,6 +2257,57 @@ public static partial class ApiOperationDocumentResolver
                 ValidationContext.Require(MatchesLegacyEnum(value.GetString()!, legacyEnum, path),
                     path, "document.trait_enum", "A Smithy string trait value must match a declared enum trait value.");
             }
+            if (TryTrait(member, "smithy.api#idRef", out var reference) ||
+                TryTrait(shape, "smithy.api#idRef", out reference))
+            {
+                ValidateTraitNodeReference(value.GetString()!, reference, path);
+            }
+        }
+
+        private void ValidateTraitNodeReference(string value, JsonElement reference, string path)
+        {
+            budget.Work(value.Length, path);
+            var separator = value.IndexOf('$');
+            var rootId = separator < 0 ? value : value[..separator];
+            var member = separator < 0 ? null : value[(separator + 1)..];
+            ValidationContext.Require((member is null || IsSmithyShapeId("example#" + member)) &&
+                (IsSmithyShapeId(rootId) || IsSmithyShapeId("example#" + rootId)),
+                path, "document.trait_id_ref", "A Smithy idRef trait value must contain a valid shape ID.");
+            if (!rootId.Contains('#', StringComparison.Ordinal))
+            {
+                ValidationContext.Fail(DocumentValidationStatus.Unsupported, path, "smithy.relative_id_ref",
+                    "Relative Smithy idRef trait values require model assembly and are not supported.");
+            }
+            var found = shapes.TryGetProperty(rootId, out var target);
+            var implicitKind = found ? null : SmithyPreludeKind(rootId);
+            if (member is not null)
+            {
+                found = found && (target.GetProperty("type").GetString() switch
+                {
+                    "structure" or "union" or "enum" or "intEnum" =>
+                        target.TryGetProperty("members", out var members) && members.ValueKind == JsonValueKind.Object &&
+                        members.TryGetProperty(member, out _),
+                    "list" => member == "member" && target.TryGetProperty(member, out _),
+                    "map" => member is "key" or "value" && target.TryGetProperty(member, out _),
+                    _ => false
+                });
+            }
+            else { found |= implicitKind is not null; }
+            var required = reference.TryGetProperty("failWhenMissing", out var missing) && missing.GetBoolean();
+            var wildcard = !reference.TryGetProperty("selector", out var selector) || selector.GetString() == "*";
+            if (!found && implicitKind is null && rootId.StartsWith("smithy.api#", StringComparison.Ordinal) &&
+                !shapes.TryGetProperty(rootId, out _) && (required || !wildcard))
+            {
+                ValidationContext.Fail(DocumentValidationStatus.Unsupported, path, "smithy.prelude_id_ref",
+                    "Existence checks for this implicit Smithy prelude reference are not supported.");
+            }
+            ValidationContext.Require(found || !required, path, "document.trait_id_ref_missing",
+                "A required Smithy idRef trait target is absent from the assembled model.");
+            if (found && !wildcard)
+            {
+                ValidationContext.Fail(DocumentValidationStatus.Unsupported, path, "smithy.id_ref_selector",
+                    "Non-wildcard selectors on Smithy idRef trait values are not supported.");
+            }
         }
 
         private bool MatchesLegacyEnum(string value, JsonElement declaration, string path)

@@ -435,7 +435,7 @@ The deprecated string `enum` constraint checks exact, case-sensitive membership
 on custom values, including nested values and decoded map keys before sparse
 null values are skipped. It shares the default-value membership check and does
 not insert omitted members. These are legacy fixed-set constraint checks;
-native `enum`/`intEnum` membership and `idRef` value resolution remain unvalidated.
+native `enum`/`intEnum` membership remains unvalidated.
 
 The `conflicts` property must be an array of absolute root trait IDs. A custom
 trait cannot coexist on the same shape with any trait named in that array,
@@ -572,10 +572,21 @@ remain unvalidated.
 Reached `idRef` declarations require string shapes or members targeting strings,
 including enum specializations. Values must be objects; optional `selector` and
 `errorMessage` fields must be strings, and `failWhenMissing` must be Boolean.
-Missing member target definitions remain unresolved. These checks validate the
-declaration, not reference semantics of custom trait application values.
-Resolution for those values and selector syntax/evaluation remain unvalidated;
-declaration strings are not acquired as dependencies.
+Missing schema target definitions remain unresolved. Custom trait values now
+check absolute root/member ID syntax and exact-case presence in the assembled
+model. `failWhenMissing: true` rejects absent targets; omitted or false permits
+absence. Member `idRef` declarations replace the whole target declaration.
+Checks include nested values and decoded map keys before sparse null values are
+skipped. A reference does not add the identified shape to the schema traversal
+or trigger acquisition, and custom error messages are not emitted.
+
+An omitted selector or exact `*` needs no selector evaluation. Other selectors
+report `Unsupported` when their target exists; an optional absent target does
+not require evaluation. Well-formed relative IDs report `Unsupported` because
+this selector does not perform IDL assembly. Required references to implicit
+prelude shapes outside the supported prelude table also report `Unsupported`,
+rather than claiming those shapes are absent. Selector syntax and general
+evaluation remain unvalidated.
 
 Reached `traitValidators` declarations require trait-definition targets and
 objects keyed by nonempty event IDs. Each rule requires a string `selector`;
