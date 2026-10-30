@@ -98,7 +98,11 @@ refresh the package-consumer matrix or qualify the remaining cells.
 - Complete the approved draft-alignment scope against the immutable successor
   sources in `eng/specification/successors.json`. The source inventory does not
   replace clause review or execution evidence.
-- Implement the selected incremental WoT profile. SemVer provider acquisition now
+- Implement the selected incremental WoT profile. Its pure D3 assignment helper
+  calculates arbitrary-precision revisions from supplied high-water state, but
+  the endpoint model, atomic durable counter, immutable compatibility lines and
+  origin-scoped incremental resolution still need implementation and evidence.
+  SemVer provider acquisition now
   performs scoped native-source lookup and verifies acquired byte digests.
   Parsed local references use the retained containing revision and its authored
   version fields. JSON Pointer fragments are applied after selection without

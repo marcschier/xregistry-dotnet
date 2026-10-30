@@ -19,6 +19,7 @@ complete xRegistry conformance.
 | WoT Registry acquisition | `XRegistry.Federation.WotRegistryResolver.ResolveAsync` | Resolves a parsed, nonlocal reference within one authorized source and Group Resource collection. Requires the source's captured SemVer WoT model, rejects competing Resources, and returns exact bytes with their computed SHA-256 digest and retained Registry origin. |
 | WoT containing-revision resolution | `XRegistry.Federation.WotRegistryResolver.ResolveLocalAsync` | Resolves a parsed local reference against an already acquired `WotResolvedDocument`. Uses its retained bytes and kind, applies local floors to the authored version, and cannot select another Registry Version. |
 | WoT JSON Pointer selection | `XRegistry.Federation.WotRegistryResolver.SelectFragmentAsync` | Applies an RFC 6901 URI-fragment pointer to the acquired document after Version or local-revision selection. Returns the selected JSON value with the containing document's full-byte digest and origin. |
+| WoT incremental assignment calculation | `XRegistry.Models.WotIncrementalVersionAllocator.Assign` | Calculates a new integer revision from explicit durable high-water state. It does not publish, persist a counter, activate an incremental endpoint or implement compatibility-line selection. |
 | Generic operation dispatch | `RegistryEngine.ExecuteAsync(RegistryOperation, RegistryOperationContext, CancellationToken)` in `XRegistry.Server` | The engine owns model, lifecycle, versions, validation and atomic change preparation. |
 | HTTP client | `XRegistry.Client.XRegistryHttpClient` | One explicit HTTP operation, unchanged status/headers and bounded metadata/Document consumption. |
 | HTTP serving | `XRegistry.AspNetCore.MapXRegistry` | Maps a concrete `RegistryEngine`; it does not start or secure a host. |
@@ -91,6 +92,18 @@ native execution in the complete Federation suite on .NET 10/Windows x64 at
 `6d143c4`. Other native cells remain unqualified; the package-consumer fixture
 does not yet exercise these methods.
 See [native evidence](native-aot.md#current-evidence-and-uncovered-cells).
+
+`WotIncrementalVersionAllocator.Assign` calculates the proposed D3 allocation
+from a supplied watermark. A canonical authored positive integer must exceed
+that watermark; absent or noncanonical authored values generate its successor.
+The helper uses arbitrary-precision arithmetic within Core's 128-character id
+limit and rejects sequence exhaustion, invalid captured counters and supplied
+ids that disagree with the assignment. It never reconstructs deleted history
+from retained Versions. A publication owner must commit the returned watermark
+atomically with the bytes, fixed metadata and Core state, retaining the counter
+after Resource deletion. That server integration and its durable/concurrent
+execution evidence are not implemented by this pure function; existing built-in
+WoT models and server writes remain SemVer.
 
 ## Choose the real seam
 
