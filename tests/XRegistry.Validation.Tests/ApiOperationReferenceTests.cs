@@ -1796,16 +1796,81 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
-    public async Task AvroProtocolLogicalTypePolicyIsExplicitlyUnsupportedRatherThanInvalidOrSelected()
+    [Arguments("""{"type":"bytes","logicalType":"decimal","precision":10,"scale":2}""")]
+    [Arguments("""{"type":"bytes","logicalType":"decimal","precision":2,"scale":10}""")]
+    [Arguments("""{"type":"bytes","logicalType":"big-decimal"}""")]
+    [Arguments("""{"type":"string","logicalType":"uuid"}""")]
+    [Arguments("""{"type":"fixed","name":"Id","size":16,"logicalType":"uuid"}""")]
+    [Arguments("""{"type":"int","logicalType":"date"}""")]
+    [Arguments("""{"type":"int","logicalType":"time-millis"}""")]
+    [Arguments("""{"type":"long","logicalType":"time-micros"}""")]
+    [Arguments("""{"type":"long","logicalType":"timestamp-millis"}""")]
+    [Arguments("""{"type":"long","logicalType":"timestamp-micros"}""")]
+    [Arguments("""{"type":"long","logicalType":"timestamp-nanos"}""")]
+    [Arguments("""{"type":"long","logicalType":"local-timestamp-millis"}""")]
+    [Arguments("""{"type":"long","logicalType":"local-timestamp-micros"}""")]
+    [Arguments("""{"type":"long","logicalType":"local-timestamp-nanos"}""")]
+    [Arguments("""{"type":"fixed","name":"Duration","size":12,"logicalType":"duration"}""")]
+    [Arguments("""{"type":"int","logicalType":"future-extension","custom":{"$ref":"https://invalid.example"}}""")]
+    [Arguments("""{"type":"string","logicalType":"date"}""")]
+    public async Task AvroProtocolLogicalTypesPreserveAnnotationsAndSelectUnderlyingWireSchemas(string schema)
     {
         var result = ResolveAvroProtocol("""
             {"protocol":"Users","messages":{"GetUser":{"request":[],
-              "response":{"type":"bytes","logicalType":"decimal","precision":10,"scale":2}}}}
-            """);
-        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Unsupported);
-        await Assert.That(result.Diagnostic!.Code).IsEqualTo("avro.logical_type");
-        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/messages/GetUser/response/logicalType");
+              "response":SCHEMA}}}
+            """.Replace("SCHEMA", schema, StringComparison.Ordinal));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetProperty("response").GetRawText()).IsEqualTo(schema);
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
+    [Test]
+    [Arguments("""{"type":"int","logicalType":"date"}""", "\"not-an-int\"", "avro.default", "/default")]
+    [Arguments("""{"type":"string","logicalType":"uuid"}""", "42", "avro.default", "/default")]
+    [Arguments("""{"type":"fixed","name":"D","size":12,"logicalType":"duration"}""", "\"short\"", "avro.default", "/default")]
+    [Arguments("""{"type":"missing","logicalType":"date"}""", "0", "avro.unknown_name", "/type/type")]
+    [Arguments("""{"type":"int","logicalType":false}""", "0", "schema.string", "/type/logicalType")]
+    [Arguments("""{"type":"fixed","name":"D","size":-1,"logicalType":"duration"}""", "\"\"", "avro.fixed_size", "/type/size")]
+    [Arguments("""[{"type":"int","logicalType":"date"},"int"]""", "0", "avro.union", "/type")]
+    public async Task AvroProtocolLogicalAnnotationsCannotBypassWireSchemaAndDefaultValidation(
+        string schema, string defaultValue, string code, string suffix)
+    {
+        var result = ResolveAvroProtocol("""
+            {"protocol":"Users","messages":{"GetUser":{"request":[
+              {"name":"value","type":SCHEMA,"default":DEFAULT}],"response":"null"}}}
+            """.Replace("SCHEMA", schema, StringComparison.Ordinal).Replace("DEFAULT", defaultValue, StringComparison.Ordinal));
+
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/messages/GetUser/request/0" + suffix);
         await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task AvroProtocolLogicalAnnotationsRetainNamedTypesRecursionAndDoNotAcquireReferences()
+    {
+        const string document = """
+            {"protocol":"Users","types":[
+              {"type":"record","name":"Node","logicalType":"future",
+               "fields":[{"name":"next","type":["null","Node"],"default":null},
+                         {"name":"id","type":{"type":"string","logicalType":"uuid"},"default":"authored"},
+                         {"name":"date","type":{"type":"int","logicalType":"date"},"default":-1}]}],
+             "messages":{"GetUser":{"request":[{"name":"node","type":"Node"}],
+               "response":{"type":"array","logicalType":"custom",
+                 "items":{"type":"map","values":{"type":"long","logicalType":"time-micros"}}},
+               "extension":{"$ref":"https://invalid.example"}}}}
+            """;
+        var result = await ApiOperationDocumentResolver.ResolveAsync("AvroProtocol/1.12.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/GetUser"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Avro logical metadata cannot acquire references."));
+
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetProperty("request")[0].GetProperty("type").GetString()).IsEqualTo("Node");
+        await Assert.That(result.Operation.GetProperty("response").GetProperty("items").GetProperty("values")
+            .GetProperty("logicalType").GetString()).IsEqualTo("time-micros");
     }
 
     [Test]

@@ -156,8 +156,12 @@ vocabulary/source mapping. It does not supply their implementation.
   declaration names, effective namespace collisions and request fields, then
   binds named request/response/error schemas and checks defaults in native
   declaration order across the complete protocol. Avro 1.12 union defaults
-  use the first matching branch. Logical-type annotations remain unsupported;
-  complete protocol validation and qualification remain open.
+  use the first matching branch. Protocol logical-type annotations retain their
+  authored representation while selection checks the underlying wire schema
+  and defaults, including unknown or invalid logical annotations. No logical
+  value conversion or comparison is performed; data-schema validation and
+  compatibility profiles retain their unsupported result. Complete protocol
+  validation and qualification remain open.
   OpenAPI 3.1 selection includes webhook operation IDs and inline webhook method
   pointers, with ambiguity checking across paths and webhooks. OpenAPI selection
   also traverses nested callbacks and caller-supplied Callback references within

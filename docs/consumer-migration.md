@@ -225,8 +225,14 @@ containers, enum symbols, byte/fixed values and numeric ranges. Avro 1.12 union
 defaults use the first matching branch; the existing Avro 1.8.2 and 1.11.0 data
 schema profiles retain their first-branch rule. Recursive default expansion and
 schema work use finite shared budgets. Enum definition defaults must name a
-declared symbol. Logical-type annotations report `Unsupported` under the current
-schema policy, not successful validation or a malformed-protocol result.
+declared symbol. Protocol selection reads logical-type schemas through their
+underlying Avro wire types, as permitted by the
+[Avro 1.12 logical-type rules](https://avro.apache.org/docs/1.12.0/specification/#logical-types).
+Authored annotations remain unchanged, including unknown names and invalid
+logical parameters; they cannot bypass underlying schema or default checks.
+This does not convert values to UUIDs, dates or decimals or compare logical
+types. The Avro 1.8.2/1.11.0 data-schema validation and compatibility profiles
+continue to report `Unsupported` for logical-type annotations.
 Named types remain in the caller's original protocol;
 selection does not inline them or synthesize the implicit system-error branch.
 Avro JSON metadata, including a member named `$ref`, never triggers dependency

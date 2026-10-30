@@ -102,8 +102,11 @@ internal sealed class AvroSyntax(string format, ValidationContext context)
         if (schema.TryGetProperty("logicalType", out var logicalType))
         {
             SchemaJson.String(logicalType, path + "/logicalType");
-            ValidationContext.Fail(DocumentValidationStatus.Unsupported, path + "/logicalType", "avro.logical_type",
-                "Logical-type annotations are outside the implemented Avro wire-schema policy.");
+            if (!_protocol)
+            {
+                ValidationContext.Fail(DocumentValidationStatus.Unsupported, path + "/logicalType", "avro.logical_type",
+                    "Logical-type annotations are outside the implemented Avro wire-schema policy.");
+            }
         }
         if (schema.TryGetProperty("doc", out var documentation))
         {
