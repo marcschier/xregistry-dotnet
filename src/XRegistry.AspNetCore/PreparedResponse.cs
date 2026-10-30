@@ -106,7 +106,7 @@ internal sealed class PreparedResponse(int statusCode, Dictionary<string, string
             "byte_limit" or "node_limit" or "depth_limit" or "number_limit" or "event_limit" => "too_large",
             "malformed_path" => "bad_request",
             "version-mismatch" => "mismatched_id",
-            "invalid-version" => "invalid_attribute",
+            "invalid-version" or "invalid-line" => "invalid_attribute",
             _ => diagnostic.Code
         };
         if (!ProblemDisclosure.ValidCode(code))

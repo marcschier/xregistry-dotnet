@@ -158,6 +158,18 @@ incremental selector cases and all 10 incremental provider cases. Both ran
 without IL diagnostics or JIT compilation and rejected their managed controls.
 This does not qualify the other native cells or complete URI/context processing.
 
+Live HTTP workflow tests now publish TM and TD revisions through
+`XRegistryHttpClient` and `MapXRegistry`, then acquire them through
+`HttpFederationReadSource` and `WotRegistryResolver`. They cover exact line
+selection, sticky failures, raw pins, numeric digest ties, exact replay and
+local resolution after source shutdown. Rejected byte, line and revision-id
+changes return Core problem codes with their required arguments and do not
+consume the next allocation. Document-view navigation to uninlined entities
+remains opaque URL data; it is not followed or mistaken for a missing pointer.
+These workflows use in-memory persistence and parsed reference requests.
+Their managed evidence does not establish a durable HTTP restart workflow,
+complete JSON-LD processing or native execution of the later HTTP corrections.
+
 ## Choose the real seam
 
 The supplied consumer uses an application-owned transactional record store:

@@ -434,8 +434,9 @@ public sealed partial class RegistryEngine
             if (incremental && !isNew &&
                 !ServerJson.Equal(fixedLine, entity.Attributes["compatibilityline"]))
             {
-                throw ServerErrors.Create("invalid-line", key,
-                    "An incremental revision's compatibility line, including its absence, cannot change.");
+                throw ServerErrors.With("invalid-line", key,
+                    "An incremental revision's compatibility line, including its absence, cannot change.",
+                    ("name", "compatibilityline"));
             }
             if (incremental && !isNew && !ServerJson.Equal(fixedWotId, entity.Attributes["wotid"]))
             {

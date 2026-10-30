@@ -3,6 +3,7 @@
 
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using System.Text.Json.Nodes;
 using TUnit.Assertions;
 using TUnit.Core;
 using static XRegistry.Federation.Tests.HttpFederationReadSourceTests;
@@ -11,6 +12,70 @@ namespace XRegistry.Federation.Tests;
 
 public class HttpFederationCompletionTests
 {
+    [Test]
+    [Arguments("metaurl", false)]
+    [Arguments("metaurl", true)]
+    [Arguments("versionsurl", false)]
+    [Arguments("versionsurl", true)]
+    [Arguments("defaultversionurl", false)]
+    [Arguments("defaultversionurl", true)]
+    [Arguments("self", true)]
+    public async Task DocumentViewPreservesUninlinedNavigationWithoutFollowingItButRequiresPointersForIncludedTargets(
+        string property, bool included)
+    {
+        const string xid = "/documents/g/assets/a";
+        const string opaque = "https://not-authorized.invalid/never-follow";
+        var entity = new JsonObject { ["xid"] = xid, ["assetid"] = "a", ["self"] = "#" };
+        var meta = new JsonObject { ["xid"] = xid + "/meta", ["self"] = "#/meta", ["defaultversionid"] = "v1" };
+        if (property == "defaultversionurl")
+        {
+            meta[property] = opaque;
+            entity["meta"] = meta;
+        }
+        else
+        {
+            entity[property] = opaque;
+        }
+        if (included)
+        {
+            if (property == "metaurl") { entity["meta"] = meta; }
+            if (property is "versionsurl" or "defaultversionurl")
+            {
+                entity["versions"] = new JsonObject
+                {
+                    ["v1"] = new JsonObject
+                    {
+                        ["xid"] = xid + "/versions/v1", ["versionid"] = "v1", ["self"] = "#/versions/v1"
+                    }
+                };
+            }
+        }
+        var paths = new List<string>();
+        await using var app = await StartAsync(app =>
+        {
+            Bootstrap(app, paths);
+            app.MapGet("/mount/documents/g/assets/a$details", () => Json(entity.ToJsonString()));
+        });
+        using var source = await HttpFederationReadSource.OpenAsync(new Uri(new Uri(app.Urls.Single()), "/mount/"),
+            new() { AllowLoopbackHttp = true });
+        var observations = source.Observations.Count;
+        var request = new FederationReadRequest(FederationOperation.Entity, xid);
+        if (included)
+        {
+            var failure = await FailureAsync(() => source.ReadAsync(request));
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InconsistentSnapshot);
+        }
+        else
+        {
+            var result = await source.ReadAsync(request);
+            var captured = result.Metadata.GetProperty("entity");
+            await Assert.That(captured.GetProperty("self").GetString()).IsEqualTo("#/entity");
+            var navigation = property == "defaultversionurl" ? captured.GetProperty("meta") : captured;
+            await Assert.That(navigation.GetProperty(property).GetString()).IsEqualTo(opaque);
+        }
+        await Assert.That(source.Observations.Count).IsEqualTo(observations + 1);
+    }
+
     [Test]
     public async Task EnabledFlagNamesRetainCoreCaseInsensitiveSemantics()
     {

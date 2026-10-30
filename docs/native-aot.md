@@ -136,6 +136,11 @@ acquisition. They do not establish complete URI/context processing, refreshed
 Server/Storage.File execution at this newer source, other platforms or
 requirement-level release qualification.
 
+Later live HTTP workflows exposed and corrected missing Core error arguments
+and over-rejection of uninlined document-view navigation. The source-matched
+native receipts above predate those corrections; their managed workflow
+evidence does not refresh native qualification.
+
 The module-level receipts below are historical and have not been refreshed
 against the complete successor source set. Do not treat their counts as
 qualification of the current implementation.

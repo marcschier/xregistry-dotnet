@@ -119,8 +119,12 @@ other platforms.
   acquisition; retained local references use the captured revision and line.
   Its full managed gate passed 10,748 cases and 283 tooling tests.
   Complete Models/Federation native suites passed at `c196737` on
-  .NET 10/Windows x64. Other native cells, URI/context mapping, line eligibility
-  diagnostics and complete workflow evidence remain open.
+  .NET 10/Windows x64. Live HTTP TM/TD publication-to-resolution workflows now
+  have managed evidence, including exact replay, rejection without allocation,
+  sticky conflicts and retained local resolution after source shutdown.
+  Other native cells, URI/context mapping, line eligibility diagnostics and
+  durable HTTP restart workflows remain open; the older native receipts do not
+  qualify the subsequent HTTP corrections.
   SemVer provider acquisition now
   performs scoped native-source lookup and verifies acquired byte digests.
   Parsed local references use the retained containing revision and its authored

@@ -259,9 +259,17 @@ public sealed partial class HttpFederationReadSource
         return result;
     }
 
-    private void RebasePointers(JsonObject entity, string[] parts, string rootPointer, string sourcePointer)
+    private void RebasePointers(JsonObject entity, string[] parts, string rootPointer, string sourcePointer,
+        JsonObject? parentResource = null)
     {
-        var navigation = new HashSet<string>(StringComparer.Ordinal) { "self", "shortself", "metaurl", "defaultversionurl" };
+        var defaultIncluded = parentResource?["versions"] is JsonObject versions &&
+            entity["defaultversionid"] is JsonValue defaultId &&
+            defaultId.TryGetValue<string>(out var id) && id is not null && versions.ContainsKey(id);
+        var navigation = new Dictionary<string, bool>(StringComparer.Ordinal)
+        {
+            ["self"] = true, ["shortself"] = true,
+            ["metaurl"] = entity["meta"] is JsonObject, ["defaultversionurl"] = defaultIncluded
+        };
         IEnumerable<string> collections = parts.Length switch
         {
             0 => Model.Groups.Keys,
@@ -271,7 +279,7 @@ public sealed partial class HttpFederationReadSource
         };
         foreach (var collection in collections)
         {
-            navigation.Add(collection + "url");
+            navigation[collection + "url"] = entity[collection] is JsonObject;
             if (entity[collection] is JsonObject members)
             {
                 foreach (var member in members)
@@ -286,12 +294,13 @@ public sealed partial class HttpFederationReadSource
         }
         if (parts.Length == 4 && entity["meta"] is JsonObject meta)
         {
-            RebasePointers(meta, [.. parts, "meta"], rootPointer, sourcePointer);
+            RebasePointers(meta, [.. parts, "meta"], rootPointer, sourcePointer, entity);
         }
-        foreach (var name in navigation)
+        foreach (var (name, included) in navigation)
         {
             if (entity[name] is JsonValue value && value.TryGetValue<string>(out var link))
             {
+                if (!link.StartsWith('#') && !included) { continue; }
                 if (!link.StartsWith('#') || (sourcePointer.Length != 0 &&
                     link != "#" + sourcePointer && !link.StartsWith("#" + sourcePointer + "/", StringComparison.Ordinal)))
                 {
