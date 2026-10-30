@@ -32,7 +32,7 @@ public class ApiOperationReferenceTests
         ["apigroups", "users", "apis", "Profile", "versions", "2"];
     private static readonly string[] s_singleDecodeTokens = ["operations", "a~1b%2F"];
     private static readonly string[] s_supportedFormats =
-        ["OpenAPI/3.0", "OpenAPI/3.1", "Swagger/2.0", "OpenRPC/1.4", "AvroProtocol/1.12.0"];
+        ["OpenAPI/3.0", "OpenAPI/3.1", "Swagger/2.0", "OpenRPC/1.4", "AvroProtocol/1.12.0", "Smithy/2.0"];
     private static readonly ApiOperationSelectorKind[] s_supportedSelectors =
         [ApiOperationSelectorKind.Operation, ApiOperationSelectorKind.JsonPointer];
 
@@ -849,6 +849,207 @@ public class ApiOperationReferenceTests
         ApiOperationDocumentResolver.Resolve("AvroProtocol/1.12.0", "application/json",
             System.Text.Encoding.UTF8.GetBytes(document),
             ApiOperationReference.Parse("/apigroups/users/apis/Profile#operations/" + message));
+
+    [Test]
+    [Arguments("2")]
+    [Arguments("2.0")]
+    public async Task SmithyJsonSelectsTheExactOwnedOperationWithItsNativeReferencesAndTraits(string version)
+    {
+        var document = """
+            {"smithy":"VERSION","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"example#Input"},
+                "output":{"target":"smithy.api#Unit"},"errors":[{"target":"example#Failure"}],
+                "traits":{"smithy.api#readonly":{},"example#Custom":{"note":"native"}}},
+              "example#Input":{"type":"structure","members":{
+                "name":{"target":"smithy.api#String","traits":{"smithy.api#required":{}}},
+                "next":{"target":"example#Input"}}},
+              "example#Failure":{"type":"structure","traits":{"smithy.api#error":"client"}},
+              "example#Custom":{"type":"structure","traits":{"smithy.api#trait":{}},
+                "members":{"note":{"target":"smithy.api#String"}}}}}
+            """.Replace("VERSION", version, StringComparison.Ordinal);
+        var bytes = System.Text.Encoding.UTF8.GetBytes(document);
+        var calls = 0;
+        var source = new Uri("https://registry.example/apis/model");
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            bytes, ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"), source,
+            (_, _) => { calls++; throw new InvalidOperationException("Shape IDs are not document URLs."); });
+        Array.Fill(bytes, (byte)' ');
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.DocumentPath).IsEqualTo("$/shapes/example#Get");
+        await Assert.That(result.DocumentUri).IsEqualTo(source);
+        using var original = JsonDocument.Parse(document);
+        await Assert.That(result.Operation.GetRawText())
+            .IsEqualTo(original.RootElement.GetProperty("shapes").GetProperty("example#Get").GetRawText());
+        await Assert.That(result.Operation.GetProperty("errors")[0].GetProperty("target").GetString()).IsEqualTo("example#Failure");
+        await Assert.That(result.Operation.GetProperty("traits").GetProperty("example#Custom").GetProperty("note").GetString())
+            .IsEqualTo("native");
+        await Assert.That(calls).IsEqualTo(0);
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
+    [Test]
+    [Arguments("""{"smithy":"2.0","shapes":{"example#Get":{"type":"operation"}}}""", "example%23get", ApiOperationResolutionStatus.NotFound, "selection.not_found")]
+    [Arguments("""{"smithy":"2.0","shapes":{"example#Get":{"type":"operation"},"example#Data":{"type":"structure"}}}""", "example%23Data", ApiOperationResolutionStatus.Invalid, "selection.not_operation")]
+    [Arguments("""{"smithy":"2.0","shapes":{"example#Get":{"type":"operation"},"example#Service":{"type":"service"}}}""", "example%23Service", ApiOperationResolutionStatus.Invalid, "selection.not_operation")]
+    [Arguments("""{"smithy":"2.0","shapes":{"example#Get":{"type":"operation"},"example#Resource":{"type":"resource"}}}""", "example%23Resource", ApiOperationResolutionStatus.Invalid, "selection.not_operation")]
+    [Arguments("""{"smithy":"2.0","shapes":{"example#Data":{"type":"structure"}}}""", "example%23Data", ApiOperationResolutionStatus.Invalid, "document.operations")]
+    [Arguments("""{"smithy":"1.0","shapes":{}}""", "example%23Get", ApiOperationResolutionStatus.Invalid, "document.smithy_version")]
+    [Arguments("""{"smithy":2,"shapes":{}}""", "example%23Get", ApiOperationResolutionStatus.Invalid, "document.smithy_version")]
+    [Arguments("""{"smithy":"2.0","shapes":[]}""", "example%23Get", ApiOperationResolutionStatus.Invalid, "document.shapes")]
+    [Arguments("""{"smithy":"2.0","shapes":{"example#Get":{"type":"operation"},"Example#GET":{"type":"operation"}}}""", "example%23Get", ApiOperationResolutionStatus.Invalid, "document.shape_id")]
+    [Arguments("""{"smithy":"2.0","shapes":{"example#Get":{"type":"operation"},"Bad":{"type":"string"}}}""", "example%23Get", ApiOperationResolutionStatus.Invalid, "document.shape_id")]
+    [Arguments("""{"smithy":"2.0","shapes":{"example#Get":{"type":"operation"},"example#Bad":null}}""", "example%23Get", ApiOperationResolutionStatus.Invalid, "document.shape")]
+    [Arguments("""{"smithy":"2.0","shapes":{"example#Get":{"type":"operation"}}}""", "Get", ApiOperationResolutionStatus.Invalid, "selector.shape_id")]
+    [Arguments("""{"smithy":"2.0","shapes":{"example#Get":{"type":"operation"}}}""", "example%23Get$member", ApiOperationResolutionStatus.Invalid, "selector.shape_id")]
+    [Arguments("""{"smithy":"2.0","shapes":{"example#Get":{"type":"operation"}}}""", "example%2523Get", ApiOperationResolutionStatus.Invalid, "selector.shape_id")]
+    [Arguments("""{"smithy":"2.0","shapes":{"example#Get":{"type":"operation"}}}""", "2example%23Get", ApiOperationResolutionStatus.Invalid, "selector.shape_id")]
+    [Arguments("""{"smithy":"2.0","shapes":{"example#Get":{"type":"operation"}}}""", "example%23_", ApiOperationResolutionStatus.Invalid, "selector.shape_id")]
+    [Arguments("""{"smithy":"2.0","shapes":{"example#Get":{"type":"operation"}}}""", "example%23G%C3%A9t", ApiOperationResolutionStatus.Invalid, "selector.shape_id")]
+    [Arguments("""{"smithy":"2.0","shapes":{"example#Get":{"type":"operation"},"example#Get":{"type":"operation"}}}""", "example%23Get", ApiOperationResolutionStatus.Invalid, "document.json")]
+    public async Task SmithyJsonRejectsInvalidRootsAndNonOperationOrNonAbsoluteSelectors(
+        string document, string selector, ApiOperationResolutionStatus status, string code)
+    {
+        var result = ResolveSmithy(document, selector);
+        await Assert.That(result.Status).IsEqualTo(status);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        await Assert.That(result.DocumentPath).IsNull();
+    }
+
+    [Test]
+    [Arguments("""{"type":"operation","input":{"target":"example#Missing"}}""", "", ApiOperationResolutionStatus.Indeterminate, "dependency.unresolved")]
+    [Arguments("""{"type":"operation","input":{"target":"smithy.api#String"}}""", "", ApiOperationResolutionStatus.Invalid, "document.target_type")]
+    [Arguments("""{"type":"operation","input":null}""", "", ApiOperationResolutionStatus.Invalid, "document.target")]
+    [Arguments("""{"type":"operation","input":{"target":"Input"}}""", "", ApiOperationResolutionStatus.Invalid, "document.target")]
+    [Arguments("""{"type":"operation","errors":{}}""", "", ApiOperationResolutionStatus.Invalid, "document.errors")]
+    [Arguments("""{"type":"operation","errors":[{"target":"example#Input"}]}""", ""","example#Input":{"type":"structure"}""", ApiOperationResolutionStatus.Invalid, "document.error_trait")]
+    [Arguments("""{"type":"operation","input":{"target":"example#Input"}}""", ""","example#Input":{"type":"structure","members":{"a":{"target":"example#Missing"}}}""", ApiOperationResolutionStatus.Indeterminate, "dependency.unresolved")]
+    [Arguments("""{"type":"operation","traits":{"example#Missing":{}}}""", "", ApiOperationResolutionStatus.Indeterminate, "dependency.unresolved")]
+    [Arguments("""{"type":"operation","traits":{"example#NotATrait":{}}}""", ""","example#NotATrait":{"type":"structure"}""", ApiOperationResolutionStatus.Invalid, "document.trait_definition")]
+    [Arguments("""{"type":"operation","traits":[]}""", "", ApiOperationResolutionStatus.Invalid, "document.traits")]
+    [Arguments("""{"type":"operation","traits":{"smithy.api#String":{}}}""", "", ApiOperationResolutionStatus.Invalid, "document.target_type")]
+    [Arguments("""{"type":"operation","traits":{"NotAbsolute":{}}}""", "", ApiOperationResolutionStatus.Invalid, "document.trait_id")]
+    [Arguments("""{"type":"operation","input":{"target":"example#Input"}}""", ""","example#Input":{"type":"structure","members":{"a":{"target":"example#Future"}}},"example#Future":{"type":"future"}""", ApiOperationResolutionStatus.Unsupported, "smithy.shape_type")]
+    [Arguments("""{"type":"operation","input":{"target":"example#Input"}}""", ""","example#Input":{"type":"structure","members":{"a":{"target":"smithy.api#String"},"A":{"target":"smithy.api#String"}}}""", ApiOperationResolutionStatus.Invalid, "document.member_name")]
+    [Arguments("""{"type":"operation","input":{"target":"example#Input"}}""", ""","example#Input":{"type":"structure","members":{"a":{"target":"example#Get"}}}""", ApiOperationResolutionStatus.Invalid, "document.target_type")]
+    [Arguments("""{"type":"operation","input":{"target":"example#Input"}}""", ""","example#Input":{"type":"structure","members":{"a":{"target":"example#Trait"}}},"example#Trait":{"type":"string","traits":{"smithy.api#trait":{}}}""", ApiOperationResolutionStatus.Invalid, "document.target_type")]
+    [Arguments("""{"type":"operation","input":{"target":"example#Input"}}""", ""","example#Input":{"type":"structure","members":{"a":{"target":"example#List"}}},"example#List":{"type":"list"}""", ApiOperationResolutionStatus.Invalid, "document.target")]
+    [Arguments("""{"type":"operation","input":{"target":"example#Input"}}""", ""","example#Input":{"type":"structure","members":{"a":{"target":"example#Map"}}},"example#Map":{"type":"map","key":{"target":"smithy.api#Integer"},"value":{"target":"smithy.api#String"}}""", ApiOperationResolutionStatus.Invalid, "document.target_type")]
+    [Arguments("""{"type":"operation","input":{"target":"example#Input"}}""", ""","example#Input":{"type":"structure","members":{"a":{"target":"example#Union"}}},"example#Union":{"type":"union","members":{}}""", ApiOperationResolutionStatus.Invalid, "document.members")]
+    [Arguments("""{"type":"operation","mixins":[]}""", "", ApiOperationResolutionStatus.Unsupported, "smithy.assembly")]
+    [Arguments("""{"type":"operation"}""", ""","example#Other":{"type":"apply","traits":{}}""", ApiOperationResolutionStatus.Unsupported, "smithy.assembly")]
+    public async Task SmithyJsonCannotSelectPastMissingMalformedOrUnassembledDependencies(
+        string operation, string dependencies, ApiOperationResolutionStatus status, string code)
+    {
+        var result = ResolveSmithy("""{"smithy":"2.0","shapes":{"example#Get":""" + operation + dependencies + "}}");
+        await Assert.That(result.Status).IsEqualTo(status);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments(64, false, ApiOperationResolutionStatus.Selected)]
+    [Arguments(65, false, ApiOperationResolutionStatus.Indeterminate)]
+    [Arguments(63, true, ApiOperationResolutionStatus.Selected)]
+    [Arguments(64, true, ApiOperationResolutionStatus.Indeterminate)]
+    public async Task SmithyJsonBoundsTransitiveShapeDepthEvenWhenJsonNestingIsShallow(
+        int depth, bool preludeLeaf, ApiOperationResolutionStatus expected)
+    {
+        var shapes = new System.Text.Json.Nodes.JsonObject
+        {
+            ["example#Get"] = System.Text.Json.Nodes.JsonNode.Parse("""{"type":"operation","input":{"target":"example#S1"}}""")
+        };
+        for (var index = 1; index <= depth; index++)
+        {
+            shapes["example#S" + index] = index == depth
+                ? System.Text.Json.Nodes.JsonNode.Parse(preludeLeaf
+                    ? """{"type":"structure","members":{"leaf":{"target":"smithy.api#String"}}}"""
+                    : """{"type":"structure"}""")
+                : System.Text.Json.Nodes.JsonNode.Parse(
+                    """{"type":"structure","members":{"next":{"target":"example#S""" + (index + 1) + "\"}}}");
+        }
+        var document = new System.Text.Json.Nodes.JsonObject { ["smithy"] = "2.0", ["shapes"] = shapes };
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(expected);
+        if (expected == ApiOperationResolutionStatus.Indeterminate)
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("limit.reference_depth");
+        }
+    }
+
+    [Test]
+    [Arguments("/shapes/example%23Get")]
+    [Arguments("services/example%23Service/operations/Get")]
+    [Arguments("operations/query/Get")]
+    public async Task SmithyJsonOnlyAcceptsItsAbsoluteOperationShapeLocator(string selector)
+    {
+        var result = ApiOperationDocumentResolver.Resolve("Smithy/2.0", "application/json",
+            """{"smithy":"2.0","shapes":{"example#Get":{"type":"operation"}}}"""u8.ToArray(),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Unsupported);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("selector.unsupported");
+    }
+
+    private static ApiOperationResolutionResult ResolveSmithy(string document, string selector = "example%23Get") =>
+        ApiOperationDocumentResolver.Resolve("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/" + selector));
+
+    [Test]
+    public async Task SmithyJsonTraversesAggregateDependenciesButNotTraitPayloadsAsShapeReferences()
+    {
+        var result = ResolveSmithy("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"example#Input"}},
+              "example#Input":{"type":"structure","members":{"entries":{"target":"example#Map"}}},
+              "example#Map":{"type":"map","key":{"target":"smithy.api#String"},"value":{"target":"example#List"}},
+              "example#List":{"type":"list","member":{"target":"example#Union"}},
+              "example#Union":{"type":"union","members":{"a":{"target":"example#Enum"},"b":{"target":"example#Number"}}},
+              "example#Enum":{"type":"enum","members":{"A":{"target":"smithy.api#Unit","traits":{"smithy.api#enumValue":"a"}}}},
+              "example#Number":{"type":"intEnum","members":{"B":{"target":"smithy.api#Unit","traits":{"smithy.api#enumValue":1}}}}
+            }}
+            """);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        var metadata = ResolveSmithy("""
+            {"smithy":"2.0","shapes":{"example#Get":{"type":"operation",
+              "traits":{"example#Metadata":{"target":"not-a-shape-id","$ref":"https://untrusted.example"}}},
+              "example#Metadata":{"type":"document","traits":{"smithy.api#trait":{}}}}}
+            """);
+        await Assert.That(metadata.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(metadata.Operation.GetProperty("traits").GetProperty("example#Metadata")
+            .GetProperty("$ref").GetString()).IsEqualTo("https://untrusted.example");
+    }
+
+    [Test]
+    public async Task SmithyJsonUsesTheSharedByteLimitAndPropagatesCallerCancellation()
+    {
+        const string document = """{"smithy":"2.0","shapes":{"example#Get":{"type":"operation"}}}""";
+        var boundary = document.PadRight(ApiOperationDocumentResolver.Capabilities.MaxDocumentBytes);
+        await Assert.That(ResolveSmithy(boundary).Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        var exceeded = ResolveSmithy(boundary + " ");
+        await Assert.That(exceeded.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(exceeded.Diagnostic!.Code).IsEqualTo("limit.bytes");
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+            ApiOperationDocumentResolver.Resolve("Smithy/2.0", "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"), cancellation.Token));
+    }
+
+    [Test]
+    [Arguments("Smithy/1.0", "application/json", "format.unsupported")]
+    [Arguments("Smithy/2.1", "application/json", "format.unsupported")]
+    [Arguments("smithy/2.0", "application/json", "format.unsupported")]
+    [Arguments("Smithy/2.0", "text/plain", "contenttype.unsupported")]
+    public async Task SmithyJsonDoesNotAdvertiseOtherReleasesOrIdlParsing(string format, string mediaType, string code)
+    {
+        var result = ApiOperationDocumentResolver.Resolve(format, mediaType,
+            """{"smithy":"2.0","shapes":{"example#Get":{"type":"operation"}}}"""u8.ToArray(),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Unsupported);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+    }
 
     [Test]
     public async Task OpenRpcSelectionPreservesTheNativeMethodAndDecodesItsNameOnce()

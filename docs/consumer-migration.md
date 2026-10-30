@@ -26,7 +26,7 @@ complete xRegistry conformance.
 | HTTP serving | `XRegistry.AspNetCore.MapXRegistry` | Maps a concrete `RegistryEngine`; it does not start or secure a host. |
 | Transactional persistence | Application-owned `IRegistryPersistence`, or `LocalRegistryPersistence` over `LocalFileStore` | Storage generations are not entity epochs or remote Registry revisions. |
 | Schema-source validation | `XRegistry.Validation` | Supported schema formats and policies, not OPC UA NodeSets/sessions/projection. |
-| API Registry and operation references | `XRegistry.Models` (`RegistryModelKind.Api`) and `XRegistry.Validation` (`ApiOperationReference`, `ApiOperationDocumentResolver`) | The model describes versioned API definitions. The parser accepts operation, service, interface, GraphQL and JSON Pointer selectors. Document resolution supports OpenAPI 3.0/3.1 and Swagger 2.0 JSON operations by `operationId` or JSON Pointer, OpenRPC 1.4 JSON methods by exact `name`, and Avro Protocol 1.12.0 JSON messages by exact member name. These selectors do not validate the full API document; other language resolvers remain unsupported. |
+| API Registry and operation references | `XRegistry.Models` (`RegistryModelKind.Api`) and `XRegistry.Validation` (`ApiOperationReference`, `ApiOperationDocumentResolver`) | The model describes versioned API definitions. The parser accepts operation, service, interface, GraphQL and JSON Pointer selectors. Document resolution supports OpenAPI 3.0/3.1 and Swagger 2.0 JSON operations by `operationId` or JSON Pointer, OpenRPC 1.4 JSON methods by exact `name`, Avro Protocol 1.12.0 JSON messages by exact member name, and assembled Smithy 2 JSON AST operations by absolute shape ID. These selectors do not validate the full API document; other language resolvers remain unsupported. |
 | Federation read acquisition | `IFederationReadSource` / `HttpFederationReadSource` | A read-source seam, not a write dispatcher or immutable live snapshot. |
 | OPC UA access and federation reads | `XRegistry.Bindings.OpcUa` | Uses OPC UA Client Stack 2.0.1 to discover endpoints, apply caller policy, open a Session, remap the portable root through `NamespaceArray`, and verify Registry type and Core version. `OpcUaRegistryReadSource` maps Registry, Group, Resource, Meta, Version and collection views, and reads local FileType Documents or returns external-reference descriptors. `OpcUaRegistryWriter` updates Properties and calls Methods, including Resource Document replacement. Callers supply Group, Resource and ResourceVersions ObjectType mappings. Fake-Session tests cover reader, source and writer behavior; in-process server tests cover Session establishment, XREG-Events subscription management, writes, methods and document transfer. Two-server tests cover trusted external Resource and Version resolution. Core API views and NodeSet projection remain unimplemented. Endpoint security policy is caller-selected. Generic packages remain free of OPC UA types. |
 
@@ -54,6 +54,32 @@ binding or defaults. Named types remain in the caller's original protocol;
 selection does not inline them or synthesize the implicit system-error branch.
 Avro JSON metadata, including a member named `$ref`, never triggers dependency
 acquisition. This does not add Avro IDL parsing or full protocol validation.
+
+For `Smithy/2.0` with `application/json`, `#operations/example%23Get` selects
+the exact `example#Get` operation shape in a
+[Smithy JSON AST](https://smithy.io/2.0/spec/json-ast.html) whose `smithy` value
+is `"2"` or `"2.0"`. Shape IDs are case-sensitive; conflicting declarations
+that differ only in case are rejected. A data, service or resource shape is
+not an operation. The result owns the native operation JSON, retaining its
+input, output, errors and trait values without inferring an endpoint or binding.
+
+The caller supplies an already assembled AST. Selection checks the operation's
+transitive data and custom-trait shape references, including recursive types,
+with a 64-edge traversal depth limit and the shared parser/work budgets.
+Missing required shapes report `Indeterminate`, not a successful partial result.
+Mixins and `apply` entries report `Unsupported`; this resolver does not merge
+model files or parse IDL. Smithy shape IDs are not retrieval URLs and never
+invoke the document dependency callback. Trait payloads remain node values;
+a payload member named `target` or `$ref` is not an import.
+
+The implicit prelude support covers `Blob`, `Boolean`, `Document`, `String`,
+`Byte`, `Short`, `Integer`, `Long`, `Float`, `Double`, `BigInteger`,
+`BigDecimal`, `Timestamp`, `Unit`, and the traits
+`error`, `documentation`, `required`, `input`, `output`, `readonly`, `idempotent`,
+`default`, `enumValue` and `trait` in `smithy.api`. Other required definitions
+must be supplied in the AST. These checks do not validate every Smithy shape
+constraint, trait value or selector. Full Smithy validation and model assembly
+remain unsupported.
 
 SemVer-profile WoT minimum-version floors exclude build metadata and fit the
 128-character Core id limit. Generated `0.0.0-N` floors are forbidden, with

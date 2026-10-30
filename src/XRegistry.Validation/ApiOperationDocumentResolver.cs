@@ -21,7 +21,7 @@ public sealed class ApiOperationResolverCapabilities
     internal ApiOperationResolverCapabilities()
     {
         Formats = Array.AsReadOnly(["OpenAPI/3.0", "OpenAPI/3.1", "Swagger/2.0", "OpenRPC/1.4",
-            "AvroProtocol/1.12.0"]);
+            "AvroProtocol/1.12.0", "Smithy/2.0"]);
         ContentTypes = Array.AsReadOnly(["application/json"]);
         Selectors = Array.AsReadOnly([ApiOperationSelectorKind.Operation, ApiOperationSelectorKind.JsonPointer]);
         SupportsCallerProvidedPathItemReferences = true;
@@ -137,7 +137,7 @@ public enum ApiOperationResolutionStatus
     Denied,
 }
 
-/// <summary>Selects OpenAPI, Swagger, OpenRPC and Avro Protocol operations from an acquired JSON document.</summary>
+/// <summary>Selects OpenAPI, Swagger, OpenRPC, Avro Protocol and assembled Smithy operations from acquired JSON.</summary>
 public static partial class ApiOperationDocumentResolver
 {
     private static readonly string[] s_methods =
@@ -208,7 +208,7 @@ public static partial class ApiOperationDocumentResolver
                 "The API operation resolver accepts JSON documents only.");
         }
         if (reference.Selector.Kind is not (ApiOperationSelectorKind.Operation or ApiOperationSelectorKind.JsonPointer) ||
-            format is "OpenRPC/1.4" or "AvroProtocol/1.12.0" &&
+            format is "OpenRPC/1.4" or "AvroProtocol/1.12.0" or "Smithy/2.0" &&
             reference.Selector.Kind != ApiOperationSelectorKind.Operation)
         {
             return Failure(ApiOperationResolutionStatus.Unsupported, "selector.unsupported",
@@ -236,6 +236,10 @@ public static partial class ApiOperationDocumentResolver
         using (parsed)
         {
             var root = parsed.RootElement;
+            if (format == "Smithy/2.0")
+            {
+                return ResolveSmithyOperation(root, reference.Selector.Tokens[^1], documentUri, budget);
+            }
             var version = ValidateRoot(format, root);
             if (version is not null)
             {
