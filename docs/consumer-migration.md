@@ -103,7 +103,9 @@ from retained Versions. A publication owner must commit the returned watermark
 atomically with the bytes, fixed metadata and Core state, retaining the counter
 after Resource deletion. That server integration and its durable/concurrent
 execution evidence are not implemented by this pure function; existing built-in
-WoT models and server writes remain SemVer.
+WoT models and server writes remain SemVer. Assignment cases passed managed
+execution on both frameworks and native execution in the complete Models suite
+on .NET 10/Windows x64 at `af72b7f`.
 
 ## Choose the real seam
 

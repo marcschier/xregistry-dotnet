@@ -82,6 +82,18 @@ reviewed requirement mapping or completion of the eight-cell native matrix.
 The matching .NET 8 publication still emits the two framework JSON warnings
 described below and is not qualified.
 
+The complete Models TUnit suite passed 954 native cases on .NET 10/Windows x64
+at `af72b7f60433be4fab9e81285e4a6c006915fd73`, including all 43 incremental
+assignment cases. ILC ran with zero IL diagnostics. The same-process proof
+reported native execution with zero JIT compilations; the managed control
+reported false/3,981 and was rejected without creating a receipt.
+`D:\temp\xregistry-models-native-af72b7f` retains the proof, TRX and receipt,
+with publish/run logs beside the directory. Its receipt records 313 distinct
+passed methods, zero failed and zero skipped. Executable SHA-256:
+`1b5edadb01828e064b4f67ee8cfbdde7947451a8995298fa68ce8684d9c82d73`.
+This establishes execution of the pure allocator, not a durable incremental
+publication adapter or complete profile qualification.
+
 The module-level receipts below are historical and have not been refreshed
 against the complete successor source set. Do not treat their counts as
 qualification of the current implementation.

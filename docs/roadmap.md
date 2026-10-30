@@ -40,9 +40,13 @@ release safeguards remain in their subject guides.
 The selected generic package, model, client/bridge sample and storage matrix
 passed all 28 jobs at `ecd2a3b` on Windows/Linux x64 and ARM64. See
 [native evidence](native-aot.md#current-evidence-and-uncovered-cells).
-Full native TUnit requirement receipts remain incomplete.
-The newer Federation suite receipt is one .NET 10/Windows x64 cell; it does not
-refresh the package-consumer matrix or qualify the remaining cells.
+Full native TUnit requirement receipts remain incomplete. Newer full-suite
+receipts cover Federation at `6d143c4` and Models at `af72b7f`, each on
+.NET 10/Windows x64; they do not refresh the package-consumer matrix or qualify
+the remaining cells. Models passed 954 native cases, including all 43 pure
+incremental assignment cases, with zero IL diagnostics and JIT compilations.
+Its receipt covers 313 distinct methods; durable incremental publication is
+still unimplemented.
 
 - Refresh source-matched package-consumer and sample evidence after material
   package changes. Preserve exact source, package, executable, and report hashes.
