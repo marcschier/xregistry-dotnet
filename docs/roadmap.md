@@ -191,14 +191,19 @@ vocabulary/source mapping. It does not supply their implementation.
   for model-wide references in recognized AST positions: only the matching slot
   of one operation can use each structure. Trait payloads, metadata and service
   renames do not add reference edges. This does not validate unrelated shapes
-  or specializations outside the selected closure. General applicability
-  selectors, custom conflicts and other trait member schemas remain open.
+  or specializations outside the selected closure. Declared custom-trait
+  conflicts are checked on reachable shapes, members and trait definitions,
+  independent of property order. Unapplied conflict IDs need no definition.
+  Trait-marker selector/conflicts/structurallyExclusive properties have shape
+  checks; general selector evaluation, structural exclusivity, breaking-change
+  rules and other trait member schemas remain open.
   Reachable defaults check applicability, root-null rejection, member null
   overrides, explicit repetition of root defaults, native scalar types,
-  integer ranges, finite float/double values, base64 blobs, enum membership and
-  empty list/map/document containers. Defaults are not inserted into operations.
-  Timestamp and string-encoded numeric defaults report unsupported; applied
-  range/length/pattern constraints and full default validation remain open.
+  integer ranges, finite float/double numbers and exact special-value strings,
+  base64 blobs, enum membership and empty list/map/document containers. Defaults
+  are not inserted into operations. Timestamp and string-encoded
+  bigInteger/bigDecimal defaults report unsupported; applied range/length/pattern
+  constraints and full default validation remain open.
 - Complete end-to-end event/outbox delivery qualification while preserving
   atomic mutation publication and caller-visible failure semantics.
 - Provide an application-specific adapter or forwarding layer when an existing

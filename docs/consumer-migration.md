@@ -291,6 +291,17 @@ aggregate root shapes, not members. Selection rejects `readonly` with
 with a trait-definition marker. Custom applicability selectors remain unchecked.
 Literal members inside trait payloads do not become dependency references.
 
+Reachable trait definitions require a string `selector`, when supplied, and
+restrict `structurallyExclusive` to `member` or `target`. These are property
+checks; selector evaluation and structural-exclusivity enforcement remain open.
+The `conflicts` property must be an array of absolute root trait IDs. A custom
+trait cannot coexist on the same shape with any trait named in that array,
+regardless of property order or whether the other trait declares a reciprocal
+conflict. This also applies to members and reachable trait definitions.
+Matching is case-sensitive. An unknown conflict ID does not require a definition
+unless that trait is actually applied; conflict declarations are not imports.
+Complete trait-member validation and `breakingChanges` rules remain open.
+
 For each input/output-marked structure reached by the selected operation, the
 resolver checks references across all recognized JSON AST shape kinds. Only
 the matching input or output slot of one operation can reference that structure.
@@ -321,14 +332,17 @@ repetition requirement.
 
 Non-null defaults must have the target's value type. Signed integer defaults
 must be integral and fit byte, short, integer or long ranges; big integers use
-the shared bounded exact-number parser. Float and double defaults must fit the
-target's finite range. Blob defaults require base64 strings; enum defaults must
+the shared bounded exact-number parser. Numeric float and double defaults must
+fit the target's finite range; the exact strings `NaN`, `Infinity` and `-Infinity`
+represent the publisher's special floating values. Other string spellings,
+including numeric strings, are invalid for float/double targets.
+Blob defaults require base64 strings; enum defaults must
 name declared values, including implicit string member-name values. List/map
 defaults must be empty containers. Document defaults permit scalar values or
 empty containers, not nested content. These checks do not apply defaults to
 the returned operation or treat literal values as imports.
 
-Timestamp defaults and string-encoded numeric defaults report `Unsupported`.
+Timestamp and string-encoded bigInteger/bigDecimal defaults report `Unsupported`.
 Complete timestamp handling and applied range/length/pattern constraints remain
 open; these checks do not establish full Smithy validity.
 

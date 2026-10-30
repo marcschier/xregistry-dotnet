@@ -489,9 +489,13 @@ public static partial class ApiOperationDocumentResolver
                     "A root Smithy default cannot be null.");
                 return;
             }
-            if (value.ValueKind == JsonValueKind.String &&
-                (kind is "bigInteger" or "bigDecimal" ||
-                    kind is "float" or "double" && value.GetString() is "NaN" or "Infinity" or "-Infinity"))
+            if (value.ValueKind == JsonValueKind.String && kind is "float" or "double")
+            {
+                ValidationContext.Require(value.GetString() is "NaN" or "Infinity" or "-Infinity", path,
+                    "document.default_value", "A string floating-point default must be NaN, Infinity or -Infinity.");
+                return;
+            }
+            if (value.ValueKind == JsonValueKind.String && kind is "bigInteger" or "bigDecimal")
             {
                 ValidationContext.Fail(DocumentValidationStatus.Unsupported, path, "smithy.numeric_string_default",
                     "String-encoded Smithy numeric defaults are not supported.");
@@ -647,6 +651,7 @@ public static partial class ApiOperationDocumentResolver
                     case "smithy.api#trait":
                         ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
                             "document.trait_value", "The Smithy trait marker requires an object value.");
+                        ValidateTraitMarker(trait.Value, traitPath);
                         continue;
                     case "smithy.api#default":
                         ValidationContext.Require(memberContainer is null && kind is not null ||
@@ -661,8 +666,47 @@ public static partial class ApiOperationDocumentResolver
                     ValidationContext.Require(definition.TryGetProperty("traits", out var markers) &&
                         markers.ValueKind == JsonValueKind.Object && markers.TryGetProperty("smithy.api#trait", out _),
                         path + "/traits", "document.trait_definition", "An applied custom trait must target a trait definition.");
+                    var marker = definition.GetProperty("traits").GetProperty("smithy.api#trait");
+                    if (marker.ValueKind == JsonValueKind.Object && marker.TryGetProperty("conflicts", out var conflicts) &&
+                        conflicts.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var other in conflicts.EnumerateArray())
+                        {
+                            budget.Work(path: traitPath);
+                            ValidationContext.Require(other.ValueKind != JsonValueKind.String ||
+                                !traits.TryGetProperty(other.GetString()!, out _), traitPath, "document.trait_conflict",
+                                "An applied Smithy trait conflicts with another trait on this shape.");
+                        }
+                    }
                 }
                 Visit(trait.Name, depth + 1, traitDefinition: true);
+            }
+        }
+
+        private void ValidateTraitMarker(JsonElement marker, string path)
+        {
+            if (marker.TryGetProperty("selector", out var selector))
+            {
+                ValidationContext.Require(selector.ValueKind == JsonValueKind.String, path + "/selector",
+                    "document.trait_selector", "A Smithy trait selector must be a string.");
+            }
+            if (marker.TryGetProperty("structurallyExclusive", out var exclusive))
+            {
+                ValidationContext.Require(exclusive.ValueKind == JsonValueKind.String &&
+                    exclusive.GetString() is "member" or "target", path + "/structurallyExclusive",
+                    "document.trait_exclusive", "Smithy structural exclusivity must be member or target.");
+            }
+            if (!marker.TryGetProperty("conflicts", out var conflicts)) { return; }
+            ValidationContext.Require(conflicts.ValueKind == JsonValueKind.Array, path + "/conflicts",
+                "document.trait_conflicts", "Smithy trait conflicts must be an array of absolute trait IDs.");
+            var index = 0;
+            foreach (var conflict in conflicts.EnumerateArray())
+            {
+                var at = path + "/conflicts/" + (index++).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                budget.Work(path: at);
+                ValidationContext.Require(conflict.ValueKind == JsonValueKind.String &&
+                    IsSmithyShapeId(conflict.GetString()!), at, "document.trait_conflicts",
+                    "A Smithy trait conflict must name an absolute root trait ID.");
             }
         }
 
