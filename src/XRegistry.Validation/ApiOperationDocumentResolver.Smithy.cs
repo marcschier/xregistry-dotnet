@@ -45,6 +45,7 @@ public static partial class ApiOperationDocumentResolver
                 "A Smithy operation selector must be an absolute root shape ID.");
 
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var preludeNames = new HashSet<string>(s_smithyPreludeKinds.Keys, StringComparer.OrdinalIgnoreCase);
             var hasOperation = false;
             foreach (var shape in shapes.EnumerateObject())
             {
@@ -59,7 +60,8 @@ public static partial class ApiOperationDocumentResolver
                     return Failure(ApiOperationResolutionStatus.Unsupported, "smithy.assembly",
                         "Supply an assembled Smithy AST without apply entries or mixins.", path);
                 }
-                ValidationContext.Require(IsSmithyShapeId(shape.Name) && names.Add(shape.Name),
+                ValidationContext.Require(IsSmithyShapeId(shape.Name) && names.Add(shape.Name) &&
+                    (!preludeNames.Contains(shape.Name) || SmithyPreludeKind(shape.Name) is not null),
                     path, "document.shape_id", "Smithy root shape IDs must be absolute and case-insensitively unique.");
                 hasOperation |= kind == "operation";
             }
@@ -97,24 +99,37 @@ public static partial class ApiOperationDocumentResolver
         SmithyRootShapeId().IsMatch(value) &&
         value.Split('.', '#').All(static part => part[0] is not (>= '0' and <= '9'));
 
-    private static string? SmithyPreludeKind(string id) => id switch
+    private static readonly Dictionary<string, string> s_smithyPreludeKinds = new(StringComparer.Ordinal)
     {
-        "smithy.api#Unit" => "structure",
-        "smithy.api#String" => "string",
-        "smithy.api#Blob" => "blob",
-        "smithy.api#Boolean" or "smithy.api#PrimitiveBoolean" => "boolean",
-        "smithy.api#Document" => "document",
-        "smithy.api#Byte" or "smithy.api#PrimitiveByte" => "byte",
-        "smithy.api#Short" or "smithy.api#PrimitiveShort" => "short",
-        "smithy.api#Integer" or "smithy.api#PrimitiveInteger" => "integer",
-        "smithy.api#Long" or "smithy.api#PrimitiveLong" => "long",
-        "smithy.api#Float" or "smithy.api#PrimitiveFloat" => "float",
-        "smithy.api#Double" or "smithy.api#PrimitiveDouble" => "double",
-        "smithy.api#BigInteger" => "bigInteger",
-        "smithy.api#BigDecimal" => "bigDecimal",
-        "smithy.api#Timestamp" => "timestamp",
-        _ => null
+        ["smithy.api#Unit"] = "structure",
+        ["smithy.api#String"] = "string",
+        ["smithy.api#Blob"] = "blob",
+        ["smithy.api#Boolean"] = "boolean",
+        ["smithy.api#Document"] = "document",
+        ["smithy.api#Byte"] = "byte",
+        ["smithy.api#Short"] = "short",
+        ["smithy.api#Integer"] = "integer",
+        ["smithy.api#Long"] = "long",
+        ["smithy.api#Float"] = "float",
+        ["smithy.api#Double"] = "double",
+        ["smithy.api#BigInteger"] = "bigInteger",
+        ["smithy.api#BigDecimal"] = "bigDecimal",
+        ["smithy.api#Timestamp"] = "timestamp",
+        ["smithy.api#PrimitiveBoolean"] = "boolean",
+        ["smithy.api#PrimitiveByte"] = "byte",
+        ["smithy.api#PrimitiveShort"] = "short",
+        ["smithy.api#PrimitiveInteger"] = "integer",
+        ["smithy.api#PrimitiveLong"] = "long",
+        ["smithy.api#PrimitiveFloat"] = "float",
+        ["smithy.api#PrimitiveDouble"] = "double"
     };
+
+    private static string? SmithyPreludeKind(string id) => s_smithyPreludeKinds.GetValueOrDefault(id);
+
+    private static bool IsSmithyPrimitivePrelude(string id) =>
+        id is "smithy.api#PrimitiveBoolean" or "smithy.api#PrimitiveByte" or "smithy.api#PrimitiveShort" or
+            "smithy.api#PrimitiveInteger" or "smithy.api#PrimitiveLong" or "smithy.api#PrimitiveFloat" or
+            "smithy.api#PrimitiveDouble";
 
     private sealed class SmithyClosure(JsonElement shapes, ValidationContext budget)
     {
@@ -151,6 +166,7 @@ public static partial class ApiOperationDocumentResolver
                     "A private Smithy shape can only be referenced from its own namespace.");
             }
             var kind = shape.GetProperty("type").GetString();
+            ValidatePreludeShape(id, shape, kind, path);
             ValidationContext.Require(expected is null ? kind is not ("operation" or "service" or "resource") :
                 kind == expected || expected == "string" && kind == "enum",
                 path, "document.target_type", "A Smithy reference targets the wrong shape type.");
@@ -476,6 +492,11 @@ public static partial class ApiOperationDocumentResolver
                 var path = "$/shapes/" + Escape(id);
                 var kind = shape.GetProperty("type").GetString()!;
                 if (TryDefault(shape, out var value)) { ValidateDefault(kind, shape, value, path, member: false); }
+                else if (IsSmithyPrimitivePrelude(id))
+                {
+                    using var implicitDefault = JsonDocument.Parse(kind == "boolean" ? "false" : "0");
+                    ValidateDefault(kind, shape, implicitDefault.RootElement, path, member: false);
+                }
                 if (kind != "structure" || !shape.TryGetProperty("members", out var members)) { continue; }
                 foreach (var member in members.EnumerateObject())
                 {
@@ -493,15 +514,10 @@ public static partial class ApiOperationDocumentResolver
                             "document.default_repeat",
                             "A structure member must repeat its target's default or explicitly override it with null.");
                     }
-                    else if (target.ValueKind == JsonValueKind.Undefined &&
-                        targetId is "smithy.api#PrimitiveBoolean" or "smithy.api#PrimitiveByte" or
-                            "smithy.api#PrimitiveShort" or "smithy.api#PrimitiveInteger" or
-                            "smithy.api#PrimitiveLong" or "smithy.api#PrimitiveFloat" or "smithy.api#PrimitiveDouble")
+                    else if (IsSmithyPrimitivePrelude(targetId))
                     {
                         ValidationContext.Require(hasDefault && (memberDefault.ValueKind == JsonValueKind.Null ||
-                            (targetKind == "boolean" ? memberDefault.ValueKind == JsonValueKind.False :
-                                memberDefault.ValueKind == JsonValueKind.Number &&
-                                JsonNumber.Read(memberDefault, budget, memberPath + "/traits/smithy.api#default").IsZero)),
+                            MatchesPrimitiveDefault(targetKind, memberDefault, memberPath + "/traits/smithy.api#default")),
                             memberPath + "/traits/smithy.api#default", "document.default_repeat",
                             "A structure member must repeat its primitive prelude default or explicitly override it with null.");
                     }
@@ -605,6 +621,31 @@ public static partial class ApiOperationDocumentResolver
             value = default;
             return shape.TryGetProperty("traits", out var traits) && traits.ValueKind == JsonValueKind.Object &&
                 traits.TryGetProperty("smithy.api#default", out value);
+        }
+
+        private bool MatchesPrimitiveDefault(string kind, JsonElement value, string path) =>
+            kind == "boolean" ? value.ValueKind == JsonValueKind.False :
+                value.ValueKind == JsonValueKind.Number && JsonNumber.Read(value, budget, path).IsZero;
+
+        private void ValidatePreludeShape(string id, JsonElement shape, string? kind, string path)
+        {
+            var preludeKind = SmithyPreludeKind(id);
+            if (preludeKind is null) { return; }
+            ValidationContext.Require(kind == preludeKind, path + "/type", "document.prelude_shape",
+                "A supplied Smithy prelude data shape must retain its predefined kind.");
+            if (id == "smithy.api#Unit")
+            {
+                ValidationContext.Require(!shape.TryGetProperty("members", out var members) ||
+                    members.ValueKind == JsonValueKind.Object && !members.EnumerateObject().Any(),
+                    path + "/members", "document.prelude_shape",
+                    "The Smithy Unit prelude shape cannot declare members.");
+            }
+            if (IsSmithyPrimitivePrelude(id) && TryDefault(shape, out var value))
+            {
+                ValidationContext.Require(MatchesPrimitiveDefault(preludeKind, value, path + "/traits/smithy.api#default"),
+                    path + "/traits/smithy.api#default", "document.prelude_default",
+                    "A supplied primitive Smithy prelude shape must retain its predefined default.");
+            }
         }
 
         private void ValidateDefault(string kind, JsonElement target, JsonElement value, string path, bool member,
@@ -884,6 +925,8 @@ public static partial class ApiOperationDocumentResolver
                     "The box trait cannot be used in Smithy 2.0 models.");
                 var targetAllowed = trait.Name switch
                 {
+                    "smithy.api#unitType" => memberContainer is null && kind == "structure" &&
+                        sourceId == "smithy.api#Unit",
                     "smithy.api#sensitive" => memberContainer is null && kind is not ("service" or "operation" or "resource"),
                     "smithy.api#enum" => memberContainer is null && kind == "string",
                     "smithy.api#required" or "smithy.api#clientOptional" or "smithy.api#recommended" =>
@@ -1005,6 +1048,7 @@ public static partial class ApiOperationDocumentResolver
                             "document.trait_value", "The Smithy error trait requires client or server.");
                         continue;
                     case "smithy.api#required":
+                    case "smithy.api#unitType":
                     case "smithy.api#internal":
                     case "smithy.api#sensitive":
                     case "smithy.api#clientOptional":

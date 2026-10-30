@@ -4652,6 +4652,211 @@ public class ApiOperationReferenceTests
         await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
     }
 
+    [Test]
+    [Arguments("String", "string")]
+    [Arguments("Blob", "blob")]
+    [Arguments("Boolean", "boolean")]
+    [Arguments("Document", "document")]
+    [Arguments("Byte", "byte")]
+    [Arguments("Short", "short")]
+    [Arguments("Integer", "integer")]
+    [Arguments("Long", "long")]
+    [Arguments("Float", "float")]
+    [Arguments("Double", "double")]
+    [Arguments("BigInteger", "bigInteger")]
+    [Arguments("BigDecimal", "bigDecimal")]
+    [Arguments("Timestamp", "timestamp")]
+    [Arguments("PrimitiveBoolean", "boolean")]
+    [Arguments("PrimitiveByte", "byte")]
+    [Arguments("PrimitiveShort", "short")]
+    [Arguments("PrimitiveInteger", "integer")]
+    [Arguments("PrimitiveLong", "long")]
+    [Arguments("PrimitiveFloat", "float")]
+    [Arguments("PrimitiveDouble", "double")]
+    [Arguments("Unit", "structure")]
+    public async Task SmithyJsonAuthoredPreludeDataShapesRetainCanonicalKinds(string name, string kind)
+    {
+        var id = "smithy.api#" + name;
+        var document = JsonNode.Parse(SmithyDefaultDocument("string", "null", false))!;
+        document["shapes"]!["example#Input"]!["members"]!["value"]!["target"] = id;
+        if (kind == "structure")
+        {
+            document["shapes"]!["example#Input"]!["members"]!["value"]!.AsObject().Remove("traits");
+        }
+        document["shapes"]![id] = new JsonObject { ["type"] = kind };
+        var correct = ResolveSmithy(document.ToJsonString());
+        await Assert.That(correct.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(correct.Diagnostic).IsNull();
+        await Assert.That(correct.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        document["shapes"]![id]!["type"] = kind == "string" ? "boolean" : "string";
+        var wrong = ResolveSmithy(document.ToJsonString());
+        await Assert.That(wrong.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(wrong.Diagnostic!.Code).IsEqualTo("document.prelude_shape");
+        await Assert.That(wrong.Diagnostic.Path).IsEqualTo("$/shapes/" + id + "/type");
+        await Assert.That(wrong.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("PrimitiveBoolean", "boolean", "false", "true")]
+    [Arguments("PrimitiveByte", "byte", "0", "1")]
+    [Arguments("PrimitiveShort", "short", "-0", "null")]
+    [Arguments("PrimitiveInteger", "integer", "0.0", "0.001")]
+    [Arguments("PrimitiveLong", "long", "0e10", "false")]
+    [Arguments("PrimitiveFloat", "float", "-0.000", "\"NaN\"")]
+    [Arguments("PrimitiveDouble", "double", "0e-1000", "\"0\"")]
+    public async Task SmithyJsonAuthoredPrimitivePreludeDefaultsRemainImplicitWhenOmitted(
+        string name, string kind, string repeatedDefault, string wrongDefault)
+    {
+        var id = "smithy.api#" + name;
+        var document = JsonNode.Parse(SmithyDefaultDocument("string", "null", false))!;
+        var member = document["shapes"]!["example#Input"]!["members"]!["value"]!;
+        member["target"] = id;
+        member["traits"]!.AsObject().Remove("smithy.api#default");
+        document["shapes"]![id] = new JsonObject { ["type"] = kind };
+        var missing = ResolveSmithy(document.ToJsonString());
+        await Assert.That(missing.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(missing.Diagnostic!.Code).IsEqualTo("document.default_repeat");
+        await Assert.That(missing.Diagnostic.Path).IsEqualTo("$/shapes/example#Input/members/value/traits/smithy.api#default");
+        member["traits"]!["smithy.api#default"] = JsonNode.Parse(repeatedDefault);
+        var repeated = ResolveSmithy(document.ToJsonString());
+        await Assert.That(repeated.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(repeated.Diagnostic).IsNull();
+        member["traits"]!["smithy.api#default"] = null;
+        var overridden = ResolveSmithy(document.ToJsonString());
+        await Assert.That(overridden.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(overridden.Diagnostic).IsNull();
+        document["shapes"]![id]!["traits"] = new JsonObject { ["smithy.api#default"] = JsonNode.Parse(wrongDefault) };
+        var changed = ResolveSmithy(document.ToJsonString());
+        await Assert.That(changed.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(changed.Diagnostic!.Code).IsEqualTo("document.prelude_default");
+        await Assert.That(changed.Diagnostic.Path).IsEqualTo("$/shapes/" + id + "/traits/smithy.api#default");
+        await Assert.That(changed.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        document["shapes"]![id]!["traits"]!["smithy.api#default"] = JsonNode.Parse(repeatedDefault);
+        var retained = ResolveSmithy(document.ToJsonString());
+        await Assert.That(retained.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(retained.Diagnostic).IsNull();
+    }
+
+    [Test]
+    [Arguments("""{"min":1}""", false)]
+    [Arguments("""{"min":0}""", true)]
+    [Arguments("""{"max":0}""", true)]
+    [Arguments("""{"max":-1}""", false)]
+    public async Task SmithyJsonImplicitPrimitivePreludeDefaultsSatisfyAuthoredRootConstraints(string range, bool valid)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("string", "null", false))!;
+        document["shapes"]!["example#Input"]!["members"]!["value"]!["target"] = "smithy.api#PrimitiveInteger";
+        document["shapes"]!["smithy.api#PrimitiveInteger"] = JsonNode.Parse(
+            """{"type":"integer","traits":{"smithy.api#range":RANGE}}""".Replace("RANGE", range, StringComparison.Ordinal));
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.default_range");
+            await Assert.That(result.Diagnostic.Path)
+                .IsEqualTo("$/shapes/smithy.api#PrimitiveInteger/traits/smithy.api#default");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("smithy.api#string")]
+    [Arguments("SMITHY.API#String")]
+    [Arguments("smithy.api#UNIT")]
+    [Arguments("smithy.api#Primitiveinteger")]
+    public async Task SmithyJsonExplicitIdsCannotCaseCollideWithImplicitPreludeDataShapes(string id)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("string", "null", false))!;
+        document["shapes"]![id] = new JsonObject { ["type"] = "string" };
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.shape_id");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/" + id);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("""{"type":"structure","members":{"value":{"target":"smithy.api#String"}}}""")]
+    [Arguments("""{"type":"structure","members":null}""")]
+    [Arguments("""{"type":"structure","members":[]}""")]
+    public async Task SmithyJsonAuthoredUnitPreludeCannotAcquireMembers(string definition)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("string", "null", false))!;
+        document["shapes"]!["example#Get"]!["output"] = JsonNode.Parse("""{"target":"smithy.api#Unit"}""");
+        document["shapes"]!["smithy.api#Unit"] = JsonNode.Parse(definition);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.prelude_shape");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/smithy.api#Unit/members");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("operation")]
+    [Arguments("root")]
+    [Arguments("member")]
+    public async Task SmithyJsonUnitTypeMarkerRequiresCanonicalUnitShape(string position)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("string", "null", false))!;
+        if (position == "root") { document["shapes"]!["example#Value"]!["type"] = "structure"; }
+        var selected = position == "operation" ? document["shapes"]!["example#Get"]! :
+            position == "root" ? document["shapes"]!["example#Value"]! :
+            document["shapes"]!["example#Input"]!["members"]!["value"]!;
+        selected["traits"] ??= new JsonObject();
+        selected["traits"]!["smithy.api#unitType"] = new JsonObject();
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("{}")]
+    [Arguments("null")]
+    [Arguments("true")]
+    [Arguments("\"unit\"")]
+    [Arguments("[]")]
+    public async Task SmithyJsonUnitTypeMarkerRetainsAnnotationValueType(string value)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("string", "null", false))!;
+        document["shapes"]!["example#Get"]!["output"] = JsonNode.Parse("""{"target":"smithy.api#Unit"}""");
+        document["shapes"]!["smithy.api#Unit"] = JsonNode.Parse(
+            """{"type":"structure","members":{},"traits":{"smithy.api#unitType":VALUE}}"""
+                .Replace("VALUE", value, StringComparison.Ordinal));
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(value == "{}"
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (value == "{}") { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_value");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/smithy.api#Unit/traits/smithy.api#unitType");
+        }
+    }
+
+    [Test]
+    public async Task SmithyJsonPreludeReconciliationPreservesNativeSelectionAndClosureBoundaries()
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("string", "null", false))!;
+        document["shapes"]!["smithy.api#String"] = JsonNode.Parse("""
+            {"type":"string","traits":{"smithy.api#documentation":"https://must-not-load.example/schema"}}
+            """);
+        document["shapes"]!["example#Input"]!["members"]!["value"]!["target"] = "smithy.api#String";
+        document["shapes"]!["smithy.api#Long"] = JsonNode.Parse("""{"type":"boolean"}""");
+        document["shapes"]!["example#PrimitiveInteger"] = JsonNode.Parse("""{"type":"string"}""");
+        document["metadata"] = JsonNode.Parse("""{"literal":{"target":"smithy.api#PrimitiveLong"}}""");
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("The prelude is not acquired."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
     private static string SmithyDefaultDocument(string kind, string value, bool rootDefault)
     {
         var target = new JsonObject { ["type"] = kind };

@@ -184,6 +184,13 @@ vocabulary/source mapping. It does not supply their implementation.
   members, not to the enumeration's root shape or other shapes and references.
   The selector's implicit prelude is limited, and full trait/schema validation
   remains open.
+  Authored definitions retain known prelude data-shape kinds. `Unit` remains
+  memberless, and primitive prelude shapes retain false/zero defaults.
+  Omitted primitive default traits
+  retain their predefined values for root-constraint checks and structure-member
+  repetition. Known implicit data-shape identities also participate in global
+  case-conflict checks. The object-valued `unitType` marker is restricted to Unit.
+  Full prelude trait-schema reconciliation remains open.
   Recognized prelude traits now check documentation/error values and the object
   shape of annotation, idempotent and trait-marker values throughout the
   selected closure. Explicit recognized prelude targets and their declared

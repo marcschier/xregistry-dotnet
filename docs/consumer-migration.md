@@ -285,11 +285,18 @@ The implicit prelude support covers `Blob`, `Boolean`, `Document`, `String`,
 `error`, `documentation`, `required`, `clientOptional`, `addedDefault`, `sparse`,
 `uniqueItems`, `private`, `length`, `range`, `pattern`, `input`, `output`, `readonly`, `idempotent`,
 `default`, `enum`, `enumValue`, `deprecated`, `recommended`, `title`, `since`,
-`tags`, `internal`, `sensitive` and `trait`
+`tags`, `internal`, `sensitive`, `unitType` and `trait`
 in `smithy.api`. Other required definitions
 must be supplied in the AST. These checks do not validate every Smithy shape
 constraint, trait value or selector. Full Smithy validation and model assembly
 remain unsupported.
+
+Supplied definitions of these prelude data shapes must retain their predefined
+kinds within the selected closure. `Unit` cannot acquire members; `unitType`
+requires an object annotation on that exact shape, not on another structure
+or a member. Global shape-ID checks also reject authored IDs that differ only
+in case from a known prelude data-shape ID, even when that implicit definition
+is absent from the AST. These checks do not reconcile every prelude trait schema.
 
 Within the selected closure, `documentation` values must be strings and
 `error` values must be exactly `client` or `server`. The recognized `required`,
@@ -448,8 +455,11 @@ The implicit primitive prelude types carry the publisher's root defaults:
 `PrimitiveBoolean` uses false; `PrimitiveByte`, `PrimitiveShort`,
 `PrimitiveInteger`, `PrimitiveLong`, `PrimitiveFloat` and `PrimitiveDouble`
 use zero. A structure member targeting one of these types must repeat its
-default or explicitly override it with null, even when the prelude definition
-is absent from the supplied AST. Exact numeric zero representations compare
+default or explicitly override it with null, whether the AST omits the prelude
+shape or supplies it without an explicit default. An authored primitive default
+must retain false or zero; its omission does not remove that value. Effective
+root defaults must also satisfy authored root constraints, even when a member
+overrides the default with null. Exact numeric zero representations compare
 equally. List, map and union members do not inherit this repetition requirement.
 The resolver does not insert defaults into the selected operation.
 
