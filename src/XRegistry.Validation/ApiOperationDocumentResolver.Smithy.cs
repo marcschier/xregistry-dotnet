@@ -955,7 +955,8 @@ public static partial class ApiOperationDocumentResolver
                     "smithy.api#uniqueItems" => kind == "list",
                     "smithy.api#enumValue" => memberContainer is "enum" or "intEnum",
                     "smithy.api#input" or "smithy.api#output" or "smithy.api#error" => kind == "structure",
-                    "smithy.api#readonly" or "smithy.api#idempotent" or "smithy.api#examples" => kind == "operation",
+                    "smithy.api#readonly" or "smithy.api#idempotent" or "smithy.api#examples" or
+                        "smithy.api#longPoll" => kind == "operation",
                     "smithy.api#trait" => memberContainer is null && kind is
                         "blob" or "boolean" or "document" or "string" or "byte" or "short" or "integer" or "long" or
                         "float" or "double" or "bigInteger" or "bigDecimal" or "timestamp" or
@@ -982,6 +983,18 @@ public static partial class ApiOperationDocumentResolver
                     "Conflicting Smithy prelude traits cannot be applied to the same shape.");
                 switch (trait.Name)
                 {
+                    case "smithy.api#longPoll":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
+                            "document.trait_value", "The Smithy longPoll trait requires an object value.");
+                        var timeoutPath = traitPath + "/timeoutMillis";
+                        ValidationContext.Require(trait.Value.TryGetProperty("timeoutMillis", out var timeout) &&
+                            timeout.ValueKind == JsonValueKind.Number, timeoutPath, "document.long_poll_timeout",
+                            "Smithy longPoll requires a numeric timeoutMillis value.");
+                        var millis = JsonNumber.Read(timeout, budget, timeoutPath);
+                        ValidationContext.Require(millis.IsInteger && FitsNumericRange("integer", millis) &&
+                            millis.CompareTo(new(false, "1", 0)) >= 0, timeoutPath, "document.long_poll_timeout",
+                            "Smithy longPoll timeoutMillis must be a positive signed 32-bit integer.");
+                        continue;
                     case "smithy.api#jsonName":
                         ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.String, traitPath,
                             "document.trait_value", "The Smithy jsonName trait requires a string value.");

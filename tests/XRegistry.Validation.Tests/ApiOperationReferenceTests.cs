@@ -5462,6 +5462,110 @@ public class ApiOperationReferenceTests
         await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
     }
 
+    [Test]
+    [Arguments("1", true)]
+    [Arguments("1.0", true)]
+    [Arguments("10e-1", true)]
+    [Arguments("70000", true)]
+    [Arguments("2147483647", true)]
+    [Arguments("214748364700e-2", true)]
+    [Arguments("0", false)]
+    [Arguments("-0.000", false)]
+    [Arguments("-1", false)]
+    [Arguments("0.999999999999999999999", false)]
+    [Arguments("1.000000000000000000001", false)]
+    [Arguments("2147483648", false)]
+    [Arguments("2147483647.000000000001", false)]
+    [Arguments("1e1000", false)]
+    [Arguments("1e-1000", false)]
+    public async Task SmithyJsonLongPollChecksExactPositiveIntegerTimeoutBoundaries(string value, bool valid)
+    {
+        var document = JsonNode.Parse(SmithyExampleDocument("[]"))!;
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#longPoll"] =
+            new JsonObject { ["timeoutMillis"] = JsonNode.Parse(value) };
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid)
+        {
+            await Assert.That(result.Diagnostic).IsNull();
+            await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.long_poll_timeout");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/smithy.api#longPoll/timeoutMillis");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("null", "", "document.trait_value")]
+    [Arguments("true", "", "document.trait_value")]
+    [Arguments("[]", "", "document.trait_value")]
+    [Arguments("\"poll\"", "", "document.trait_value")]
+    [Arguments("{}", "/timeoutMillis", "document.long_poll_timeout")]
+    [Arguments("""{"timeoutMillis":null}""", "/timeoutMillis", "document.long_poll_timeout")]
+    [Arguments("""{"timeoutMillis":false}""", "/timeoutMillis", "document.long_poll_timeout")]
+    [Arguments("""{"timeoutMillis":"70000"}""", "/timeoutMillis", "document.long_poll_timeout")]
+    [Arguments("""{"timeoutMillis":[]}""", "/timeoutMillis", "document.long_poll_timeout")]
+    [Arguments("""{"timeoutMillis":{}}""", "/timeoutMillis", "document.long_poll_timeout")]
+    public async Task SmithyJsonLongPollRequiresAnObjectAndNumericTimeout(string trait, string suffix, string code)
+    {
+        var document = JsonNode.Parse(SmithyExampleDocument("[]"))!;
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#longPoll"] = JsonNode.Parse(trait);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/smithy.api#longPoll" + suffix);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("structure")]
+    [Arguments("list")]
+    [Arguments("error")]
+    [Arguments("member")]
+    [Arguments("listMember")]
+    public async Task SmithyJsonLongPollRequiresAnOperation(string position)
+    {
+        var document = JsonNode.Parse(SmithyExampleDocument("[]"))!;
+        var selected = position switch
+        {
+            "structure" => document["shapes"]!["example#Input"]!,
+            "list" => document["shapes"]!["example#Values"]!,
+            "error" => document["shapes"]!["example#Failure"]!,
+            "member" => document["shapes"]!["example#Input"]!["members"]!["value"]!,
+            _ => document["shapes"]!["example#Values"]!["member"]!
+        };
+        selected["traits"] ??= new JsonObject();
+        selected["traits"]!["smithy.api#longPoll"] = new JsonObject { ["timeoutMillis"] = 1 };
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonLongPollPreservesNativeMetadataWithoutAcquisitionOrUnrelatedScanning()
+    {
+        var document = JsonNode.Parse(SmithyExampleDocument(
+            """[{"title":"literal","input":{"smithy.api#longPoll":{"timeoutMillis":false},"target":"https://must-not-load.example/schema"}}]"""))!;
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#longPoll"] =
+            new JsonObject { ["timeoutMillis"] = 70000 };
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#readonly"] = new JsonObject();
+        document["shapes"]!["example#Unused"] = JsonNode.Parse(
+            """{"type":"operation","traits":{"smithy.api#longPoll":{"timeoutMillis":0}}}""");
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Long-poll declarations are not imports."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
     private static string SmithyExampleDocument(string examples) => """
         {"smithy":"2.0","shapes":{
           "example#Get":{"type":"operation","input":{"target":"example#Input"},

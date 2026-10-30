@@ -201,6 +201,9 @@ vocabulary/source mapping. It does not supply their implementation.
   on a string-targeting structure member, with at most one marked member per
   structure. Nested declarations do not establish top-level operation tokens;
   no replay store, token generation or retry execution is added.
+  `longPoll` requires an operation object annotation with a positive signed
+  32-bit integer `timeoutMillis`, checked exactly without rounding. The check
+  does not execute polling or modify request timeout configuration.
   `jsonName` requires a string-valued structure/union member annotation and
   unique exact explicit names within each container. `timestampFormat` checks
   timestamp root/member eligibility and the three declared serialization formats.

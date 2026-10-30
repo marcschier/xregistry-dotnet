@@ -286,7 +286,7 @@ The implicit prelude support covers `Blob`, `Boolean`, `Document`, `String`,
 `uniqueItems`, `private`, `length`, `range`, `pattern`, `input`, `output`, `readonly`, `idempotent`,
 `default`, `enum`, `enumValue`, `deprecated`, `recommended`, `title`, `since`,
 `tags`, `internal`, `sensitive`, `unitType`, `examples`, `retryable`,
-`idempotencyToken`, `jsonName`, `timestampFormat` and `trait`
+`idempotencyToken`, `longPoll`, `jsonName`, `timestampFormat` and `trait`
 in `smithy.api`. Other required definitions
 must be supplied in the AST. These checks do not validate every Smithy shape
 constraint, trait value or selector. Full Smithy validation and model assembly
@@ -454,6 +454,15 @@ definitions still report unresolved dependencies. These checks do not generate
 tokens, discard replayed requests or implement client retry policy. A token
 on a nested structure remains valid model metadata, but does not become a
 top-level operation token.
+
+The `longPoll` trait requires an object value on an operation and a numeric
+`timeoutMillis` between 1 and 2,147,483,647 inclusive. The timeout must be
+mathematically integral; decimal and exponent spellings are compared exactly
+without rounding. The required-member rule follows the publisher's trait table
+and prelude, rather than its parameterless example. Missing, null and
+string-encoded timeouts are invalid. Selection preserves the declaration
+without setting client timeouts, waiting for responses or overriding user
+request configuration.
 
 The `jsonName` trait requires a string value on a structure or union member.
 Explicit names cannot repeat within that structure or union; comparison is
