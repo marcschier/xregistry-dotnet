@@ -283,7 +283,7 @@ The implicit prelude support covers `Blob`, `Boolean`, `Document`, `String`,
 `PrimitiveShort`, `PrimitiveInteger`, `PrimitiveLong`, `PrimitiveFloat`,
 `PrimitiveDouble`, and the traits
 `error`, `documentation`, `required`, `clientOptional`, `addedDefault`, `sparse`,
-`input`, `output`, `readonly`, `idempotent`, `default`, `enumValue` and `trait`
+`uniqueItems`, `input`, `output`, `readonly`, `idempotent`, `default`, `enumValue` and `trait`
 in `smithy.api`. Other required definitions
 must be supplied in the AST. These checks do not validate every Smithy shape
 constraint, trait value or selector. Full Smithy validation and model assembly
@@ -310,6 +310,15 @@ an object value. These declarations remain in the supplied model without
 dependency acquisition. Selection does not generate client types or serialize
 instances; `clientOptional` does not suppress validation of an authored default,
 and recognizing `sparse` does not validate collection instance values.
+
+The `uniqueItems` annotation requires an object value on a list and conflicts
+with `sparse` regardless of property order. Its transitive data-member closure
+cannot contain float, double or document shapes, including the implicit
+primitive floating types. The check follows structure/union members and nested
+list/map members, terminates on repeated targets, and excludes applied trait
+definitions and payloads from the data graph. Unmarked lists retain those value
+kinds. This checks model eligibility, not equality or uniqueness of instances.
+Unrelated lists outside the selected closure remain unchecked.
 
 Reachable trait definitions require a string `selector`, when supplied, and
 restrict `structurallyExclusive` to `member` or `target`. These are property

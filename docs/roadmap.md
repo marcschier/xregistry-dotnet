@@ -192,6 +192,10 @@ vocabulary/source mapping. It does not supply their implementation.
   `clientOptional` requires a structure member, `addedDefault` also requires an
   authored default, and `sparse` requires a list or map. These checks do not
   generate client types, serialize instances or bypass default validation.
+  `uniqueItems` checks list-only applicability, object values and the conflict
+  with `sparse`. Its transitive data graph cannot contain float, double or
+  document shapes; recursive traversal excludes trait-definition dependencies.
+  Instance uniqueness and value equality are not evaluated.
   Idempotent `exists`/`notFound` declarations are mutually exclusive
   arrays of absolute IDs whose targets must occur in the operation's own errors.
   Their native hints are retained without execution or fallback to service errors.

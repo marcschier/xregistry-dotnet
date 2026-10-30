@@ -69,6 +69,7 @@ public static partial class ApiOperationDocumentResolver
             closure.ValidateInputOutputUsage();
             closure.ValidateDefaults();
             closure.ValidateStructuralExclusivity();
+            closure.ValidateUniqueItems();
             return Selected(operation, "$/shapes/" + Escape(shapeId), documentUri);
         }
         catch (ValidationFailure failure)
@@ -529,6 +530,54 @@ public static partial class ApiOperationDocumentResolver
             }
         }
 
+        internal void ValidateUniqueItems()
+        {
+            foreach (var (id, shape) in _visited)
+            {
+                budget.Work();
+                if (shape.GetProperty("type").GetString() != "list" ||
+                    !shape.TryGetProperty("traits", out var traits) ||
+                    !traits.TryGetProperty("smithy.api#uniqueItems", out _)) { continue; }
+                var path = "$/shapes/" + Escape(id) + "/traits/smithy.api#uniqueItems";
+                var pending = new Stack<string>();
+                var seen = new HashSet<string>(StringComparer.Ordinal);
+                pending.Push(shape.GetProperty("member").GetProperty("target").GetString()!);
+                while (pending.TryPop(out var targetId))
+                {
+                    budget.Work(path: path);
+                    if (!seen.Add(targetId)) { continue; }
+                    var target = shapes.TryGetProperty(targetId, out var supplied) ? supplied : default;
+                    var kind = target.ValueKind == JsonValueKind.Object
+                        ? target.GetProperty("type").GetString() : SmithyPreludeKind(targetId);
+                    ValidationContext.Require(kind is not ("float" or "double" or "document"), path,
+                        "document.unique_items_target",
+                        "A Smithy uniqueItems list cannot transitively contain floats, doubles or documents.");
+                    if (target.ValueKind != JsonValueKind.Object) { continue; }
+                    switch (kind)
+                    {
+                        case "structure":
+                        case "union":
+                            if (target.TryGetProperty("members", out var members))
+                            {
+                                foreach (var member in members.EnumerateObject())
+                                {
+                                    budget.Work(path: path);
+                                    pending.Push(member.Value.GetProperty("target").GetString()!);
+                                }
+                            }
+                            break;
+                        case "list":
+                            pending.Push(target.GetProperty("member").GetProperty("target").GetString()!);
+                            break;
+                        case "map":
+                            pending.Push(target.GetProperty("key").GetProperty("target").GetString()!);
+                            pending.Push(target.GetProperty("value").GetProperty("target").GetString()!);
+                            break;
+                    }
+                }
+            }
+        }
+
         private static bool TryDefault(JsonElement shape, out JsonElement value)
         {
             value = default;
@@ -675,6 +724,7 @@ public static partial class ApiOperationDocumentResolver
                     "smithy.api#addedDefault" => memberContainer == "structure" &&
                         traits.TryGetProperty("smithy.api#default", out _),
                     "smithy.api#sparse" => kind is "list" or "map",
+                    "smithy.api#uniqueItems" => kind == "list",
                     "smithy.api#enumValue" => memberContainer is "enum" or "intEnum",
                     "smithy.api#input" or "smithy.api#output" or "smithy.api#error" => kind == "structure",
                     "smithy.api#readonly" or "smithy.api#idempotent" => kind == "operation",
@@ -694,6 +744,8 @@ public static partial class ApiOperationDocumentResolver
                     "smithy.api#output" => traits.TryGetProperty("smithy.api#input", out _) ||
                         traits.TryGetProperty("smithy.api#error", out _),
                     "smithy.api#error" => traits.TryGetProperty("smithy.api#trait", out _),
+                    "smithy.api#sparse" => traits.TryGetProperty("smithy.api#uniqueItems", out _),
+                    "smithy.api#uniqueItems" => traits.TryGetProperty("smithy.api#sparse", out _),
                     _ => false
                 };
                 ValidationContext.Require(!conflict, traitPath, "document.trait_conflict",
@@ -713,6 +765,7 @@ public static partial class ApiOperationDocumentResolver
                     case "smithy.api#clientOptional":
                     case "smithy.api#addedDefault":
                     case "smithy.api#sparse":
+                    case "smithy.api#uniqueItems":
                     case "smithy.api#input":
                     case "smithy.api#output":
                     case "smithy.api#readonly":

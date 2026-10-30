@@ -2213,6 +2213,12 @@ public class ApiOperationReferenceTests
     [Arguments("listMember", """{"smithy.api#sparse":{}}""")]
     [Arguments("mapMember", """{"smithy.api#sparse":{}}""")]
     [Arguments("unionMember", """{"smithy.api#sparse":{}}""")]
+    [Arguments("operation", """{"smithy.api#uniqueItems":{}}""")]
+    [Arguments("structure", """{"smithy.api#uniqueItems":{}}""")]
+    [Arguments("member", """{"smithy.api#uniqueItems":{}}""")]
+    [Arguments("listMember", """{"smithy.api#uniqueItems":{}}""")]
+    [Arguments("mapMember", """{"smithy.api#uniqueItems":{}}""")]
+    [Arguments("unionMember", """{"smithy.api#uniqueItems":{}}""")]
     [Arguments("member", """{"smithy.api#input":{}}""")]
     [Arguments("member", """{"smithy.api#output":{}}""")]
     [Arguments("member", """{"smithy.api#error":"server"}""")]
@@ -2885,6 +2891,142 @@ public class ApiOperationReferenceTests
         await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
         await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.default_value");
         await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("smithy.api#Float", false)]
+    [Arguments("smithy.api#Double", false)]
+    [Arguments("smithy.api#Document", false)]
+    [Arguments("smithy.api#PrimitiveFloat", false)]
+    [Arguments("smithy.api#PrimitiveDouble", false)]
+    [Arguments("smithy.api#String", true)]
+    [Arguments("smithy.api#Integer", true)]
+    [Arguments("smithy.api#BigDecimal", true)]
+    [Arguments("smithy.api#Timestamp", true)]
+    [Arguments("smithy.api#Blob", true)]
+    [Arguments("smithy.api#Boolean", true)]
+    [Arguments("smithy.api#Unit", true)]
+    public async Task SmithyJsonUniqueItemsChecksImplicitPreludeValueKinds(string target, bool valid)
+    {
+        var result = ResolveSmithy("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"example#Input"}},
+              "example#Input":{"type":"structure","members":{"values":{"target":"example#Values"}}},
+              "example#Values":{"type":"list","member":{"target":"TARGET"},"traits":{"smithy.api#uniqueItems":{}}}}}
+            """.Replace("TARGET", target, StringComparison.Ordinal));
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.unique_items_target");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Values/traits/smithy.api#uniqueItems");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("structure", "float")]
+    [Arguments("union", "double")]
+    [Arguments("map", "document")]
+    [Arguments("list", "float")]
+    public async Task SmithyJsonUniqueItemsRejectsTransitiveIneligibleDataKinds(string containerKind, string leafKind)
+    {
+        var document = JsonNode.Parse("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"example#Input"}},
+              "example#Input":{"type":"structure","members":{"values":{"target":"example#Values"}}},
+              "example#Values":{"type":"list","member":{"target":"example#Container"},"traits":{"smithy.api#uniqueItems":{}}},
+              "example#Leaf":{"type":"LEAF"}}}
+            """.Replace("LEAF", leafKind, StringComparison.Ordinal))!;
+        var container = new JsonObject { ["type"] = containerKind };
+        var member = JsonNode.Parse("""{"target":"example#Leaf"}""");
+        if (containerKind == "list") { container["member"] = member; }
+        else if (containerKind == "map")
+        {
+            container["key"] = JsonNode.Parse("""{"target":"smithy.api#String"}""");
+            container["value"] = member;
+        }
+        else { container["members"] = new JsonObject { ["value"] = member }; }
+        document["shapes"]!["example#Container"] = container;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.unique_items_target");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task SmithyJsonUniqueItemsConflictsWithSparseInEitherPropertyOrder(bool reverse)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("list", "[]", false))!;
+        var traits = new JsonObject
+        {
+            [reverse ? "smithy.api#sparse" : "smithy.api#uniqueItems"] = new JsonObject(),
+            [reverse ? "smithy.api#uniqueItems" : "smithy.api#sparse"] = new JsonObject()
+        };
+        document["shapes"]!["example#Value"]!["traits"] = traits;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_conflict");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Value/traits/" +
+            (reverse ? "smithy.api#sparse" : "smithy.api#uniqueItems"));
+    }
+
+    [Test]
+    [Arguments("null")]
+    [Arguments("true")]
+    [Arguments("[]")]
+    [Arguments("\"unique\"")]
+    public async Task SmithyJsonUniqueItemsRequiresAnObjectAnnotation(string value)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("list", "[]", false))!;
+        document["shapes"]!["example#Value"]!["traits"] =
+            new JsonObject { ["smithy.api#uniqueItems"] = JsonNode.Parse(value) };
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_value");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonUniqueItemsAllowsTerminatingRecursionAndIgnoresTraitDefinitionDataAndUnusedLists()
+    {
+        var document = """
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"example#Input"}},
+              "example#Input":{"type":"structure","members":{"values":{"target":"example#Values"}}},
+              "example#Values":{"type":"list","member":{"target":"example#Node"},
+                "traits":{"smithy.api#uniqueItems":{},"example#Custom":1.5}},
+              "example#Node":{"type":"structure","members":{"next":{"target":"example#Values"}}},
+              "example#Custom":{"type":"double","traits":{"smithy.api#trait":{}}},
+              "example#Unused":{"type":"list","member":{"target":"smithy.api#Document"},"traits":{"smithy.api#uniqueItems":{}}}}}
+            """;
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Prelude annotations are not imports."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        using var original = JsonDocument.Parse(document);
+        await Assert.That(result.Operation.GetRawText())
+            .IsEqualTo(original.RootElement.GetProperty("shapes").GetProperty("example#Get").GetRawText());
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
+    [Test]
+    [Arguments("Float")]
+    [Arguments("Double")]
+    [Arguments("Document")]
+    public async Task SmithyJsonUnconstrainedListsCanContainNonEquivalenceKinds(string kind)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("list", "[]", false))!;
+        document["shapes"]!["example#Value"]!["member"]!["target"] = "smithy.api#" + kind;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
     }
 
     private static string SmithyDefaultDocument(string kind, string value, bool rootDefault)
