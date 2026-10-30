@@ -196,6 +196,11 @@ vocabulary/source mapping. It does not supply their implementation.
   Optional example error IDs must be bound in the operation's own errors list;
   normal error dependency checks still apply. Literal input/output/error content
   does not trigger retrieval or instance validation.
+  `externalDocumentation` checks a nonempty map of nonempty exact names to
+  nonempty, well-formed absolute URLs on reached roots and members. It does
+  not restrict links to HTTP, fetch their contents or use them to supply
+  missing definitions. Literal examples and unrelated declarations remain
+  outside the selected closure.
   `retryable` requires an error structure and an object value, with optional
   Boolean throttling. `idempotencyToken` requires an object-valued annotation
   on a string-targeting structure member, with at most one marked member per

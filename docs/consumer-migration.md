@@ -565,6 +565,15 @@ does not mark `shapeId` as required, so an empty error object remains permitted.
 Input, output and error content remain literal document values, including null;
 they are neither dependency references nor validated instance examples.
 
+The `externalDocumentation` trait requires a nonempty map on reached roots or
+members. Every key must be a nonempty name and every value a nonempty,
+well-formed absolute URL. Names are case-sensitive; whitespace-only names are
+not trimmed or rejected by an invented naming rule. No HTTP-only scheme
+restriction is imposed. Links retain their authored spelling without retrieval,
+normalization or generated documentation. Literal example links and unrelated
+declarations remain outside the selected closure, and documentation URLs cannot
+supply missing shape definitions.
+
 Defaults are checked on reachable simple, list and map shapes and on structure
 members that target those kinds. A default cannot annotate an operation,
 structure, union, list/map member or operation reference. Root defaults cannot

@@ -6719,6 +6719,160 @@ public class ApiOperationReferenceTests
         await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
     }
 
+    [Test]
+    [Arguments("https://example.test/Docs/%7e?q=Value#Part")]
+    [Arguments("http://example.test/")]
+    [Arguments("ftp://example.test/docs")]
+    [Arguments("file:///docs/reference.html")]
+    public async Task SmithyJsonExternalDocumentationRetainsNamedUrlsWithoutAcquisition(string url)
+    {
+        var document = SmithyExternalDocumentationDocument(new JsonObject
+        {
+            ["Reference"] = url,
+            ["reference"] = "https://example.test/other",
+            ["API / ~ guide"] = url,
+            [" "] = url
+        });
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Documentation URLs must not be fetched."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+    }
+
+    [Test]
+    [Arguments("null", "")]
+    [Arguments("[]", "")]
+    [Arguments("\"https://example.test/\"", "")]
+    [Arguments("{}", "")]
+    [Arguments("""{"":"https://example.test/"}""", "/")]
+    [Arguments("""{"API / ~ guide":null}""", "/API ~1 ~0 guide")]
+    [Arguments("""{"Reference":true}""", "/Reference")]
+    [Arguments("""{"Reference":1}""", "/Reference")]
+    [Arguments("""{"Reference":{}}""", "/Reference")]
+    [Arguments("""{"Reference":[]}""", "/Reference")]
+    [Arguments("""{"Reference":""}""", "/Reference")]
+    [Arguments("""{"Reference":"docs/reference"}""", "/Reference")]
+    [Arguments("""{"Reference":"//example.test/docs"}""", "/Reference")]
+    [Arguments("""{"Reference":"#fragment"}""", "/Reference")]
+    [Arguments("""{"Reference":"https://example.test/bad path"}""", "/Reference")]
+    [Arguments("""{"Reference":"https://example.test/%zz"}""", "/Reference")]
+    [Arguments("""{"Reference":"http://["}""", "/Reference")]
+    [Arguments("""{"Valid":"https://example.test/","Reference":""}""", "/Reference")]
+    public async Task SmithyJsonExternalDocumentationChecksEveryMapEntry(string annotation, string suffix)
+    {
+        var result = ResolveSmithy(SmithyExternalDocumentationDocument(JsonNode.Parse(annotation)).ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.external_documentation");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/smithy.api#externalDocumentation" + suffix);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("root", false)]
+    [Arguments("structure", false)]
+    [Arguments("union", false)]
+    [Arguments("list", false)]
+    [Arguments("mapKey", false)]
+    [Arguments("mapValue", false)]
+    [Arguments("enum", false)]
+    [Arguments("intEnum", false)]
+    [Arguments("root", true)]
+    [Arguments("structure", true)]
+    [Arguments("union", true)]
+    [Arguments("list", true)]
+    [Arguments("mapKey", true)]
+    [Arguments("mapValue", true)]
+    [Arguments("enum", true)]
+    [Arguments("intEnum", true)]
+    public async Task SmithyJsonExternalDocumentationChecksReachedDataRootsAndMembers(string location, bool valid)
+    {
+        var document = SmithyExternalDocumentationDocument(JsonNode.Parse("""{"Reference":"https://example.test/"}"""));
+        document["shapes"]!["example#Event"]!["members"]!["data"]!.AsObject().Remove("traits");
+        var target = JsonNode.Parse(location switch
+        {
+            "list" => """{"type":"list","member":{"target":"smithy.api#String"}}""",
+            "mapKey" or "mapValue" => """{"type":"map","key":{"target":"smithy.api#String"},"value":{"target":"smithy.api#String"}}""",
+            "enum" => """{"type":"enum","members":{"one":{"target":"smithy.api#Unit"}}}""",
+            "intEnum" => """{"type":"intEnum","members":{"one":{"target":"smithy.api#Unit","traits":{"smithy.api#enumValue":1}}}}""",
+            "union" => """{"type":"union","members":{"one":{"target":"smithy.api#String"}}}""",
+            _ => """{"type":"structure","members":{"one":{"target":"smithy.api#String"}}}"""
+        })!;
+        var member = location switch
+        {
+            "root" => target,
+            "list" => target["member"]!,
+            "mapKey" => target["key"]!,
+            "mapValue" => target["value"]!,
+            _ => target["members"]!["one"]!
+        };
+        member["traits"] ??= new JsonObject();
+        member["traits"]!["smithy.api#externalDocumentation"] = new JsonObject
+        { ["Reference"] = valid ? "https://example.test/Docs" : "" };
+        document["shapes"]!["example#Target"] = target;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid)
+        {
+            await Assert.That(result.Diagnostic).IsNull();
+            return;
+        }
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.external_documentation");
+        var at = location switch
+        {
+            "root" => "",
+            "list" => "/member",
+            "mapKey" => "/key",
+            "mapValue" => "/value",
+            _ => "/members/one"
+        };
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Target" + at +
+            "/traits/smithy.api#externalDocumentation/Reference");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonExternalDocumentationPreservesLiteralAndUnrelatedClosureBoundaries()
+    {
+        var document = SmithyExternalDocumentationDocument(JsonNode.Parse("""{"Reference":"https://example.test/"}"""));
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#examples"] = JsonNode.Parse("""
+            [{"title":"literal","input":{"smithy.api#externalDocumentation":{},"target":"example#Absent"}}]
+            """);
+        document["shapes"]!["example#Unused"] = JsonNode.Parse(
+            """{"type":"string","traits":{"smithy.api#externalDocumentation":[]}}""");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
+    [Test]
+    public async Task SmithyJsonExternalDocumentationCannotSupplyMissingShapeDefinitions()
+    {
+        var document = SmithyExternalDocumentationDocument(JsonNode.Parse("""{"Reference":"https://example.test/schema"}"""));
+        document["shapes"]!.AsObject().Remove("example#Target");
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Documentation cannot supply missing definitions."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("dependency.unresolved");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Target");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    private static JsonNode SmithyExternalDocumentationDocument(JsonNode? annotation)
+    {
+        var document = SmithyEventBindingDocument("eventHeader");
+        document["shapes"]!["example#Get"]!["traits"] = new JsonObject
+        { ["smithy.api#externalDocumentation"] = annotation };
+        return document;
+    }
+
     private static JsonNode SmithyMediaTypeDocument(string kind, JsonNode? mediaType)
     {
         var document = SmithyEventBindingDocument("eventHeader");

@@ -1360,6 +1360,26 @@ public static partial class ApiOperationDocumentResolver
                                 "document.request_compression", "Only the case-insensitive gzip compression algorithm is defined.");
                         }
                         continue;
+                    case "smithy.api#externalDocumentation":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object &&
+                            trait.Value.EnumerateObject().Any(), traitPath, "document.external_documentation",
+                            "Smithy external documentation requires a nonempty map of named URLs.");
+                        foreach (var link in trait.Value.EnumerateObject())
+                        {
+                            var linkPath = traitPath + "/" + Escape(link.Name);
+                            budget.Work(link.Name.Length, linkPath);
+                            ValidationContext.Require(link.Name.Length > 0, linkPath, "document.external_documentation",
+                                "An external documentation link requires a nonempty name.");
+                            ValidationContext.Require(link.Value.ValueKind == JsonValueKind.String &&
+                                link.Value.GetString()!.Length > 0, linkPath, "document.external_documentation",
+                                "An external documentation link requires a nonempty URL string.");
+                            var linkText = link.Value.GetString()!;
+                            budget.Work(linkText.Length, linkPath);
+                            ValidationContext.Require(Uri.TryCreate(linkText, UriKind.Absolute, out _) &&
+                                Uri.IsWellFormedUriString(linkText, UriKind.Absolute), linkPath,
+                                "document.external_documentation", "An external documentation link requires a well-formed absolute URL.");
+                        }
+                        continue;
                     case "smithy.api#documentation":
                     case "smithy.api#title":
                     case "smithy.api#since":
