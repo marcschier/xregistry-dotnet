@@ -37,9 +37,10 @@ release safeguards remain in their subject guides.
   636 cases, including all 31 incremental selector and 10 incremental provider
   cases. Their receipts cover 329 and 250 distinct methods, with zero IL/JIT and
   rejected managed controls.
-  At `306e6cd`, the complete HTTP suite passed 421 native cases in that cell,
-  including all 28 incremental publication-to-resolution workflow cases.
-  Its receipt covers 136 methods, with zero IL/JIT and a rejected managed control.
+  At `449d229`, the complete HTTP suite passed 427 native cases in that cell,
+  including all 34 incremental publication-to-resolution workflow cases and
+  their file-backed deletion/restart paths. Its receipt covers 137 methods,
+  with zero IL/JIT and a rejected managed control.
   Remaining work: link the shared proof into the other test projects, decide
   whether/how the existing native CI matrix (or a new job) runs the full suites
   across all eight `net8.0`/`net10.0` × `win-x64`/`win-arm64`/`linux-x64`/
@@ -56,8 +57,8 @@ Full native TUnit requirement receipts remain incomplete. Models and Federation
 passed 985 and 636 native cases at `c196737`; Server and Storage.File passed
 886 and 32 at `f97af1b`. All four are .NET 10/Windows x64 receipts tied to their
 own sources. They do not refresh the package-consumer matrix or qualify the
-other platforms. The complete HTTP suite subsequently passed 421 native cases
-in the same cell at `306e6cd`; its receipt is likewise source-specific.
+other platforms. The complete HTTP suite subsequently passed 427 native cases
+in the same cell at `449d229`; its receipt is likewise source-specific.
 
 - Refresh source-matched package-consumer and sample evidence after material
   package changes. Preserve exact source, package, executable, and report hashes.
@@ -131,9 +132,10 @@ in the same cell at `306e6cd`; its receipt is likewise source-specific.
   retain greater-than-64-bit allocation across three separate adapter/host
   lifetimes, with preserved history, Resource deletion or Group deletion.
   Retained pins preserve bytes; deleted pins fail. The complete managed gate
-  now passes 10,832 cases and 283 tooling tests; these six cases await native
-  execution. Their orderly close/reopen scope does not qualify crash or
-  power-loss behavior.
+  now passes 10,832 cases and 283 tooling tests. At `449d229`, the complete HTTP
+  native suite passed 427 cases on .NET 10/Windows x64, including all 34 workflow
+  cases, with zero IL/JIT and a rejected managed control. Their orderly
+  close/reopen scope does not qualify crash or power-loss behavior.
   Other native cells, URI/context mapping and line eligibility diagnostics
   remain open. The older module receipts do not
   qualify complete Server/Federation suites at the HTTP checkpoint.

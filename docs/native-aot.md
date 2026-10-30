@@ -152,6 +152,24 @@ This qualifies the tested live HTTP workflow on in-memory persistence, not a
 durable HTTP restart workflow, another platform or complete Server/Federation
 suite execution at this source.
 
+The HTTP suite was refreshed at `449d22934f72c1608f764adee0397c8b05b321ae`
+with actual file-backed deletion/restart workflows. All 427 native cases passed
+on .NET 10/Windows x64, including all 34 incremental HTTP workflow cases.
+Six of those cases reopen `LocalFileStore`, its persistence adapter and the
+HTTP host through three lifetimes, preserving greater-than-64-bit allocation
+after retained history, Resource deletion or Group deletion.
+ILC ran with zero IL diagnostics. The same-process proof reported native
+execution with zero JIT compilations; the managed control reported false/3,999
+and was rejected without creating a receipt.
+
+`D:\temp\xregistry-http-native-449d229` retains the TRX, proof and receipt,
+with publish/run logs beside it. The receipt aggregates 137 distinct passed
+methods, with zero failed or skipped. Executable SHA-256:
+`e27420657888bb185ff6e9b41560bbc60fd527bab51938f5eb3f6187ae3e363a`.
+This extends the tested HTTP path to orderly file-store close/reopen; it does
+not qualify crash or power-loss behavior, other platforms, refreshed package
+consumers or complete execution of the other module suites at this source.
+
 The module-level receipts below are historical and have not been refreshed
 against the complete successor source set. Do not treat their counts as
 qualification of the current implementation.

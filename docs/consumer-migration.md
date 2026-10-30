@@ -179,7 +179,9 @@ does not reset that watermark: publication after each reopen assigns the next
 number. A retained Version pin still returns the original bytes; a deleted pin
 fails without fallback. The complete managed gate passed 10,832 cases plus 283
 tooling tests, including all 34 incremental HTTP workflow cases per framework.
-The six added cases await native execution. Orderly close/reopen does not
+At `449d229`, the complete HTTP suite passed 427 native cases on
+.NET 10/Windows x64, including those 34 cases, with zero IL diagnostics or JIT
+compilation and a rejected managed control. Orderly close/reopen does not
 establish crash or power-loss durability, complete JSON-LD processing or
 qualification of the other native cells.
 
