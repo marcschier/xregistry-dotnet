@@ -187,8 +187,13 @@ vocabulary/source mapping. It does not supply their implementation.
   are checked. Idempotent `exists`/`notFound` declarations are mutually exclusive
   arrays of absolute IDs whose targets must occur in the operation's own errors.
   Their native hints are retained without execution or fallback to service errors.
-  General applicability selectors, custom conflicts, complete
-  input/output usage, trait member schemas and default constraints remain open.
+  Input/output-marked structures reached by the selected operation are checked
+  for model-wide references in recognized AST positions: only the matching slot
+  of one operation can use each structure. Trait payloads, metadata and service
+  renames do not add reference edges. This does not validate unrelated shapes
+  or specializations outside the selected closure. General applicability
+  selectors, custom conflicts, other trait member schemas and default constraints
+  remain open.
 - Complete end-to-end event/outbox delivery qualification while preserving
   atomic mutation publication and caller-visible failure semantics.
 - Provide an application-specific adapter or forwarding layer when an existing

@@ -288,10 +288,19 @@ restrict `required` to structure members, `input`/`output`/`error` to structures
 and `readonly`/`idempotent` to operations. Trait definitions must be simple or
 aggregate root shapes, not members. Selection rejects `readonly` with
 `idempotent`, input/output combinations, input or output with error, and error
-with a trait-definition marker. These checks do not interpret custom selectors
-or establish the complete input/output usage constraints across the model.
-Unreachable declarations are not validated, and literal members inside trait payloads do
-not become dependency references.
+with a trait-definition marker. Custom applicability selectors remain unchecked.
+Literal members inside trait payloads do not become dependency references.
+
+For each input/output-marked structure reached by the selected operation, the
+resolver checks references across all recognized JSON AST shape kinds. Only
+the matching input or output slot of one operation can reference that structure.
+A second operation, another slot, an ordinary data member or a service/resource
+reference invalidates selection. This includes references from otherwise
+unvisited shapes; declarations are not ignored merely because they occur after
+the selected operation. Applied trait IDs are references, but literal trait
+values, model metadata and service rename entries do not add reference edges.
+Unmarked structures can be shared. These usage checks do not validate unrelated
+shape constraints or specialize structures outside the selected closure.
 
 For the structured `idempotent` trait, `exists` and `notFound` cannot both be
 present. Each supplied property must be an array of absolute root shape IDs,

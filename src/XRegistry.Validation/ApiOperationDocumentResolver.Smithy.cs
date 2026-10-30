@@ -62,6 +62,7 @@ public static partial class ApiOperationDocumentResolver
             var closure = new SmithyClosure(shapes, budget);
             closure.Visit(shapeId, 0, "operation");
             closure.ValidateRecursion();
+            closure.ValidateInputOutputUsage();
             return Selected(operation, "$/shapes/" + Escape(shapeId), documentUri);
         }
         catch (ValidationFailure failure)
@@ -310,6 +311,119 @@ public static partial class ApiOperationDocumentResolver
                 budget.Work();
                 ValidationContext.Require(terminating.Contains(id), "$/shapes/" + Escape(id),
                     "document.recursion", detail);
+            }
+        }
+
+        internal void ValidateInputOutputUsage()
+        {
+            var directions = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var (id, shape) in _visited)
+            {
+                budget.Work();
+                if (shape.GetProperty("type").GetString() != "structure" ||
+                    !shape.TryGetProperty("traits", out var traits)) { continue; }
+                if (traits.TryGetProperty("smithy.api#input", out _)) { directions.Add(id, "input"); }
+                else if (traits.TryGetProperty("smithy.api#output", out _)) { directions.Add(id, "output"); }
+            }
+            if (directions.Count == 0) { return; }
+            var owners = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var shape in shapes.EnumerateObject())
+            {
+                budget.Work();
+                var kind = shape.Value.GetProperty("type").GetString();
+                var path = "$/shapes/" + Escape(shape.Name);
+                CheckTraits(shape.Value, path);
+                switch (kind)
+                {
+                    case "operation":
+                        CheckSingle("input");
+                        CheckSingle("output");
+                        CheckArray("errors");
+                        break;
+                    case "structure": case "union": case "enum": case "intEnum":
+                        CheckMap("members");
+                        break;
+                    case "list":
+                        CheckSingle("member");
+                        break;
+                    case "map":
+                        CheckSingle("key");
+                        CheckSingle("value");
+                        break;
+                    case "service":
+                        CheckArray("operations");
+                        CheckArray("resources");
+                        CheckArray("errors");
+                        break;
+                    case "resource":
+                        CheckMap("identifiers");
+                        CheckMap("properties");
+                        foreach (var name in new[] { "create", "put", "read", "update", "delete", "list" })
+                        {
+                            CheckSingle(name);
+                        }
+                        CheckArray("operations");
+                        CheckArray("collectionOperations");
+                        CheckArray("resources");
+                        break;
+                }
+
+                void CheckTarget(string target, string referencePath, string? slot = null)
+                {
+                    budget.Work(path: referencePath);
+                    if (!directions.TryGetValue(target, out var direction)) { return; }
+                    ValidationContext.Require(kind == "operation" && slot == direction, referencePath,
+                        "document.input_output_usage",
+                        "A Smithy input or output structure can only be referenced in its matching operation slot.");
+                    ValidationContext.Require(owners.TryAdd(target, shape.Name) || owners[target] == shape.Name,
+                        referencePath, "document.input_output_usage",
+                        "A specialized Smithy input or output structure cannot be shared by multiple operations.");
+                }
+
+                void CheckTraits(JsonElement value, string referencePath)
+                {
+                    if (!value.TryGetProperty("traits", out var traits) || traits.ValueKind != JsonValueKind.Object) { return; }
+                    foreach (var trait in traits.EnumerateObject())
+                    {
+                        CheckTarget(trait.Name, referencePath + "/traits/" + Escape(trait.Name));
+                    }
+                }
+
+                void CheckReference(JsonElement value, string referencePath, string? slot = null)
+                {
+                    budget.Work(path: referencePath);
+                    if (value.ValueKind != JsonValueKind.Object) { return; }
+                    CheckTraits(value, referencePath);
+                    if (value.TryGetProperty("target", out var target) && target.ValueKind == JsonValueKind.String)
+                    {
+                        CheckTarget(target.GetString()!, referencePath, slot);
+                    }
+                }
+
+                void CheckSingle(string name)
+                {
+                    if (shape.Value.TryGetProperty(name, out var value)) { CheckReference(value, path + "/" + name, name); }
+                }
+
+                void CheckArray(string name)
+                {
+                    if (!shape.Value.TryGetProperty(name, out var values) || values.ValueKind != JsonValueKind.Array) { return; }
+                    var index = 0;
+                    foreach (var value in values.EnumerateArray())
+                    {
+                        CheckReference(value, path + "/" + name + "/" +
+                            (index++).ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    }
+                }
+
+                void CheckMap(string name)
+                {
+                    if (!shape.Value.TryGetProperty(name, out var values) || values.ValueKind != JsonValueKind.Object) { return; }
+                    foreach (var value in values.EnumerateObject())
+                    {
+                        CheckReference(value.Value, path + "/" + name + "/" + Escape(value.Name));
+                    }
+                }
             }
         }
 
