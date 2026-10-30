@@ -687,6 +687,11 @@ public sealed partial class RegistryEngine
                 }
 
                 mutations.AddRange(_shortMutations.Values);
+                foreach (var allocation in _wotAllocations)
+                {
+                    mutations.Add(RegistryMutation.Put(allocation.Key, ServerJson.Own(
+                        new JsonObject { ["highwater"] = allocation.Value }, _engine.Limits.Json)));
+                }
 
                 mutations.Add(RegistryMutation.Put(CorrelationsKey + "/" + correlationId,
                     ServerJson.Own(new JsonObject { ["correlationid"] = correlationId }, _engine.Limits.Json)));

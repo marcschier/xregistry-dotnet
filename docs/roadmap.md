@@ -45,8 +45,8 @@ receipts cover Federation at `6d143c4` and Models at `af72b7f`, each on
 .NET 10/Windows x64; they do not refresh the package-consumer matrix or qualify
 the remaining cells. Models passed 954 native cases, including all 43 pure
 incremental assignment cases, with zero IL diagnostics and JIT compilations.
-Its receipt covers 313 distinct methods; durable incremental publication is
-still unimplemented.
+Its receipt covers 313 distinct methods; it does not qualify the subsequent
+incremental server integration.
 
 - Refresh source-matched package-consumer and sample evidence after material
   package changes. Preserve exact source, package, executable, and report hashes.
@@ -102,10 +102,13 @@ still unimplemented.
 - Complete the approved draft-alignment scope against the immutable successor
   sources in `eng/specification/successors.json`. The source inventory does not
   replace clause review or execution evidence.
-- Implement the selected incremental WoT profile. Its pure D3 assignment helper
-  calculates arbitrary-precision revisions from supplied high-water state, but
-  the endpoint model, atomic durable counter, immutable compatibility lines and
-  origin-scoped incremental resolution still need implementation and evidence.
+- Complete the selected incremental WoT profile. Separate fixed-profile models,
+  atomic allocation, immutable revision bytes and compatibility lines now have
+  managed publication evidence, including concurrent conflicts and deletion
+  across file-store restarts. The full managed gate passed 10,666 cases and 283
+  tooling tests. Native evidence for this integration, origin-scoped incremental
+  selection, line eligibility diagnostics and complete workflow evidence remain
+  open.
   SemVer provider acquisition now
   performs scoped native-source lookup and verifies acquired byte digests.
   Parsed local references use the retained containing revision and its authored

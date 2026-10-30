@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json.Nodes;
+using XRegistry.Models;
 
 namespace XRegistry.Server;
 
@@ -33,6 +34,7 @@ public sealed partial class RegistryEngine
             }
 
             _ = next.EffectiveModel;
+            _ = WotRegistryProfiles.Read(next);
             CheckVersionModes(next, _capabilities);
             _ct.ThrowIfCancellationRequested();
             var previous = _model;
@@ -77,10 +79,26 @@ public sealed partial class RegistryEngine
                 Work();
                 if (record.Key.StartsWith('$'))
                 {
+                    if (record.Key.StartsWith(WotAllocationsKey + "/", StringComparison.Ordinal) &&
+                        (WotRegistryProfiles.Read(previous) != WotRegistryProfiles.Read(next) ||
+                         IncrementalResourceChanged(previous, next, record.Key[WotAllocationsKey.Length..])))
+                    {
+                        throw ServerErrors.Create("model_compliance_error", "/model",
+                            "An allocated WoT endpoint cannot switch profiles in place.");
+                    }
                     continue;
                 }
 
                 var path = RegistryPath.Parse(record.Key);
+                if (path.Kind == RegistryPathKind.Version &&
+                    IsWotResource(previous.Groups[path.GroupType!].Resources[path.ResourceType!]) &&
+                    (WotRegistryProfiles.Read(previous) != WotRegistryProfiles.Read(next) ||
+                     WotRegistryProfiles.Read(previous) == WotVersionProfile.Incremental &&
+                     IncrementalResourceChanged(previous, next, record.Key)))
+                {
+                    throw ServerErrors.Create("model_compliance_error", "/model",
+                        "A WoT endpoint with published revisions cannot switch profiles in place.");
+                }
                 if (path.GroupType is not null && !next.Groups.ContainsKey(path.GroupType) ||
                     path.ResourceType is not null && !next.Groups[path.GroupType!].Resources.ContainsKey(path.ResourceType))
                 {
@@ -140,6 +158,15 @@ public sealed partial class RegistryEngine
                         "Existing Version metadata does not comply with the proposed model."), exception);
                 }
             }
+        }
+
+        private static bool IncrementalResourceChanged(RegistryModel previous, RegistryModel next, string key)
+        {
+            var path = RegistryPath.Parse(key);
+            return !next.Groups.TryGetValue(path.GroupType!, out var group) ||
+                !group.Resources.TryGetValue(path.ResourceType!, out var resource) ||
+                !IsWotResource(resource) ||
+                previous.Groups[path.GroupType!].Resources[path.ResourceType!].Singular != resource.Singular;
         }
 
         private JsonObject FreezeModel()

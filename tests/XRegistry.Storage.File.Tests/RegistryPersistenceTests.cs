@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: MIT
 
 using System.Security.Claims;
+using System.Text;
 using TUnit.Assertions;
 using TUnit.Core;
+using XRegistry.Models;
 using XRegistry.Server;
 
 namespace XRegistry.Storage.File.Tests;
@@ -267,6 +269,71 @@ public class RegistryPersistenceTests
         await Assert.That(reopened.ReadGeneration()).IsEqualTo(before);
         var unchanged = await restored.ExecuteAsync(new(RegistryAction.Read, RegistryPath.Parse("/teams")), context);
         await Assert.That(unchanged.Metadata!.RootElement.EnumerateObject().Single().Name).IsEqualTo("a");
+    }
+
+    [Test]
+    [Arguments("/thingmodelgroups/g/thingmodels/pump/versions/184467440737095516160")]
+    [Arguments("/thingmodelgroups/g/thingmodels/pump")]
+    [Arguments("/thingmodelgroups/g")]
+    public async Task IncrementalWatermarkBytesAndFixedLineSurviveDeletionAndSeparateAdapterRestarts(string deletedPath)
+    {
+        using var directory = new TestDirectory();
+        const string resource = "/thingmodelgroups/g/thingmodels/pump";
+        const string document = """{ "id": "urn:example:pump", "version": { "model": "184467440737095516160" } }""";
+        var source = WotRegistryProfiles.Compile(WotVersionProfile.Incremental).Source.RootElement.GetRawText();
+        var context = new RegistryOperationContext(new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, "fixture")], "fixture")));
+        string? correlation;
+        using (var store = LocalFileStore.Initialize(directory.Path))
+        using (var persistence = new LocalRegistryPersistence(store))
+        {
+            var engine = Engine(persistence, source);
+            using var content = new MemoryStream(Encoding.UTF8.GetBytes(document));
+            var created = await engine.ExecuteAsync(new(RegistryAction.Post, RegistryPath.Parse(resource))
+            {
+                Document = content, ContentType = "application/json",
+                Metadata = RegistryJson.Parse("""{"compatibilityline":"urn:example:line:a"}""")
+            }, context);
+            await Assert.That(created.Path.VersionId!.Value).IsEqualTo("184467440737095516160");
+            correlation = created.CorrelationId;
+        }
+        using (var store = LocalFileStore.Open(directory.Path))
+        using (var persistence = new LocalRegistryPersistence(store))
+        {
+            var engine = Engine(persistence, "{}");
+            var read = await engine.ExecuteAsync(new(RegistryAction.Read,
+                RegistryPath.Parse(resource + "/versions/184467440737095516160")), context);
+            using var reader = new StreamReader(read.Document!.OpenRead());
+            await Assert.That(await reader.ReadToEndAsync()).IsEqualTo(document);
+            await Assert.That(read.Metadata!.RootElement.GetProperty("compatibilityline").GetString())
+                .IsEqualTo("urn:example:line:a");
+            using var snapshot = await persistence.ReadSnapshotAsync();
+            await Assert.That(snapshot.Find("$wotalloc" + resource)!.Metadata.RootElement.GetProperty("highwater").GetString())
+                .IsEqualTo("184467440737095516160");
+            await Assert.That(snapshot.Find("$events/" + correlation) is not null).IsTrue();
+            await Assert.That(snapshot.Find("$correlations/" + correlation) is not null).IsTrue();
+            await engine.ExecuteAsync(new(RegistryAction.Delete, RegistryPath.Parse(deletedPath)), context);
+        }
+        using (var store = LocalFileStore.Open(directory.Path))
+        using (var persistence = new LocalRegistryPersistence(store))
+        {
+            var engine = Engine(persistence, "{}");
+            using var content = new MemoryStream("""{"id":"urn:example:pump"}"""u8.ToArray());
+            var next = await engine.ExecuteAsync(new(RegistryAction.Post, RegistryPath.Parse(resource))
+            {
+                Document = content, ContentType = "application/json",
+                Metadata = RegistryJson.Parse("""{"compatibilityline":"urn:example:line:b"}""")
+            }, context);
+            await Assert.That(next.Path.VersionId!.Value).IsEqualTo("184467440737095516161");
+        }
+        using var reopened = LocalFileStore.Open(directory.Path);
+        using var adapter = new LocalRegistryPersistence(reopened);
+        using var durable = await adapter.ReadSnapshotAsync();
+        await Assert.That(durable.Generation).IsEqualTo(3L);
+        await Assert.That(durable.Find("$wotalloc" + resource)!.Metadata.RootElement.GetProperty("highwater").GetString())
+            .IsEqualTo("184467440737095516161");
+        await Assert.That(durable.Find(resource + "/versions/184467440737095516160")).IsNull();
+        await Assert.That(durable.Find(resource + "/versions/184467440737095516161")!.HasDocument).IsTrue();
     }
 
     private static RegistryEngine Engine(IRegistryPersistence persistence, string model) => new(new()

@@ -96,6 +96,12 @@ public sealed partial class RegistryEngine
                     ApplyMeta(meta, body, patch);
                     if (ChildCount(meta.Key + "/versions") == 0)
                     {
+                        if (IsIncrementalWot(ResourceDefinition(path)))
+                        {
+                            throw ServerErrors.With("invalid_attribute", meta.Key,
+                                "A new incremental WoT revision requires its complete Document.",
+                                ("name", ResourceDefinition(path).Singular));
+                        }
                         ApplyVersion(meta, GenerateVersionId(meta, ResourceDefinition(path)), new JsonObject(), false, false, generated: true);
                     }
 
@@ -341,6 +347,12 @@ public sealed partial class RegistryEngine
         {
             var path = RegistryPath.Parse(resource.Key);
             var definition = ResourceDefinition(path);
+            if (IsIncrementalWot(definition) && body["compatibility"] is not null)
+            {
+                throw ServerErrors.With("invalid_attribute", resource.Key,
+                    "Resource-wide compatibility does not classify separate incremental compatibility lines.",
+                    ("name", "compatibility"));
+            }
             var input = (JsonObject)body.DeepClone();
             if (patch && input.ContainsKey("defaultversionid") && !input.ContainsKey("defaultversionsticky"))
             {
@@ -366,6 +378,9 @@ public sealed partial class RegistryEngine
             var key = resource.Key + "/versions/" + Uri.EscapeDataString(versionId);
             var entity = Find(key);
             var isNew = entity is null;
+            var incremental = IsIncrementalWot(definition);
+            var fixedLine = entity?.Attributes["compatibilityline"]?.DeepClone();
+            var fixedWotId = entity?.Attributes["wotid"]?.DeepClone();
             if (isNew && !definition.SetVersionId && !generated)
             {
                 throw ServerErrors.With("versionid_not_allowed", resource.Key, "This Resource type requires server-generated Version identifiers.",
@@ -416,6 +431,17 @@ public sealed partial class RegistryEngine
                 throw ServerErrors.With("hasdocument_violation", key, "This Resource type has no separate Document.", ("plural", definition.Plural));
             }
             entity.Attributes[definition.Singular + "id"] = path.ResourceId!.Value;
+            if (incremental && !isNew &&
+                !ServerJson.Equal(fixedLine, entity.Attributes["compatibilityline"]))
+            {
+                throw ServerErrors.Create("invalid-line", key,
+                    "An incremental revision's compatibility line, including its absence, cannot change.");
+            }
+            if (incremental && !isNew && !ServerJson.Equal(fixedWotId, entity.Attributes["wotid"]))
+            {
+                throw ServerErrors.With("invalid_attribute", key,
+                    "An incremental revision's wotid must retain its Document identity.", ("name", "wotid"));
+            }
             if (definition.HasDocument)
             {
                 ApplyDocument(entity, resource, definition, input, submittedDocuments, patch, documentMode);

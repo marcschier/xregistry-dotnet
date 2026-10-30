@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json.Nodes;
+using XRegistry.Models;
 
 namespace XRegistry.Server;
 
@@ -25,6 +26,7 @@ public sealed partial class RegistryEngine : IReadOnlyRegistryHostBackend
         ArgumentNullException.ThrowIfNull(authorization);
         ArgumentNullException.ThrowIfNull(options.PublicRoot);
         ArgumentNullException.ThrowIfNull(options.Model);
+        _ = WotRegistryProfiles.Read(options.Model);
         ArgumentNullException.ThrowIfNull(options.TimeProvider);
         ArgumentNullException.ThrowIfNull(options.Limits);
         ArgumentNullException.ThrowIfNull(options.QueryLimits);
@@ -218,6 +220,7 @@ public sealed partial class RegistryEngine : IReadOnlyRegistryHostBackend
         {
             model = RegistryModel.Compile(RegistryJson.FromElement(frozen, _options.ModelCompilation.JsonLimits),
                 _options.ModelCompilation with { Resolver = null, SourceUri = null });
+            _ = WotRegistryProfiles.Read(model);
         }
         catch (RegistryException exception)
         {

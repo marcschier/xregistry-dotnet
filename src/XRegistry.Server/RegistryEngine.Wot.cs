@@ -13,6 +13,9 @@ public sealed partial class RegistryEngine
 {
     private sealed partial class Request
     {
+        private const string WotAllocationsKey = "$wotalloc";
+        private readonly Dictionary<string, string> _wotAllocations = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, byte[]> _wotRevisionDocuments = new(StringComparer.Ordinal);
         private sealed record WotVersionAssignment(string VersionId, string Origin, string WotId);
 
         private static bool IsWotResource(RegistryResourceDefinition definition) =>
@@ -38,12 +41,32 @@ public sealed partial class RegistryEngine
             return version;
         }
 
+        private bool IsIncrementalWot(RegistryResourceDefinition definition)
+        {
+            if (!IsWotResource(definition)) { return false; }
+            var profile = WotRegistryProfiles.Read(_model);
+            if (profile == WotVersionProfile.Incremental &&
+                (definition.VersionMode != "manual" || definition.SingleVersionRoot))
+            {
+                throw ServerErrors.Create("unknown-profile", "/model",
+                    "Incremental WoT Resources require manual versioning and multiple roots.");
+            }
+            return profile == WotVersionProfile.Incremental;
+        }
+
         private WotVersionAssignment? AssignWotVersion(Entity resource, RegistryResourceDefinition definition,
             JsonObject input, string? requestedVersionId)
         {
             var bytes = WotDocumentBytes(definition, input);
             if (bytes is null)
             {
+                if (IsIncrementalWot(definition) && (input.ContainsKey(definition.Singular) ||
+                    requestedVersionId is null ||
+                    Find(resource.Key + "/versions/" + Uri.EscapeDataString(requestedVersionId)) is null))
+                {
+                    throw ServerErrors.With("invalid_attribute", resource.Key,
+                        "A new incremental WoT revision requires its complete Document.", ("name", definition.Singular));
+                }
                 return null;
             }
 
@@ -81,6 +104,10 @@ public sealed partial class RegistryEngine
 
                 input["wotid"] = wotId;
                 var versionField = definition.Singular == "thingmodel" ? "model" : "instance";
+                if (IsIncrementalWot(definition))
+                {
+                    return AssignIncrementalWotVersion(resource, input, requestedVersionId, root, versionField, bytes, wotId);
+                }
                 var authoredVersion = AuthoredWotVersion(root, versionField, resource.Key);
                 var origin = authoredVersion is null ? "generated" : "authored";
                 var existingGeneratedVersion = requestedVersionId is not null &&
@@ -98,6 +125,136 @@ public sealed partial class RegistryEngine
                 }
 
                 return new(versionId, origin, wotId);
+            }
+        }
+
+        private WotVersionAssignment AssignIncrementalWotVersion(Entity resource, JsonObject input,
+            string? requestedVersionId, JsonElement root, string versionField, byte[] bytes, string wotId)
+        {
+            string? authored = null;
+            if (root.TryGetProperty("version", out var version) && version.ValueKind == JsonValueKind.Object &&
+                version.TryGetProperty(versionField, out var value) && value.ValueKind == JsonValueKind.String)
+            {
+                authored = value.GetString();
+            }
+
+            var submitted = Identifier(input, "versionid", resource.Key);
+            if (requestedVersionId is not null && submitted is not null && requestedVersionId != submitted)
+            {
+                throw ServerErrors.Create("version-mismatch", resource.Key, "Conflicting incremental revision ids.");
+            }
+            var candidate = requestedVersionId ?? submitted;
+            ApplyIncrementalLine(input, root, resource.Key, ResourceDefinition(RegistryPath.Parse(resource.Key)));
+            if (candidate is not null &&
+                Find(resource.Key + "/versions/" + Uri.EscapeDataString(candidate)) is { } existing)
+            {
+                using var stored = _wotRevisionDocuments.TryGetValue(existing.Key, out var staged)
+                    ? new MemoryStream(staged, writable: false) : _snapshot.OpenDocument(existing.Key, _ct);
+                var offset = 0;
+                Span<byte> buffer = stackalloc byte[4096];
+                int count;
+                while ((count = stored.Read(buffer)) != 0)
+                {
+                    Work();
+                    if (count > bytes.Length - offset || !buffer[..count].SequenceEqual(bytes.AsSpan(offset, count)))
+                    {
+                        throw ServerErrors.Create("invalid_attribute", existing.Key,
+                            "An existing incremental revision's Document cannot change.");
+                    }
+                    offset += count;
+                }
+                if (offset != bytes.Length)
+                {
+                    throw ServerErrors.Create("invalid_attribute", existing.Key,
+                        "An existing incremental revision's Document cannot change.");
+                }
+                return new(candidate, ServerJson.Text(existing.Attributes, "versionorigin")!, wotId);
+            }
+
+            var key = WotAllocationsKey + resource.Key;
+            if (!_wotAllocations.TryGetValue(key, out var watermark))
+            {
+                Work();
+                var record = _snapshot.Find(key);
+                if (record is null)
+                {
+                    if (Children(resource.Key + "/versions").Any())
+                    {
+                        throw ServerErrors.Create("invalid-version", resource.Key,
+                            "Published incremental revisions have no durable allocation history.");
+                    }
+                    watermark = "0";
+                }
+                else if (!record.Metadata.RootElement.TryGetProperty("highwater", out var highwater) ||
+                    highwater.ValueKind != JsonValueKind.String ||
+                    (watermark = highwater.GetString()!) == "0" ||
+                    watermark.Length is < 1 or > 128 || watermark[0] is < '1' or > '9' ||
+                    !watermark.All(char.IsAsciiDigit))
+                {
+                    throw ServerErrors.Create("invalid-version", resource.Key,
+                        "The durable incremental allocation history is corrupt.");
+                }
+                var maximum = BigInteger.Parse(watermark, NumberStyles.None, CultureInfo.InvariantCulture);
+                foreach (var retained in Children(resource.Key + "/versions"))
+                {
+                    Work();
+                    var id = Id(retained);
+                    if (id.Length is < 1 or > 128 || id[0] is < '1' or > '9' || !id.All(char.IsAsciiDigit) ||
+                        BigInteger.Parse(id, NumberStyles.None, CultureInfo.InvariantCulture) > maximum)
+                    {
+                        throw ServerErrors.Create("invalid-version", resource.Key,
+                            "Retained incremental revisions disagree with the durable allocation history.");
+                    }
+                }
+            }
+            var assignment = WotIncrementalVersionAllocator.Assign(watermark, authored, candidate);
+            _wotAllocations[key] = assignment.HighWaterMark;
+            _wotRevisionDocuments[resource.Key + "/versions/" + Uri.EscapeDataString(assignment.VersionId)] = bytes;
+            return new(assignment.VersionId, assignment.Origin, wotId);
+        }
+
+        private void ApplyIncrementalLine(JsonObject input, JsonElement root, string path,
+            RegistryResourceDefinition definition)
+        {
+            const string lineIri = "http://opcfoundation.org/UA/WoT-Binding/compatibilityLine";
+            if (root.TryGetProperty("uav:compatibilityLine", out _))
+            {
+                throw ServerErrors.Create("invalid-line", path,
+                    "Compact compatibility-line terms require JSON-LD context processing; use authorized metadata or the expanded IRI.");
+            }
+            var metadata = input["compatibilityline"];
+            string? line = null;
+            if (metadata is not null)
+            {
+                if (metadata is not JsonValue scalar || !scalar.TryGetValue<string>(out line))
+                {
+                    throw ServerErrors.Create("invalid-line", path, "The compatibility line must be an absolute URI.");
+                }
+            }
+            if (root.TryGetProperty(lineIri, out var declaration))
+            {
+                if (declaration.ValueKind != JsonValueKind.String ||
+                    line is not null && line != declaration.GetString())
+                {
+                    throw ServerErrors.Create("invalid-line", path, "Document and metadata compatibility lines must agree exactly.");
+                }
+                line = declaration.GetString();
+            }
+            if (line is not null)
+            {
+                try
+                {
+                    _ = RegistryMetadataValidator.Validate(RegistryJson.Parse(new JsonObject
+                        { ["compatibilityline"] = line }.ToJsonString()),
+                        new Dictionary<string, RegistryAttributeDefinition>
+                        { ["compatibilityline"] = definition.Attributes["compatibilityline"] },
+                        new() { Limits = _engine.Limits.Json }, _ct);
+                }
+                catch (RegistryException exception)
+                {
+                    throw ServerErrors.Wrap(exception, "invalid-line", path);
+                }
+                input["compatibilityline"] = line;
             }
         }
 

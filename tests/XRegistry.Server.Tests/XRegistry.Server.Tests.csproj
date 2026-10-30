@@ -9,6 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="TUnit" />
+    <Compile Include="..\Shared\NativeExecutionProofTests.cs" Link="NativeExecutionProofTests.cs" />
     <ProjectReference Include="..\..\src\XRegistry.Server\XRegistry.Server.csproj" />
     <ProjectReference Include="..\..\src\XRegistry.Models\XRegistry.Models.csproj" />
     <ProjectReference Include="..\..\src\XRegistry.Validation\XRegistry.Validation.csproj" />

@@ -20,6 +20,7 @@ complete xRegistry conformance.
 | WoT containing-revision resolution | `XRegistry.Federation.WotRegistryResolver.ResolveLocalAsync` | Resolves a parsed local reference against an already acquired `WotResolvedDocument`. Uses its retained bytes and kind, applies local floors to the authored version, and cannot select another Registry Version. |
 | WoT JSON Pointer selection | `XRegistry.Federation.WotRegistryResolver.SelectFragmentAsync` | Applies an RFC 6901 URI-fragment pointer to the acquired document after Version or local-revision selection. Returns the selected JSON value with the containing document's full-byte digest and origin. |
 | WoT incremental assignment calculation | `XRegistry.Models.WotIncrementalVersionAllocator.Assign` | Calculates a new integer revision from explicit durable high-water state. It does not publish, persist a counter, activate an incremental endpoint or implement compatibility-line selection. |
+| WoT incremental publication | `XRegistry.Models.WotRegistryProfiles.Compile(WotVersionProfile.Incremental)` with `RegistryEngine` | Provisions a separate fixed-profile model. Publication commits the counter with Documents, metadata and Core state; revision bytes and compatibility lines cannot change. Reference selection remains unsupported. |
 | Generic operation dispatch | `RegistryEngine.ExecuteAsync(RegistryOperation, RegistryOperationContext, CancellationToken)` in `XRegistry.Server` | The engine owns model, lifecycle, versions, validation and atomic change preparation. |
 | HTTP client | `XRegistry.Client.XRegistryHttpClient` | One explicit HTTP operation, unchanged status/headers and bounded metadata/Document consumption. |
 | HTTP serving | `XRegistry.AspNetCore.MapXRegistry` | Maps a concrete `RegistryEngine`; it does not start or secure a host. |
@@ -101,11 +102,32 @@ limit and rejects sequence exhaustion, invalid captured counters and supplied
 ids that disagree with the assignment. It never reconstructs deleted history
 from retained Versions. A publication owner must commit the returned watermark
 atomically with the bytes, fixed metadata and Core state, retaining the counter
-after Resource deletion. That server integration and its durable/concurrent
-execution evidence are not implemented by this pure function; existing built-in
-WoT models and server writes remain SemVer. Assignment cases passed managed
+after Resource deletion. This pure function does not perform that transaction.
+Existing built-in WoT models retain SemVer. Assignment cases passed managed
 execution on both frameworks and native execution in the complete Models suite
 on .NET 10/Windows x64 at `af72b7f`.
+
+Use `WotRegistryProfiles.Compile(WotVersionProfile.Incremental)` to provision
+an incremental endpoint explicitly. Its read-only `wotversionprofile` marker
+fixes the profile; Resources use manual Version ids and multiple roots without
+a Resource-wide compatibility claim. New revisions require complete TM or TD
+bytes. The engine stores its allocation watermark in the same generation-checked
+batch as Documents, fixed metadata, model state and outbox records. Deleting a
+Version, Resource or Group retains the watermark, including across file-store
+restarts. An exact explicit replay does not advance it; changed bytes or a changed
+line fail. Concurrent publications cannot commit the same allocation, and a
+known-not-committed conflict can be retried against the new state. Missing,
+malformed or inconsistent retained allocation history fails instead of restarting
+the sequence.
+
+An incremental revision's `compatibilityline`, including absence, is fixed at
+creation. Authorized metadata can supply an absolute URI; a document declaration
+using the expanded `http://opcfoundation.org/UA/WoT-Binding/compatibilityLine`
+IRI must agree exactly. Compact JSON-LD terms are rejected until context
+processing is implemented. A lineless revision can be stored and read directly,
+but automatic line selection and its publication diagnostic remain open.
+The full managed gate passed 10,666 cases and 283 tooling tests for this
+publication slice. Native execution of the new integration remains unqualified.
 
 ## Choose the real seam
 
