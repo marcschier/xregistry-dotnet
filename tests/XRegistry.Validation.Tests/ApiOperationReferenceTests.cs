@@ -2641,6 +2641,145 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
+    [Arguments("""{"links":[]}""")]
+    [Arguments("""{"links":[{}]}""")]
+    [Arguments("""{"links":[{"method":"Target","name":{"native":true},"params":{"a":"$request.params.a"},"summary":"","description":""}]}""")]
+    [Arguments("""{"links":[{"method":"Later","server":{"url":"../{region}","variables":{"region":{"default":"west","enum":["east"]}}}}]}""")]
+    [Arguments("""{"links":[{"method":"Target"},{"method":"Later"}]}""")]
+    public async Task OpenRpcLinksResolveExactNativeMethodNamesWithoutExecutingCalls(string metadata)
+    {
+        var method = JsonNode.Parse(metadata)!.AsObject();
+        method["name"] = "Target";
+        method["params"] = new JsonArray();
+        var native = method.ToJsonString();
+        var document = new JsonObject
+        {
+            ["openrpc"] = "1.4.0", ["methods"] = new JsonArray(method,
+                new JsonObject
+                {
+                    ["name"] = "Later", ["params"] = new JsonArray(),
+                    ["links"] = new JsonArray(new JsonObject { ["method"] = "Target" })
+                })
+        };
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenRPC/1.4", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Links are not invocations."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(native);
+        await Assert.That(result.DocumentPath).IsEqualTo("$/methods/0");
+    }
+
+    [Test]
+    [Arguments("""{"links":{}}""", "document.links", "/links")]
+    [Arguments("""{"links":[null]}""", "document.operation", "/links/0")]
+    [Arguments("""{"links":[{"method":false}]}""", "document.annotation", "/links/0/method")]
+    [Arguments("""{"links":[{"method":"target"}]}""", "document.link_method", "/links/0/method")]
+    [Arguments("""{"links":[{"method":"Missing"}]}""", "document.link_method", "/links/0/method")]
+    [Arguments("""{"links":[{"method":""}]}""", "document.link_method", "/links/0/method")]
+    [Arguments("""{"links":[{"summary":[]}]}""", "document.annotation", "/links/0/summary")]
+    [Arguments("""{"links":[{"description":false}]}""", "document.annotation", "/links/0/description")]
+    [Arguments("""{"links":[{"server":null}]}""", "document.server", "/links/0/server")]
+    [Arguments("""{"links":[{"server":{"$ref":"https://must-not-load.example/server"}}]}""", "document.server_url", "/links/0/server/url")]
+    [Arguments("""{"links":[{"server":{"url":"/rpc","variables":{"v":{}}}}]}""", "document.server_default", "/links/0/server/variables/v/default")]
+    public async Task OpenRpcInvalidLinksInLaterMethodsPreventAnEarlierMatch(
+        string metadata, string code, string suffix)
+    {
+        var method = JsonNode.Parse(metadata)!.AsObject();
+        method["name"] = "Other";
+        method["params"] = new JsonArray();
+        var document = new JsonObject
+        {
+            ["openrpc"] = "1.4.0", ["methods"] = new JsonArray(
+                new JsonObject { ["name"] = "Target", ["params"] = new JsonArray() }, method)
+        };
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenRPC/1.4", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Links are not invocations."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/methods/1" + suffix);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("Target")]
+    [Arguments("Unrelated")]
+    public async Task OpenRpcLinkedMethodNamesMustIdentifyOneOccurrenceAcrossTheCompleteMethodArray(string selector)
+    {
+        var result = ApiOperationDocumentResolver.Resolve("OpenRPC/1.4", "application/json", """
+            {"openrpc":"1.4.0","methods":[
+              {"name":"Target","params":[],"links":[{"method":"Duplicated"}]},
+              {"name":"Duplicated","params":[]},{"$ref":"#/methods/1"}]}
+            """u8.ToArray(), ApiOperationReference.Parse("/apigroups/g/apis/a#operations/" + selector));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.link_method");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/methods/0/links/0/method");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task OpenRpcLinkReferencesResolveFromTheirContainingMethodAndPreserveNativeLinkData()
+    {
+        var calls = new List<string>();
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenRPC/1.4", "application/json", """
+            {"openrpc":"1.4.0","methods":[{"$ref":"./nested/method.json"},{"name":"Later","params":[]}]}
+            """u8.ToArray(), ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+            new Uri("https://api.example/root.json"), (uri, _) =>
+            {
+                calls.Add(uri);
+                var json = uri switch
+                {
+                    "https://api.example/nested/method.json" =>
+                        """{"name":"Target","params":[],"links":[{"$ref":"./links.json#/next"}]}""",
+                    "https://api.example/nested/links.json" =>
+                        """{"next":{"$ref":"./parts/link.json"}}""",
+                    "https://api.example/nested/parts/link.json" => """
+                        {"method":"Later","params":{"ref":{"$ref":"https://not-an-import.example/value"}},
+                         "server":{"url":"https://must-not-invoke.example/rpc"}}
+                        """,
+                    _ => throw new InvalidOperationException("Unexpected URL " + uri)
+                };
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(json));
+            });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Operation.GetProperty("links")[0].GetProperty("$ref").GetString()).IsEqualTo("./links.json#/next");
+        await Assert.That(result.DocumentUri).IsEqualTo(new Uri("https://api.example/nested/method.json"));
+        await Assert.That(calls.SequenceEqual(["https://api.example/nested/method.json",
+            "https://api.example/nested/links.json", "https://api.example/nested/parts/link.json"])).IsTrue();
+    }
+
+    [Test]
+    [Arguments("unavailable", ApiOperationResolutionStatus.Indeterminate, "dependency.unresolved")]
+    [Arguments("denied", ApiOperationResolutionStatus.Denied, "dependency.denied")]
+    [Arguments("cycle", ApiOperationResolutionStatus.Indeterminate, "dependency.cycle")]
+    [Arguments("malformed", ApiOperationResolutionStatus.Invalid, "document.annotation")]
+    public async Task OpenRpcLinkDependencyFailuresDoNotBecomeSuccessfulSelections(
+        string outcome, ApiOperationResolutionStatus expected, string code)
+    {
+        var calls = 0;
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenRPC/1.4", "application/json", """
+            {"openrpc":"1.4.0","methods":[{"name":"Target","params":[],"links":[{"$ref":"https://api.example/link.json"}]}]}
+            """u8.ToArray(), ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+            resolveReference: (_, _) =>
+            {
+                calls++;
+                if (outcome == "denied") { throw new UnauthorizedAccessException("Outside policy."); }
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(outcome switch
+                {
+                    "cycle" => """{"$ref":"#"}"""u8.ToArray(),
+                    "malformed" => """{"method":0}"""u8.ToArray(),
+                    _ => (ReadOnlyMemory<byte>?)null
+                });
+            });
+        await Assert.That(result.Status).IsEqualTo(expected);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        await Assert.That(calls).IsEqualTo(1);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
     [Arguments("""{"name":"Other"}""", "document.params", "/params")]
     [Arguments("""{"name":"Other","params":null}""", "document.params", "/params")]
     [Arguments("""{"name":"Other","params":{}}""", "document.params", "/params")]

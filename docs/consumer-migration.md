@@ -141,6 +141,22 @@ require objects with URL strings and optional descriptions; documentation URLs
 are not retrieved. URL-string shape checks do not establish URL validity.
 Malformed metadata in a later method prevents an earlier selection.
 
+OpenRPC links are resolved as declarations, not executed. A supplied `method`
+must name exactly one occurrence in the complete resolved `methods` array;
+matching is case-sensitive and does not use a URL or operation selector.
+Links can target later methods or form cycles without recursive invocation.
+A missing or ambiguous linked method invalidates selection, even if a different
+method matched the caller's selector. Link Object references use the containing
+source's base URI and caller policy. Returned methods retain their original
+link references, names and parameter values; runtime expressions in link
+parameters remain data.
+
+Link server overrides reuse the method-server structural checks. Link summary
+and description values must be strings. A link can omit `method`; selection
+does not infer a target from its name, parameters or server. This does not
+validate parameter expressions against the target schema or execute a linked
+method.
+
 For `AvroProtocol/1.12.0`, `#operations/GetUser` selects the exact `GetUser`
 member of `messages`. An absent or empty `messages` object has no selectable
 operations; an Avro data schema without a protocol declaration is rejected.

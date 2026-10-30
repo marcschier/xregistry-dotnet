@@ -156,6 +156,11 @@ vocabulary/source mapping. It does not supply their implementation.
   have structural checks. Tag references use the same authorized retrieval;
   server and documentation URLs remain native strings without invocation.
   URL-template semantics and complete URL validation remain open.
+  Link references use the same acquisition policy; supplied linked method names
+  must identify one occurrence after the complete Method array is resolved.
+  Link server overrides have the shared structural checks. Links and their
+  parameter expressions are preserved without invocation; target-schema
+  parameter validation remains open.
   Smithy selection checks required operation/data/custom-trait dependencies in
   an already assembled non-mixin AST and rejects invalid recursion in that
   closure, invalid enum targets and duplicate or malformed enum values. Its

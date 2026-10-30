@@ -459,6 +459,8 @@ public static partial class ApiOperationDocumentResolver
         string methodName, ReferenceContext references, ValidationContext budget, CancellationToken cancellationToken)
     {
         var matches = new List<OperationLocation>();
+        var methodCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+        var links = new List<OperationLocation>();
         var index = 0;
         foreach (var method in root.GetProperty("methods").EnumerateArray())
         {
@@ -478,11 +480,25 @@ public static partial class ApiOperationDocumentResolver
                     "An OpenRPC Method Object must have a non-empty name.", location.Pointer + "/name");
             }
             var contractFailure = await ValidateOpenRpcMethodAsync(location, references, budget,
-                cancellationToken).ConfigureAwait(false);
+                links, cancellationToken).ConfigureAwait(false);
             if (contractFailure is not null) { return contractFailure; }
+            var nativeName = name.GetString()!;
+            methodCounts[nativeName] = Math.Min(2, methodCounts.GetValueOrDefault(nativeName) + 1);
             if (string.Equals(name.GetString(), methodName, StringComparison.Ordinal))
             {
                 if (matches.Count < 2) { matches.Add(location); }
+            }
+        }
+        foreach (var link in links)
+        {
+            budget.Work(path: link.Pointer);
+            if (!link.Operation.TryGetProperty("method", out var target)) { continue; }
+            var count = methodCounts.GetValueOrDefault(target.GetString()!);
+            if (count != 1)
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid, "document.link_method",
+                    "An OpenRPC link method must name exactly one resolved Method Object.",
+                    link.Pointer + "/method");
             }
         }
         return matches.Count switch
