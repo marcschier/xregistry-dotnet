@@ -17,58 +17,29 @@ release safeguards remain in their subject guides.
 - `eng/specification/native_receipt.py` converts one already-executed,
   already-verified native TUnit TRX run plus an independently captured
   `nativeAot`/`jitCompiledMethods` proof into the exact `schemaVersion: 1`
-  receipt shape `manage.py`'s `release_check` validates. It has been proven
-  end to end: `XRegistry.Models.Tests` (net10.0) publishes and runs natively
-  with `dotnet publish ... -p:PublishAot=true`, its opt-in
-  `NativeExecutionProofTests` reports genuine `nativeAot: true,
-  jitCompiledMethods: 0` (versus a JIT control's `nativeAot: false,
-  jitCompiledMethods: 7169`), and the resulting receipt passes every
-  structural/hash/native check in `release_check` up to the still-missing
-  seven remaining framework/RID cells.   All 16 test projects now share the proof test through the common build targets;
-  that inclusion does not qualify their native execution.
-  At `c7ff014`, the complete Core suite passed 756 native cases on each of
-  .NET 8 and .NET 10/Windows x64, with zero IL/JIT and rejected managed controls.
-  Each Core receipt covers 268 distinct methods.
-  The complete Federation suite passed 626 native cases on
-  .NET 10/Windows x64 at `6d143c4`, with zero IL diagnostics and zero JIT-compiled
-  methods. Its receipt covers 242 distinct methods, not 626 independent methods.
-  At `f97af1b`, complete Server and Storage.File suites passed 886 and 32 native
-  cases in that cell, including incremental publication and durable restart
-  contracts, with zero IL diagnostics or JIT compilations. Their receipts
-  cover 415 and 30 distinct methods. Managed controls were rejected without
-  creating receipts.
-  Models and Federation were refreshed at `c196737` in the same cell: 985 and
-  636 cases, including all 31 incremental selector and 10 incremental provider
-  cases. Their receipts cover 329 and 250 distinct methods, with zero IL/JIT and
-  rejected managed controls.
-  Models was subsequently refreshed at `611fb0b` on both .NET 8 and .NET 10/
-  Windows x64: 1,006 cases, 332 methods per receipt, zero IL/JIT and rejected
-  managed controls. All 76 Media Endpoint cases passed on each framework.
-  At `449d229`, the complete HTTP suite passed 427 native cases in that cell,
-  including all 34 incremental publication-to-resolution workflow cases and
-  their file-backed deletion/restart paths. Its receipt covers 137 methods,
-  with zero IL/JIT and a rejected managed control.
+  receipt shape `manage.py`'s `release_check` validates. All 16 projects share
+  the same opt-in proof test; inclusion alone does not qualify execution.
   `eng/run_native_suites.py` and the `native-module-suites` CI job now schedule
   the thirteen generic suites across all eight framework/RID cells. Each
   suite must pass natively and in its matching managed baseline with identical
   case inventories, source-bound hashes, zero IL diagnostics and a rejected
-  managed receipt. Remaining work: execute every cell, resolve failures without
+  managed receipt. At `1bdfa6f`, all four complete .NET 10 cells passed on
+  Windows/Linux x64 and ARM64. The .NET 8 cells remain failed for four test
+  hosts with framework JSON IL diagnostics. Resolve those failures without
   suppression, then map each reviewed requirement's `testIds` to real method
-  names and attach the resulting evidence per requirement. Scheduling and
-  driver unit tests do not establish native execution.
+  names and attach the resulting evidence per requirement. The source
+  reconciliation after this checkpoint has no native requirement promotion.
 
 ## Native platforms and package consumers
 
 The selected generic package, model, client/bridge sample and storage matrix
-passed all 28 jobs at `c7ff014` on Windows/Linux x64 and ARM64. See
+passed all 28 jobs at `1bdfa6f` on Windows/Linux x64 and ARM64. The four complete
+.NET 10 module-suite cells also passed at that source. See
 [native evidence](native-aot.md#current-evidence-and-uncovered-cells).
-Full native TUnit requirement receipts remain incomplete. Models passed 1,006
-cases per framework at `611fb0b` on .NET 8 and .NET 10/Windows x64; Core passed
-756 per framework at `c7ff014`. Federation passed 636 cases at `c196737`;
-Server and Storage.File passed 886 and 32 at `f97af1b`; HTTP passed 427 at
-`449d229`. These last four receipts cover .NET 10/Windows x64 only. Each suite
-remains tied to its source; the package matrix does not qualify every module
-suite on the other platforms.
+Full native TUnit requirement receipts remain incomplete. All four .NET 8
+complete-suite summaries failed for AspNetCore, HTTP, Federation and Git
+test-host IL warnings. Their other nine suites passed, but those partial
+successes do not qualify a complete cell.
 
 - Refresh source-matched package-consumer and sample evidence after material
   package changes. Preserve exact source, package, executable, and report hashes.
@@ -121,43 +92,40 @@ suite on the other platforms.
 
 ## Integration work
 
+The source inventory now retains 51 files from five immutable revisions,
+including the W25 reconciliation at `514f6eac`; the earlier `811de7d2` files
+remain intact. One pending closure block was replaced, and five unchanged
+floor clauses were explicitly re-reviewed against the new source. All 2,389
+pending successor obligations remain pending. The reconciliation identifies
+four missing closure contracts: dependency classification, occurrence/operator
+encoding, document-URL mapping to captured targets, and assigned projection
+vocabulary/source mapping. It does not supply their implementation.
+
 - Complete the approved draft-alignment scope against the immutable successor
   sources in `eng/specification/successors.json`. The source inventory does not
   replace clause review or execution evidence.
 - Complete the selected incremental WoT profile. Separate fixed-profile models,
   atomic allocation, immutable revision bytes and compatibility lines now have
   managed publication evidence, including concurrent conflicts and deletion
-  across file-store restarts. The full managed gate passed 10,666 cases and 283
-  tooling tests at `7e84cad`; complete Server and Storage.File native suites
-  passed on .NET 10/Windows x64 at `f97af1b`. Parsed incremental selection now
-  uses exact lines, numeric floors/ranking, sticky defaults and origin-scoped
-  acquisition; retained local references use the captured revision and line.
-  Its full managed gate passed 10,748 cases and 283 tooling tests.
-  Complete Models/Federation native suites passed at `c196737` on
-  .NET 10/Windows x64. Live HTTP TM/TD publication-to-resolution workflows now
-  have managed and .NET 10/Windows x64 native evidence at `306e6cd`, including
-  exact replay, rejection without allocation, sticky conflicts and retained
-  local resolution after source shutdown. The complete managed gate passed
-  10,820 cases and 283 tooling tests. Six added file-backed TM/TD HTTP workflows
+  across file-store restarts. Parsed incremental selection uses exact lines,
+  numeric floors/ranking, sticky defaults and origin-scoped acquisition;
+  retained local references use the captured revision and line.
+  Live HTTP TM/TD publication-to-resolution workflows cover exact replay,
+  rejection without allocation, sticky conflicts and retained local resolution
+  after source shutdown. Six file-backed TM/TD HTTP workflows
   retain greater-than-64-bit allocation across three separate adapter/host
   lifetimes, with preserved history, Resource deletion or Group deletion.
-  Retained pins preserve bytes; deleted pins fail. The complete managed gate
-  now passes 10,832 cases and 283 tooling tests. At `449d229`, the complete HTTP
-  native suite passed 427 cases on .NET 10/Windows x64, including all 34 workflow
-  cases, with zero IL/JIT and a rejected managed control. Their orderly
+  Retained pins preserve bytes; deleted pins fail. At `1bdfa6f`, these cases
+  passed within all four complete .NET 10 module-suite cells. Their orderly
   close/reopen scope does not qualify crash or power-loss behavior.
-  Other native cells, URI/context mapping and line eligibility diagnostics
-  remain open. The older module receipts do not
-  qualify complete Server/Federation suites at the HTTP checkpoint.
-  SemVer provider acquisition now
-  performs scoped native-source lookup and verifies acquired byte digests.
+  SemVer provider acquisition performs scoped native-source lookup and
+  verifies acquired byte digests.
   Parsed local references use the retained containing revision and its authored
   version fields. JSON Pointer fragments are applied after selection without
-  changing full-document provenance, with managed and .NET 10/Windows x64 native
-  evidence.
-  URI/base/JSON-LD context processing and alias integration remain open.
-  WoT publication closure also needs the unresolved source-occurrence and target
-  mappings from the draft; do not substitute live targets for captured closure.
+  changing full-document provenance. URI/base/JSON-LD context processing,
+  alias integration, line eligibility diagnostics and complete profile
+  qualification remain open. WoT publication closure needs the four contracts
+  above; do not substitute live targets for captured closure.
 - Add full API format validators and the remaining language resolvers. The
   OpenAPI/Swagger and OpenRPC JSON selectors do not establish format validation,
   YAML support, or gRPC, Thrift, Avro Protocol/IDL, GraphQL, WSDL or Smithy support.

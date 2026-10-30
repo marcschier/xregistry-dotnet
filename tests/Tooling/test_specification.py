@@ -312,6 +312,32 @@ class ProvenanceAndReviewTests(unittest.TestCase):
         self.assertEqual((self.root / tool.SUCCESSORS).read_bytes(), before)
         self.assertEqual(tool.verify_corpus(self.root)["successorInventory"]["pinnedFiles"], 4)
 
+    def test_w25_successor_retains_prior_sources_and_explicitly_selects_reconciled_documents(self) -> None:
+        spec = importlib.util.spec_from_file_location("freeze_successors", ROOT / "eng/specification/freeze_successors.py")
+        freezer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(freezer)
+        sources = {source["id"]: source for source in freezer.sources()}
+        self.assertEqual(set(sources), {
+            "upstream-4a7e7f5e", "pr571-811de7d2", "pr571-514f6eac",
+            "pr715-5f9d0134", "pr716-9613f002",
+        })
+        prior = sources["pr571-811de7d2"]
+        current = sources["pr571-514f6eac"]
+        self.assertEqual(prior["commit"], "811de7d20711dd3edc8c676ae634adebee235188")
+        self.assertEqual(current["commit"], "514f6eacd6297821e949dcb81a03e2943f5cb88e")
+        expected = {
+            "workingdrafts/models/wot/spec.md": "normative",
+            "workingdrafts/publication/spec.md": "normative",
+            "workingdrafts/publication/design/design.md": "selected-design",
+        }
+        old_roles = {entry["path"]: entry["role"] for entry in prior["files"]}
+        new_roles = {entry["path"]: entry["role"] for entry in current["files"]}
+        self.assertEqual(new_roles, expected | {"LICENSE": "review-only"})
+        for path in expected:
+            self.assertEqual(old_roles[path], "review-only", path)
+        self.assertEqual(old_roles["workingdrafts/models/wot/model.json"], "review-only")
+        self.assertEqual(old_roles["workingdrafts/bindings/oci.md"], "normative")
+
     def test_successor_acquisition_failure_does_not_change_selected_sources(self) -> None:
         self.pin_successors()
         spec = importlib.util.spec_from_file_location("freeze_successors", ROOT / "eng/specification/freeze_successors.py")

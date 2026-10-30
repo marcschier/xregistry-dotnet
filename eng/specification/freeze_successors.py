@@ -21,6 +21,7 @@ SPEC.loader.exec_module(tool)
 
 MERGED = "4a7e7f5e333f359e77d1bef5641d16120305352f"
 DRAFT = "811de7d20711dd3edc8c676ae634adebee235188"
+CLOSURE = "514f6eacd6297821e949dcb81a03e2943f5cb88e"
 API = "5f9d0134407927c0fae3b95e0aa844548e3756d6"
 MEDIA = "9613f002c82c9568fbefc5f1f0cf0490d6df572a"
 
@@ -33,6 +34,10 @@ def sources() -> list[dict]:
     draft = {
         "id": "pr571-811de7d2", "repository": "https://github.com/xregistry/spec",
         "commit": DRAFT, "status": "working-draft", "files": [],
+    }
+    closure = {
+        "id": "pr571-514f6eac", "repository": "https://github.com/xregistry/spec",
+        "commit": CLOSURE, "status": "working-draft", "files": [],
     }
     api = {
         "id": "pr715-5f9d0134", "repository": "https://github.com/xregistry/spec",
@@ -84,7 +89,17 @@ def sources() -> list[dict]:
         api["files"].append({"path": path, "owner": "api", "kind": kind, "role": "review-only"})
     media["files"].append({"path": "workingdrafts/models/media-endpoints.md", "owner": "media-endpoints",
                            "kind": "normative", "role": "review-only"})
-    result = [merged, draft, api, media]
+    for path, owner, kind, role in (
+        ("workingdrafts/models/wot/spec.md", "wot", "normative", "normative"),
+        ("workingdrafts/publication/spec.md", "publication", "normative", "normative"),
+        ("workingdrafts/publication/design/design.md", "wot", "informative", "selected-design"),
+    ):
+        closure["files"].append({"path": path, "owner": owner, "kind": kind, "role": role})
+    replaced_paths = {entry["path"] for entry in closure["files"]}
+    for entry in draft["files"]:
+        if entry["path"] in replaced_paths:
+            entry["role"] = "review-only"
+    result = [merged, draft, closure, api, media]
     for source in result:
         source["files"].append({"path": "LICENSE", "owner": "license", "kind": "license", "role": "review-only"})
     return result

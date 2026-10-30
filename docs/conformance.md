@@ -16,7 +16,7 @@ Historical pinned files: **318**. Historical normative documents: **17**. Combin
 Historical sources and their reviews are retained separately from the
 successor composition; new source-qualified requirements do not inherit
 historical implementation claims.
-Successor files: **47**. Successor normative documents: **22**. Selected informative designs: **1**.
+Successor files: **51**. Successor normative documents: **22**. Selected informative designs: **1**.
 
 A selected informative design is an implementation target, not an adopted
 standard. Its obligations still require explicit semantic review.

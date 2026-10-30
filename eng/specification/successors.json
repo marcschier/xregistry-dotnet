@@ -312,6 +312,42 @@
       ]
     },
     {
+      "id": "pr571-514f6eac",
+      "repository": "https://github.com/xregistry/spec",
+      "commit": "514f6eacd6297821e949dcb81a03e2943f5cb88e",
+      "status": "working-draft",
+      "files": [
+        {
+          "path": "workingdrafts/models/wot/spec.md",
+          "owner": "wot",
+          "kind": "normative",
+          "bytes": 72836,
+          "sha256": "e6d0a3bfc77f0c8e95a48dc9fa9acf73f24fc45472a0e69268f906b377425deb"
+        },
+        {
+          "path": "workingdrafts/publication/spec.md",
+          "owner": "publication",
+          "kind": "normative",
+          "bytes": 50050,
+          "sha256": "970163220f096105e1f414a0e0d43a2d41f71f44e70bd48d191e743e5017b3e1"
+        },
+        {
+          "path": "workingdrafts/publication/design/design.md",
+          "owner": "wot",
+          "kind": "informative",
+          "bytes": 93386,
+          "sha256": "9d08da98adc72531a330a09f88f002fc98cac57d315ad45446aabdcbad9481ac"
+        },
+        {
+          "path": "LICENSE",
+          "owner": "license",
+          "kind": "license",
+          "bytes": 11349,
+          "sha256": "c07c2bf22d1b6eadecdbc008b0693c9a876f85c1485c375ff57301085ffc8db9"
+        }
+      ]
+    },
+    {
       "id": "pr715-5f9d0134",
       "repository": "https://github.com/xregistry/spec",
       "commit": "5f9d0134407927c0fae3b95e0aa844548e3756d6",
@@ -467,7 +503,7 @@
     {
       "source": "pr571-811de7d2",
       "path": "workingdrafts/models/wot/spec.md",
-      "role": "normative"
+      "role": "review-only"
     },
     {
       "source": "pr571-811de7d2",
@@ -532,7 +568,7 @@
     {
       "source": "pr571-811de7d2",
       "path": "workingdrafts/publication/spec.md",
-      "role": "normative"
+      "role": "review-only"
     },
     {
       "source": "pr571-811de7d2",
@@ -542,7 +578,7 @@
     {
       "source": "pr571-811de7d2",
       "path": "workingdrafts/publication/design/design.md",
-      "role": "selected-design"
+      "role": "review-only"
     },
     {
       "source": "pr571-811de7d2",
@@ -571,6 +607,26 @@
     },
     {
       "source": "pr571-811de7d2",
+      "path": "LICENSE",
+      "role": "review-only"
+    },
+    {
+      "source": "pr571-514f6eac",
+      "path": "workingdrafts/models/wot/spec.md",
+      "role": "normative"
+    },
+    {
+      "source": "pr571-514f6eac",
+      "path": "workingdrafts/publication/spec.md",
+      "role": "normative"
+    },
+    {
+      "source": "pr571-514f6eac",
+      "path": "workingdrafts/publication/design/design.md",
+      "role": "selected-design"
+    },
+    {
+      "source": "pr571-514f6eac",
       "path": "LICENSE",
       "role": "review-only"
     },
