@@ -10390,7 +10390,7 @@ public class ApiOperationReferenceTests
     [Test]
     [Arguments("Target", "{}", "smithy.relative_id_ref")]
     [Arguments("Target$value", "{}", "smithy.relative_id_ref")]
-    [Arguments("example#Target", """{"selector":"string [trait|sensitive]"}""", "smithy.id_ref_selector")]
+    [Arguments("example#Target", """{"selector":"string [trait|sensitive = true]"}""", "smithy.id_ref_selector")]
     [Arguments("smithy.api#String", """{"selector":":is(string)"}""", "smithy.id_ref_selector")]
     [Arguments("smithy.api#required", """{"failWhenMissing":true}""", "smithy.prelude_id_ref")]
     [Arguments("smithy.api#required", """{"selector":"* :test(string)"}""", "smithy.prelude_id_ref")]
@@ -10627,9 +10627,9 @@ public class ApiOperationReferenceTests
     [Arguments(" \tstring\r\n", true)]
     [Arguments("\n* ", true)]
     [Arguments("String", false)]
-    [Arguments("string [trait|sensitive]", false)]
+    [Arguments("string [trait|sensitive = true]", false)]
     [Arguments(":is(string)", false)]
-    [Arguments("[trait|required]", false)]
+    [Arguments("[trait|required = true]", false)]
     [Arguments("member > string", false)]
     [Arguments("", false)]
     public async Task SmithyJsonCustomTraitIdRefTypeSelectorsTrimTokenWhitespaceWithoutApproximatingGrammar(string selector, bool supported)
@@ -10722,9 +10722,9 @@ public class ApiOperationReferenceTests
     [Arguments(":not string")]
     [Arguments(":unknown(string)")]
     [Arguments(":TEST(string)")]
-    [Arguments(":test(string,[trait|sensitive])")]
-    [Arguments("number [trait|sensitive]")]
-    [Arguments(":not(number [trait|sensitive])")]
+    [Arguments(":test(string,[trait|sensitive = true])")]
+    [Arguments("number [trait|sensitive = true]")]
+    [Arguments(":not(number [trait|sensitive = true])")]
     [Arguments(":test(*,:is(string))")]
     [Arguments("string,number")]
     [Arguments("string)")]
@@ -10898,10 +10898,10 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
-    [Arguments("[trait|required]")]
+    [Arguments("[trait|required = true]")]
     [Arguments("member > string")]
     [Arguments(":is(string)")]
-    [Arguments(":test(operation,[trait|required])")]
+    [Arguments(":test(operation,[trait|required = true])")]
     [Arguments(":not()")]
     public async Task SmithyJsonCustomTraitSelectorsReportUnsupportedGrammarAtApplication(string selector)
     {
@@ -10936,7 +10936,7 @@ public class ApiOperationReferenceTests
         document["shapes"]!["example#Scheme"]!["traits"]!["smithy.api#authDefinition"] =
             JsonNode.Parse("""{"traits":["example#Dependency"]}""");
         document["shapes"]!["example#Dependency"] = JsonNode.Parse("""
-            {"type":"string","traits":{"smithy.api#trait":{"selector":"[trait|required]"}}}
+            {"type":"string","traits":{"smithy.api#trait":{"selector":"[trait|required = true]"}}}
             """);
         document["shapes"]!["example#Literal"] = JsonNode.Parse("""{"type":"document","traits":{"smithy.api#trait":{}}}""");
         document["shapes"]!["example#Get"]!["traits"]!["example#Literal"] =
@@ -10970,13 +10970,194 @@ public class ApiOperationReferenceTests
     public async Task SmithyJsonCustomTraitSelectorsPreserveMissingSchemaDependencyBeforeUnsupportedEvaluation()
     {
         var document = SmithyCustomNodeDocument("structure", "{}");
-        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!["selector"] = "[trait|required]";
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!["selector"] = "[trait|required = true]";
         document["shapes"]!["example#Custom"]!["members"] = JsonNode.Parse("""{"value":{"target":"example#Missing"}}""");
         var result = ResolveSmithy(document.ToJsonString());
         await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
         await Assert.That(result.Diagnostic!.Code).IsEqualTo("dependency.unresolved");
         await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Missing");
         await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("[trait|deprecated]", true)]
+    [Arguments("[trait|smithy.api#deprecated]", true)]
+    [Arguments("operation [ trait | deprecated ]", true)]
+    [Arguments(":not([trait|deprecated])", false)]
+    [Arguments(":test([trait|since],[trait|deprecated])", true)]
+    [Arguments("[trait|Deprecated]", false)]
+    [Arguments("[trait|example#deprecated]", false)]
+    [Arguments("[trait|since]", false)]
+    public async Task SmithyJsonTraitExistenceSelectorsResolvePreludeNamesExactly(string selector, bool matches)
+    {
+        var document = SmithyCustomNodeDocument("string", "\"value\"");
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!["selector"] = selector;
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#deprecated"] = new JsonObject();
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(matches ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (matches)
+        {
+            await Assert.That(result.Diagnostic).IsNull();
+            await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_selector_target");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/example#Custom");
+        }
+    }
+
+    [Test]
+    [Arguments("{}")]
+    [Arguments("[]")]
+    [Arguments("null")]
+    [Arguments("false")]
+    [Arguments("0")]
+    [Arguments("\"\"")]
+    public async Task SmithyJsonTraitExistenceSelectorsDoNotUsePayloadTruthiness(string value)
+    {
+        var document = SmithyCustomNodeDocument("string", "\"value\"");
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!["selector"] = "[trait|example#Marker]";
+        document["shapes"]!["example#Marker"] = JsonNode.Parse("""{"type":"document","traits":{"smithy.api#trait":{}}}""");
+        document["shapes"]!["example#Get"]!["traits"]!["example#Marker"] = JsonNode.Parse(value);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+    }
+
+    [Test]
+    [Arguments("[trait|deprecated]", true)]
+    [Arguments("string[trait|deprecated]", true)]
+    [Arguments(":test(number, [trait|deprecated])", true)]
+    [Arguments(":not([trait|deprecated])", false)]
+    [Arguments("[trait|example#Custom]", false)]
+    public async Task SmithyJsonIdRefTraitExistenceSelectorsInspectReferencedRootNotApplication(string selector, bool matches)
+    {
+        var document = SmithyIdRefTraitDocument("example#Target", "{}");
+        document["shapes"]!["example#Target"]!["traits"] = JsonNode.Parse("""{"smithy.api#deprecated":{}}""");
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#idRef"]!["selector"] = selector;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(matches ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (matches) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_id_ref_selector");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/example#Custom");
+        }
+    }
+
+    [Test]
+    [Arguments("structure", "value")]
+    [Arguments("list", "member")]
+    [Arguments("map", "value")]
+    [Arguments("map", "key")]
+    public async Task SmithyJsonIdRefTraitExistenceSelectorsInspectSelectedMember(string container, string member)
+    {
+        var document = SmithyIdRefTraitDocument("example#Target$" + member, "{}");
+        var target = SmithyIdRefTarget(container);
+        if (container == "structure") { target["members"] = JsonNode.Parse("""{"value":{"target":"smithy.api#String"}}"""); }
+        var selected = container == "structure" ? target["members"]!["value"]! : target[member]!;
+        selected["traits"] = JsonNode.Parse("""{"smithy.api#deprecated":{}}""");
+        target["traits"] = JsonNode.Parse("""{"smithy.api#since":"1"}""");
+        document["shapes"]!["example#Target"] = target;
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#idRef"]!["selector"] =
+            "member[trait|deprecated]:not([trait|since])";
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        selected.AsObject().Remove("traits");
+        var missing = ResolveSmithy(document.ToJsonString());
+        await Assert.That(missing.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(missing.Diagnostic!.Code).IsEqualTo("document.trait_id_ref_selector");
+    }
+
+    [Test]
+    public async Task SmithyJsonTraitExistenceSelectorsRecognizeTraitDefinitionApplications()
+    {
+        var document = SmithyCustomNodeDocument("string", "\"value\"");
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!["selector"] = "structure[trait|trait]";
+        document["shapes"]!["example#Secondary"] = JsonNode.Parse("""
+            {"type":"structure","traits":{"smithy.api#trait":{},"example#Custom":"value"},"members":{}}
+            """);
+        document["shapes"]!["example#Get"]!["traits"] = JsonNode.Parse("""{"example#Secondary":{}}""");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+    }
+
+    [Test]
+    [Arguments("[trait|deprecated]")]
+    [Arguments(":not([trait|default])")]
+    [Arguments(":test(string,[trait|deprecated])")]
+    public async Task SmithyJsonIdRefTraitExistenceSelectorsDoNotAssumeImplicitPreludeTraitSets(string selector)
+    {
+        var document = SmithyIdRefTraitDocument("smithy.api#String", "{}");
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#idRef"]!["selector"] = selector;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Unsupported);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("smithy.id_ref_selector");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        document["shapes"]!["smithy.api#String"] = JsonNode.Parse("""{"type":"string","traits":{"smithy.api#deprecated":{}}}""");
+        var explicitTarget = ResolveSmithy(document.ToJsonString());
+        await Assert.That(explicitTarget.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(explicitTarget.Diagnostic).IsNull();
+    }
+
+    [Test]
+    [Arguments("[trait]")]
+    [Arguments("[trait|]")]
+    [Arguments("[trait|bad!name]")]
+    [Arguments("[trait|deprecated = true]")]
+    [Arguments("[trait|deprecated|message]")]
+    [Arguments("[trait|(values)]")]
+    [Arguments("[id|name]")]
+    [Arguments("[trait|deprecated")]
+    [Arguments("[trait|deprecated]]")]
+    [Arguments(":test(operation,[trait|deprecated = true])")]
+    public async Task SmithyJsonTraitExistenceSelectorsRejectUnsupportedAttributeGrammar(string selector)
+    {
+        var document = SmithyCustomNodeDocument("string", "\"value\"");
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!["selector"] = selector;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Unsupported);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("smithy.trait_selector");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("[]")]
+    [Arguments("null")]
+    [Arguments("\"invalid\"")]
+    public async Task SmithyJsonIdRefTraitExistenceSelectorsRejectMalformedTargetTraitObjects(string traits)
+    {
+        var document = SmithyIdRefTraitDocument("example#Target", """{"selector":"[trait|deprecated]"}""");
+        document["shapes"]!["example#Target"]!["traits"] = JsonNode.Parse(traits);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.traits");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonTraitExistenceSelectorsBoundRepeatedTraitLookups()
+    {
+        var document = SmithyIdRefTraitDocument("example#Target", "{}");
+        var traits = new JsonObject();
+        for (var index = 0; index < 1000; index++)
+        {
+            traits["example#Marker" + index.ToString(System.Globalization.CultureInfo.InvariantCulture)] = new JsonObject();
+        }
+        document["shapes"]!["example#Target"]!["traits"] = traits;
+        var control = ResolveSmithy(document.ToJsonString());
+        await Assert.That(control.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#idRef"]!["selector"] =
+            string.Concat(Enumerable.Repeat("[trait|missing]", 600));
+        var bounded = ResolveSmithy(document.ToJsonString());
+        await Assert.That(bounded.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(bounded.Diagnostic!.Code).IsEqualTo("limit.work");
+        await Assert.That(bounded.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
     }
 
     private static JsonNode SmithyIdRefTarget(string kind)

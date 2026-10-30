@@ -400,6 +400,11 @@ Reachable trait definitions require a string `selector`, when supplied, and
 restrict `structurallyExclusive` to `member` or `target`. After schema-closure
 checks, custom applications evaluate type-token selectors and their supported
 sequence/`:test`/`:not` compositions against the actual root or member shape.
+Exact trait-existence predicates such as `structure[trait|trait]` are also
+supported. Unqualified names resolve only in `smithy.api`; fully qualified trait
+IDs match exactly. Presence does not depend on the trait value's truthiness or
+collection size. Predicates inspect the application shape's own traits, not its
+container, target or literal payload. Trait lookups consume the shared work budget.
 A member is not matched as its target or container type. An omitted selector
 permits every shape; each reached application is checked independently.
 Type mismatches are invalid. Other selector expressions report `Unsupported`
@@ -597,10 +602,14 @@ Type-token sequences intersect their predicates. Type-only `:test` predicates
 match when any argument matches, and `:not` requires exactly one argument and
 negates its result. These functions can nest and compose with type tokens.
 The evaluator checks the entire supported expression before returning a result;
-unsupported attributes, graph traversal or functions do not become matches
-through a true branch or a negated false branch. Empty arguments and partially
+unsupported attribute comparisons/projections, graph traversal or functions do
+not become matches through a true branch or a negated false branch. Empty arguments and partially
 parsed expressions report `Unsupported`. Nesting and token scanning consume the
 shared depth and work budgets.
+Exact `[trait|name]` predicates use the referenced root or member's own trait
+object, with the same namespace and presence rules as application selectors.
+Trait predicates on unmaterialized implicit prelude targets report `Unsupported`;
+the supported type table does not establish their complete trait sets.
 Well-formed relative IDs report `Unsupported` because this selector does not
 perform IDL assembly. Required references to implicit
 prelude shapes outside the supported prelude table also report `Unsupported`,

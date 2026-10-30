@@ -221,6 +221,9 @@ vocabulary/source mapping. It does not supply their implementation.
   type bounds and supported string timestamps after schema-closure validation.
   Their application sites also check type-token selectors and supported
   sequence/`:test`/`:not` compositions against the actual root or member shape.
+  Exact `[trait|name]` existence predicates inspect that shape's own traits;
+  unqualified names resolve in `smithy.api`, and payload truthiness does not
+  affect presence. Trait lookups consume the shared work budget.
   Each application is checked independently. Type mismatches are invalid;
   unsupported grammar reports `Unsupported` at the application without changing
   unapplied declaration checks or masking earlier missing schema dependencies.
@@ -255,8 +258,10 @@ vocabulary/source mapping. It does not supply their implementation.
   traversal or acquisition. Single type selectors match concrete types and
   documented categories, including enum/intEnum specializations and list aliases.
   Member IDs match the member shape rather than its target. Type-token sequences
-  intersect predicates; nested type-only `:test` and `:not` expressions support
-  alternatives and negation with bounded scanning and nesting. Unsupported or
+  intersect predicates; nested `:test` and `:not` expressions support
+  alternatives and negation with bounded scanning and nesting. Exact trait
+  existence predicates also inspect referenced roots or members; unmaterialized
+  implicit prelude trait sets remain unsupported. Unsupported or
   partially parsed expressions cannot yield a match through short-circuiting.
   Relative ID assembly, other selectors on existing targets and required
   references to unindexed

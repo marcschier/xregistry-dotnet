@@ -184,7 +184,7 @@ public static partial class ApiOperationDocumentResolver
     private sealed class SmithyClosure(JsonElement shapes, ValidationContext budget)
     {
         private readonly Dictionary<string, JsonElement> _visited = new(StringComparer.Ordinal);
-        private readonly List<(string Id, JsonElement Value, string Path, string Kind)> _traitNodes = [];
+        private readonly List<(string Id, JsonElement Value, string Path, string Kind, JsonElement Shape)> _traitNodes = [];
 
         internal void Visit(string id, int depth, string? expected = null, bool error = false, bool traitDefinition = false,
             string? sourceId = null, string? referencePath = null)
@@ -1956,13 +1956,13 @@ public static partial class ApiOperationDocumentResolver
                     }
                 }
                 Visit(trait.Name, depth + 1, traitDefinition: true, sourceId: sourceId, referencePath: traitPath);
-                _traitNodes.Add((trait.Name, trait.Value, traitPath, memberContainer is null ? kind! : "member"));
+                _traitNodes.Add((trait.Name, trait.Value, traitPath, memberContainer is null ? kind! : "member", shape));
             }
         }
 
         internal void ValidateTraitNodes()
         {
-            foreach (var (id, value, path, kind) in _traitNodes)
+            foreach (var (id, value, path, kind, shape) in _traitNodes)
             {
                 var definition = shapes.GetProperty(id);
                 if (TryTrait(definition, "smithy.api#trait", out var marker) &&
@@ -1970,7 +1970,7 @@ public static partial class ApiOperationDocumentResolver
                 {
                     var text = selector.GetString()!;
                     budget.Work(text.Length, path);
-                    var matches = MatchSmithySelector(text, kind, path);
+                    var matches = MatchSmithySelector(text, kind, path, shape);
                     if (matches is null)
                     {
                         ValidationContext.Fail(DocumentValidationStatus.Unsupported, path, "smithy.trait_selector",
@@ -2324,7 +2324,13 @@ public static partial class ApiOperationDocumentResolver
             if (found && !wildcard)
             {
                 var kind = member is not null ? "member" : implicitKind ?? target.GetProperty("type").GetString()!;
-                var matches = MatchSmithySelector(selectorText, kind, path);
+                var selectedShape = target;
+                if (member is not null)
+                {
+                    selectedShape = target.GetProperty("type").GetString() is "list" or "map"
+                        ? target.GetProperty(member) : target.GetProperty("members").GetProperty(member);
+                }
+                var matches = MatchSmithySelector(selectorText, kind, path, selectedShape);
                 if (matches is null)
                 {
                     ValidationContext.Fail(DocumentValidationStatus.Unsupported, path, "smithy.id_ref_selector",
@@ -2335,7 +2341,7 @@ public static partial class ApiOperationDocumentResolver
             }
         }
 
-        private bool? MatchSmithySelector(string text, string kind, string path)
+        private bool? MatchSmithySelector(string text, string kind, string path, JsonElement shape)
         {
             var position = 0;
             var result = Sequence(0);
@@ -2359,6 +2365,42 @@ public static partial class ApiOperationDocumentResolver
                     {
                         position++;
                         current = true;
+                    }
+                    else if (text[position] == '[')
+                    {
+                        position++;
+                        SkipWhitespace();
+                        if (Identifier() != "trait") { return null; }
+                        SkipWhitespace();
+                        if (position == text.Length || text[position++] != '|') { return null; }
+                        SkipWhitespace();
+                        var start = position;
+                        while (position < text.Length && (char.IsAsciiLetterOrDigit(text[position]) ||
+                            text[position] is '_' or '.' or '#'))
+                        {
+                            budget.Work(path: path);
+                            position++;
+                        }
+                        var traitId = text[start..position];
+                        if (!traitId.Contains('#', StringComparison.Ordinal)) { traitId = "smithy.api#" + traitId; }
+                        if (!IsSmithyShapeId(traitId)) { return null; }
+                        SkipWhitespace();
+                        if (position == text.Length || text[position++] != ']' ||
+                            shape.ValueKind != JsonValueKind.Object)
+                        {
+                            return null;
+                        }
+                        current = false;
+                        if (shape.TryGetProperty("traits", out var traits))
+                        {
+                            ValidationContext.Require(traits.ValueKind == JsonValueKind.Object,
+                                path, "document.traits", "Smithy traits must be an object.");
+                            foreach (var trait in traits.EnumerateObject())
+                            {
+                                budget.Work(trait.Name.Length + 1L, path);
+                                if (trait.Name == traitId) { current = true; break; }
+                            }
+                        }
                     }
                     else if (text[position] == ':')
                     {
