@@ -24,9 +24,12 @@ release safeguards remain in their subject guides.
   jitCompiledMethods: 0` (versus a JIT control's `nativeAot: false,
   jitCompiledMethods: 7169`), and the resulting receipt passes every
   structural/hash/native check in `release_check` up to the still-missing
-  seven remaining framework/RID cells. Remaining work: add the same opt-in
-  proof test to the other test projects, decide whether/how the existing
-  native CI matrix (or a new job) runs the full managed test suites natively
+  seven remaining framework/RID cells. The proof test is now shared by Models
+  and Federation; the complete Federation suite passed 568 native cases on
+  .NET 10/Windows x64 at `1c62700`, with zero IL diagnostics and zero JIT-compiled
+  methods. Its receipt covers 233 distinct methods, not 568 independent methods.
+  Remaining work: link the shared proof into the other test projects, decide
+  whether/how the existing native CI matrix (or a new job) runs the full suites
   across all eight `net8.0`/`net10.0` × `win-x64`/`win-arm64`/`linux-x64`/
   `linux-arm64` cells and uploads receipts, then map each reviewed
   requirement's `testIds` to real method names and attach the resulting
@@ -38,6 +41,8 @@ The selected generic package, model, client/bridge sample and storage matrix
 passed all 28 jobs at `ecd2a3b` on Windows/Linux x64 and ARM64. See
 [native evidence](native-aot.md#current-evidence-and-uncovered-cells).
 Full native TUnit requirement receipts remain incomplete.
+The newer Federation suite receipt is one .NET 10/Windows x64 cell; it does not
+refresh the package-consumer matrix or qualify the remaining cells.
 
 - Refresh source-matched package-consumer and sample evidence after material
   package changes. Preserve exact source, package, executable, and report hashes.

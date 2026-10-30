@@ -63,6 +63,24 @@ in [consumer embedding](consumer-migration.md#current-evidence-and-limits).
 These jobs qualify their development probes, not the complete native TUnit
 suites or every specification obligation.
 
+The complete Federation TUnit suite passed 568 native cases on .NET 10/Windows
+x64 at `1c62700d0ef712967fe401873257a8f55c154ed3`, including all 99 scoped and
+document-local WoT resolver cases. Publication ran ILC with zero IL diagnostics.
+The same process reported `nativeAot: true` and `jitCompiledMethods: 0`; its
+managed control reported `nativeAot: false` and 3,263 JIT-compiled methods and
+was rejected by the receipt converter.
+
+The run is retained locally at `D:\temp\xregistry-fed-native-1c62700`, with its
+publish/run logs beside that directory. `receipt.json` records 233 distinct
+passed methods, zero failed and zero skipped; parameterized executions are
+combined using their worst outcome, so the method count differs from the 568
+executed cases. The native executable's SHA-256 is
+`ecaa3e0b3150bae450fee0de163841d1a90cb2100db6290f97b34bf636310a8d`.
+This is one full-suite development cell, not a package-consumer receipt, a
+reviewed requirement mapping or completion of the eight-cell native matrix.
+The matching .NET 8 publication still emits the two framework JSON warnings
+described below and is not qualified.
+
 The module-level receipts below are historical and have not been refreshed
 against the complete successor source set. Do not treat their counts as
 qualification of the current implementation.

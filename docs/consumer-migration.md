@@ -73,8 +73,10 @@ request. `ResolveAsync` rejects local requests; `ResolveLocalAsync` rejects
 Registry pins. Resource aliases must first be resolved to an authorized source,
 and external document descriptors are not dereferenced. Incremental-profile
 selection and publication closure remain unimplemented. These resolver cases
-have managed execution evidence; the native package-consumer fixture does not
-yet exercise them.
+passed managed execution on both frameworks and native execution in the complete
+Federation suite on .NET 10/Windows x64 at `1c62700`. The other native cells remain
+unqualified; the package-consumer fixture does not yet exercise these methods.
+See [native evidence](native-aot.md#current-evidence-and-uncovered-cells).
 
 ## Choose the real seam
 
