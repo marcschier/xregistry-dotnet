@@ -601,6 +601,10 @@ A type mismatch is invalid; an optional absent target does not require evaluatio
 Type-token sequences intersect their predicates. Type-only `:test` predicates
 match when any argument matches, and `:not` requires exactly one argument and
 negates its result. These functions can nest and compose with type tokens.
+The `:is` function unions results from supported same-shape predicates, including
+trait-existence checks, and can compose with sequences or negation. Graph-yielding
+branches remain unsupported; they are not treated as Boolean tests on the
+starting shape. The deprecated optional `:each` alias is not implemented.
 The evaluator checks the entire supported expression before returning a result;
 unsupported attribute comparisons/projections, graph traversal or functions do
 not become matches through a true branch or a negated false branch. Empty arguments and partially

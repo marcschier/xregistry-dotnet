@@ -2408,7 +2408,7 @@ public static partial class ApiOperationDocumentResolver
                         SkipWhitespace();
                         var function = Identifier();
                         SkipWhitespace();
-                        if (function is not ("test" or "not") || position == text.Length || text[position++] != '(')
+                        if (function is not ("test" or "not" or "is") || position == text.Length || text[position++] != '(')
                         {
                             return null;
                         }

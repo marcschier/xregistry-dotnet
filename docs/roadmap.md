@@ -263,6 +263,9 @@ vocabulary/source mapping. It does not supply their implementation.
   existence predicates also inspect referenced roots or members; unmaterialized
   implicit prelude trait sets remain unsupported. Unsupported or
   partially parsed expressions cannot yield a match through short-circuiting.
+  `:is` unions supported same-shape predicate results, including trait-existence
+  checks, without approximating graph-yielding branches. The deprecated optional
+  `:each` alias remains unsupported.
   Relative ID assembly, other selectors on existing targets and required
   references to unindexed
   implicit prelude shapes report `Unsupported`. General selector syntax and
