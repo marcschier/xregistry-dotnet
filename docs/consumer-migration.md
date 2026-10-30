@@ -334,9 +334,12 @@ The `length` trait checks root and member applicability to string, blob, list
 and map targets, including enum string specializations. Its object value must
 declare at least one of `min` or `max`; each supplied bound must be an integral
 signed-64-bit number, compared without floating-point rounding. Missing target
-definitions still report unresolved dependencies. These declaration checks do
-not measure default values or instances, and unrelated definitions remain
-unchecked.
+definitions still report unresolved dependencies. Non-null defaults must meet
+their effective bounds: a member's `length` trait supersedes its target's trait,
+including omitted bounds. Strings count Unicode scalar values, blobs count
+decoded bytes, and the permitted empty list/map defaults have length zero.
+Null member overrides are not measured. Instance lengths and unrelated
+definitions remain unchecked.
 
 Reachable trait definitions require a string `selector`, when supplied, and
 restrict `structurallyExclusive` to `member` or `target`. These are property
@@ -416,7 +419,7 @@ empty containers, not nested content. These checks do not apply defaults to
 the returned operation or treat literal values as imports.
 
 Timestamp and string-encoded bigInteger/bigDecimal defaults report `Unsupported`.
-Complete timestamp handling and applied range/length/pattern constraints remain
+Complete timestamp handling and applied range/pattern constraints remain
 open; these checks do not establish full Smithy validity.
 
 SemVer-profile WoT minimum-version floors exclude build metadata and fit the

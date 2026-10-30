@@ -201,8 +201,10 @@ vocabulary/source mapping. It does not supply their implementation.
   member markings do not change target accessibility; literal values and
   unrelated model references remain outside the selected-closure check.
   `length` declarations check eligible root/member kinds, at least one bound,
-  and exact integral signed-64-bit bounds. Default and instance length
-  evaluation remain open.
+  and exact integral signed-64-bit bounds. Non-null defaults check effective
+  bounds, with member traits superseding target traits. Strings count Unicode
+  scalars, blobs count decoded bytes, and empty list/map defaults count zero.
+  Null member overrides are not measured; instance length evaluation remains open.
   Idempotent `exists`/`notFound` declarations are mutually exclusive
   arrays of absolute IDs whose targets must occur in the operation's own errors.
   Their native hints are retained without execution or fallback to service errors.
@@ -230,7 +232,7 @@ vocabulary/source mapping. It does not supply their implementation.
   integer ranges, finite float/double numbers and exact special-value strings,
   base64 blobs, enum membership and empty list/map/document containers. Defaults
   are not inserted into operations. Timestamp and string-encoded
-  bigInteger/bigDecimal defaults report unsupported; applied range/length/pattern
+  bigInteger/bigDecimal defaults report unsupported; applied range/pattern
   constraints and full default validation remain open.
 - Complete end-to-end event/outbox delivery qualification while preserving
   atomic mutation publication and caller-visible failure semantics.

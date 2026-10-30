@@ -3317,6 +3317,128 @@ public class ApiOperationReferenceTests
         await Assert.That(selected.Diagnostic).IsNull();
     }
 
+    [Test]
+    [Arguments("string", "\"\"", """{"min":0,"max":0}""", true)]
+    [Arguments("string", "\"a\"", """{"min":2}""", false)]
+    [Arguments("string", "\"ab\"", """{"min":2,"max":2}""", true)]
+    [Arguments("string", "\"abc\"", """{"max":2}""", false)]
+    [Arguments("string", "\"0123456789\"", """{"min":1e1,"max":10.0}""", true)]
+    [Arguments("string", "\"\"", """{"max":-1}""", false)]
+    [Arguments("string", "\"a\"", """{"min":-9223372036854775808,"max":9223372036854775807}""", true)]
+    [Arguments("string", "\"\\uD83D\\uDE00\"", """{"min":1,"max":1}""", true)]
+    [Arguments("string", "\"e\\u0301\"", """{"min":2,"max":2}""", true)]
+    [Arguments("string", "\"\\uD83D\\uDE00\"", """{"min":2}""", false)]
+    [Arguments("blob", "\"\"", """{"min":0,"max":0}""", true)]
+    [Arguments("blob", "\"YQ==\"", """{"min":1,"max":1}""", true)]
+    [Arguments("blob", "\"YWI=\"", """{"max":1}""", false)]
+    [Arguments("blob", "\"YQ==\"", """{"min":2}""", false)]
+    [Arguments("list", "[]", """{"max":0}""", true)]
+    [Arguments("list", "[]", """{"min":1}""", false)]
+    [Arguments("map", "{}", """{"min":0,"max":0}""", true)]
+    [Arguments("map", "{}", """{"min":1}""", false)]
+    [Arguments("enum", "\"authored\"", """{"min":8,"max":8}""", true)]
+    [Arguments("enum", "\"authored\"", """{"min":8e0,"max":8.0}""", true)]
+    [Arguments("enum", "\"authored\"", """{"min":7,"max":7}""", false)]
+    public async Task SmithyJsonDefaultLengthsUseScalarByteAndCollectionCounts(
+        string kind, string value, string bounds, bool valid)
+    {
+        foreach (var rootDefault in new[] { false, true })
+        {
+            var document = JsonNode.Parse(SmithyDefaultDocument(kind, value, rootDefault))!;
+            var owner = rootDefault ? document["shapes"]!["example#Value"]!
+                : document["shapes"]!["example#Input"]!["members"]!["value"]!;
+            owner["traits"]!["smithy.api#length"] = JsonNode.Parse(bounds);
+            if (rootDefault)
+            {
+                document["shapes"]!["example#Input"]!["members"]!["value"]!["traits"]!["smithy.api#default"] = null;
+            }
+            var result = ResolveSmithy(document.ToJsonString());
+            await Assert.That(result.Status).IsEqualTo(valid
+                ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+            if (valid)
+            {
+                await Assert.That(result.Diagnostic).IsNull();
+                await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+            }
+            else
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.default_length");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo((rootDefault
+                    ? "$/shapes/example#Value" : "$/shapes/example#Input/members/value") + "/traits/smithy.api#default");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments(false, false)]
+    [Arguments(false, true)]
+    [Arguments(true, false)]
+    [Arguments(true, true)]
+    public async Task SmithyJsonMemberLengthSupersedesRatherThanMergesTargetBounds(bool overrideLength, bool narrow)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("string", "\"ab\"", false))!;
+        document["shapes"]!["example#Value"]!["traits"] = JsonNode.Parse(narrow
+            ? """{"smithy.api#length":{"min":0,"max":10}}"""
+            : """{"smithy.api#length":{"min":3,"max":4}}""");
+        if (overrideLength)
+        {
+            document["shapes"]!["example#Input"]!["members"]!["value"]!["traits"]!["smithy.api#length"] =
+                JsonNode.Parse(narrow ? """{"max":1}""" : """{"min":1}""");
+        }
+        var result = ResolveSmithy(document.ToJsonString());
+        var valid = overrideLength != narrow;
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.default_length");
+            await Assert.That(result.Diagnostic.Path)
+                .IsEqualTo("$/shapes/example#Input/members/value/traits/smithy.api#default");
+        }
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task SmithyJsonNullDefaultOverridesAreNotMeasuredAgainstLengthConstraints(bool onMember)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("string", "null", false))!;
+        document["shapes"]!["example#Value"]!["traits"] = JsonNode.Parse("""{"smithy.api#length":{"min":10}}""");
+        if (onMember)
+        {
+            document["shapes"]!["example#Input"]!["members"]!["value"]!["traits"]!["smithy.api#length"] =
+                JsonNode.Parse("""{"min":20}""");
+        }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+    }
+
+    [Test]
+    public async Task SmithyJsonDefaultLengthChecksDoNotAcquireOrScanUnrelatedAndLiteralValues()
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("string", "\"a\"", false))!;
+        document["shapes"]!["example#Input"]!["members"]!["value"]!["traits"]!["smithy.api#length"] =
+            JsonNode.Parse("""{"min":1,"max":1}""");
+        document["shapes"]!["example#Unused"] = JsonNode.Parse("""
+            {"type":"string","traits":{"smithy.api#length":{"min":2},"smithy.api#default":"a"}}
+            """);
+        document["metadata"] = JsonNode.Parse("""
+            {"lengthLiteral":{"target":"https://example.test/not-an-import",
+              "traits":{"smithy.api#length":{"min":2},"smithy.api#default":"a"}}}
+            """);
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Length defaults are not imports."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
     private static string SmithyDefaultDocument(string kind, string value, bool rootDefault)
     {
         var target = new JsonObject { ["type"] = kind };

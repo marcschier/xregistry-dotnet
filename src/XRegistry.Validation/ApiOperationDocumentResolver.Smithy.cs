@@ -493,7 +493,8 @@ public static partial class ApiOperationDocumentResolver
                             memberPath + "/traits/smithy.api#default", "document.default_repeat",
                             "A structure member must repeat its primitive prelude default or explicitly override it with null.");
                     }
-                    if (hasDefault) { ValidateDefault(targetKind, target, memberDefault, memberPath, member: true); }
+                    if (hasDefault) { ValidateDefault(targetKind, target, memberDefault, memberPath, member: true,
+                        memberShape: member.Value); }
                 }
             }
         }
@@ -594,7 +595,8 @@ public static partial class ApiOperationDocumentResolver
                 traits.TryGetProperty("smithy.api#default", out value);
         }
 
-        private void ValidateDefault(string kind, JsonElement target, JsonElement value, string path, bool member)
+        private void ValidateDefault(string kind, JsonElement target, JsonElement value, string path, bool member,
+            JsonElement memberShape = default)
         {
             path += "/traits/smithy.api#default";
             budget.Work(path: path);
@@ -638,11 +640,12 @@ public static partial class ApiOperationDocumentResolver
                 ValidationContext.Fail(DocumentValidationStatus.Unsupported, path, "smithy.timestamp_default",
                     "Timestamp default validation is not supported.");
             }
+            var length = 0;
             if (kind == "blob")
             {
                 var text = value.GetString()!;
                 budget.Work(text.Length, path);
-                ValidationContext.Require(Convert.TryFromBase64String(text, new byte[text.Length], out _),
+                ValidationContext.Require(Convert.TryFromBase64String(text, new byte[text.Length], out length),
                     path, "document.default_value", "A Smithy blob default must contain valid base64.");
             }
             if (kind is "byte" or "short" or "integer" or "long" or "bigInteger" or "intEnum")
@@ -684,6 +687,36 @@ public static partial class ApiOperationDocumentResolver
                 ValidationContext.Require(found, path, "document.default_value",
                     "A Smithy enum default must match a declared value.");
             }
+            if (kind is "string" or "enum" or "blob" or "list" or "map")
+            {
+                var hasLength = TryLength(memberShape, out var constraint) || TryLength(target, out constraint);
+                if (!hasLength) { return; }
+                if (kind is "string" or "enum")
+                {
+                    var text = value.GetString()!;
+                    budget.Work(text.Length, path);
+                    foreach (var rune in text.EnumerateRunes()) { length++; }
+                }
+                var number = new JsonNumber(false, length.ToString(System.Globalization.CultureInfo.InvariantCulture), 0);
+                if (constraint.TryGetProperty("min", out var min))
+                {
+                    ValidationContext.Require(number.CompareTo(JsonNumber.Read(min, budget, path)) >= 0,
+                        path, "document.default_length", "The Smithy default is shorter than its effective length minimum.");
+                }
+                if (constraint.TryGetProperty("max", out var max))
+                {
+                    ValidationContext.Require(number.CompareTo(JsonNumber.Read(max, budget, path)) <= 0,
+                        path, "document.default_length", "The Smithy default exceeds its effective length maximum.");
+                }
+            }
+        }
+
+        private static bool TryLength(JsonElement shape, out JsonElement value)
+        {
+            value = default;
+            return shape.ValueKind == JsonValueKind.Object &&
+                shape.TryGetProperty("traits", out var traits) && traits.ValueKind == JsonValueKind.Object &&
+                traits.TryGetProperty("smithy.api#length", out value);
         }
 
         private void RequiredReference(JsonElement shape, string name, string path, int depth, string sourceId,
