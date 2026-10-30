@@ -283,7 +283,7 @@ Within the selected closure, `documentation` values must be strings and
 `input`, `output` and `readonly` annotation traits require object values, as do
 the structured `idempotent` and `trait` traits. These checks also apply to
 reachable member declarations and custom-trait definitions. They do not check
-every trait member or default constraint. Recognized applicability checks
+every trait member or applied constraint. Recognized applicability checks
 restrict `required` to structure members, `input`/`output`/`error` to structures,
 and `readonly`/`idempotent` to operations. Trait definitions must be simple or
 aggregate root shapes, not members. Selection rejects `readonly` with
@@ -309,6 +309,28 @@ A common service error alone does not satisfy this rule. The normal dependency
 checks still require each declared error to resolve to an error-marked structure.
 Empty hint arrays are valid without an `errors` list and retain their native
 meaning; the resolver neither inserts error declarations nor executes retries.
+
+Defaults are checked on reachable simple, list and map shapes and on structure
+members that target those kinds. A default cannot annotate an operation,
+structure, union, list/map member or operation reference. Root defaults cannot
+be null; an explicit null on an eligible structure member means no default.
+When a structure member targets a shape with a root default, the member must
+repeat that value or explicitly override it with null. Numeric comparison is
+exact, so `1`, `1.0` and `1e0` match. List and map members do not inherit this
+repetition requirement.
+
+Non-null defaults must have the target's value type. Signed integer defaults
+must be integral and fit byte, short, integer or long ranges; big integers use
+the shared bounded exact-number parser. Float and double defaults must fit the
+target's finite range. Blob defaults require base64 strings; enum defaults must
+name declared values, including implicit string member-name values. List/map
+defaults must be empty containers. Document defaults permit scalar values or
+empty containers, not nested content. These checks do not apply defaults to
+the returned operation or treat literal values as imports.
+
+Timestamp defaults and string-encoded numeric defaults report `Unsupported`.
+Complete timestamp handling and applied range/length/pattern constraints remain
+open; these checks do not establish full Smithy validity.
 
 SemVer-profile WoT minimum-version floors exclude build metadata and fit the
 128-character Core id limit. Generated `0.0.0-N` floors are forbidden, with
