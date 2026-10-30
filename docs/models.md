@@ -52,6 +52,17 @@ address lists defer network configuration; an authored address record without a
 URI still fails when materialized. Authorization metadata remains discovery
 information, not credentials or evidence that authorization succeeded.
 
+Materialized Media Endpoints retain `media_session_setup` at `/protocol` as a
+deferred obligation. Producers also retain `media_input_compatibility` at
+`/protocoloptions`: the receiving path and encoder must support the effective
+format and codecs without silently substituting defaults. Supplied signaling
+and SDP references retain `media_description` at their option paths. These
+checks require connector or deployment evidence; materialization does not
+perform them. Missing addresses and `deployed: false` do not discharge them.
+The checks use the existing deferred-count and byte budgets. The shared `HTTP`
+selector receives these obligations only through `MaterializeMedia`, not
+ordinary messaging `Materialize`.
+
 WebRTC `signalingreference` and RTP `sessiondescription` require absolute HTTPS
 URIs without embedded credentials. Both Media entry points reject malformed
 URI text before platform URI parsing can normalize it, including raw spaces,

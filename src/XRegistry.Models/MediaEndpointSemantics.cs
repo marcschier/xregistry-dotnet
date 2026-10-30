@@ -40,6 +40,28 @@ internal static class MediaEndpointSemantics
         signaling.ValueKind == JsonValueKind.String &&
         signaling.GetString() is "WHIP/RFC9725" or "WHEP/draft-ietf-wish-whep-03";
 
+    internal static void DeferRuntimeChecks(JsonElement endpoint, EndpointDefinitionEvaluation evaluation)
+    {
+        evaluation.Defer("media_session_setup", "/protocol",
+            "The connector must support the selected media mapping and apply native session, security and admission rules; metadata does not establish reachability or decodability.");
+        if (IsProducer(endpoint))
+        {
+            evaluation.Defer("media_input_compatibility", "/protocoloptions",
+                "The provider's receiving path and the producer's encoder must support the effective format and codecs; unsupported requirements must not be replaced with defaults.");
+        }
+        if (endpoint.TryGetProperty("protocoloptions", out var options))
+        {
+            foreach (var name in new[] { "signalingreference", "sessiondescription" })
+            {
+                if (options.TryGetProperty(name, out _))
+                {
+                    evaluation.Defer("media_description", "/protocoloptions/" + name,
+                        "The connector must interpret the referenced native description under local access policy and check applicable input requirements; validation does not fetch it.");
+                }
+            }
+        }
+    }
+
     internal static void ValidateIfDraftMediaProtocol(JsonElement endpoint, bool resolved, CancellationToken cancellationToken)
     {
         var protocol = EndpointDefinitionSemantics.Protocol(endpoint);

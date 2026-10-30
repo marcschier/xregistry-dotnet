@@ -134,7 +134,11 @@ public sealed class EndpointDefinition
     /// Non-string JSON is not injected. No references, credentials, or network endpoints are acquired.
     /// </remarks>
     public static EndpointDefinition Materialize(RegistryJson authored, RegistryJson? arguments = null,
-        EndpointTemplateOptions? options = null, CancellationToken cancellationToken = default)
+        EndpointTemplateOptions? options = null, CancellationToken cancellationToken = default) =>
+        MaterializeCore(authored, arguments, options, media: false, cancellationToken);
+
+    private static EndpointDefinition MaterializeCore(RegistryJson authored, RegistryJson? arguments,
+        EndpointTemplateOptions? options, bool media, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(authored);
         cancellationToken.ThrowIfCancellationRequested();
@@ -150,6 +154,10 @@ public sealed class EndpointDefinition
         EndpointDefinitionSemantics.Validate(resolved.RootElement, options.JsonLimits, cancellationToken);
         var evaluation = new EndpointDefinitionEvaluation(options, cancellationToken);
         var subscriptionFilter = EndpointDefinitionSemantics.ValidateConsumer(resolved.RootElement, evaluation);
+        if (media || MediaEndpointSemantics.IsDraftMediaProtocol(EndpointDefinitionSemantics.Protocol(resolved.RootElement)))
+        {
+            MediaEndpointSemantics.DeferRuntimeChecks(resolved.RootElement, evaluation);
+        }
         EndpointDefinitionMessageSet.Collect(resolved.RootElement, groups, evaluation);
         cancellationToken.ThrowIfCancellationRequested();
         var definition = new EndpointDefinition(owned, resolved, subscriptionFilter, evaluation);
@@ -162,7 +170,7 @@ public sealed class EndpointDefinition
         EndpointTemplateOptions? options = null, CancellationToken cancellationToken = default)
     {
         ValidateMediaAuthored(authored, options, cancellationToken);
-        var definition = Materialize(authored, arguments, options, cancellationToken);
+        var definition = MaterializeCore(authored, arguments, options, media: true, cancellationToken);
         MediaEndpointSemantics.Validate(definition.Resolved.RootElement, resolved: true, cancellationToken);
         return definition;
     }

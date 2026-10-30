@@ -114243,7 +114243,7 @@
       "text": "Compatibility depends on the receiving implementation's support for the advertised media and on protocol-specific behavior. A receiver MUST NOT treat successful xRegistry validation as proof that it can consume an endpoint. The provider is responsible for making its declarations accurate, and the receiver is responsible for deciding whether it supports them. This draft does not prescribe negotiation or failure signaling.",
       "review": {
         "status": "reviewed",
-        "note": "This constrains the actual receiver's interpretation of successful validation. The Registry returns validated metadata without opening media sessions or promising consumption; no independent receiver execution establishes the required decision here. Keep this obligation pending rather than inferring it from a successful model test.",
+        "note": "This constrains the actual receiver's interpretation of successful validation. Materialized Media Endpoints explicitly retain native session setup, producer input compatibility and supplied description interpretation as bounded deferred obligations, including absent addresses and undeployed declarations. Tests cover every defined protocol role, shared HTTP opt-in isolation, post-binding description checks and exact diagnostic limits. The Registry does not open media sessions or establish actual receiver support. No independent receiver execution establishes the required decision here; keep this obligation pending.",
         "roles": [
           "producer",
           "client"
@@ -114251,7 +114251,13 @@
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "XRegistry.Models.Tests.MediaEndpointDefinitionTests.MediaMaterializationDefersNativeSetupAndProducerCompatibility",
+          "XRegistry.Models.Tests.MediaEndpointDefinitionTests.ReferencedMediaDescriptionsRemainDeferredAfterSuccessfulTemplateBinding",
+          "XRegistry.Models.Tests.MediaEndpointDefinitionTests.MissingAddressesAndUndeployedFlagsDoNotDischargeMediaRuntimeObligations",
+          "XRegistry.Models.Tests.MediaEndpointDefinitionTests.SharedHttpSelectorDefersMediaSetupOnlyWhenExplicitlyMaterializedAsMedia",
+          "XRegistry.Models.Tests.MediaEndpointDefinitionTests.MediaRuntimeObligationsRespectExactDeferredCountAndByteBudgets"
+        ],
         "nativeEvidence": []
       }
     },

@@ -824,6 +824,136 @@ public class MediaEndpointDefinitionTests
         await Assert.That(failure.Diagnostic.Path).IsEqualTo(path);
     }
 
+    [Test]
+    [Arguments("SRT", "producer")]
+    [Arguments("SRT", "consumer")]
+    [Arguments("WebRTC", "producer")]
+    [Arguments("WebRTC", "consumer")]
+    [Arguments("RTSP/1.0", "producer")]
+    [Arguments("RTSP/1.0", "consumer")]
+    [Arguments("RTSP/2.0", "consumer")]
+    [Arguments("RTP/2", "producer")]
+    [Arguments("RTP/2", "consumer")]
+    [Arguments("MPEGTS-UDP", "producer")]
+    [Arguments("MPEGTS-UDP", "consumer")]
+    [Arguments("RTMP/1.0", "producer")]
+    [Arguments("RTMP/1.0", "consumer")]
+    [Arguments("HLS", "consumer")]
+    [Arguments("DASH", "consumer")]
+    [Arguments("RIST-Simple/2020", "producer")]
+    [Arguments("RIST-Simple/2020", "consumer")]
+    [Arguments("RIST-Main/2024", "producer")]
+    [Arguments("RIST-Main/2024", "consumer")]
+    public async Task MediaMaterializationDefersNativeSetupAndProducerCompatibility(string protocol, string usage)
+    {
+        var metadata = ValidEndpoint(protocol, usage);
+        var expected = "media_session_setup:/protocol" +
+            (usage == "producer" ? ",media_input_compatibility:/protocoloptions" : "") +
+            (protocol == "RTP/2" && usage == "producer"
+                ? ",media_description:/protocoloptions/sessiondescription" : "");
+
+        foreach (var result in new[]
+        {
+            EndpointDefinition.MaterializeMedia(metadata),
+            EndpointDefinition.Materialize(metadata)
+        })
+        {
+            await Assert.That(string.Join(",", result.DeferredChecks.Select(check => check.Code + ":" + check.Path)))
+                .IsEqualTo(expected);
+            await Assert.That(result.Authored.RootElement.GetRawText()).IsEqualTo(metadata.RootElement.GetRawText());
+            await Assert.That(result.Resolved.RootElement.GetRawText()).IsEqualTo(metadata.RootElement.GetRawText());
+        }
+    }
+
+    [Test]
+    [Arguments("WebRTC", "producer", "signalingreference")]
+    [Arguments("WebRTC", "consumer", "signalingreference")]
+    [Arguments("RTP/2", "producer", "sessiondescription")]
+    [Arguments("RTP/2", "consumer", "sessiondescription")]
+    public async Task ReferencedMediaDescriptionsRemainDeferredAfterSuccessfulTemplateBinding(
+        string protocol, string usage, string name)
+    {
+        var input = JsonNode.Parse(ValidEndpoint(protocol, usage).RootElement.GetRawText())!.AsObject();
+        if (protocol == "WebRTC") { input["protocoloptions"]!["signaling"] = "external"; }
+        input["protocoloptions"]![name] = "{scheme}://media.example.test/description";
+        var metadata = RegistryJson.Parse(input.ToJsonString());
+
+        var result = EndpointDefinition.MaterializeMedia(metadata, RegistryJson.Parse("""{"scheme":"https"}"""));
+
+        await Assert.That(result.DeferredChecks.Count(check => check.Code == "media_description" &&
+            check.Path == "/protocoloptions/" + name)).IsEqualTo(1);
+        await Assert.That(result.GetProtocolOption(name).GetString())
+            .IsEqualTo("https://media.example.test/description");
+        await Assert.That(result.Authored.RootElement.GetProperty("protocoloptions")
+            .GetProperty(name).GetString()).IsEqualTo("{scheme}://media.example.test/description");
+    }
+
+    [Test]
+    [Arguments("producer", false)]
+    [Arguments("consumer", false)]
+    [Arguments("producer", true)]
+    [Arguments("consumer", true)]
+    public async Task MissingAddressesAndUndeployedFlagsDoNotDischargeMediaRuntimeObligations(string usage, bool absentOptions)
+    {
+        var metadata = Endpoint("SRT", usage, absentOptions ? "{}" : """{"deployed":false,"endpoints":[]}""");
+        if (absentOptions)
+        {
+            var input = JsonNode.Parse(metadata.RootElement.GetRawText())!.AsObject();
+            input.Remove("protocoloptions");
+            metadata = RegistryJson.Parse(input.ToJsonString());
+        }
+
+        var result = EndpointDefinition.MaterializeMedia(metadata);
+
+        await Assert.That(string.Join(",", result.DeferredChecks.Select(check => check.Code + ":" + check.Path)))
+            .IsEqualTo("endpoint_address:/protocoloptions/endpoints,media_session_setup:/protocol" +
+                (usage == "producer" ? ",media_input_compatibility:/protocoloptions" : ""));
+        await Assert.That(result.IsDeployed).IsEqualTo(absentOptions);
+    }
+
+    [Test]
+    public async Task SharedHttpSelectorDefersMediaSetupOnlyWhenExplicitlyMaterializedAsMedia()
+    {
+        var metadata = Endpoint("HTTP", "consumer", """{"endpoints":[{"uri":"https://media.example.test/live"}]}""");
+        var messaging = EndpointDefinition.Materialize(metadata);
+        var media = EndpointDefinition.MaterializeMedia(metadata);
+
+        await Assert.That(messaging.DeferredChecks).IsEmpty();
+        await Assert.That(string.Join(",", media.DeferredChecks.Select(check => check.Code + ":" + check.Path)))
+            .IsEqualTo("media_session_setup:/protocol");
+        await Assert.That(media.GetProtocolOption("videocodec").ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("SRT", "producer")]
+    [Arguments("SRT", "consumer")]
+    [Arguments("RTP/2", "producer")]
+    public async Task MediaRuntimeObligationsRespectExactDeferredCountAndByteBudgets(string protocol, string usage)
+    {
+        var metadata = ValidEndpoint(protocol, usage);
+        var baseline = EndpointDefinition.MaterializeMedia(metadata);
+        var count = baseline.DeferredChecks.Count;
+        var bytes = baseline.DeferredChecks.Sum(check =>
+            System.Text.Encoding.UTF8.GetByteCount(check.Code) +
+            System.Text.Encoding.UTF8.GetByteCount(check.Path) +
+            System.Text.Encoding.UTF8.GetByteCount(check.Message));
+        var exact = new EndpointTemplateOptions { MaxDeferredChecks = count, MaxDeferredBytes = bytes };
+        var result = EndpointDefinition.MaterializeMedia(metadata, options: exact);
+        await Assert.That(result.DeferredChecks.Count).IsEqualTo(count);
+
+        foreach (var limits in new[]
+        {
+            exact with { MaxDeferredChecks = count - 1 },
+            exact with { MaxDeferredBytes = bytes - 1 }
+        })
+        {
+            var failure = await Assert.That(() => EndpointDefinition.MaterializeMedia(metadata, options: limits))
+                .Throws<RegistryException>();
+            await Assert.That(failure!.Diagnostic.Code).IsEqualTo("endpoint_deferred_limit");
+            await Assert.That(failure.Diagnostic.Path).IsEqualTo(baseline.DeferredChecks[^1].Path);
+        }
+    }
+
     private static RegistryJson ValidEndpoint(string protocol, string usage)
     {
         var options = protocol switch
