@@ -285,7 +285,8 @@ The implicit prelude support covers `Blob`, `Boolean`, `Document`, `String`,
 `error`, `documentation`, `required`, `clientOptional`, `addedDefault`, `sparse`,
 `uniqueItems`, `private`, `length`, `range`, `pattern`, `input`, `output`, `readonly`, `idempotent`,
 `default`, `enum`, `enumValue`, `deprecated`, `recommended`, `title`, `since`,
-`tags`, `internal`, `sensitive`, `unitType`, `examples` and `trait`
+`tags`, `internal`, `sensitive`, `unitType`, `examples`, `retryable`,
+`idempotencyToken` and `trait`
 in `smithy.api`. Other required definitions
 must be supplied in the AST. These checks do not validate every Smithy shape
 constraint, trait value or selector. Full Smithy validation and model assembly
@@ -441,6 +442,18 @@ A common service error alone does not satisfy this rule. The normal dependency
 checks still require each declared error to resolve to an error-marked structure.
 Empty hint arrays are valid without an `errors` list and retain their native
 meaning; the resolver neither inserts error declarations nor executes retries.
+
+The `retryable` trait requires an object value on an error-marked structure.
+Its optional `throttling` property must be Boolean. Both client and server
+errors can carry that annotation. The `idempotencyToken` annotation requires
+an object value on a structure member targeting a string, including an enum
+string specialization. A structure can mark at most one member as a token;
+separate nested structures retain their own limit. An unmarked member sharing
+the same string target does not inherit the annotation. Missing target
+definitions still report unresolved dependencies. These checks do not generate
+tokens, discard replayed requests or implement client retry policy. A token
+on a nested structure remains valid model metadata, but does not become a
+top-level operation token.
 
 The `examples` trait applies only to operations and requires an array of
 objects. Each example requires a string `title`; `documentation`, when present,

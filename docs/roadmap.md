@@ -196,6 +196,11 @@ vocabulary/source mapping. It does not supply their implementation.
   Optional example error IDs must be bound in the operation's own errors list;
   normal error dependency checks still apply. Literal input/output/error content
   does not trigger retrieval or instance validation.
+  `retryable` requires an error structure and an object value, with optional
+  Boolean throttling. `idempotencyToken` requires an object-valued annotation
+  on a string-targeting structure member, with at most one marked member per
+  structure. Nested declarations do not establish top-level operation tokens;
+  no replay store, token generation or retry execution is added.
   Recognized prelude traits now check documentation/error values and the object
   shape of annotation, idempotent and trait-marker values throughout the
   selected closure. Explicit recognized prelude targets and their declared

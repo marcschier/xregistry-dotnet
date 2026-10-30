@@ -552,6 +552,13 @@ public static partial class ApiOperationDocumentResolver
                     foreach (var trait in traits.EnumerateObject())
                     {
                         budget.Work(path: path);
+                        if (trait.Name == "smithy.api#idempotencyToken" && mode == "member")
+                        {
+                            ValidationContext.Require(owners.TryAdd(trait.Name, memberName), path,
+                                "document.trait_exclusivity",
+                                "Only one member of a Smithy structure can be an idempotency token.");
+                            continue;
+                        }
                         if (!shapes.TryGetProperty(trait.Name, out var definition) ||
                             !definition.TryGetProperty("traits", out var markers) ||
                             markers.ValueKind != JsonValueKind.Object ||
@@ -927,6 +934,9 @@ public static partial class ApiOperationDocumentResolver
                 {
                     "smithy.api#unitType" => memberContainer is null && kind == "structure" &&
                         sourceId == "smithy.api#Unit",
+                    "smithy.api#retryable" => memberContainer is null && kind == "structure" &&
+                        traits.TryGetProperty("smithy.api#error", out _),
+                    "smithy.api#idempotencyToken" => memberContainer == "structure",
                     "smithy.api#sensitive" => memberContainer is null && kind is not ("service" or "operation" or "resource"),
                     "smithy.api#enum" => memberContainer is null && kind == "string",
                     "smithy.api#required" or "smithy.api#clientOptional" or "smithy.api#recommended" =>
@@ -964,6 +974,25 @@ public static partial class ApiOperationDocumentResolver
                     "Conflicting Smithy prelude traits cannot be applied to the same shape.");
                 switch (trait.Name)
                 {
+                    case "smithy.api#retryable":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
+                            "document.trait_value", "The Smithy retryable trait requires an object value.");
+                        if (trait.Value.TryGetProperty("throttling", out var throttling))
+                        {
+                            ValidationContext.Require(throttling.ValueKind is JsonValueKind.True or JsonValueKind.False,
+                                traitPath + "/throttling", "document.trait_value",
+                                "Smithy retryable throttling must be a Boolean value.");
+                        }
+                        continue;
+                    case "smithy.api#idempotencyToken":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
+                            "document.trait_value", "The Smithy idempotencyToken annotation requires an object value.");
+                        var tokenTargetId = shape.GetProperty("target").GetString()!;
+                        var tokenKind = shapes.TryGetProperty(tokenTargetId, out var tokenTarget)
+                            ? tokenTarget.GetProperty("type").GetString() : SmithyPreludeKind(tokenTargetId);
+                        ValidationContext.Require(tokenKind is null or "string" or "enum", traitPath,
+                            "document.trait_target", "A Smithy idempotency token must target a string.");
+                        continue;
                     case "smithy.api#examples":
                         ValidateExamples(shape, trait.Value, traitPath);
                         continue;
