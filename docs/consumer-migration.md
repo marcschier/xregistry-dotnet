@@ -414,7 +414,12 @@ checks use the selected shape's own traits and compose with the supported
 Boolean functions. The operands may be unquoted or single/double-quoted
 `true`/`false` values, including comma-separated alternatives. A comparison
 matches any alternative, but every operand is parsed before the result is
-accepted. Other operand values and comparison modifiers remain unsupported.
+accepted. Other supported text operands are valid nonmatches rather than
+Boolean aliases. The per-comparison ASCII `i` modifier also applies to presence
+operands, so `?= TRUE i` tests presence and `?= FALSE i` tests absence.
+Presence never renders the left payload as text: nulls, numeric nodes and
+non-ASCII strings still exist. Unsupported right-hand rendering or folding
+remains explicit even after an earlier alternative matches.
 Literal object properties can be selected with additional `|name` segments.
 Trait names and property names may use single or double quotes; quoted names
 cannot be empty or contain backslashes or control characters below U+0020.
@@ -438,8 +443,8 @@ decoded text; Booleans compare as `true` or `false`. Present nulls and
 aggregates compare as empty strings, but absent attributes never match any of
 these operators, including `!=`. Quoted numeric text is compared literally;
 numeric JSON values and unquoted numeric operands report `Unsupported` because
-numeric-to-string rendering is not implemented. Empty quoted operands,
-projection set comparisons remain unsupported. The `i` modifier enables
+numeric-to-string rendering is not implemented. Empty quoted operands and
+unscoped projection set comparisons remain unsupported. The `i` modifier enables
 case-insensitive string comparison when every operand and the selected value
 contain only ASCII characters. Non-ASCII case folding remains unsupported,
 including an operand after an earlier match or on an absent attribute. Trait
@@ -554,8 +559,7 @@ other context text does not match. A missing right value or empty right
 projection supplies no alternatives, so it cannot make an absence check match.
 Every supplied context value is checked, even after a matching Boolean
 alternative or when the left side is absent. Numeric JSON rendering remains
-unsupported, and the ASCII `i` modifier remains limited to ordinary string
-comparisons.
+unsupported on the right, and ASCII folding checks every right-hand text value.
 Named scopes resolve an attribute once, then evaluate relative context paths
 against that value; for example, `[@trait|example#Custom: @{min} < @{max}]`.
 This also applies to the `id` and `service` attributes and trait-key identities.

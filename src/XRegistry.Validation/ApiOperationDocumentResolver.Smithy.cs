@@ -2429,8 +2429,6 @@ public static partial class ApiOperationDocumentResolver
                                     if (position == text.Length || text[position++] != '}') { return null; }
                                     SkipWhitespace();
                                 }
-                                var acceptsPresent = true;
-                                var acceptsAbsent = false;
                                 var numericComparator = '\0';
                                 var inclusive = false;
                                 List<JsonNumber?>? numericOperands = null;
@@ -2438,45 +2436,7 @@ public static partial class ApiOperationDocumentResolver
                                 var properSubset = false;
                                 var stringComparator = '\0';
                                 List<string>? stringOperands = null;
-                                if (position < text.Length && text[position] == '?')
-                                {
-                                    position++;
-                                    if (position == text.Length || text[position++] != '=') { return null; }
-                                    acceptsPresent = false;
-                                    while (true)
-                                    {
-                                        SkipWhitespace();
-                                        List<string> expectedValues = [];
-                                        if (scoped && position < text.Length && text[position] == '@')
-                                        {
-                                            var operands = ContextValues(evaluateAssertion, context, contexts is not null);
-                                            if (operands is null) { return null; }
-                                            foreach (var operand in operands)
-                                            {
-                                                budget.Work(path: path);
-                                                var expected = AttributeText(operand);
-                                                if (expected is null) { return null; }
-                                                expectedValues.Add(expected);
-                                            }
-                                        }
-                                        else
-                                        {
-                                            var expected = AttributeName();
-                                            if (expected is not ("true" or "false")) { return null; }
-                                            expectedValues.Add(expected);
-                                        }
-                                        foreach (var expected in expectedValues)
-                                        {
-                                            budget.Work(expected.Length + 1L, path);
-                                            acceptsPresent |= expected == "true";
-                                            acceptsAbsent |= expected == "false";
-                                        }
-                                        SkipWhitespace();
-                                        if (position == text.Length || text[position] != ',') { break; }
-                                        position++;
-                                    }
-                                }
-                                else if (scoped && position < text.Length && text[position] == '{')
+                                if (scoped && position < text.Length && text[position] == '{')
                                 {
                                     position++;
                                     if (position == text.Length || text[position++] != '<') { return null; }
@@ -2548,7 +2508,7 @@ public static partial class ApiOperationDocumentResolver
                                         position++;
                                     }
                                 }
-                                else if (position < text.Length && text[position] is '=' or '!' or '^' or '$' or '*')
+                                else if (position < text.Length && text[position] is '=' or '!' or '^' or '$' or '*' or '?')
                                 {
                                     stringComparator = text[position++];
                                     if (stringComparator != '=' &&
@@ -2641,6 +2601,16 @@ public static partial class ApiOperationDocumentResolver
                                         current |= subset && (!properSubset || !same);
                                     }
                                 }
+                                else if (stringOperands is not null && stringComparator == '?')
+                                {
+                                    var expected = values.Count > 0 ? "true" : "false";
+                                    foreach (var operand in stringOperands)
+                                    {
+                                        budget.Work(expected.Length + operand.Length + 1L, path);
+                                        current |= expected.Equals(operand,
+                                            ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+                                    }
+                                }
                                 else if (stringOperands is not null)
                                 {
                                     foreach (var selected in values)
@@ -2666,7 +2636,7 @@ public static partial class ApiOperationDocumentResolver
                                 }
                                 else if (numericOperands is null)
                                 {
-                                    current = values.Count > 0 ? acceptsPresent : acceptsAbsent;
+                                    current = values.Count > 0;
                                 }
                                 else
                                 {

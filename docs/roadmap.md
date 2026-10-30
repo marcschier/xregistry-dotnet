@@ -244,8 +244,9 @@ vocabulary/source mapping. It does not supply their implementation.
   Trait `?= true`/`?= false` predicates test presence/absence independently of
   payload truthiness, including on selected reference members. Unquoted or
   single/double-quoted Boolean operands support comma-separated alternatives;
-  every operand is parsed before a match is accepted. Other operand values
-  and comparison modifiers remain unsupported.
+  every operand is parsed before a match is accepted. Other supported text
+  operands do not match. Per-comparison ASCII `i` permits Boolean case variants
+  without rendering or folding the left payload; all right values remain checked.
   Literal nested object paths and quoted trait/property names use exact
   matching. Missing properties and descent through scalars or arrays yield
   absence; present nulls still exist. Property scans consume the shared work
@@ -328,8 +329,9 @@ vocabulary/source mapping. It does not supply their implementation.
   with literal Boolean alternatives. Exact `true`/`false` text tests presence/
   absence; other text and empty right projections do not match. All supplied
   context values are checked after a match and against an absent left side.
-  Numeric JSON rendering and the presence comparator's `i` modifier remain
-  unsupported.
+  Numeric JSON rendering remains unsupported on the right. ASCII `i` folds
+  Boolean existence against every right-hand text alternative, including
+  alternatives after a match.
   Named scopes resolve one attribute and use relative context paths on both
   sides of comparisons. Projected scopes require one flattened element to
   satisfy every assertion; assertions cannot combine different elements.
