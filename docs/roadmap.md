@@ -217,6 +217,13 @@ vocabulary/source mapping. It does not supply their implementation.
   unresolved without acquisition. Complete implicit required-trait coverage,
   enclosing-service scheme application/inheritance and custom application
   schemas remain unvalidated.
+  Custom trait applications now check scalar node kinds, base64, exact numeric
+  type bounds and supported string timestamps after schema-closure validation.
+  Recursive list/map values, sparse nulls, required/declared structure members
+  and single-member unions are checked on every reached application. Document
+  values remain arbitrary JSON. Custom constraint evaluation, enum value
+  membership, map-key constraints, `idRef` value resolution and complete custom
+  application schemas remain unvalidated.
   Reached `protocolDefinition` declarations share the structure-trait target
   and required-trait reference checks; `noInlineDocumentSupport` requires a
   Boolean. Protocol selection and the service-closure document prohibition
@@ -226,8 +233,8 @@ vocabulary/source mapping. It does not supply their implementation.
   Configurable validators, hierarchical warning suppression and metadata
   severity overrides remain unvalidated.
   `idRef` checks string/member-string declaration targets, object values and
-  optional string/Boolean fields. Custom application values, reference
-  resolution and selector syntax/evaluation remain unvalidated.
+  optional string/Boolean fields. Reference semantics of custom application
+  values and selector syntax/evaluation remain unvalidated.
   `traitValidators` checks trait-definition targets, nonempty event IDs and rule
   objects with required string selectors, optional string messages and explicit
   recognized severities. Selector syntax/execution and configured validation

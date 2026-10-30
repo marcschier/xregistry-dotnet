@@ -124,6 +124,7 @@ public static partial class ApiOperationDocumentResolver
             closure.ValidateStructuralExclusivity();
             closure.ValidateUniqueItems();
             closure.ValidateStreaming();
+            closure.ValidateTraitNodes();
             return Selected(operation, "$/shapes/" + Escape(shapeId), documentUri);
         }
         catch (ValidationFailure failure)
@@ -183,6 +184,7 @@ public static partial class ApiOperationDocumentResolver
     private sealed class SmithyClosure(JsonElement shapes, ValidationContext budget)
     {
         private readonly Dictionary<string, JsonElement> _visited = new(StringComparer.Ordinal);
+        private readonly List<(string Id, JsonElement Value, string Path)> _traitNodes = [];
 
         internal void Visit(string id, int depth, string? expected = null, bool error = false, bool traitDefinition = false,
             string? sourceId = null, string? referencePath = null)
@@ -1956,6 +1958,123 @@ public static partial class ApiOperationDocumentResolver
                     }
                 }
                 Visit(trait.Name, depth + 1, traitDefinition: true, sourceId: sourceId, referencePath: traitPath);
+                _traitNodes.Add((trait.Name, trait.Value, traitPath));
+            }
+        }
+
+        internal void ValidateTraitNodes()
+        {
+            foreach (var (id, value, path) in _traitNodes)
+            {
+                ValidateTraitNode(id, value, path, 0);
+            }
+        }
+
+        private void ValidateTraitNode(string id, JsonElement value, string path, int depth)
+        {
+            budget.Work(path: path);
+            if (depth > Capabilities.MaxReferenceDepth)
+            {
+                ValidationContext.Fail(DocumentValidationStatus.Indeterminate, path, "limit.reference_depth",
+                    "The Smithy trait value dependency depth limit was exceeded.");
+            }
+            var supplied = shapes.TryGetProperty(id, out var shape);
+            var kind = supplied ? shape.GetProperty("type").GetString() : SmithyPreludeKind(id);
+            if (kind == "document") { return; }
+            var compatible = kind switch
+            {
+                "string" or "enum" or "blob" => value.ValueKind == JsonValueKind.String,
+                "boolean" => value.ValueKind is JsonValueKind.True or JsonValueKind.False,
+                "timestamp" or "bigInteger" or "bigDecimal" or "float" or "double" =>
+                    value.ValueKind is JsonValueKind.String or JsonValueKind.Number,
+                "byte" or "short" or "integer" or "long" or "intEnum" => value.ValueKind == JsonValueKind.Number,
+                "list" => value.ValueKind == JsonValueKind.Array,
+                "map" or "structure" or "union" => value.ValueKind == JsonValueKind.Object,
+                _ => false
+            };
+            ValidationContext.Require(compatible, path, "document.trait_node",
+                "The Smithy trait node value is incompatible with its declared shape.");
+            if (kind == "blob")
+            {
+                var text = value.GetString()!;
+                budget.Work(text.Length, path);
+                ValidationContext.Require(Convert.TryFromBase64String(text, new byte[text.Length], out _),
+                    path, "document.trait_node", "A Smithy blob trait value must contain valid base64.");
+            }
+            if (IsNumericKind(kind) || kind == "intEnum")
+            {
+                if (kind is "float" or "double" && value.ValueKind == JsonValueKind.String)
+                {
+                    ValidationContext.Require(value.GetString() is "NaN" or "Infinity" or "-Infinity",
+                        path, "document.trait_node", "A floating-point trait string must be NaN, Infinity or -Infinity.");
+                }
+                else
+                {
+                    var number = kind is "bigInteger" or "bigDecimal"
+                        ? ReadSmithyNumber(value, path, "smithy.numeric_string_trait")
+                        : JsonNumber.Read(value, budget, path);
+                    ValidationContext.Require((kind is not ("byte" or "short" or "integer" or "long" or "bigInteger" or "intEnum") ||
+                        number.IsInteger) && FitsNumericRange(kind!, number),
+                        path, "document.trait_node", "A numeric Smithy trait value must fit its declared type.");
+                    if (kind is "float" or "double")
+                    {
+                        ValidationContext.Require(kind == "float"
+                            ? value.TryGetSingle(out var single) && float.IsFinite(single)
+                            : value.TryGetDouble(out var real) && double.IsFinite(real),
+                            path, "document.trait_node", "A floating-point Smithy trait value must fit its declared type.");
+                    }
+                }
+            }
+            if (kind == "timestamp" && value.ValueKind == JsonValueKind.String)
+            {
+                ValidateTimestampString(value.GetString()!, path);
+            }
+            if (kind == "list")
+            {
+                var index = 0;
+                foreach (var item in value.EnumerateArray())
+                {
+                    var itemPath = path + "/" + (index++).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    budget.Work(path: itemPath);
+                    if (item.ValueKind == JsonValueKind.Null && TryTrait(shape, "smithy.api#sparse", out _)) { continue; }
+                    ValidateTraitNode(shape.GetProperty("member").GetProperty("target").GetString()!, item, itemPath, depth + 1);
+                }
+            }
+            if (kind == "map")
+            {
+                foreach (var item in value.EnumerateObject())
+                {
+                    var itemPath = path + "/" + Escape(item.Name);
+                    budget.Work(item.Name.Length, itemPath);
+                    if (item.Value.ValueKind == JsonValueKind.Null && TryTrait(shape, "smithy.api#sparse", out _)) { continue; }
+                    ValidateTraitNode(shape.GetProperty("value").GetProperty("target").GetString()!, item.Value, itemPath, depth + 1);
+                }
+            }
+            if (kind is "structure" or "union")
+            {
+                var hasMembers = supplied && shape.TryGetProperty("members", out _);
+                var members = hasMembers ? shape.GetProperty("members") : default;
+                ValidationContext.Require(kind != "union" || value.EnumerateObject().Count() == 1,
+                    path, "document.trait_node", "A Smithy union trait value must select exactly one member.");
+                foreach (var item in value.EnumerateObject())
+                {
+                    var itemPath = path + "/" + Escape(item.Name);
+                    budget.Work(path: itemPath);
+                    ValidationContext.Require(hasMembers && members.TryGetProperty(item.Name, out _),
+                        itemPath, "document.trait_node", "A Smithy trait value contains an undeclared structure or union member.");
+                    ValidateTraitNode(members.GetProperty(item.Name).GetProperty("target").GetString()!,
+                        item.Value, itemPath, depth + 1);
+                }
+                if (kind == "structure" && hasMembers)
+                {
+                    foreach (var member in members.EnumerateObject())
+                    {
+                        budget.Work(path: path);
+                        ValidationContext.Require(!TryTrait(member.Value, "smithy.api#required", out _) ||
+                            value.TryGetProperty(member.Name, out _), path + "/" + Escape(member.Name),
+                            "document.trait_node", "A Smithy trait value must supply every required structure member.");
+                    }
+                }
             }
         }
 

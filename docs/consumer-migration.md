@@ -399,6 +399,21 @@ default values.
 Reachable trait definitions require a string `selector`, when supplied, and
 restrict `structurallyExclusive` to `member` or `target`. These are property
 checks; general selector evaluation remains open.
+
+After schema-closure checks, each custom trait application is checked against
+its declared node types. Scalar checks cover Boolean/string values, base64
+blobs and exact numeric type bounds, including supported string-encoded large
+numbers and special floating-point values. String timestamps use the existing
+UTC validator; leap seconds and nonzero sub-millisecond fractions remain
+unsupported. Document values remain arbitrary JSON, including null.
+Lists and maps recursively check their values, with null entries permitted by
+`sparse` or document targets. Structures reject undeclared members and require
+all required members; unions require exactly one declared member. Optional
+omissions remain omitted. Validation checks every reached application,
+including members, without interpreting payload strings as shape references.
+Custom application constraint evaluation, enum value membership, map-key
+constraints and `idRef` value resolution remain unvalidated.
+
 The `conflicts` property must be an array of absolute root trait IDs. A custom
 trait cannot coexist on the same shape with any trait named in that array,
 regardless of property order or whether the other trait declares a reciprocal
@@ -535,8 +550,8 @@ Reached `idRef` declarations require string shapes or members targeting strings,
 including enum specializations. Values must be objects; optional `selector` and
 `errorMessage` fields must be strings, and `failWhenMissing` must be Boolean.
 Missing member target definitions remain unresolved. These checks validate the
-declaration, not values supplied through custom trait applications. Reference
-resolution for those values and selector syntax/evaluation remain unvalidated;
+declaration, not reference semantics of custom trait application values.
+Resolution for those values and selector syntax/evaluation remain unvalidated;
 declaration strings are not acquired as dependencies.
 
 Reached `traitValidators` declarations require trait-definition targets and
