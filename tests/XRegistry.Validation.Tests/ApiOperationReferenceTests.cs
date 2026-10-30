@@ -2102,6 +2102,9 @@ public class ApiOperationReferenceTests
     [Arguments("member", "required", "[]")]
     [Arguments("member", "required", "1")]
     [Arguments("member", "required", "\"required\"")]
+    [Arguments("member", "clientOptional", "null")]
+    [Arguments("member", "clientOptional", "false")]
+    [Arguments("member", "clientOptional", "[]")]
     [Arguments("member", "documentation", "{}")]
     [Arguments("payload", "error", "\"Client\"")]
     [Arguments("payload", "error", "\"service\"")]
@@ -2193,6 +2196,23 @@ public class ApiOperationReferenceTests
     [Arguments("structure", """{"smithy.api#required":{}}""")]
     [Arguments("structure", """{"smithy.api#readonly":{}}""")]
     [Arguments("structure", """{"smithy.api#idempotent":{}}""")]
+    [Arguments("operation", """{"smithy.api#clientOptional":{}}""")]
+    [Arguments("structure", """{"smithy.api#clientOptional":{}}""")]
+    [Arguments("listMember", """{"smithy.api#clientOptional":{}}""")]
+    [Arguments("mapMember", """{"smithy.api#clientOptional":{}}""")]
+    [Arguments("unionMember", """{"smithy.api#clientOptional":{}}""")]
+    [Arguments("operation", """{"smithy.api#addedDefault":{}}""")]
+    [Arguments("structure", """{"smithy.api#addedDefault":{}}""")]
+    [Arguments("member", """{"smithy.api#addedDefault":{}}""")]
+    [Arguments("listMember", """{"smithy.api#addedDefault":{}}""")]
+    [Arguments("mapMember", """{"smithy.api#addedDefault":{}}""")]
+    [Arguments("unionMember", """{"smithy.api#addedDefault":{}}""")]
+    [Arguments("operation", """{"smithy.api#sparse":{}}""")]
+    [Arguments("structure", """{"smithy.api#sparse":{}}""")]
+    [Arguments("member", """{"smithy.api#sparse":{}}""")]
+    [Arguments("listMember", """{"smithy.api#sparse":{}}""")]
+    [Arguments("mapMember", """{"smithy.api#sparse":{}}""")]
+    [Arguments("unionMember", """{"smithy.api#sparse":{}}""")]
     [Arguments("member", """{"smithy.api#input":{}}""")]
     [Arguments("member", """{"smithy.api#output":{}}""")]
     [Arguments("member", """{"smithy.api#error":"server"}""")]
@@ -2779,6 +2799,91 @@ public class ApiOperationReferenceTests
         await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
         await Assert.That(result.Diagnostic!.Code).IsEqualTo("dependency.unresolved");
         await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/smithy.api#" + target);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("null", false)]
+    [Arguments("null", true)]
+    [Arguments("\"en\"", false)]
+    [Arguments("\"en\"", true)]
+    public async Task SmithyJsonOptionalityAnnotationsPreserveRequiredAndDefaultDeclarations(string value, bool reverse)
+    {
+        var document = JsonNode.Parse("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"example#Input"}},
+              "example#Input":{"type":"structure","members":{"value":{"target":"smithy.api#String"}}}}}
+            """)!;
+        var traits = new JsonObject();
+        if (reverse) { traits["smithy.api#default"] = JsonNode.Parse(value); }
+        traits["smithy.api#addedDefault"] = new JsonObject();
+        traits["smithy.api#clientOptional"] = new JsonObject();
+        traits["smithy.api#required"] = new JsonObject();
+        if (!reverse) { traits["smithy.api#default"] = JsonNode.Parse(value); }
+        document["shapes"]!["example#Input"]!["members"]!["value"]!["traits"] = traits;
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Prelude annotations are not imports."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+    }
+
+    [Test]
+    [Arguments("null")]
+    [Arguments("false")]
+    [Arguments("[]")]
+    [Arguments("1")]
+    [Arguments("\"added\"")]
+    public async Task SmithyJsonAddedDefaultRequiresAnObjectEvenWithAValidDefault(string value)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("string", "\"en\"", false))!;
+        document["shapes"]!["example#Input"]!["members"]!["value"]!["traits"]!["smithy.api#addedDefault"] = JsonNode.Parse(value);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_value");
+        await Assert.That(result.Diagnostic.Path)
+            .IsEqualTo("$/shapes/example#Input/members/value/traits/smithy.api#addedDefault");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("list", "{}", true)]
+    [Arguments("map", "{}", true)]
+    [Arguments("list", "null", false)]
+    [Arguments("map", "false", false)]
+    [Arguments("list", "[]", false)]
+    [Arguments("map", "\"sparse\"", false)]
+    public async Task SmithyJsonSparseAnnotationsApplyToCollectionsAndRequireObjects(string kind, string value, bool valid)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument(kind, kind == "list" ? "[]" : "{}", false))!;
+        document["shapes"]!["example#Value"]!["traits"] =
+            new JsonObject { ["smithy.api#sparse"] = JsonNode.Parse(value) };
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid)
+        {
+            await Assert.That(result.Diagnostic).IsNull();
+            await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_value");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Value/traits/smithy.api#sparse");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    public async Task SmithyJsonClientOptionalDoesNotSuppressAuthoritativeDefaultValidation()
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("integer", "\"not a number\"", false))!;
+        document["shapes"]!["example#Input"]!["members"]!["value"]!["traits"]!["smithy.api#clientOptional"] = new JsonObject();
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.default_value");
         await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
     }
 

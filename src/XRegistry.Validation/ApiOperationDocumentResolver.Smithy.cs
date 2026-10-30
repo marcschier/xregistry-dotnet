@@ -671,7 +671,10 @@ public static partial class ApiOperationDocumentResolver
                 var traitPath = path + "/traits/" + Escape(trait.Name);
                 var targetAllowed = trait.Name switch
                 {
-                    "smithy.api#required" => memberContainer == "structure",
+                    "smithy.api#required" or "smithy.api#clientOptional" => memberContainer == "structure",
+                    "smithy.api#addedDefault" => memberContainer == "structure" &&
+                        traits.TryGetProperty("smithy.api#default", out _),
+                    "smithy.api#sparse" => kind is "list" or "map",
                     "smithy.api#enumValue" => memberContainer is "enum" or "intEnum",
                     "smithy.api#input" or "smithy.api#output" or "smithy.api#error" => kind == "structure",
                     "smithy.api#readonly" or "smithy.api#idempotent" => kind == "operation",
@@ -707,6 +710,9 @@ public static partial class ApiOperationDocumentResolver
                             "document.trait_value", "The Smithy error trait requires client or server.");
                         continue;
                     case "smithy.api#required":
+                    case "smithy.api#clientOptional":
+                    case "smithy.api#addedDefault":
+                    case "smithy.api#sparse":
                     case "smithy.api#input":
                     case "smithy.api#output":
                     case "smithy.api#readonly":

@@ -188,7 +188,11 @@ vocabulary/source mapping. It does not supply their implementation.
   shape of annotation, idempotent and trait-marker values throughout the
   selected closure. Explicit recognized prelude targets and their declared
   readonly/idempotent, input/output/error and error/trait-definition conflicts
-  are checked. Idempotent `exists`/`notFound` declarations are mutually exclusive
+  are checked. Optionality annotations check object values and explicit targets:
+  `clientOptional` requires a structure member, `addedDefault` also requires an
+  authored default, and `sparse` requires a list or map. These checks do not
+  generate client types, serialize instances or bypass default validation.
+  Idempotent `exists`/`notFound` declarations are mutually exclusive
   arrays of absolute IDs whose targets must occur in the operation's own errors.
   Their native hints are retained without execution or fallback to service errors.
   Input/output-marked structures reached by the selected operation are checked

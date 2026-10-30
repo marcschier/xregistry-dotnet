@@ -282,8 +282,9 @@ The implicit prelude support covers `Blob`, `Boolean`, `Document`, `String`,
 `BigDecimal`, `Timestamp`, `Unit`, `PrimitiveBoolean`, `PrimitiveByte`,
 `PrimitiveShort`, `PrimitiveInteger`, `PrimitiveLong`, `PrimitiveFloat`,
 `PrimitiveDouble`, and the traits
-`error`, `documentation`, `required`, `input`, `output`, `readonly`, `idempotent`,
-`default`, `enumValue` and `trait` in `smithy.api`. Other required definitions
+`error`, `documentation`, `required`, `clientOptional`, `addedDefault`, `sparse`,
+`input`, `output`, `readonly`, `idempotent`, `default`, `enumValue` and `trait`
+in `smithy.api`. Other required definitions
 must be supplied in the AST. These checks do not validate every Smithy shape
 constraint, trait value or selector. Full Smithy validation and model assembly
 remain unsupported.
@@ -300,6 +301,15 @@ aggregate root shapes, not members. Selection rejects `readonly` with
 `idempotent`, input/output combinations, input or output with error, and error
 with a trait-definition marker. Custom applicability selectors remain unchecked.
 Literal members inside trait payloads do not become dependency references.
+
+The `clientOptional` annotation is restricted to structure members.
+`addedDefault` requires a structure member with an explicit `default` trait,
+including an explicit null override; property order does not affect that check.
+`sparse` is restricted to list and map shapes, not their members. Each requires
+an object value. These declarations remain in the supplied model without
+dependency acquisition. Selection does not generate client types or serialize
+instances; `clientOptional` does not suppress validation of an authored default,
+and recognizing `sparse` does not validate collection instance values.
 
 Reachable trait definitions require a string `selector`, when supplied, and
 restrict `structurallyExclusive` to `member` or `target`. These are property
