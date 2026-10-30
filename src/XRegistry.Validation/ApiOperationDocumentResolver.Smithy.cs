@@ -2474,6 +2474,16 @@ public static partial class ApiOperationDocumentResolver
                                 position++;
                             }
                         }
+                        var ignoreCase = stringOperands is not null && position < text.Length && text[position] == 'i';
+                        if (ignoreCase)
+                        {
+                            position++;
+                            SkipWhitespace();
+                            foreach (var operand in stringOperands!)
+                            {
+                                if (!AsciiText(operand)) { return null; }
+                            }
+                        }
                         if (position == text.Length || text[position++] != ']' ||
                             shape.ValueKind != JsonValueKind.Object)
                         {
@@ -2503,11 +2513,7 @@ public static partial class ApiOperationDocumentResolver
                                     if (node.ValueKind == JsonValueKind.String)
                                     {
                                         var value = node.GetString()!;
-                                        budget.Work(value.Length, path);
-                                        foreach (var character in value)
-                                        {
-                                            if (!char.IsAscii(character)) { return null; }
-                                        }
+                                        if (!AsciiText(value)) { return null; }
                                         nodeLength = value.Length;
                                     }
                                     else if (node.ValueKind == JsonValueKind.Array) { nodeLength = node.GetArrayLength(); }
@@ -2535,16 +2541,18 @@ public static partial class ApiOperationDocumentResolver
                                     JsonValueKind.False => "false",
                                     _ => ""
                                 };
+                                if (ignoreCase && !AsciiText(value)) { return null; }
+                                var comparison = ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
                                 foreach (var operand in stringOperands)
                                 {
                                     budget.Work(value.Length + operand.Length + 1L, path);
                                     current |= stringComparator switch
                                     {
-                                        '=' => value.Equals(operand, StringComparison.Ordinal),
-                                        '!' => !value.Equals(operand, StringComparison.Ordinal),
-                                        '^' => value.StartsWith(operand, StringComparison.Ordinal),
-                                        '$' => value.EndsWith(operand, StringComparison.Ordinal),
-                                        _ => value.Contains(operand, StringComparison.Ordinal)
+                                        '=' => value.Equals(operand, comparison),
+                                        '!' => !value.Equals(operand, comparison),
+                                        '^' => value.StartsWith(operand, comparison),
+                                        '$' => value.EndsWith(operand, comparison),
+                                        _ => value.Contains(operand, comparison)
                                     };
                                 }
                             }
@@ -2671,6 +2679,16 @@ public static partial class ApiOperationDocumentResolver
                     }
                 }
                 return default;
+            }
+
+            bool AsciiText(string value)
+            {
+                budget.Work(value.Length, path);
+                foreach (var character in value)
+                {
+                    if (!char.IsAscii(character)) { return false; }
+                }
+                return true;
             }
 
             int ObjectLength(JsonElement node)

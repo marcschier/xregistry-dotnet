@@ -258,8 +258,9 @@ vocabulary/source mapping. It does not supply their implementation.
   with operand alternatives. Booleans use their lowercase text; present nulls
   and aggregates compare as empty strings, while missing attributes never
   match. Numeric rendering, unquoted numeric operands, empty quoted operands
-  and case-insensitive modifiers remain unsupported. Repeated text comparison
-  consumes the shared work budget.
+  remain unsupported. String comparisons accept `i` for ASCII-only values and
+  operands; non-ASCII folding remains unsupported. Trait/property names remain
+  exact. Character checks and repeated comparison consume the shared work budget.
   Each application is checked independently. Type mismatches are invalid;
   unsupported grammar reports `Unsupported` at the application without changing
   unapplied declaration checks or masking earlier missing schema dependencies.

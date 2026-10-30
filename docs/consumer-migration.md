@@ -435,8 +435,12 @@ aggregates compare as empty strings, but absent attributes never match any of
 these operators, including `!=`. Quoted numeric text is compared literally;
 numeric JSON values and unquoted numeric operands report `Unsupported` because
 numeric-to-string rendering is not implemented. Empty quoted operands,
-case-insensitive modifiers, projection and scoped comparisons remain
-unsupported. Text comparisons consume the shared work budget.
+projection and scoped comparisons remain unsupported. The `i` modifier enables
+case-insensitive string comparison when every operand and the selected value
+contain only ASCII characters. Non-ASCII case folding remains unsupported,
+including an operand after an earlier match or on an absent attribute. Trait
+and property names retain exact matching. Character checks and text comparisons
+consume the shared work budget.
 The `(length)` property counts array items and object entries, including null
 values. Empty aggregates have a present length of zero. Numeric comparisons
 and presence checks can use the result; further property access yields absence.
