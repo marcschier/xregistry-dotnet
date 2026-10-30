@@ -184,7 +184,7 @@ public static partial class ApiOperationDocumentResolver
     private sealed class SmithyClosure(JsonElement shapes, ValidationContext budget)
     {
         private readonly Dictionary<string, JsonElement> _visited = new(StringComparer.Ordinal);
-        private readonly List<(string Id, JsonElement Value, string Path, string Kind, JsonElement Shape)> _traitNodes = [];
+        private readonly List<(string Id, JsonElement Value, string Path, string Kind, JsonElement Shape, string ShapeId)> _traitNodes = [];
 
         internal void Visit(string id, int depth, string? expected = null, bool error = false, bool traitDefinition = false,
             string? sourceId = null, string? referencePath = null)
@@ -284,7 +284,7 @@ public static partial class ApiOperationDocumentResolver
                             var memberPath = path + "/members/" + Escape(member.Name);
                             Reference(member.Value, memberPath, depth, id,
                                 kind == "union" && TryTrait(shape, "smithy.api#streaming", out _) ? "structure" : null,
-                                memberContainer: kind);
+                                memberContainer: kind, memberName: member.Name);
                             if (TryTrait(member.Value, "smithy.api#jsonName", out var jsonName))
                             {
                                 budget.Work(jsonName.GetString()!.Length, memberPath);
@@ -1296,12 +1296,12 @@ public static partial class ApiOperationDocumentResolver
             ValidationContext.Require(shape.TryGetProperty(name, out var value), path + "/" + name,
                 "document.target", "The Smithy shape is missing a required member reference.");
             Reference(value, path + "/" + name, depth, sourceId, expected,
-                memberContainer: shape.GetProperty("type").GetString());
+                memberContainer: shape.GetProperty("type").GetString(), memberName: name);
         }
 
         private void Reference(JsonElement value, string path, int depth, string sourceId,
             string? expected = null, bool error = false,
-            string? memberContainer = null)
+            string? memberContainer = null, string? memberName = null)
         {
             budget.Work();
             ValidationContext.Require(value.ValueKind == JsonValueKind.Object &&
@@ -1317,13 +1317,16 @@ public static partial class ApiOperationDocumentResolver
                     propertyPath, "document.reference_property",
                     "A Smithy shape reference permits only target; a member can also declare traits.");
             }
-            if (memberContainer is not null) { Traits(value, path, depth, sourceId, memberContainer: memberContainer); }
+            if (memberContainer is not null)
+            {
+                Traits(value, path, depth, sourceId, memberContainer: memberContainer, memberName: memberName);
+            }
             Visit(value.GetProperty("target").GetString()!, depth + 1, expected, error,
                 sourceId: sourceId, referencePath: path);
         }
 
         private void Traits(JsonElement shape, string path, int depth, string sourceId, string? kind = null,
-            string? memberContainer = null)
+            string? memberContainer = null, string? memberName = null)
         {
             if (!shape.TryGetProperty("traits", out var traits)) { return; }
             ValidationContext.Require(traits.ValueKind == JsonValueKind.Object,
@@ -1956,13 +1959,14 @@ public static partial class ApiOperationDocumentResolver
                     }
                 }
                 Visit(trait.Name, depth + 1, traitDefinition: true, sourceId: sourceId, referencePath: traitPath);
-                _traitNodes.Add((trait.Name, trait.Value, traitPath, memberContainer is null ? kind! : "member", shape));
+                _traitNodes.Add((trait.Name, trait.Value, traitPath, memberContainer is null ? kind! : "member",
+                    shape, memberName is null ? sourceId : sourceId + "$" + memberName));
             }
         }
 
         internal void ValidateTraitNodes()
         {
-            foreach (var (id, value, path, kind, shape) in _traitNodes)
+            foreach (var (id, value, path, kind, shape, shapeId) in _traitNodes)
             {
                 var definition = shapes.GetProperty(id);
                 if (TryTrait(definition, "smithy.api#trait", out var marker) &&
@@ -1970,7 +1974,7 @@ public static partial class ApiOperationDocumentResolver
                 {
                     var text = selector.GetString()!;
                     budget.Work(text.Length, path);
-                    var matches = MatchSmithySelector(text, kind, path, shape);
+                    var matches = MatchSmithySelector(text, kind, path, shape, shapeId);
                     if (matches is null)
                     {
                         ValidationContext.Fail(DocumentValidationStatus.Unsupported, path, "smithy.trait_selector",
@@ -2330,7 +2334,7 @@ public static partial class ApiOperationDocumentResolver
                     selectedShape = target.GetProperty("type").GetString() is "list" or "map"
                         ? target.GetProperty(member) : target.GetProperty("members").GetProperty(member);
                 }
-                var matches = MatchSmithySelector(selectorText, kind, path, selectedShape);
+                var matches = MatchSmithySelector(selectorText, kind, path, selectedShape, value);
                 if (matches is null)
                 {
                     ValidationContext.Fail(DocumentValidationStatus.Unsupported, path, "smithy.id_ref_selector",
@@ -2341,7 +2345,7 @@ public static partial class ApiOperationDocumentResolver
             }
         }
 
-        private bool? MatchSmithySelector(string text, string kind, string path, JsonElement shape)
+        private bool? MatchSmithySelector(string text, string kind, string path, JsonElement shape, string shapeId)
         {
             var position = 0;
             var result = Sequence(0);
@@ -2370,11 +2374,13 @@ public static partial class ApiOperationDocumentResolver
                     {
                         position++;
                         SkipWhitespace();
-                        if (Identifier() != "trait") { return null; }
+                        var attribute = Identifier();
+                        if (attribute is not ("trait" or "id")) { return null; }
                         SkipWhitespace();
-                        var traitCollection = position == text.Length || text[position] != '|';
-                        if (!traitCollection) { position++; SkipWhitespace(); }
-                        var countTraits = !traitCollection && position < text.Length && text[position] == '(';
+                        var traitCollection = attribute == "trait" && (position == text.Length || text[position] != '|');
+                        if (attribute == "trait" && !traitCollection) { position++; SkipWhitespace(); }
+                        var countTraits = attribute == "trait" && !traitCollection &&
+                            position < text.Length && text[position] == '(';
                         string? traitId = null;
                         if (countTraits)
                         {
@@ -2384,7 +2390,7 @@ public static partial class ApiOperationDocumentResolver
                             SkipWhitespace();
                             if (position == text.Length || text[position++] != ')') { return null; }
                         }
-                        else if (!traitCollection)
+                        else if (attribute == "trait" && !traitCollection)
                         {
                             traitId = AttributeName();
                             if (traitId is null) { return null; }
@@ -2485,13 +2491,15 @@ public static partial class ApiOperationDocumentResolver
                             }
                         }
                         if (position == text.Length || text[position++] != ']' ||
-                            shape.ValueKind != JsonValueKind.Object)
+                            attribute == "trait" && shape.ValueKind != JsonValueKind.Object)
                         {
                             return null;
                         }
                         var node = default(JsonElement);
                         int? nodeLength = countTraits ? 0 : null;
-                        if (shape.TryGetProperty("traits", out var traits))
+                        var idValue = attribute == "id" ? shapeId : null;
+                        string? textValue = null;
+                        if (attribute == "trait" && shape.TryGetProperty("traits", out var traits))
                         {
                             ValidationContext.Require(traits.ValueKind == JsonValueKind.Object,
                                 path, "document.traits", "Smithy traits must be an object.");
@@ -2502,6 +2510,35 @@ public static partial class ApiOperationDocumentResolver
                         {
                             foreach (var property in properties)
                             {
+                                if (idValue is not null)
+                                {
+                                    budget.Work(idValue.Length, path);
+                                    if (property.Length) { nodeLength = idValue.Length; }
+                                    else
+                                    {
+                                        var namespaceEnd = idValue.IndexOf('#');
+                                        var memberStart = idValue.IndexOf('$');
+                                        textValue = property.Name switch
+                                        {
+                                            "namespace" => idValue[..namespaceEnd],
+                                            "name" => idValue[(namespaceEnd + 1)..(memberStart < 0 ? idValue.Length : memberStart)],
+                                            "member" => memberStart < 0 ? null : idValue[(memberStart + 1)..],
+                                            _ => null
+                                        };
+                                    }
+                                    idValue = null;
+                                    continue;
+                                }
+                                if (textValue is not null)
+                                {
+                                    if (property.Length)
+                                    {
+                                        if (!AsciiText(textValue)) { return null; }
+                                        nodeLength = textValue.Length;
+                                    }
+                                    textValue = null;
+                                    continue;
+                                }
                                 if (nodeLength is not null)
                                 {
                                     nodeLength = null;
@@ -2530,9 +2567,10 @@ public static partial class ApiOperationDocumentResolver
                         {
                             if (node.ValueKind == JsonValueKind.Number) { return null; }
                             current = false;
-                            if (traitCollection || nodeLength is not null || node.ValueKind != JsonValueKind.Undefined)
+                            if (traitCollection || idValue is not null || textValue is not null ||
+                                nodeLength is not null || node.ValueKind != JsonValueKind.Undefined)
                             {
-                                var value = nodeLength is { } countValue
+                                var value = idValue ?? textValue ?? (nodeLength is { } countValue
                                     ? countValue.ToString(System.Globalization.CultureInfo.InvariantCulture)
                                     : node.ValueKind switch
                                 {
@@ -2540,7 +2578,7 @@ public static partial class ApiOperationDocumentResolver
                                     JsonValueKind.True => "true",
                                     JsonValueKind.False => "false",
                                     _ => ""
-                                };
+                                });
                                 if (ignoreCase && !AsciiText(value)) { return null; }
                                 var comparison = ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
                                 foreach (var operand in stringOperands)
@@ -2559,13 +2597,15 @@ public static partial class ApiOperationDocumentResolver
                         }
                         else if (numericOperands is null)
                         {
-                            current = traitCollection || nodeLength is not null || node.ValueKind != JsonValueKind.Undefined
+                            current = traitCollection || idValue is not null || textValue is not null ||
+                                nodeLength is not null || node.ValueKind != JsonValueKind.Undefined
                                 ? acceptsPresent : acceptsAbsent;
                         }
                         else
                         {
                             var number = nodeLength is { } lengthValue
                                 ? new JsonNumber(false, lengthValue.ToString(System.Globalization.CultureInfo.InvariantCulture), 0)
+                                : idValue is not null || textValue is not null ? SelectorNumber(idValue ?? textValue!)
                                 : node.ValueKind switch
                             {
                                 JsonValueKind.Number => JsonNumber.Read(node, budget, path),

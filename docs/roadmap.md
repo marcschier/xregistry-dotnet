@@ -261,6 +261,11 @@ vocabulary/source mapping. It does not supply their implementation.
   remain unsupported. String comparisons accept `i` for ASCII-only values and
   operands; non-ASCII folding remains unsupported. Trait/property names remain
   exact. Character checks and repeated comparison consume the shared work budget.
+  The `id` attribute exposes absolute root/member identity, its namespace/name/
+  member parts and their `(length)`. Root member parts are absent. Application
+  and `idRef` selectors inspect their respective selected identities, including
+  known implicit prelude IDs, without treating those IDs as acquisition URLs.
+  Identity property scans consume the shared work budget.
   Each application is checked independently. Type mismatches are invalid;
   unsupported grammar reports `Unsupported` at the application without changing
   unapplied declaration checks or masking earlier missing schema dependencies.

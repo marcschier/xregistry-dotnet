@@ -462,6 +462,16 @@ even when the shape omits its traits object. The collection compares as an
 empty string with string comparators and has no numeric representation;
 `[trait|name]` still tests an individual trait. Malformed traits objects remain
 invalid, and unmaterialized implicit prelude shapes remain unsupported.
+The `id` attribute exposes the selected shape's absolute identity. Its
+`namespace`, `name` and `member` properties return the corresponding text;
+`member` is absent on a root shape. `(length)` counts the full identity or a
+selected part, and further descent through text or a computed count yields
+absence. String, numeric and presence comparisons use the same rules as other
+supported attributes. Application selectors inspect the annotated root or
+member; `idRef` selectors inspect the referenced identity, including known
+implicit prelude shapes. Identity lookup neither traverses the referenced shape
+nor acquires it as a document. Property scans and comparisons consume the shared
+work budget.
 A member is not matched as its target or container type. An omitted selector
 permits every shape; each reached application is checked independently.
 Type mismatches are invalid. Other selector expressions report `Unsupported`
