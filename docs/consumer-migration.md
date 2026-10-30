@@ -499,6 +499,22 @@ including structures outside an event stream, without serializing events or
 choosing a framing protocol. Literal example content and unrelated event
 definitions remain outside the selected closure.
 
+The operation-only `endpoint` trait requires an object with a string
+`hostPrefix`. Prefix literals follow the RFC 3986 registered-name grammar,
+without schemes, user information or ports. Labels must have distinct valid
+member names and cannot be adjacent. Each label requires an exact-name
+top-level input member marked with both `required` and the object-valued
+`hostLabel` annotation, targeting a string or enum specialization. The
+recommendation that a labeled prefix end in a period is not enforced as a
+mandatory rule.
+
+Host labels do not conflict with HTTP message bindings; one member can supply
+both a host label and an HTTP header. Extra host-label annotations and
+annotations on nested or output members do not become template dependencies.
+Selection preserves the authored prefix without expanding it, resolving hosts
+or changing protocol serialization. Runtime empty/null label values and the
+validity of the final combined endpoint host remain client responsibilities.
+
 The operation-only `http` trait requires an object with string `method` and
 `uri` values. Methods remain literal, without an allowlist or inferred safety
 traits. An explicit success `code` must be an exact integer from 100 to 999;

@@ -45,6 +45,10 @@ public static partial class ApiOperationDocumentResolver
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
     private static partial Regex SmithyHttpHeaderName();
 
+    [GeneratedRegex(@"\A(?:[A-Za-z0-9._~!$&'()*+,;=-]|%[A-Fa-f0-9]{2})*\z",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
+    private static partial Regex SmithyHostPrefixLiteral();
+
     private static bool IsSmithyMediaTypeName(string value)
     {
         var slash = value.IndexOf('/');
@@ -248,6 +252,7 @@ public static partial class ApiOperationDocumentResolver
                     ValidateRequestCompression(shape, path);
                     ValidateHttpOperation(shape, path);
                     ValidateHttpPayloads(shape);
+                    ValidateEndpoint(shape, path);
                     break;
                 case "structure":
                 case "union":
@@ -1078,6 +1083,54 @@ public static partial class ApiOperationDocumentResolver
                 number.CompareTo(new(false, bounds.Value.Item2, 0)) <= 0;
         }
 
+        private void ValidateEndpoint(JsonElement operation, string path)
+        {
+            if (!TryTrait(operation, "smithy.api#endpoint", out var endpoint)) { return; }
+            var prefixPath = path + "/traits/smithy.api#endpoint/hostPrefix";
+            var prefix = endpoint.GetProperty("hostPrefix").GetString()!;
+            budget.Work(prefix.Length, prefixPath);
+            var labels = new HashSet<string>(StringComparer.Ordinal);
+            var position = 0;
+            var previousLabel = false;
+            while (position < prefix.Length)
+            {
+                var open = prefix.IndexOf('{', position);
+                var end = open < 0 ? prefix.Length : open;
+                var literal = prefix.AsSpan(position, end - position);
+                ValidationContext.Require(SmithyHostPrefixLiteral().IsMatch(literal),
+                    prefixPath, "document.endpoint_prefix",
+                    "A Smithy host prefix permits only RFC 3986 registered-name literals and label placeholders.");
+                if (open < 0) { break; }
+                var close = prefix.IndexOf('}', open + 1);
+                ValidationContext.Require(close >= 0 && (!previousLabel || literal.Length > 0),
+                    prefixPath, "document.endpoint_prefix",
+                    "Smithy endpoint labels must be closed and cannot be adjacent.");
+                var name = prefix[(open + 1)..close];
+                ValidationContext.Require(IsSmithyShapeId("example#" + name) && labels.Add(name),
+                    prefixPath, "document.endpoint_prefix",
+                    "Smithy endpoint labels require valid, distinct member names.");
+                position = close + 1;
+                previousLabel = true;
+            }
+            if (labels.Count == 0) { return; }
+            var members = default(JsonElement);
+            if (operation.TryGetProperty("input", out var input) &&
+                shapes.TryGetProperty(input.GetProperty("target").GetString()!, out var inputShape))
+            {
+                inputShape.TryGetProperty("members", out members);
+            }
+            foreach (var name in labels)
+            {
+                budget.Work(path: prefixPath);
+                ValidationContext.Require(members.ValueKind == JsonValueKind.Object &&
+                    members.TryGetProperty(name, out var member) &&
+                    TryTrait(member, "smithy.api#required", out _) &&
+                    TryTrait(member, "smithy.api#hostLabel", out _),
+                    prefixPath, "document.endpoint_label",
+                    "Every endpoint label requires an exact-name required string input member marked with hostLabel.");
+            }
+        }
+
         private void ValidateHttpBindingTarget(JsonElement member, string trait, string path)
         {
             var kind = TargetKind(member, out var target);
@@ -1287,7 +1340,8 @@ public static partial class ApiOperationDocumentResolver
                         traits.TryGetProperty("smithy.api#error", out _),
                     "smithy.api#httpError" => memberContainer is null && kind == "structure" &&
                         traits.TryGetProperty("smithy.api#error", out _),
-                    "smithy.api#http" => memberContainer is null && kind == "operation",
+                    "smithy.api#http" or "smithy.api#endpoint" => memberContainer is null && kind == "operation",
+                    "smithy.api#hostLabel" => memberContainer == "structure",
                     "smithy.api#httpLabel" or "smithy.api#httpPayload" or "smithy.api#httpHeader" or
                         "smithy.api#httpPrefixHeaders" or "smithy.api#httpQuery" or "smithy.api#httpQueryParams" =>
                         memberContainer == "structure",
@@ -1354,6 +1408,23 @@ public static partial class ApiOperationDocumentResolver
                     "Conflicting Smithy prelude traits cannot be applied to the same shape.");
                 switch (trait.Name)
                 {
+                    case "smithy.api#endpoint":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
+                            "document.trait_value", "The Smithy endpoint trait requires an object value.");
+                        ValidationContext.Require(trait.Value.TryGetProperty("hostPrefix", out var hostPrefix) &&
+                            hostPrefix.ValueKind == JsonValueKind.String, traitPath + "/hostPrefix",
+                            "document.endpoint_prefix", "The Smithy endpoint trait requires a string hostPrefix.");
+                        continue;
+                    case "smithy.api#hostLabel":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
+                            "document.trait_value", "The Smithy hostLabel annotation requires an object value.");
+                        var hostTargetId = shape.GetProperty("target").GetString()!;
+                        var hostKind = shapes.TryGetProperty(hostTargetId, out var hostTarget)
+                            ? hostTarget.GetProperty("type").GetString() : SmithyPreludeKind(hostTargetId);
+                        ValidationContext.Require(traits.TryGetProperty("smithy.api#required", out _) &&
+                            hostKind is null or "string" or "enum", traitPath, "document.trait_target",
+                            "A Smithy hostLabel requires a required structure member targeting a string.");
+                        continue;
                     case "smithy.api#httpHeader":
                     case "smithy.api#httpPrefixHeaders":
                     case "smithy.api#httpQuery":

@@ -8072,6 +8072,254 @@ public class ApiOperationReferenceTests
         _ => """{"type":"KIND"}""".Replace("KIND", kind, StringComparison.Ordinal)
     })!;
 
+    [Test]
+    [Arguments("null", "document.trait_value")]
+    [Arguments("true", "document.trait_value")]
+    [Arguments("[]", "document.trait_value")]
+    [Arguments("\"prefix\"", "document.trait_value")]
+    [Arguments("{}", "document.endpoint_prefix")]
+    [Arguments("""{"hostPrefix":null}""", "document.endpoint_prefix")]
+    [Arguments("""{"hostPrefix":42}""", "document.endpoint_prefix")]
+    public async Task SmithyJsonEndpointRequiresAnObjectWithStringHostPrefix(string value, string diagnostic)
+    {
+        var document = SmithyEndpointDocument();
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#endpoint"] = JsonNode.Parse(value);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(diagnostic);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("")]
+    [Arguments("data.")]
+    [Arguments("data")]
+    [Arguments("{id}.data.")]
+    [Arguments("prefix-{id}-suffix")]
+    [Arguments("{id}")]
+    [Arguments("a%2eb.")]
+    [Arguments("~!$&'()*+,;=_-")]
+    public async Task SmithyJsonEndpointPreservesPrefixesWithoutEnforcingDnsOrTrailingPeriodRecommendations(string prefix)
+    {
+        var document = SmithyEndpointDocument();
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#endpoint"]!["hostPrefix"] = prefix;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+    }
+
+    [Test]
+    [Arguments("https://data.")]
+    [Arguments("user@data.")]
+    [Arguments("data:443")]
+    [Arguments("data/path")]
+    [Arguments("data?query")]
+    [Arguments("data#fragment")]
+    [Arguments("data space")]
+    [Arguments("bad%")]
+    [Arguments("bad%xx")]
+    [Arguments("bad\\name")]
+    [Arguments("{id")]
+    [Arguments("id}")]
+    [Arguments("{}")]
+    [Arguments("{1id}")]
+    [Arguments("{id+}")]
+    [Arguments("{{id}}")]
+    [Arguments("{id}.{id}")]
+    [Arguments("{id}{other}")]
+    public async Task SmithyJsonEndpointRejectsInvalidLiteralsAndMalformedOrRepeatedLabels(string prefix)
+    {
+        var document = SmithyEndpointDocument();
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#endpoint"]!["hostPrefix"] = prefix;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.endpoint_prefix");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/smithy.api#endpoint/hostPrefix");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("no-input")]
+    [Arguments("unit-input")]
+    [Arguments("no-members")]
+    [Arguments("no-member")]
+    [Arguments("wrong-case")]
+    [Arguments("no-host-label")]
+    public async Task SmithyJsonEndpointLabelsRequireExactTopLevelInputMembers(string problem)
+    {
+        var document = SmithyEndpointDocument();
+        var input = document["shapes"]!["example#Input"]!;
+        switch (problem)
+        {
+            case "no-input": document["shapes"]!["example#Get"]!.AsObject().Remove("input"); break;
+            case "unit-input": document["shapes"]!["example#Get"]!["input"]!["target"] = "smithy.api#Unit"; break;
+            case "no-members": input.AsObject().Remove("members"); break;
+            case "no-member": input["members"] = new JsonObject(); break;
+            case "wrong-case": document["shapes"]!["example#Get"]!["traits"]!["smithy.api#endpoint"]!["hostPrefix"] = "{Id}."; break;
+            default: input["members"]!["id"]!["traits"]!.AsObject().Remove("smithy.api#hostLabel"); break;
+        }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.endpoint_label");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/smithy.api#endpoint/hostPrefix");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("string", true)]
+    [Arguments("enum", true)]
+    [Arguments("implicit", true)]
+    [Arguments("integer", false)]
+    [Arguments("intEnum", false)]
+    [Arguments("blob", false)]
+    [Arguments("boolean", false)]
+    [Arguments("timestamp", false)]
+    [Arguments("document", false)]
+    [Arguments("structure", false)]
+    [Arguments("list", false)]
+    [Arguments("map", false)]
+    [Arguments("union", false)]
+    public async Task SmithyJsonHostLabelRequiresAStringTargetIncludingEnumSpecializations(string kind, bool valid)
+    {
+        var document = SmithyEndpointDocument();
+        if (kind == "implicit") { document["shapes"]!["example#Input"]!["members"]!["id"]!["target"] = "smithy.api#String"; }
+        else { document["shapes"]!["example#Identifier"] = SmithyHttpBindingTarget(kind); }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Input/members/id/traits/smithy.api#hostLabel");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("null")]
+    [Arguments("true")]
+    [Arguments("[]")]
+    [Arguments("\"host\"")]
+    public async Task SmithyJsonHostLabelRequiresAnObjectAnnotation(string annotation)
+    {
+        var document = SmithyEndpointDocument();
+        document["shapes"]!["example#Input"]!["members"]!["id"]!["traits"]!["smithy.api#hostLabel"] = JsonNode.Parse(annotation);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_value");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("required")]
+    [Arguments("root")]
+    [Arguments("union")]
+    [Arguments("list")]
+    [Arguments("map")]
+    public async Task SmithyJsonHostLabelRequiresARequiredStructureMember(string problem)
+    {
+        var document = SmithyEndpointDocument();
+        if (problem == "required") { document["shapes"]!["example#Input"]!["members"]!["id"]!["traits"]!.AsObject().Remove("smithy.api#required"); }
+        else if (problem == "root") { document["shapes"]!["example#Input"]!["traits"] = JsonNode.Parse("""{"smithy.api#hostLabel":{}}"""); }
+        else
+        {
+            document["shapes"]!["example#Identifier"] = JsonNode.Parse(problem switch
+            {
+                "union" => """{"type":"union","members":{"value":{"target":"smithy.api#String","traits":{"smithy.api#required":{},"smithy.api#hostLabel":{}}}}}""",
+                "list" => """{"type":"list","member":{"target":"smithy.api#String","traits":{"smithy.api#hostLabel":{}}}}""",
+                _ => """{"type":"map","key":{"target":"smithy.api#String"},"value":{"target":"smithy.api#String","traits":{"smithy.api#hostLabel":{}}}}"""
+            });
+            document["shapes"]!["example#Input"]!["members"]!["id"]!["traits"]!.AsObject().Remove("smithy.api#hostLabel");
+        }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("root")]
+    [Arguments("member")]
+    public async Task SmithyJsonEndpointRequiresAnOperationTarget(string location)
+    {
+        var document = SmithyEndpointDocument();
+        var traits = document["shapes"]!["example#Get"]!["traits"]!.DeepClone();
+        document["shapes"]!["example#Get"]!.AsObject().Remove("traits");
+        var target = location == "root" ? document["shapes"]!["example#Input"]! :
+            document["shapes"]!["example#Input"]!["members"]!["id"]!;
+        target["traits"] = traits;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonEndpointSupportsMultipleSeparatedLabelsAndIndependentHttpBindings()
+    {
+        var document = SmithyEndpointDocument();
+        var member = document["shapes"]!["example#Input"]!["members"]!["id"]!;
+        member["traits"]!["smithy.api#httpHeader"] = "X-Identifier";
+        document["shapes"]!["example#Input"]!["members"]!["other"] = member.DeepClone();
+        document["shapes"]!["example#Input"]!["members"]!["other"]!["traits"]!["smithy.api#httpHeader"] = "X-Other";
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#endpoint"]!["hostPrefix"] = "{id}-{other}.data.";
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#http"] = JsonNode.Parse("""{"method":"GET","uri":"/status"}""");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+    }
+
+    [Test]
+    public async Task SmithyJsonHostLabelsOutsideEndpointInputDoNotBecomeTemplateDependencies()
+    {
+        var document = SmithyEndpointDocument();
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#endpoint"]!["hostPrefix"] = "data.";
+        document["shapes"]!["example#Nested"] = document["shapes"]!["example#Input"]!.DeepClone();
+        document["shapes"]!["example#Input"]!["members"]!["nested"] = JsonNode.Parse("""{"target":"example#Nested"}""");
+        document["shapes"]!["example#Get"]!["output"] = JsonNode.Parse("""{"target":"example#Nested"}""");
+        document["shapes"]!["example#Unused"] = JsonNode.Parse("""{"type":"operation","traits":{"smithy.api#endpoint":{"hostPrefix":"{bad}{bad}"}}}""");
+        var selected = ResolveSmithy(document.ToJsonString());
+        await Assert.That(selected.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(selected.Diagnostic).IsNull();
+        document["shapes"]!["example#Get"]!.AsObject().Remove("traits");
+        var noEndpoint = ResolveSmithy(document.ToJsonString());
+        await Assert.That(noEndpoint.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(noEndpoint.Diagnostic).IsNull();
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
+    [Test]
+    [Arguments("input")]
+    [Arguments("label")]
+    public async Task SmithyJsonEndpointRetainsUnresolvedTargetsWithoutAcquiringHostsOrShapes(string missing)
+    {
+        var document = SmithyEndpointDocument();
+        var id = missing == "input" ? "example#Input" : "example#Identifier";
+        document["shapes"]!.AsObject().Remove(id);
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Endpoint metadata cannot acquire hosts or shapes."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("dependency.unresolved");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/" + id);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    private static JsonNode SmithyEndpointDocument()
+    {
+        var document = SmithyHttpOperationDocument();
+        document["shapes"]!["example#Get"]!["traits"] = JsonNode.Parse("""
+            {"smithy.api#endpoint":{"hostPrefix":"{id}.data."}}
+            """);
+        document["shapes"]!["example#Input"]!["members"]!["id"]!["traits"]!.AsObject().Remove("smithy.api#httpLabel");
+        document["shapes"]!["example#Input"]!["members"]!["id"]!["traits"]!["smithy.api#hostLabel"] = new JsonObject();
+        return document;
+    }
+
     private static JsonNode SmithyHttpPayloadDocument(string role)
     {
         var document = JsonNode.Parse("""

@@ -209,6 +209,14 @@ vocabulary/source mapping. It does not supply their implementation.
   `longPoll` requires an operation object annotation with a positive signed
   32-bit integer `timeoutMillis`, checked exactly without rounding. The check
   does not execute polling or modify request timeout configuration.
+  `endpoint` checks operation applicability, object/string declarations,
+  registered-name prefix literals and distinct nonadjacent labels. Labels
+  require exact-name top-level input members with required string-valued
+  `hostLabel` declarations, including enum specializations. Host-label and HTTP
+  bindings remain independent. Extra/nested/output host-label annotations do
+  not become template dependencies. Trailing-period guidance remains a
+  recommendation; runtime prefix expansion, label values and the final combined
+  host are not evaluated.
   `http` checks operation applicability, required string method/URI values and
   exact success codes from 100 to 999. Methods remain literal. Local URI rules
   reject invalid origin-form syntax, dot/empty segments, fragments, query labels
