@@ -279,8 +279,17 @@ public static partial class ApiOperationDocumentResolver
             using var references = new ReferenceContext(parsed, documentUri, resolveReference, budget);
             if (format == "OpenRPC/1.4")
             {
-                return await ResolveOpenRpcMethodAsync(root, reference.Selector.Tokens[^1], references,
-                    cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    return await ResolveOpenRpcMethodAsync(root, reference.Selector.Tokens[^1], references,
+                        budget, cancellationToken).ConfigureAwait(false);
+                }
+                catch (ValidationFailure failure)
+                {
+                    return new(failure.Status == DocumentValidationStatus.Indeterminate
+                        ? ApiOperationResolutionStatus.Indeterminate : ApiOperationResolutionStatus.Invalid,
+                        failure.Diagnostic);
+                }
             }
             try
             {
@@ -447,7 +456,7 @@ public static partial class ApiOperationDocumentResolver
     }
 
     private static async ValueTask<ApiOperationResolutionResult> ResolveOpenRpcMethodAsync(JsonElement root,
-        string methodName, ReferenceContext references, CancellationToken cancellationToken)
+        string methodName, ReferenceContext references, ValidationContext budget, CancellationToken cancellationToken)
     {
         var matches = new List<OperationLocation>();
         var index = 0;
@@ -468,9 +477,12 @@ public static partial class ApiOperationDocumentResolver
                 return Failure(ApiOperationResolutionStatus.Invalid, "document.method_name",
                     "An OpenRPC Method Object must have a non-empty name.", location.Pointer + "/name");
             }
+            var contractFailure = await ValidateOpenRpcMethodAsync(location, references, budget,
+                cancellationToken).ConfigureAwait(false);
+            if (contractFailure is not null) { return contractFailure; }
             if (string.Equals(name.GetString(), methodName, StringComparison.Ordinal))
             {
-                matches.Add(location);
+                if (matches.Count < 2) { matches.Add(location); }
             }
         }
         return matches.Count switch

@@ -147,6 +147,11 @@ vocabulary/source mapping. It does not supply their implementation.
   text is preserved without URL validation. Inline JSON Pointers can select
   reusable Path Item and Callback component methods without dereferencing or
   making unused definitions into operation-ID candidates.
+  OpenRPC selection checks resolved parameter/result descriptors and errors,
+  parameter name uniqueness and required-before-optional ordering, and exact
+  integer error-code uniqueness within each method before selection. Descriptor
+  and error references use caller-controlled acquisition; schema values remain
+  opaque. Complete OpenRPC document and JSON Schema validation remain open.
   Smithy selection checks required operation/data/custom-trait dependencies in
   an already assembled non-mixin AST and rejects invalid recursion in that
   closure, invalid enum targets and duplicate or malformed enum values. Its

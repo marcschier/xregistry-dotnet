@@ -113153,7 +113153,7 @@
       "text": "The token MUST match the `name` of exactly one resolved Method Object in `methods`. Parameters, result, and errors come from that object, not from an example JSON-RPC request.",
       "review": {
         "status": "reviewed",
-        "note": "The optional OpenRPC/1.4 document resolver selects one resolved Method Object by exact name and retains its parameters, result and errors. Full format validation, API-Version acquisition and native qualification remain separate obligations.",
+        "note": "The optional OpenRPC/1.4 document resolver selects one resolved Method Object by exact name and retains its native parameters, result, errors and references without inlining. Every resolved method requires params and checks paramStructure, annotations, resolved parameter/result descriptor shape, unique exact parameter names and required-before-optional order. An absent result retains notification semantics. Resolved errors require exact integer codes and string messages; numeric aliases are duplicates, with a bounded 256-character number spelling. Content Descriptor/Error references use their containing source base and caller-authorized bounded retrieval; missing, denied, cyclic or malformed later contracts prevent an earlier selection. Descriptor schema objects remain opaque and do not cause acquisition. Full format/schema validation, API-Version acquisition and native qualification remain separate obligations.",
         "roles": [
           "client"
         ]
@@ -113162,6 +113162,14 @@
         "status": "implemented",
         "testIds": [
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenRpcSelectionPreservesTheNativeMethodAndDecodesItsNameOnce",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenRpcContractsPreserveNativeNotificationsDescriptorsAndExactErrorCodes",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenRpcMalformedContractsInLaterMethodsPreventAnEarlierSelection",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenRpcDescriptorAndErrorReferencesUseTheirContainingSourcesAndRetainNativeReferences",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenRpcContractDependenciesPreserveUnavailableAndDeniedFailures",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenRpcContractReferenceCyclesCannotProduceASelection",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenRpcReferenceReuseDoesNotBypassContractUniquenessOrOrdering",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenRpcErrorCodeNormalizationHonorsTheExactNumberBudget",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenRpcContentReferencesHonorTheInclusiveReferenceDepthLimit",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenRpcResolutionDistinguishesAbsentAmbiguousAndInvalidDocuments",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenRpcResolvesLocalAndExternalMethodsThroughAuthorizedDocuments",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenRpcDoesNotReturnAnEarlyMatchWhenAnotherMethodIsUnavailableOrDenied"

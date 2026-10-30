@@ -104,6 +104,29 @@ only API occurrences reachable through paths, webhooks and callbacks. Reusable
 definitions do not add candidates merely by existing in `components`.
 Full OpenAPI validation and YAML parsing remain unsupported.
 
+For `OpenRPC/1.4`, selection checks every resolved Method Object before returning
+a match. Each method requires a `params` array, including notifications with no
+parameters. An omitted `result` remains absent; the resolver does not invent a
+response descriptor. `paramStructure`, when supplied, must be `by-name`,
+`by-position` or `either`. Method and content-descriptor annotations have their
+declared string or boolean types.
+
+Parameters require distinct exact names and an object or boolean `schema`.
+Required parameters must precede optional parameters; an omitted `required`
+flag means optional. Results use the same content-descriptor shape. Errors
+require an integer `code` and string `message`, with distinct codes within the
+method. Integer comparison is exact: `1`, `1.0` and `1e0` are the same code.
+Number spellings beyond the shared 256-character limit report `Indeterminate`.
+
+Content Descriptor and Error references use the containing document's base URI
+and the same bounded, caller-authorized retrieval as Method references. Missing,
+denied or cyclic dependencies prevent selection, including in a later method.
+The returned Method Object preserves its native references; resolution does not
+inline them. Descriptor schema objects, including their `$ref` values, remain
+opaque schema data and do not trigger retrieval. This checks method contracts,
+not every schema keyword, linked method, example or document metadata field.
+`SupportsApiDocumentValidation` remains false.
+
 For `AvroProtocol/1.12.0`, `#operations/GetUser` selects the exact `GetUser`
 member of `messages`. An absent or empty `messages` object has no selectable
 operations; an Avro data schema without a protocol declaration is rejected.

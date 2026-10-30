@@ -2500,9 +2500,237 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
+    [Arguments("""{"name":"Target","params":[]}""")]
+    [Arguments("""{"name":"Target","paramStructure":"by-name","params":[{"name":"a","schema":true,"required":true},{"name":"A","schema":false}]}""")]
+    [Arguments("""{"name":"Target","paramStructure":"by-position","params":[{"name":"","schema":{},"required":false}],"deprecated":true}""")]
+    [Arguments("""{"name":"Target","paramStructure":"either","params":[],"result":{"name":"reply","schema":false,"required":true,"deprecated":false,"summary":"","description":""}}""")]
+    [Arguments("""{"name":"Target","params":[],"errors":[{"code":1.0,"message":""},{"code":1e100,"message":"Large"},{"code":-32700,"message":"Native","data":{"x":true}}]}""")]
+    public async Task OpenRpcContractsPreserveNativeNotificationsDescriptorsAndExactErrorCodes(string method)
+    {
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenRPC/1.4", "application/json",
+            System.Text.Encoding.UTF8.GetBytes("""{"openrpc":"1.4.0","methods":[""" + method + "]}"),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+            resolveReference: (_, _) => throw new InvalidOperationException("No imports were declared."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.DocumentPath).IsEqualTo("$/methods/0");
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(method);
+        await Assert.That(result.Operation.TryGetProperty("result", out _)).IsEqualTo(method.Contains("\"result\"", StringComparison.Ordinal));
+    }
+
+    [Test]
+    [Arguments("""{"name":"Other"}""", "document.params", "/params")]
+    [Arguments("""{"name":"Other","params":null}""", "document.params", "/params")]
+    [Arguments("""{"name":"Other","params":{}}""", "document.params", "/params")]
+    [Arguments("""{"name":"Other","params":[null]}""", "document.operation", "/params/0")]
+    [Arguments("""{"name":"Other","params":[],"paramStructure":"BY-NAME"}""", "document.param_structure", "/paramStructure")]
+    [Arguments("""{"name":"Other","params":[],"paramStructure":true}""", "document.param_structure", "/paramStructure")]
+    [Arguments("""{"name":"Other","params":[],"summary":0}""", "document.annotation", "/summary")]
+    [Arguments("""{"name":"Other","params":[],"description":null}""", "document.annotation", "/description")]
+    [Arguments("""{"name":"Other","params":[],"deprecated":"false"}""", "document.deprecated", "/deprecated")]
+    [Arguments("""{"name":"Other","params":[{}]}""", "document.content_name", "/params/0/name")]
+    [Arguments("""{"name":"Other","params":[{"name":0,"schema":{}}]}""", "document.content_name", "/params/0/name")]
+    [Arguments("""{"name":"Other","params":[{"name":"a"}]}""", "document.content_schema", "/params/0/schema")]
+    [Arguments("""{"name":"Other","params":[{"name":"a","schema":[]}]}""", "document.content_schema", "/params/0/schema")]
+    [Arguments("""{"name":"Other","params":[{"name":"a","schema":null}]}""", "document.content_schema", "/params/0/schema")]
+    [Arguments("""{"name":"Other","params":[{"name":"a","schema":{},"required":0}]}""", "document.content_required", "/params/0/required")]
+    [Arguments("""{"name":"Other","params":[{"name":"a","schema":{}},{"name":"a","schema":{}}]}""", "document.parameter_duplicate", "/params/1/name")]
+    [Arguments("""{"name":"Other","params":[{"name":"a","schema":{}},{"name":"b","schema":{},"required":true}]}""", "document.parameter_order", "/params/1/required")]
+    [Arguments("""{"name":"Other","params":[],"result":{}}""", "document.content_name", "/result/name")]
+    [Arguments("""{"name":"Other","params":[],"result":true}""", "document.operation", "/result")]
+    [Arguments("""{"name":"Other","params":[],"result":{"name":"r","schema":"string"}}""", "document.content_schema", "/result/schema")]
+    [Arguments("""{"name":"Other","params":[],"result":{"name":"r","schema":{},"deprecated":1}}""", "document.deprecated", "/result/deprecated")]
+    [Arguments("""{"name":"Other","params":[],"errors":{}}""", "document.errors", "/errors")]
+    [Arguments("""{"name":"Other","params":[],"errors":[false]}""", "document.operation", "/errors/0")]
+    [Arguments("""{"name":"Other","params":[],"errors":[{}]}""", "document.error_code", "/errors/0/code")]
+    [Arguments("""{"name":"Other","params":[],"errors":[{"code":"1","message":"bad"}]}""", "document.error_code", "/errors/0/code")]
+    [Arguments("""{"name":"Other","params":[],"errors":[{"code":1.1,"message":"bad"}]}""", "document.error_code", "/errors/0/code")]
+    [Arguments("""{"name":"Other","params":[],"errors":[{"code":1}]}""", "document.error_message", "/errors/0/message")]
+    [Arguments("""{"name":"Other","params":[],"errors":[{"code":1,"message":null}]}""", "document.error_message", "/errors/0/message")]
+    [Arguments("""{"name":"Other","params":[],"errors":[{"code":1,"message":"a"},{"code":1.0,"message":"b"}]}""", "document.error_duplicate", "/errors/1/code")]
+    [Arguments("""{"name":"Other","params":[],"errors":[{"code":0,"message":"a"},{"code":-0e99,"message":"b"}]}""", "document.error_duplicate", "/errors/1/code")]
+    [Arguments("""{"name":"Other","params":[],"errors":[{"code":1e100,"message":"a"},{"code":10e99,"message":"b"}]}""", "document.error_duplicate", "/errors/1/code")]
+    public async Task OpenRpcMalformedContractsInLaterMethodsPreventAnEarlierSelection(
+        string method, string code, string suffix)
+    {
+        var document = """{"openrpc":"1.4.0","methods":[{"name":"Target","params":[]},""" + method + "]}";
+        var result = ApiOperationDocumentResolver.Resolve("OpenRPC/1.4", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/methods/1" + suffix);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task OpenRpcDescriptorAndErrorReferencesUseTheirContainingSourcesAndRetainNativeReferences()
+    {
+        var requests = new List<string>();
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenRPC/1.4", "application/json", """
+            {"openrpc":"1.4.0","methods":[{"$ref":"./nested/method.json#/method"}]}
+            """u8.ToArray(), ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+            new Uri("https://api.example/root.json"), (uri, _) =>
+            {
+                requests.Add(uri);
+                var json = uri switch
+                {
+                    "https://api.example/nested/method.json" => """
+                        {"method":{"name":"Target","params":[{"$ref":"./descriptors.json#/required"},{"$ref":"./descriptors.json#/optional"}],
+                          "result":{"$ref":"./descriptors.json#/reply"},"errors":[{"$ref":"../errors.json#/denied"}]}}
+                        """,
+                    "https://api.example/nested/descriptors.json" => """
+                        {"required":{"$ref":"./parts/required.json"},
+                         "optional":{"name":"b","schema":false},"reply":{"name":"r","schema":{"$ref":"https://schema.example/not-acquired"}}}
+                        """,
+                    "https://api.example/nested/parts/required.json" =>
+                        """{"name":"a","schema":true,"required":true}""",
+                    "https://api.example/errors.json" => """{"denied":{"code":42,"message":"Denied"}}""",
+                    _ => throw new InvalidOperationException("Unexpected import: " + uri)
+                };
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(json));
+            });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.DocumentUri).IsEqualTo(new Uri("https://api.example/nested/method.json"));
+        await Assert.That(result.DocumentPath).IsEqualTo("$/method");
+        await Assert.That(result.Operation.GetProperty("params")[0].GetProperty("$ref").GetString())
+            .IsEqualTo("./descriptors.json#/required");
+        await Assert.That(result.Operation.GetProperty("result").GetProperty("$ref").GetString())
+            .IsEqualTo("./descriptors.json#/reply");
+        await Assert.That(requests.SequenceEqual([
+            "https://api.example/nested/method.json", "https://api.example/nested/descriptors.json",
+            "https://api.example/nested/parts/required.json", "https://api.example/errors.json"])).IsTrue();
+    }
+
+    [Test]
+    [Arguments("params", false)]
+    [Arguments("params", true)]
+    [Arguments("result", false)]
+    [Arguments("result", true)]
+    [Arguments("errors", false)]
+    [Arguments("errors", true)]
+    public async Task OpenRpcContractDependenciesPreserveUnavailableAndDeniedFailures(string member, bool denied)
+    {
+        var method = new JsonObject { ["name"] = "Target", ["params"] = new JsonArray() };
+        var reference = new JsonObject { ["$ref"] = "https://api.example/contract.json" };
+        method[member] = member == "result" ? reference : new JsonArray(reference);
+        var document = new JsonObject { ["openrpc"] = "1.4.0", ["methods"] = new JsonArray(method) };
+        var calls = 0;
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenRPC/1.4", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+            resolveReference: (_, _) =>
+            {
+                calls++;
+                if (denied) { throw new UnauthorizedAccessException("Outside policy."); }
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(null);
+            });
+        await Assert.That(calls).IsEqualTo(1);
+        await Assert.That(result.Status).IsEqualTo(denied
+            ? ApiOperationResolutionStatus.Denied : ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(denied ? "dependency.denied" : "dependency.unresolved");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("""{"name":"Target","params":[{"$ref":"#/cycle"}]}""")]
+    [Arguments("""{"name":"Target","params":[],"result":{"$ref":"#/cycle"}}""")]
+    [Arguments("""{"name":"Target","params":[],"errors":[{"$ref":"#/cycle"}]}""")]
+    public async Task OpenRpcContractReferenceCyclesCannotProduceASelection(string method)
+    {
+        var document = """{"openrpc":"1.4.0","methods":[""" + method + """],"cycle":{"$ref":"#/cycle"}}""";
+        var result = ApiOperationDocumentResolver.Resolve("OpenRPC/1.4", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document), ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("dependency.cycle");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("""{"name":"Target","params":[{"$ref":"#/contract"},{"$ref":"#/contract"}]}""",
+        """{"name":"a","schema":{}}""", "document.parameter_duplicate")]
+    [Arguments("""{"name":"Target","params":[{"name":"a","schema":{}},{"$ref":"#/contract"}]}""",
+        """{"name":"b","schema":{},"required":true}""", "document.parameter_order")]
+    [Arguments("""{"name":"Target","params":[],"errors":[{"$ref":"#/contract"},{"$ref":"#/contract"}]}""",
+        """{"code":123,"message":"Denied"}""", "document.error_duplicate")]
+    public async Task OpenRpcReferenceReuseDoesNotBypassContractUniquenessOrOrdering(
+        string method, string contract, string code)
+    {
+        var document = """{"openrpc":"1.4.0","methods":[""" + method + """],"contract":""" + contract + "}";
+        var result = ApiOperationDocumentResolver.Resolve("OpenRPC/1.4", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document), ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments(255, ApiOperationResolutionStatus.Selected)]
+    [Arguments(256, ApiOperationResolutionStatus.Selected)]
+    [Arguments(257, ApiOperationResolutionStatus.Indeterminate)]
+    public async Task OpenRpcErrorCodeNormalizationHonorsTheExactNumberBudget(
+        int digits, ApiOperationResolutionStatus expected)
+    {
+        var document = """
+            {"openrpc":"1.4.0","methods":[{"name":"Target","params":[],"errors":[{"code":CODE,"message":"Large"}]}]}
+            """.Replace("CODE", new string('9', digits), StringComparison.Ordinal);
+        var result = ApiOperationDocumentResolver.Resolve("OpenRPC/1.4", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document), ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"));
+        await Assert.That(result.Status).IsEqualTo(expected);
+        if (expected == ApiOperationResolutionStatus.Selected)
+        {
+            await Assert.That(result.Operation.GetProperty("errors")[0].GetProperty("code").GetRawText())
+                .IsEqualTo(new string('9', digits));
+        }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("limit.number");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/methods/0/errors/0/code");
+        }
+    }
+
+    [Test]
+    [Arguments(63, ApiOperationResolutionStatus.Selected)]
+    [Arguments(64, ApiOperationResolutionStatus.Selected)]
+    [Arguments(65, ApiOperationResolutionStatus.Indeterminate)]
+    public async Task OpenRpcContentReferencesHonorTheInclusiveReferenceDepthLimit(
+        int depth, ApiOperationResolutionStatus expected)
+    {
+        var chain = new JsonObject();
+        for (var index = 0; index < depth; index++)
+        {
+            chain["n" + index] = index == depth - 1
+                ? new JsonObject { ["name"] = "value", ["schema"] = true }
+                : new JsonObject { ["$ref"] = "#/chain/n" + (index + 1) };
+        }
+        var document = new JsonObject
+        {
+            ["openrpc"] = "1.4.0",
+            ["methods"] = new JsonArray(new JsonObject
+            {
+                ["name"] = "Target", ["params"] = new JsonArray(),
+                ["result"] = new JsonObject { ["$ref"] = "#/chain/n0" }
+            }),
+            ["chain"] = chain
+        };
+        var result = ApiOperationDocumentResolver.Resolve("OpenRPC/1.4", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"));
+        await Assert.That(result.Status).IsEqualTo(expected);
+        if (expected == ApiOperationResolutionStatus.Selected)
+        {
+            await Assert.That(result.Operation.GetProperty("result").GetProperty("$ref").GetString()).IsEqualTo("#/chain/n0");
+        }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("limit.reference_depth");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
     [Arguments("""{"openrpc":"1.4.0","methods":[]}""", ApiOperationResolutionStatus.NotFound, "selection.not_found")]
-    [Arguments("""{"openrpc":"1.4.0","methods":[{"name":"target"}]}""", ApiOperationResolutionStatus.NotFound, "selection.not_found")]
-    [Arguments("""{"openrpc":"1.4.0","methods":[{"name":"Target"},{"name":"Target"}]}""", ApiOperationResolutionStatus.Ambiguous, "selection.ambiguous")]
+    [Arguments("""{"openrpc":"1.4.0","methods":[{"name":"target","params":[]}]}""", ApiOperationResolutionStatus.NotFound, "selection.not_found")]
+    [Arguments("""{"openrpc":"1.4.0","methods":[{"name":"Target","params":[]},{"name":"Target","params":[]}]}""", ApiOperationResolutionStatus.Ambiguous, "selection.ambiguous")]
     [Arguments("""{"openrpc":"1.3.2","methods":[]}""", ApiOperationResolutionStatus.Invalid, "document.openrpc_version")]
     [Arguments("""{"openrpc":1.4,"methods":[]}""", ApiOperationResolutionStatus.Invalid, "document.openrpc_version")]
     [Arguments("""{"openrpc":"1.4.garbage","methods":[]}""", ApiOperationResolutionStatus.Invalid, "document.openrpc_version")]
@@ -2548,7 +2776,7 @@ public class ApiOperationReferenceTests
     [Arguments("1.4.0+build.01")]
     public async Task OpenRpcUsesTheDeclaredFeatureSetRatherThanTheApplicationVersion(string version)
     {
-        var document = $$"""{"openrpc":"{{version}}","info":{"version":"7.0.0"},"methods":[{"name":"Target"}]}""";
+        var document = $$"""{"openrpc":"{{version}}","info":{"version":"7.0.0"},"methods":[{"name":"Target","params":[]}]}""";
         var result = ApiOperationDocumentResolver.Resolve("OpenRPC/1.4", "application/json",
             System.Text.Encoding.UTF8.GetBytes(document),
             ApiOperationReference.Parse("/apigroups/users/apis/Profile#operations/Target"));
@@ -2563,7 +2791,7 @@ public class ApiOperationReferenceTests
         const string document = """
             {"openrpc":"1.4.0","methods":[
               {"$ref":"#/components/methods/Local"},{"$ref":"./shared.json#/methods/0"}
-            ],"components":{"methods":{"Local":{"name":"Other"}}}}
+            ],"components":{"methods":{"Local":{"name":"Other","params":[]}}}}
             """;
         var requests = new List<string>();
         var result = await ApiOperationDocumentResolver.ResolveAsync("OpenRPC/1.4", "application/json",
@@ -2592,7 +2820,7 @@ public class ApiOperationReferenceTests
         ApiOperationResolutionStatus expected, string code)
     {
         const string document = """
-            {"openrpc":"1.4.0","methods":[{"name":"Target"},{"$ref":"https://other.example/method.json"}]}
+            {"openrpc":"1.4.0","methods":[{"name":"Target","params":[]},{"$ref":"https://other.example/method.json"}]}
             """;
         var loads = 0;
         var result = await ApiOperationDocumentResolver.ResolveAsync("OpenRPC/1.4", "application/json",
@@ -2658,7 +2886,7 @@ public class ApiOperationReferenceTests
             resolveReference: (_, _) =>
             {
                 loads++;
-                return ValueTask.FromResult<ReadOnlyMemory<byte>?>( """{"name":"Target"}"""u8.ToArray());
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>( """{"name":"Target","params":[]}"""u8.ToArray());
             });
 
         await Assert.That(loads).IsEqualTo(1);
@@ -2673,8 +2901,8 @@ public class ApiOperationReferenceTests
     public async Task ApiResolverEnforcesTheInclusiveJsonNodeLimit(int excess, ApiOperationResolutionStatus expected)
     {
         var padding = string.Join(",", Enumerable.Repeat("null",
-            ApiOperationDocumentResolver.Capabilities.MaxDocumentNodes - 6 + excess));
-        var document = """{"openrpc":"1.4.0","methods":[{"name":"Target"}],"padding":[""" + padding + "]}";
+            ApiOperationDocumentResolver.Capabilities.MaxDocumentNodes - 7 + excess));
+        var document = """{"openrpc":"1.4.0","methods":[{"name":"Target","params":[]}],"padding":[""" + padding + "]}";
         var result = ApiOperationDocumentResolver.Resolve("OpenRPC/1.4", "application/json",
             System.Text.Encoding.UTF8.GetBytes(document),
             ApiOperationReference.Parse("/apigroups/users/apis/Profile#operations/Target"));
@@ -2696,7 +2924,7 @@ public class ApiOperationReferenceTests
     [Arguments(63, ApiOperationResolutionStatus.Indeterminate)]
     public async Task ApiResolverCountsRootAndScalarInItsJsonDepthLimit(int arrays, ApiOperationResolutionStatus expected)
     {
-        var document = """{"openrpc":"1.4.0","methods":[{"name":"Target"}],"padding":""" +
+        var document = """{"openrpc":"1.4.0","methods":[{"name":"Target","params":[]}],"padding":""" +
             new string('[', arrays) + "null" + new string(']', arrays) + "}";
         var result = ApiOperationDocumentResolver.Resolve("OpenRPC/1.4", "application/json",
             System.Text.Encoding.UTF8.GetBytes(document),
@@ -2723,7 +2951,7 @@ public class ApiOperationReferenceTests
         for (var index = 0; index < depth; index++)
         {
             chain["n" + index] = index + 1 == depth
-                ? new JsonObject { ["name"] = "Target" }
+                ? new JsonObject { ["name"] = "Target", ["params"] = new JsonArray() }
                 : new JsonObject { ["$ref"] = "#/chain/n" + (index + 1) };
         }
         var document = new JsonObject
@@ -2754,7 +2982,7 @@ public class ApiOperationReferenceTests
     [Arguments(1, ApiOperationResolutionStatus.Indeterminate)]
     public async Task ApiResolverEnforcesTheInclusiveDocumentByteLimit(int excess, ApiOperationResolutionStatus expected)
     {
-        const string prefix = "{\"openrpc\":\"1.4.0\",\"methods\":[{\"name\":\"Target\"}],\"description\":\"";
+        const string prefix = "{\"openrpc\":\"1.4.0\",\"methods\":[{\"name\":\"Target\",\"params\":[]}],\"description\":\"";
         const string suffix = "\"}";
         var document = prefix + new string('x', ApiOperationDocumentResolver.Capabilities.MaxDocumentBytes
             - prefix.Length - suffix.Length + excess) + suffix;
@@ -2791,7 +3019,7 @@ public class ApiOperationReferenceTests
             resolveReference: (_, _) =>
             {
                 var name = loads++ == 0 ? "Target" : "Other";
-                var prefix = "{\"name\":\"" + name + "\",\"description\":\"";
+                var prefix = "{\"name\":\"" + name + "\",\"params\":[],\"description\":\"";
                 const string suffix = "\"}";
                 return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(prefix +
                    new string('x', ApiOperationDocumentResolver.Capabilities.MaxDocumentBytes
