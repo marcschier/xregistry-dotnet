@@ -89,14 +89,14 @@ public static partial class ApiOperationDocumentResolver
         "smithy.api#Unit" => "structure",
         "smithy.api#String" => "string",
         "smithy.api#Blob" => "blob",
-        "smithy.api#Boolean" => "boolean",
+        "smithy.api#Boolean" or "smithy.api#PrimitiveBoolean" => "boolean",
         "smithy.api#Document" => "document",
-        "smithy.api#Byte" => "byte",
-        "smithy.api#Short" => "short",
-        "smithy.api#Integer" => "integer",
-        "smithy.api#Long" => "long",
-        "smithy.api#Float" => "float",
-        "smithy.api#Double" => "double",
+        "smithy.api#Byte" or "smithy.api#PrimitiveByte" => "byte",
+        "smithy.api#Short" or "smithy.api#PrimitiveShort" => "short",
+        "smithy.api#Integer" or "smithy.api#PrimitiveInteger" => "integer",
+        "smithy.api#Long" or "smithy.api#PrimitiveLong" => "long",
+        "smithy.api#Float" or "smithy.api#PrimitiveFloat" => "float",
+        "smithy.api#Double" or "smithy.api#PrimitiveDouble" => "double",
         "smithy.api#BigInteger" => "bigInteger",
         "smithy.api#BigDecimal" => "bigDecimal",
         "smithy.api#Timestamp" => "timestamp",
@@ -470,6 +470,18 @@ public static partial class ApiOperationDocumentResolver
                             SchemaJson.Equal(memberDefault, targetDefault, budget)), memberPath + "/traits/smithy.api#default",
                             "document.default_repeat",
                             "A structure member must repeat its target's default or explicitly override it with null.");
+                    }
+                    else if (target.ValueKind == JsonValueKind.Undefined &&
+                        targetId is "smithy.api#PrimitiveBoolean" or "smithy.api#PrimitiveByte" or
+                            "smithy.api#PrimitiveShort" or "smithy.api#PrimitiveInteger" or
+                            "smithy.api#PrimitiveLong" or "smithy.api#PrimitiveFloat" or "smithy.api#PrimitiveDouble")
+                    {
+                        ValidationContext.Require(hasDefault && (memberDefault.ValueKind == JsonValueKind.Null ||
+                            (targetKind == "boolean" ? memberDefault.ValueKind == JsonValueKind.False :
+                                memberDefault.ValueKind == JsonValueKind.Number &&
+                                JsonNumber.Read(memberDefault, budget, memberPath + "/traits/smithy.api#default").IsZero)),
+                            memberPath + "/traits/smithy.api#default", "document.default_repeat",
+                            "A structure member must repeat its primitive prelude default or explicitly override it with null.");
                     }
                     if (hasDefault) { ValidateDefault(targetKind, target, memberDefault, memberPath, member: true); }
                 }

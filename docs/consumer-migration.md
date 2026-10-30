@@ -279,7 +279,9 @@ interpret literal trait payloads as shape references.
 
 The implicit prelude support covers `Blob`, `Boolean`, `Document`, `String`,
 `Byte`, `Short`, `Integer`, `Long`, `Float`, `Double`, `BigInteger`,
-`BigDecimal`, `Timestamp`, `Unit`, and the traits
+`BigDecimal`, `Timestamp`, `Unit`, `PrimitiveBoolean`, `PrimitiveByte`,
+`PrimitiveShort`, `PrimitiveInteger`, `PrimitiveLong`, `PrimitiveFloat`,
+`PrimitiveDouble`, and the traits
 `error`, `documentation`, `required`, `input`, `output`, `readonly`, `idempotent`,
 `default`, `enumValue` and `trait` in `smithy.api`. Other required definitions
 must be supplied in the AST. These checks do not validate every Smithy shape
@@ -354,6 +356,15 @@ When a structure member targets a shape with a root default, the member must
 repeat that value or explicitly override it with null. Numeric comparison is
 exact, so `1`, `1.0` and `1e0` match. List and map members do not inherit this
 repetition requirement.
+
+The implicit primitive prelude types carry the publisher's root defaults:
+`PrimitiveBoolean` uses false; `PrimitiveByte`, `PrimitiveShort`,
+`PrimitiveInteger`, `PrimitiveLong`, `PrimitiveFloat` and `PrimitiveDouble`
+use zero. A structure member targeting one of these types must repeat its
+default or explicitly override it with null, even when the prelude definition
+is absent from the supplied AST. Exact numeric zero representations compare
+equally. List, map and union members do not inherit this repetition requirement.
+The resolver does not insert defaults into the selected operation.
 
 Non-null defaults must have the target's value type. Signed integer defaults
 must be integral and fit byte, short, integer or long ranges; big integers use

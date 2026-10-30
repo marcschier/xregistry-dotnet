@@ -207,6 +207,9 @@ vocabulary/source mapping. It does not supply their implementation.
   string messages and JSON Pointer path syntax. Trait-schema path resolution
   and semantic model comparison remain open, as do general selector evaluation
   and other trait member schemas.
+  The seven implicit primitive prelude types retain their native scalar kinds
+  and false/zero root defaults. Structure members must repeat those defaults
+  or override them with null; list, map and union members need no repetition.
   Reachable defaults check applicability, root-null rejection, member null
   overrides, explicit repetition of root defaults, native scalar types,
   integer ranges, finite float/double numbers and exact special-value strings,
