@@ -418,8 +418,8 @@ cannot be empty or contain backslashes or control characters below U+0020.
 Names match exactly without Unicode normalization or JSON Pointer decoding.
 Missing properties and descent through scalars or arrays yield absence; a
 property containing null still exists. Unquoted numeric keys, projections and
-function properties remain unsupported. Property scans consume the shared work
-budget.
+function properties other than the aggregate `(length)` checks below remain
+unsupported. Property scans consume the shared work budget.
 Trait and nested-property predicates also support `>`, `>=`, `<` and `<=`.
 Both sides must contain Smithy number spellings, either as numbers or strings;
 other node kinds, missing properties and nonnumeric strings do not match.
@@ -437,6 +437,12 @@ numeric JSON values and unquoted numeric operands report `Unsupported` because
 numeric-to-string rendering is not implemented. Empty quoted operands,
 case-insensitive modifiers, projection and scoped comparisons remain
 unsupported. Text comparisons consume the shared work budget.
+The `(length)` property counts array items and object entries, including null
+values. Empty aggregates have a present length of zero. Numeric comparisons
+and presence checks can use the result; further property access yields absence.
+Object-entry counting consumes the shared work budget. String length and
+string rendering of computed lengths remain unsupported. A quoted `'(length)'`
+is a literal object key, not a function property.
 A member is not matched as its target or container type. An omitted selector
 permits every shape; each reached application is checked independently.
 Type mismatches are invalid. Other selector expressions report `Unsupported`

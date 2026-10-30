@@ -232,13 +232,18 @@ vocabulary/source mapping. It does not supply their implementation.
   Literal nested object paths and quoted trait/property names use exact
   matching. Missing properties and descent through scalars or arrays yield
   absence; present nulls still exist. Property scans consume the shared work
-  budget. Unquoted numeric path tokens, projections and function properties remain
-  unsupported.
+  budget. Unquoted numeric path tokens, projections and function properties
+  other than aggregate `(length)` remain unsupported.
   Numeric trait/node predicates support `>`, `>=`, `<` and `<=` with exact
   decimal comparison and comma-separated alternatives. Both sides must contain
   Smithy number spellings; absent or nonnumeric values do not match.
   Numeric spellings have a 256-character limit, and repeated parsing/comparison
   consumes the shared work budget.
+  Node `(length)` counts array items or object entries, including null values;
+  empty aggregates have a present zero length. Numeric and presence predicates
+  accept computed lengths, and subsequent property access yields absence.
+  Object counting consumes the shared work budget. String length and string
+  rendering of computed counts remain unsupported.
   String trait/node predicates support ordinal `=`, `!=`, `^=`, `$=` and `*=`
   with operand alternatives. Booleans use their lowercase text; present nulls
   and aggregates compare as empty strings, while missing attributes never

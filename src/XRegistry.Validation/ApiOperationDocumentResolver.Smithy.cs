@@ -2379,14 +2379,24 @@ public static partial class ApiOperationDocumentResolver
                         if (!traitId.Contains('#', StringComparison.Ordinal)) { traitId = "smithy.api#" + traitId; }
                         if (!IsSmithyShapeId(traitId)) { return null; }
                         SkipWhitespace();
-                        List<string>? properties = null;
+                        List<(string Name, bool Length)>? properties = null;
                         while (position < text.Length && text[position] == '|')
                         {
                             position++;
                             SkipWhitespace();
-                            var property = AttributeName();
+                            var length = position < text.Length && text[position] == '(';
+                            string? property;
+                            if (length)
+                            {
+                                position++;
+                                SkipWhitespace();
+                                property = Identifier();
+                                SkipWhitespace();
+                                if (property != "length" || position == text.Length || text[position++] != ')') { return null; }
+                            }
+                            else { property = AttributeName(); }
                             if (property is null) { return null; }
-                            (properties ??= []).Add(property);
+                            (properties ??= []).Add((property, length));
                             SkipWhitespace();
                         }
                         var acceptsPresent = true;
@@ -2463,13 +2473,38 @@ public static partial class ApiOperationDocumentResolver
                                 path, "document.traits", "Smithy traits must be an object.");
                             node = Property(traits, traitId);
                         }
+                        int? nodeLength = null;
                         if (properties is not null)
                         {
-                            foreach (var property in properties) { node = Property(node, property); }
+                            foreach (var property in properties)
+                            {
+                                if (nodeLength is not null)
+                                {
+                                    nodeLength = null;
+                                    node = default;
+                                }
+                                if (property.Length)
+                                {
+                                    budget.Work(path: path);
+                                    if (node.ValueKind == JsonValueKind.String) { return null; }
+                                    if (node.ValueKind == JsonValueKind.Array) { nodeLength = node.GetArrayLength(); }
+                                    else if (node.ValueKind == JsonValueKind.Object)
+                                    {
+                                        nodeLength = 0;
+                                        foreach (var entry in node.EnumerateObject())
+                                        {
+                                            budget.Work(entry.Name.Length + 1L, path);
+                                            nodeLength++;
+                                        }
+                                    }
+                                    node = default;
+                                }
+                                else { node = Property(node, property.Name); }
+                            }
                         }
                         if (stringOperands is not null)
                         {
-                            if (node.ValueKind == JsonValueKind.Number) { return null; }
+                            if (nodeLength is not null || node.ValueKind == JsonValueKind.Number) { return null; }
                             current = false;
                             if (node.ValueKind != JsonValueKind.Undefined)
                             {
@@ -2496,11 +2531,14 @@ public static partial class ApiOperationDocumentResolver
                         }
                         else if (numericOperands is null)
                         {
-                            current = node.ValueKind != JsonValueKind.Undefined ? acceptsPresent : acceptsAbsent;
+                            current = nodeLength is not null || node.ValueKind != JsonValueKind.Undefined
+                                ? acceptsPresent : acceptsAbsent;
                         }
                         else
                         {
-                            var number = node.ValueKind switch
+                            var number = nodeLength is { } lengthValue
+                                ? new JsonNumber(false, lengthValue.ToString(System.Globalization.CultureInfo.InvariantCulture), 0)
+                                : node.ValueKind switch
                             {
                                 JsonValueKind.Number => JsonNumber.Read(node, budget, path),
                                 JsonValueKind.String => SelectorNumber(node.GetString()!),
