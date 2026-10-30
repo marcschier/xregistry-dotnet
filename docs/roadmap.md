@@ -191,6 +191,11 @@ vocabulary/source mapping. It does not supply their implementation.
   repetition. Known implicit data-shape identities also participate in global
   case-conflict checks. The object-valued `unitType` marker is restricted to Unit.
   Full prelude trait-schema reconciliation remains open.
+  Operation `examples` check required string titles, optional documentation,
+  output/error exclusivity and Boolean `allowConstraintErrors` only with errors.
+  Optional example error IDs must be bound in the operation's own errors list;
+  normal error dependency checks still apply. Literal input/output/error content
+  does not trigger retrieval or instance validation.
   Recognized prelude traits now check documentation/error values and the object
   shape of annotation, idempotent and trait-marker values throughout the
   selected closure. Explicit recognized prelude targets and their declared

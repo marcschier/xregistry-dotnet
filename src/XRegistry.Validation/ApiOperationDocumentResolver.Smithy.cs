@@ -937,7 +937,7 @@ public static partial class ApiOperationDocumentResolver
                     "smithy.api#uniqueItems" => kind == "list",
                     "smithy.api#enumValue" => memberContainer is "enum" or "intEnum",
                     "smithy.api#input" or "smithy.api#output" or "smithy.api#error" => kind == "structure",
-                    "smithy.api#readonly" or "smithy.api#idempotent" => kind == "operation",
+                    "smithy.api#readonly" or "smithy.api#idempotent" or "smithy.api#examples" => kind == "operation",
                     "smithy.api#trait" => memberContainer is null && kind is
                         "blob" or "boolean" or "document" or "string" or "byte" or "short" or "integer" or "long" or
                         "float" or "double" or "bigInteger" or "bigDecimal" or "timestamp" or
@@ -964,6 +964,9 @@ public static partial class ApiOperationDocumentResolver
                     "Conflicting Smithy prelude traits cannot be applied to the same shape.");
                 switch (trait.Name)
                 {
+                    case "smithy.api#examples":
+                        ValidateExamples(shape, trait.Value, traitPath);
+                        continue;
                     case "smithy.api#tags":
                         ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Array, traitPath,
                             "document.trait_value", "Smithy tags require an array of strings.");
@@ -1271,11 +1274,8 @@ public static partial class ApiOperationDocumentResolver
             }
         }
 
-        private void ValidateIdempotent(JsonElement operation, JsonElement trait, string path)
+        private HashSet<string> DeclaredErrors(JsonElement operation, string path)
         {
-            ValidationContext.Require(!trait.TryGetProperty("exists", out _) ||
-                !trait.TryGetProperty("notFound", out _), path, "document.idempotent_conflict",
-                "Smithy idempotent exists and notFound properties are mutually exclusive.");
             var declaredErrors = new HashSet<string>(StringComparer.Ordinal);
             if (operation.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Array)
             {
@@ -1289,6 +1289,58 @@ public static partial class ApiOperationDocumentResolver
                     }
                 }
             }
+            return declaredErrors;
+        }
+
+        private void ValidateExamples(JsonElement operation, JsonElement trait, string path)
+        {
+            ValidationContext.Require(trait.ValueKind == JsonValueKind.Array, path, "document.examples",
+                "Smithy operation examples require an array.");
+            var declaredErrors = DeclaredErrors(operation, path);
+            var index = 0;
+            foreach (var example in trait.EnumerateArray())
+            {
+                var at = path + "/" + (index++).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                budget.Work(path: at);
+                ValidationContext.Require(example.ValueKind == JsonValueKind.Object, at, "document.example",
+                    "A Smithy operation example must be an object.");
+                ValidationContext.Require(example.TryGetProperty("title", out var title) &&
+                    title.ValueKind == JsonValueKind.String, at + "/title", "document.example_title",
+                    "A Smithy operation example requires a string title.");
+                if (example.TryGetProperty("documentation", out var documentation))
+                {
+                    ValidationContext.Require(documentation.ValueKind == JsonValueKind.String, at + "/documentation",
+                        "document.example_documentation", "Smithy example documentation must be a string.");
+                }
+                var hasError = example.TryGetProperty("error", out var error);
+                ValidationContext.Require(!hasError || !example.TryGetProperty("output", out _), at,
+                    "document.example_conflict", "A Smithy example cannot define both output and error.");
+                if (example.TryGetProperty("allowConstraintErrors", out var allow))
+                {
+                    ValidationContext.Require(hasError && allow.ValueKind is JsonValueKind.True or JsonValueKind.False,
+                        at + "/allowConstraintErrors", "document.example_constraints",
+                        "Smithy allowConstraintErrors requires a Boolean value and an error example.");
+                }
+                if (!hasError) { continue; }
+                ValidationContext.Require(error.ValueKind == JsonValueKind.Object, at + "/error",
+                    "document.example_error", "A Smithy error example must be an object.");
+                if (error.TryGetProperty("shapeId", out var shapeId))
+                {
+                    var targetPath = at + "/error/shapeId";
+                    ValidationContext.Require(shapeId.ValueKind == JsonValueKind.String &&
+                        IsSmithyShapeId(shapeId.GetString()!) && declaredErrors.Contains(shapeId.GetString()!),
+                        targetPath, "document.example_error",
+                        "A Smithy example error shape ID must be declared in this operation's errors list.");
+                }
+            }
+        }
+
+        private void ValidateIdempotent(JsonElement operation, JsonElement trait, string path)
+        {
+            ValidationContext.Require(!trait.TryGetProperty("exists", out _) ||
+                !trait.TryGetProperty("notFound", out _), path, "document.idempotent_conflict",
+                "Smithy idempotent exists and notFound properties are mutually exclusive.");
+            var declaredErrors = DeclaredErrors(operation, path);
             foreach (var member in new[] { "exists", "notFound" })
             {
                 if (!trait.TryGetProperty(member, out var values)) { continue; }

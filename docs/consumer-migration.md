@@ -285,7 +285,7 @@ The implicit prelude support covers `Blob`, `Boolean`, `Document`, `String`,
 `error`, `documentation`, `required`, `clientOptional`, `addedDefault`, `sparse`,
 `uniqueItems`, `private`, `length`, `range`, `pattern`, `input`, `output`, `readonly`, `idempotent`,
 `default`, `enum`, `enumValue`, `deprecated`, `recommended`, `title`, `since`,
-`tags`, `internal`, `sensitive`, `unitType` and `trait`
+`tags`, `internal`, `sensitive`, `unitType`, `examples` and `trait`
 in `smithy.api`. Other required definitions
 must be supplied in the AST. These checks do not validate every Smithy shape
 constraint, trait value or selector. Full Smithy validation and model assembly
@@ -441,6 +441,19 @@ A common service error alone does not satisfy this rule. The normal dependency
 checks still require each declared error to resolve to an error-marked structure.
 Empty hint arrays are valid without an `errors` list and retain their native
 meaning; the resolver neither inserts error declarations nor executes retries.
+
+The `examples` trait applies only to operations and requires an array of
+objects. Each example requires a string `title`; `documentation`, when present,
+must also be a string. Empty titles and repeated titles are permitted. An
+example cannot define both `output` and `error`, including an explicit null
+output. `allowConstraintErrors` requires a Boolean value and an error example,
+even when its value is false. An error example must be an object; its optional
+`shapeId` must name an error in that operation's own `errors` list. A service
+error alone does not establish that binding. Declared errors still undergo
+the normal dependency, structure-kind and error-marker checks. The prelude
+does not mark `shapeId` as required, so an empty error object remains permitted.
+Input, output and error content remain literal document values, including null;
+they are neither dependency references nor validated instance examples.
 
 Defaults are checked on reachable simple, list and map shapes and on structure
 members that target those kinds. A default cannot annotate an operation,
