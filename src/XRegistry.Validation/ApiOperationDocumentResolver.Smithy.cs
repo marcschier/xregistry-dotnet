@@ -124,6 +124,7 @@ public static partial class ApiOperationDocumentResolver
             closure.ValidateStructuralExclusivity();
             closure.ValidateUniqueItems();
             closure.ValidateStreaming();
+            closure.ValidateBreakingChangePaths();
             closure.ValidateTraitNodes();
             return Selected(operation, "$/shapes/" + Escape(shapeId), documentUri);
         }
@@ -3246,6 +3247,57 @@ public static partial class ApiOperationDocumentResolver
                 ValidationContext.Require(conflict.ValueKind == JsonValueKind.String &&
                     IsSmithyShapeId(conflict.GetString()!), at, "document.trait_conflicts",
                     "A Smithy trait conflict must name an absolute root trait ID.");
+            }
+        }
+
+        internal void ValidateBreakingChangePaths()
+        {
+            foreach (var (id, shape) in _visited)
+            {
+                budget.Work();
+                if (!TryTrait(shape, "smithy.api#trait", out var marker) ||
+                    !marker.TryGetProperty("breakingChanges", out var rules)) { continue; }
+                var index = 0;
+                foreach (var rule in rules.EnumerateArray())
+                {
+                    var path = "$/shapes/" + Escape(id) + "/traits/smithy.api#trait/breakingChanges/" +
+                        (index++).ToString(System.Globalization.CultureInfo.InvariantCulture) + "/path";
+                    budget.Work(path: path);
+                    if (!rule.TryGetProperty("path", out var pointer) || pointer.GetString()!.Length == 0) { continue; }
+                    var target = id;
+                    var depth = 0;
+                    foreach (var segment in pointer.GetString()![1..].Split('/'))
+                    {
+                        budget.Work(segment.Length + 1L, path);
+                        if (++depth > Capabilities.MaxReferenceDepth)
+                        {
+                            ValidationContext.Fail(DocumentValidationStatus.Indeterminate, path, "limit.reference_depth",
+                                "The Smithy breaking-change schema path depth limit was exceeded.");
+                        }
+                        var name = segment.Replace("~1", "/", StringComparison.Ordinal).Replace("~0", "~", StringComparison.Ordinal);
+                        var supplied = shapes.TryGetProperty(target, out var current);
+                        var kind = supplied ? current.GetProperty("type").GetString() : SmithyPreludeKind(target);
+                        var member = default(JsonElement);
+                        if (supplied && kind is "structure" or "union" &&
+                            current.TryGetProperty("members", out var members))
+                        {
+                            foreach (var candidate in members.EnumerateObject())
+                            {
+                                budget.Work(candidate.Name.Length + 1L, path);
+                                if (candidate.Name == name) { member = candidate.Value; }
+                            }
+                        }
+                        else if (supplied && (kind == "list" && name == "member" ||
+                            kind == "map" && name is "key" or "value"))
+                        {
+                            current.TryGetProperty(name, out member);
+                        }
+                        ValidationContext.Require(member.ValueKind == JsonValueKind.Object, path,
+                            "document.trait_pointer_target",
+                            "A Smithy breaking-change path must identify members in the trait's modeled schema.");
+                        target = member.GetProperty("target").GetString()!;
+                    }
+                }
             }
         }
 

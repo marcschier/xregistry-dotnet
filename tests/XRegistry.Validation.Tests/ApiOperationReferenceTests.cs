@@ -15469,17 +15469,16 @@ public class ApiOperationReferenceTests
     [Arguments("update", "WARNING", "/list/member")]
     [Arguments("any", "NOTE", "/map/key")]
     [Arguments("presence", "ERROR", "/map/value")]
-    [Arguments("update", "NOTE", "/a~1b/~0name")]
-    [Arguments("any", "DANGER", "/")]
-    [Arguments("remove", "WARNING", "//")]
-    [Arguments("add", "NOTE", "/~01")]
     public async Task SmithyJsonBreakingChangeDeclarationsPreserveNativeFieldsAndDoNotExecuteRules(
         string change, string severity, string rulePath)
     {
         var document = JsonNode.Parse("""
             {"smithy":"2.0","shapes":{
               "example#Get":{"type":"operation","traits":{"example#Custom":{}}},
-              "example#Custom":{"type":"structure","traits":{"smithy.api#trait":{"breakingChanges":[]}}}}}
+              "example#Custom":{"type":"structure","traits":{"smithy.api#trait":{"breakingChanges":[]}},
+                "members":{"value":{"target":"smithy.api#String"},"list":{"target":"example#List"},"map":{"target":"example#Map"}}},
+              "example#List":{"type":"list","member":{"target":"smithy.api#String"}},
+              "example#Map":{"type":"map","key":{"target":"smithy.api#String"},"value":{"target":"smithy.api#String"}}}}
             """)!;
         var rules = document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!["breakingChanges"]!.AsArray();
         rules.Add((JsonNode)new JsonObject { ["change"] = change, ["severity"] = severity, ["path"] = rulePath,
@@ -15493,6 +15492,169 @@ public class ApiOperationReferenceTests
         await Assert.That(result.Diagnostic).IsNull();
         await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
         await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
+    [Test]
+    [Arguments("", true)]
+    [Arguments("/value", true)]
+    [Arguments("/list/member", true)]
+    [Arguments("/list/member/value", true)]
+    [Arguments("/map/key", true)]
+    [Arguments("/map/value", true)]
+    [Arguments("/map/value/value", true)]
+    [Arguments("/choice/text", true)]
+    [Arguments("/choice/nested/value", true)]
+    [Arguments("/next/next/value", true)]
+    [Arguments("/", false)]
+    [Arguments("//", false)]
+    [Arguments("/a~1b/~0name", false)]
+    [Arguments("/~01", false)]
+    [Arguments("/Value", false)]
+    [Arguments("/missing", false)]
+    [Arguments("/value/child", false)]
+    [Arguments("/list/0", false)]
+    [Arguments("/list/value", false)]
+    [Arguments("/map/member", false)]
+    [Arguments("/map/key/child", false)]
+    [Arguments("/choice/missing", false)]
+    [Arguments("/next/missing", false)]
+    public async Task SmithyJsonBreakingChangePathsResolveModeledMembersNotInstancePointers(string schemaPath, bool valid)
+    {
+        var document = SmithyBreakingChangePathDocument(schemaPath);
+        var result = ResolveSmithy(document.ToJsonString());
+
+        await Assert.That(result.Status).IsEqualTo(valid ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid)
+        {
+            await Assert.That(result.Diagnostic).IsNull();
+            await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_pointer_target");
+            await Assert.That(result.Diagnostic.Path)
+                .IsEqualTo("$/shapes/example#Custom/traits/smithy.api#trait/breakingChanges/0/path");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    public async Task SmithyJsonBreakingChangePathsCheckLaterRulesAndReachedNestedDefinitions()
+    {
+        var document = SmithyBreakingChangePathDocument("/value");
+        var marker = document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!;
+        marker["breakingChanges"]!.AsArray().Add((JsonNode)new JsonObject { ["change"] = "update", ["path"] = "/missing" });
+        var later = ResolveSmithy(document.ToJsonString());
+        await Assert.That(later.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(later.Diagnostic!.Path)
+            .IsEqualTo("$/shapes/example#Custom/traits/smithy.api#trait/breakingChanges/1/path");
+
+        marker["breakingChanges"]!.AsArray().RemoveAt(1);
+        document["shapes"]!["example#Other"] = JsonNode.Parse("""
+            {"type":"structure","traits":{"smithy.api#trait":{"breakingChanges":[{"change":"update","path":"/missing"}]}}}
+            """);
+        await Assert.That(ResolveSmithy(document.ToJsonString()).Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        document["shapes"]!["example#Custom"]!["traits"]!["example#Other"] = new JsonObject();
+        var nested = ResolveSmithy(document.ToJsonString());
+        await Assert.That(nested.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(nested.Diagnostic!.Code).IsEqualTo("document.trait_pointer_target");
+        await Assert.That(nested.Diagnostic.Path)
+            .IsEqualTo("$/shapes/example#Other/traits/smithy.api#trait/breakingChanges/0/path");
+    }
+
+    [Test]
+    [Arguments("string", "/child", false)]
+    [Arguments("document", "", true)]
+    [Arguments("document", "/child", false)]
+    [Arguments("enum", "/YES", false)]
+    public async Task SmithyJsonBreakingChangePathsCannotDescendIntoUnmodeledNodeContent(string kind, string schemaPath, bool valid)
+    {
+        var document = SmithyBreakingChangePathDocument(schemaPath);
+        document["shapes"]!["example#Get"]!["traits"]!["example#Custom"] =
+            kind is "string" or "enum" ? JsonValue.Create("YES") : new JsonObject();
+        var custom = document["shapes"]!["example#Custom"]!.AsObject();
+        custom["type"] = kind;
+        custom.Remove("members");
+        if (kind == "enum") { custom["members"] = JsonNode.Parse("""{"YES":{"target":"smithy.api#Unit"}}"""); }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (!valid) { await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_pointer_target"); }
+    }
+
+    [Test]
+    [Arguments(64, true)]
+    [Arguments(65, false)]
+    public async Task SmithyJsonBreakingChangePathsBoundRecursiveSchemaTraversal(int segments, bool valid)
+    {
+        var document = SmithyBreakingChangePathDocument(string.Concat(Enumerable.Repeat("/next", segments)));
+        var result = ResolveSmithy(document.ToJsonString());
+
+        await Assert.That(result.Status).IsEqualTo(valid ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Indeterminate);
+        if (!valid)
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("limit.reference_depth");
+            await Assert.That(result.Diagnostic.Path)
+                .IsEqualTo("$/shapes/example#Custom/traits/smithy.api#trait/breakingChanges/0/path");
+        }
+    }
+
+    [Test]
+    public async Task SmithyJsonBreakingChangePathsChargeEveryRepeatedSchemaMemberScan()
+    {
+        var document = SmithyBreakingChangePathDocument("/value");
+        var custom = document["shapes"]!["example#Custom"]!;
+        var members = custom["members"]!.AsObject();
+        for (var index = 0; index < 600; index++)
+        {
+            members["field" + index.ToString(System.Globalization.CultureInfo.InvariantCulture) + new string('x', 55)] =
+                JsonNode.Parse("""{"target":"smithy.api#String"}""");
+        }
+        var rules = custom["traits"]!["smithy.api#trait"]!["breakingChanges"]!.AsArray();
+        for (var index = 0; index < 400; index++)
+        {
+            rules.Add((JsonNode)new JsonObject { ["change"] = "update", ["path"] = "/value" });
+        }
+
+        var result = ResolveSmithy(document.ToJsonString());
+
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("limit.work");
+        await Assert.That(result.Diagnostic.Path.StartsWith(
+            "$/shapes/example#Custom/traits/smithy.api#trait/breakingChanges/", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonBreakingChangePathsPreserveUnresolvedDependenciesBeforeInterpretingPaths()
+    {
+        var document = SmithyBreakingChangePathDocument("/missing");
+        document["shapes"]!["example#Node"]!["members"]!["unresolved"] = JsonNode.Parse("""{"target":"example#Absent"}""");
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Schema paths cannot acquire definitions."));
+
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("dependency.unresolved");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Absent");
+    }
+
+    private static JsonNode SmithyBreakingChangePathDocument(string schemaPath)
+    {
+        var document = JsonNode.Parse("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","traits":{"example#Custom":{}}},
+              "example#Custom":{"type":"structure","traits":{"smithy.api#trait":{"breakingChanges":[]}},
+                "members":{"value":{"target":"smithy.api#String"},"list":{"target":"example#List"},
+                  "map":{"target":"example#Map"},"choice":{"target":"example#Choice"},"next":{"target":"example#Node"}}},
+              "example#Node":{"type":"structure","members":{"value":{"target":"smithy.api#String"},"next":{"target":"example#Node"}}},
+              "example#List":{"type":"list","member":{"target":"example#Node"}},
+              "example#Map":{"type":"map","key":{"target":"smithy.api#String"},"value":{"target":"example#Node"}},
+              "example#Choice":{"type":"union","members":{"text":{"target":"smithy.api#String"},"nested":{"target":"example#Node"}}}}}
+            """)!;
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!["breakingChanges"]!.AsArray()
+            .Add((JsonNode)new JsonObject { ["change"] = "update", ["path"] = schemaPath });
+        return document;
     }
 
     [Test]

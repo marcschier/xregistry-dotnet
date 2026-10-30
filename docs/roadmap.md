@@ -553,9 +553,14 @@ vocabulary/source mapping. It does not supply their implementation.
   targets carry the trait, including repeated use of the same target. Other
   structures and trait IDs have separate limits. Trait-marker `breakingChanges`
   checks require a nonempty rule array, recognized change/severity values,
-  string messages and JSON Pointer path syntax. Trait-schema path resolution
-  and semantic model comparison remain open, as do general selector evaluation
-  and other trait member schemas.
+  string messages and JSON Pointer path syntax. Nonempty paths resolve through
+  the reached trait schema: named structure/union members, list `member` and
+  map `key`/`value` segments. Missing members, instance indices and descent into
+  unmodeled content are rejected; recursive traversal and repeated member scans
+  remain subject to depth/work limits. Empty or absent paths select the whole
+  trait. This does not execute change rules or compare models. Semantic model
+  comparison remains open, as do general selector evaluation and other trait
+  member schemas.
   The seven implicit primitive prelude types retain their native scalar kinds
   and false/zero root defaults. Structure members must repeat those defaults
   or override them with null; list, map and union members need no repetition.
