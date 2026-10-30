@@ -139,6 +139,21 @@ development cell, not requirement-level release qualification.
 
 ## Current evidence and uncovered cells
 
+The complete Models suite at `58743c8cb8d15caf78688571dd4b1010b8da4960`
+passed on Windows x64 under .NET 8 and .NET 10: 1,144 cases and 354 methods per
+framework. This includes the packaged Media model, inherited options and
+deprecation checks, strict description-reference syntax and bounded deferred
+runtime obligations. Both publications ran ILC without IL diagnostics.
+Native executable, managed control, report, proof and receipt hashes match;
+regenerated receipts and complete native/managed case inventories agree.
+Both managed proofs were rejected, and source inventories remained unchanged.
+Evidence is retained at
+`D:\temp\xregistry-models-58743c8-net8\native-suites-4_55d6s1` and
+`D:\temp\xregistry-models-58743c8-net10\native-suites-k5uz97x3`.
+These selected-project runs remain development evidence. They do not execute
+media connectors, establish receiver compatibility, refresh other native
+platforms or promote requirement-level qualification.
+
 The package-only model consumer at `6b3aa357b7a79b49f3dddb4f2b05935130c7c416`
 passed natively on Windows x64 under .NET 8 and .NET 10 using a fresh local feed
 and package cache. Each run checked eleven exact source hashes, compiled every

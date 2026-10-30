@@ -51,10 +51,11 @@ The complete Validation suite also passed at later selector source `f72e125`
 on Windows x64 under both frameworks: 4,820 native cases and 845 methods each,
 with complete managed parity, exact hashes and rejected managed proofs.
 That selected-project evidence does not refresh the complete native matrix.
-The Models suite at `d2fafe7` also passed on Windows x64 under both frameworks:
-1,032 native cases and 336 methods each, including all canonical Media vector
-checks. Its source, artifacts, case parity and rejected controls were audited;
-provider media accuracy and receiver compatibility remain unqualified.
+The Models suite at `58743c8` also passed on Windows x64 under both frameworks:
+1,144 native cases and 354 methods each, including packaged Media sources,
+inherited metadata, strict description references and bounded deferred runtime
+obligations. Its source, artifacts, case parity and rejected controls were
+audited; provider media accuracy and receiver compatibility remain unqualified.
 Full native TUnit requirement receipts remain incomplete. All four .NET 8
 complete-suite summaries at `1bdfa6f` failed for AspNetCore, HTTP, Federation and Git
 test-host IL warnings. Their other nine suites passed, but those partial
