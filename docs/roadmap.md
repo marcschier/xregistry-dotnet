@@ -219,6 +219,8 @@ vocabulary/source mapping. It does not supply their implementation.
   schemas remain unvalidated.
   Custom trait applications now check scalar node kinds, base64, exact numeric
   type bounds and supported string timestamps after schema-closure validation.
+  Numeric timestamps share the exact default epoch range and millisecond
+  resolution checks, including nested implicit prelude targets.
   Recursive list/map values, sparse nulls, required/declared structure members
   and single-member unions are checked on every reached application. Document
   values remain arbitrary JSON. Effective length/range constraints now apply

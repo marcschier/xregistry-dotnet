@@ -405,7 +405,10 @@ its declared node types. Scalar checks cover Boolean/string values, base64
 blobs and exact numeric type bounds, including supported string-encoded large
 numbers and special floating-point values. String timestamps use the existing
 UTC validator; leap seconds and nonzero sub-millisecond fractions remain
-unsupported. Document values remain arbitrary JSON, including null.
+unsupported. Numeric timestamps share the default validator's exact epoch-second
+range for years 0001 through 9999 and millisecond resolution. These checks also
+apply to nested implicit `Timestamp` targets; equivalent numeric spellings retain
+their authored representation. Document values remain arbitrary JSON, including null.
 Lists and maps recursively check their values, with null entries permitted by
 `sparse` or document targets. Structures reject undeclared members and require
 all required members; unions require exactly one declared member. Optional

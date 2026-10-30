@@ -910,12 +910,7 @@ public static partial class ApiOperationDocumentResolver
                     ValidateTimestampString(value.GetString()!, path);
                     return;
                 }
-                var seconds = JsonNumber.Read(value, budget, path);
-                ValidationContext.Require((seconds.IsZero || seconds.Exponent >= -3) &&
-                    seconds.CompareTo(new(true, "62135596800", 0)) >= 0 &&
-                    seconds.CompareTo(new(false, "253402300799999", -3)) <= 0,
-                    path, "document.default_timestamp",
-                    "A Smithy timestamp default must be epoch seconds within years 0001 through 9999 at millisecond resolution.");
+                ValidateTimestampNumber(value, path, "document.default_timestamp");
                 return;
             }
             var length = 0;
@@ -1038,6 +1033,16 @@ public static partial class ApiOperationDocumentResolver
             }
             using var parsed = JsonDocument.Parse(text);
             return JsonNumber.Read(parsed.RootElement, budget, path);
+        }
+
+        private void ValidateTimestampNumber(JsonElement value, string path, string code)
+        {
+            var seconds = JsonNumber.Read(value, budget, path);
+            ValidationContext.Require((seconds.IsZero || seconds.Exponent >= -3) &&
+                seconds.CompareTo(new(true, "62135596800", 0)) >= 0 &&
+                seconds.CompareTo(new(false, "253402300799999", -3)) <= 0,
+                path, code,
+                "A Smithy timestamp must be epoch seconds within years 0001 through 9999 at millisecond resolution.");
         }
 
         private void ValidateTimestampString(string text, string path)
@@ -2026,9 +2031,10 @@ public static partial class ApiOperationDocumentResolver
                     }
                 }
             }
-            if (kind == "timestamp" && value.ValueKind == JsonValueKind.String)
+            if (kind == "timestamp")
             {
-                ValidateTimestampString(value.GetString()!, path);
+                if (value.ValueKind == JsonValueKind.String) { ValidateTimestampString(value.GetString()!, path); }
+                else { ValidateTimestampNumber(value, path, "document.trait_timestamp"); }
             }
             ValidateTraitNodeConstraints(kind!, shape, memberShape, value, path);
             if (kind == "list")

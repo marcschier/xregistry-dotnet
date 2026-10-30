@@ -9881,6 +9881,80 @@ public class ApiOperationReferenceTests
         await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
     }
 
+    [Test]
+    [Arguments("-62135596800.001", false)]
+    [Arguments("-62135596800", true)]
+    [Arguments("-62135596799.999", true)]
+    [Arguments("253402300799.998", true)]
+    [Arguments("253402300799.999", true)]
+    [Arguments("253402300800", false)]
+    [Arguments("0", true)]
+    [Arguments("-0", true)]
+    [Arguments("0e-100", true)]
+    [Arguments("0.001", true)]
+    [Arguments("-0.001", true)]
+    [Arguments("0.0001", false)]
+    [Arguments("-0.0001", false)]
+    [Arguments("1.2340", true)]
+    [Arguments("1.2341", false)]
+    [Arguments("1234e-3", true)]
+    [Arguments("12341e-4", false)]
+    [Arguments("1e100", false)]
+    public async Task SmithyJsonCustomTraitTimestampsUseExactEpochRangeAndMillisecondBoundaries(string value, bool valid)
+    {
+        var document = SmithyCustomNodeDocument("timestamp", value);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid)
+        {
+            await Assert.That(result.Diagnostic).IsNull();
+            await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_timestamp");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/example#Custom");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("structure", """{"time":253402300800}""", "/time")]
+    [Arguments("union", """{"time":253402300800}""", "/time")]
+    [Arguments("list", "[0,253402300800]", "/1")]
+    [Arguments("map", """{"ok":0,"a/b~c":253402300800}""", "/a~1b~0c")]
+    public async Task SmithyJsonCustomTraitTimestampsValidateNestedPreludeTargets(string kind, string value, string suffix)
+    {
+        var document = SmithyCustomNodeDocument(kind, value);
+        var reference = JsonNode.Parse("""{"target":"smithy.api#Timestamp"}""");
+        if (kind == "list") { document["shapes"]!["example#Custom"]!["member"] = reference; }
+        else if (kind == "map") { document["shapes"]!["example#Custom"]!["value"] = reference; }
+        else { document["shapes"]!["example#Custom"]!["members"] = new JsonObject { ["time"] = reference }; }
+        var invalid = ResolveSmithy(document.ToJsonString());
+        await Assert.That(invalid.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(invalid.Diagnostic!.Code).IsEqualTo("document.trait_timestamp");
+        await Assert.That(invalid.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/example#Custom" + suffix);
+        await Assert.That(invalid.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        document["shapes"]!["example#Get"]!["traits"]!["example#Custom"] =
+            JsonNode.Parse(value.Replace("253402300800", "253402300799.999", StringComparison.Ordinal));
+        var selected = ResolveSmithy(document.ToJsonString());
+        await Assert.That(selected.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(selected.Diagnostic).IsNull();
+    }
+
+    [Test]
+    public async Task SmithyJsonCustomTraitTimestampChecksDoNotInterpretDocumentOrUnrelatedValues()
+    {
+        var document = SmithyCustomNodeDocument("document", """{"time":253402300800,"fraction":0.0001}""");
+        document["shapes"]!["example#Unused"] = JsonNode.Parse("""
+            {"type":"timestamp","traits":{"example#Custom":253402300800}}
+            """);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+    }
+
     private static JsonObject SmithyCustomNodeDocument(string kind, string value)
     {
         var shape = new JsonObject { ["type"] = kind, ["traits"] = JsonNode.Parse("""{"smithy.api#trait":{}}""") };
