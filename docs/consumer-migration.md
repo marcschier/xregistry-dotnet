@@ -400,6 +400,9 @@ Reachable trait definitions require a string `selector`, when supplied, and
 restrict `structurallyExclusive` to `member` or `target`. After schema-closure
 checks, custom applications evaluate type-token selectors and their supported
 sequence/`:test`/`:not` compositions against the actual root or member shape.
+Explicit `enum` and `intEnum` selectors match only their respective root kinds;
+the existing `string` and `integer` selectors also match those specializations.
+Enum members remain `member` shapes, not their container's type.
 Exact trait-existence predicates such as `structure[trait|trait]` are also
 supported. Unqualified names resolve only in `smithy.api`; fully qualified trait
 IDs match exactly. Presence does not depend on the trait value's truthiness or

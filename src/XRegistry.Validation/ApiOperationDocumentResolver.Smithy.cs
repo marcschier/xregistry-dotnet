@@ -2868,7 +2868,7 @@ public static partial class ApiOperationDocumentResolver
                 "integer" => kind is "integer" or "intEnum",
                 "blob" or "boolean" or "document" or "byte" or "short" or "long" or "float" or "double" or
                     "bigDecimal" or "bigInteger" or "timestamp" or "list" or "map" or "structure" or "union" or
-                    "service" or "operation" or "resource" or "member" => selector == kind,
+                    "service" or "operation" or "resource" or "member" or "enum" or "intEnum" => selector == kind,
                 _ => null
             };
         }

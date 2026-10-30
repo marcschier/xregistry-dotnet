@@ -13618,6 +13618,92 @@ public class ApiOperationReferenceTests
         await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
     }
 
+    [Test]
+    [Arguments("enum", "enum", true)]
+    [Arguments("enum", "intEnum", false)]
+    [Arguments("intEnum", "intEnum", true)]
+    [Arguments("intEnum", "enum", false)]
+    [Arguments("string", "enum", false)]
+    [Arguments("integer", "intEnum", false)]
+    [Arguments("enum", "enum string simpleType dataType", true)]
+    [Arguments("intEnum", "intEnum integer number simpleType dataType", true)]
+    [Arguments("enum", ":is(intEnum,enum):not(integer)", true)]
+    [Arguments("intEnum", ":test(enum,intEnum):in(integer)", true)]
+    [Arguments("enum", ":not(enum)", false)]
+    [Arguments("intEnum", ":not(intEnum)", false)]
+    [Arguments("enum", "enum aggregateType", false)]
+    [Arguments("intEnum", "intEnum serviceType", false)]
+    public async Task SmithyJsonExplicitEnumSelectorsMatchOnlyTheirDeclaredRootKinds(string kind, string selector, bool matches)
+    {
+        var document = SmithyIdRefTraitDocument("example#Target", "{}");
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#idRef"]!["selector"] = selector;
+        document["shapes"]!["example#Target"] = SmithyIdRefTarget(kind);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(matches ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (matches)
+        {
+            await Assert.That(result.Diagnostic).IsNull();
+            await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_id_ref_selector");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/example#Custom");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("enum", "enum", false)]
+    [Arguments("intEnum", "intEnum", false)]
+    [Arguments("enum", "member:not(enum)", true)]
+    [Arguments("intEnum", "member:not(intEnum)", true)]
+    [Arguments("enum", ":is(enum,member)", true)]
+    [Arguments("intEnum", ":is(intEnum,member)", true)]
+    public async Task SmithyJsonExplicitEnumSelectorsDoNotTreatEnumMembersAsTheirContainer(string kind, string selector, bool matches)
+    {
+        var document = SmithyIdRefTraitDocument("example#Target$VALUE", "{}");
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#idRef"]!["selector"] = selector;
+        document["shapes"]!["example#Target"] = SmithyIdRefTarget(kind);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(matches ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (matches) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_id_ref_selector");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("enum", true)]
+    [Arguments("intEnum", true)]
+    [Arguments("enum", false)]
+    [Arguments("intEnum", false)]
+    public async Task SmithyJsonExplicitEnumSelectorsCheckCustomTraitApplicationRoots(string kind, bool matches)
+    {
+        var document = SmithyCustomNodeDocument("string", "\"value\"");
+        var target = SmithyIdRefTarget(kind);
+        target["traits"] = JsonNode.Parse("""{"example#Custom":"value"}""");
+        document["shapes"]!["example#Target"] = target;
+        document["shapes"]!["example#Get"]!["traits"]!.AsObject().Remove("example#Custom");
+        document["shapes"]!["example#Get"]!["input"] = JsonNode.Parse("""{"target":"example#Input"}""");
+        document["shapes"]!["example#Input"] = JsonNode.Parse("""
+            {"type":"structure","members":{"value":{"target":"example#Target"}}}
+            """);
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#trait"]!["selector"] =
+            matches ? kind : kind == "enum" ? "intEnum" : "enum";
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(matches ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (matches) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_selector_target");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Target/traits/example#Custom");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
     private static JsonNode SmithyIdRefTarget(string kind)
     {
         var target = SmithyCustomNodeDocument(kind, "{}")["shapes"]!["example#Custom"]!.DeepClone();

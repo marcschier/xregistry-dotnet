@@ -221,6 +221,9 @@ vocabulary/source mapping. It does not supply their implementation.
   type bounds and supported string timestamps after schema-closure validation.
   Their application sites also check type-token selectors and supported
   sequence/`:test`/`:not` compositions against the actual root or member shape.
+  Explicit `enum`/`intEnum` tokens distinguish the declared root kinds while
+  retaining their `string`/`integer` subtype matches. Enum members match `member`,
+  not their container's type.
   Exact `[trait|name]` existence predicates inspect that shape's own traits;
   unqualified names resolve in `smithy.api`, and payload truthiness does not
   affect presence. Trait lookups consume the shared work budget.
