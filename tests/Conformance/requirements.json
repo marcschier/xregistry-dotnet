@@ -114049,7 +114049,8 @@
         "status": "implemented",
         "testIds": [
           "CodecIdentifiersRemainCaseSensitiveAndOpenEnded",
-          "UnrecognizedCodecNamesRemainExactForBothMediaKinds"
+          "UnrecognizedCodecNamesRemainExactForBothMediaKinds",
+          "XRegistry.Models.Tests.MediaEndpointDefinitionTests.CanonicalMediaCodecVectorsExerciseMaterializationAndMetadataValidation"
         ],
         "nativeEvidence": []
       }
@@ -114121,7 +114122,10 @@
         "testIds": [
           "DeclaredStreamFormatsAcceptIndependentKnownCodecDeclarations",
           "StreamFormatEnumsRejectUnknownCaseVariantsAndNonStringValues",
-          "RequiredAndProducerInputRulesFailAtTheOption"
+          "RequiredAndProducerInputRulesFailAtTheOption",
+          "XRegistry.Models.Tests.MediaEndpointDefinitionTests.CanonicalMediaVectorInventoryRetainsEveryPinnedCodecAndProtocol",
+          "XRegistry.Models.Tests.MediaEndpointDefinitionTests.CanonicalMediaStreamFormatVectorsExerciseEveryDeclaredRuntimeAlternative",
+          "XRegistry.Models.Tests.MediaEndpointDefinitionTests.CanonicalMediaModelEnumsMatchVectorsWithoutInventingProducerSupport"
         ],
         "nativeEvidence": []
       }
@@ -114160,7 +114164,8 @@
         "testIds": [
           "KnownCodecsCannotBeDeclaredForTheOtherMediaKind",
           "UnrecognizedCodecNamesRemainExactForBothMediaKinds",
-          "OpenCodecIdentifiersArePreservedAndConsumerDefaultsAreNotInjected"
+          "OpenCodecIdentifiersArePreservedAndConsumerDefaultsAreNotInjected",
+          "XRegistry.Models.Tests.MediaEndpointDefinitionTests.CanonicalMediaCodecVectorsExerciseMaterializationAndMetadataValidation"
         ],
         "nativeEvidence": []
       }

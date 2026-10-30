@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Security.Cryptography;
 using TUnit.Assertions;
 using TUnit.Core;
 
@@ -256,6 +257,169 @@ public class MediaEndpointDefinitionTests
 
     private static JsonObject ProducerOptions(string protocol) =>
         JsonNode.Parse(ValidEndpoint(protocol, "producer").RootElement.GetRawText())!.AsObject();
+
+    [Test]
+    public async Task CanonicalMediaVectorInventoryRetainsEveryPinnedCodecAndProtocol()
+    {
+        using var vectors = CanonicalMediaVectors();
+        await Assert.That(string.Join(",", vectors.RootElement.GetProperty("codecs").EnumerateArray()
+            .Select(static item => item.GetProperty("id").GetString())))
+            .IsEqualTo("default-video-codec,default-audio-codec,known-audio-codec-in-video-field,known-video-codec-in-audio-field,codec-identifier-case-is-not-normalized,unknown-codec-identifier");
+        await Assert.That(string.Join(",", vectors.RootElement.GetProperty("streamformats").EnumerateObject()
+            .Select(static item => item.Name)))
+            .IsEqualTo("SRT,WebRTC,RTSP/1.0,RTSP/2.0,RTP/2,MPEGTS-UDP,RTMP/1.0,HLS,DASH,RIST-Simple/2020,RIST-Main/2024");
+    }
+
+    [Test]
+    [Arguments("default-video-codec")]
+    [Arguments("default-audio-codec")]
+    [Arguments("known-audio-codec-in-video-field")]
+    [Arguments("known-video-codec-in-audio-field")]
+    [Arguments("codec-identifier-case-is-not-normalized")]
+    [Arguments("unknown-codec-identifier")]
+    public async Task CanonicalMediaCodecVectorsExerciseMaterializationAndMetadataValidation(string id)
+    {
+        using var vectors = CanonicalMediaVectors();
+        var vector = vectors.RootElement.GetProperty("codecs").EnumerateArray()
+            .Single(item => item.GetProperty("id").GetString() == id);
+        var option = vector.GetProperty("field").GetString()!;
+        var value = vector.GetProperty("value").GetString()!;
+        var input = ProducerOptions("SRT");
+        input["protocoloptions"]![option] = value;
+        var metadata = RegistryJson.Parse(input.ToJsonString());
+        var outcome = vector.GetProperty("result").GetString();
+        await Assert.That(outcome is "accept" or "reject").IsTrue();
+        if (outcome == "accept")
+        {
+            var result = EndpointDefinition.MaterializeMedia(metadata);
+            await Assert.That(result.GetProtocolOption(option).GetString()).IsEqualTo(value);
+            await Assert.That(() => RegistryDomainRules.ValidateMediaEndpointMetadata(metadata.RootElement)).ThrowsNothing();
+        }
+        else
+        {
+            await Rejects(metadata, "/protocoloptions/" + option);
+            await RejectsCanonicalMediaMetadata(metadata, "/protocoloptions/" + option);
+        }
+    }
+
+    [Test]
+    [Arguments("SRT")]
+    [Arguments("WebRTC")]
+    [Arguments("RTSP/1.0")]
+    [Arguments("RTP/2")]
+    [Arguments("MPEGTS-UDP")]
+    [Arguments("RTMP/1.0")]
+    [Arguments("RIST-Simple/2020")]
+    [Arguments("RIST-Main/2024")]
+    public async Task CanonicalMediaStreamFormatVectorsExerciseEveryDeclaredRuntimeAlternative(string protocol)
+    {
+        using var vectors = CanonicalMediaVectors();
+        var vector = vectors.RootElement.GetProperty("streamformats").GetProperty(protocol);
+        foreach (var accepted in vector.GetProperty("accepted").EnumerateArray())
+        {
+            var input = ProducerOptions(protocol);
+            input["protocoloptions"]!["streamformat"] = accepted.GetString();
+            var metadata = RegistryJson.Parse(input.ToJsonString());
+            var result = EndpointDefinition.MaterializeMedia(metadata);
+            await Assert.That(result.GetProtocolOption("streamformat").GetString()).IsEqualTo(accepted.GetString());
+            await Assert.That(() => RegistryDomainRules.ValidateMediaEndpointMetadata(metadata.RootElement)).ThrowsNothing();
+        }
+        foreach (var rejected in vector.GetProperty("rejected").EnumerateArray())
+        {
+            var input = ProducerOptions(protocol);
+            input["protocoloptions"]!["streamformat"] = rejected.GetString();
+            var metadata = RegistryJson.Parse(input.ToJsonString());
+            await Rejects(metadata, "/protocoloptions/streamformat");
+            await RejectsCanonicalMediaMetadata(metadata, "/protocoloptions/streamformat");
+        }
+    }
+
+    [Test]
+    [Arguments("SRT")]
+    [Arguments("WebRTC")]
+    [Arguments("RTSP/1.0")]
+    [Arguments("RTSP/2.0")]
+    [Arguments("RTP/2")]
+    [Arguments("MPEGTS-UDP")]
+    [Arguments("RTMP/1.0")]
+    [Arguments("HLS")]
+    [Arguments("DASH")]
+    [Arguments("RIST-Simple/2020")]
+    [Arguments("RIST-Main/2024")]
+    public async Task CanonicalMediaModelEnumsMatchVectorsWithoutInventingProducerSupport(string protocol)
+    {
+        using var vectors = CanonicalMediaVectors();
+        using var model = ReadCanonicalMediaSource("MediaValidationModel",
+            "F8A0FA6CBD975F4C38EE211D291D5B64416BCCC4D9A7242EAF4F9DA34367CFA8", 13799);
+        var options = model.RootElement.GetProperty("groups").GetProperty("endpoints")
+            .GetProperty("attributes").GetProperty("protocol").GetProperty("ifvalues")
+            .GetProperty(protocol).GetProperty("siblingattributes").GetProperty("protocoloptions");
+        var hasDeclaration = options.TryGetProperty("attributes", out var attributes) &&
+            attributes.TryGetProperty("streamformat", out _);
+        var vector = vectors.RootElement.GetProperty("streamformats").GetProperty(protocol);
+        var declared = vector.GetProperty("declared");
+        await Assert.That(hasDeclaration).IsEqualTo(declared.ValueKind == JsonValueKind.Array);
+        if (hasDeclaration)
+        {
+            var streamFormat = attributes.GetProperty("streamformat");
+            await Assert.That(streamFormat.GetProperty("type").GetString()).IsEqualTo("string");
+            await Assert.That(streamFormat.GetProperty("strict").GetBoolean()).IsTrue();
+            var names = streamFormat.GetProperty("enum").EnumerateArray().Select(static item => item.GetString()).ToArray();
+            await Assert.That(string.Join(",", names))
+                .IsEqualTo(string.Join(",", declared.EnumerateArray().Select(static item => item.GetString())));
+            foreach (var accepted in vector.GetProperty("accepted").EnumerateArray())
+            {
+                await Assert.That(names.Contains(accepted.GetString(), StringComparer.Ordinal)).IsTrue();
+            }
+            foreach (var rejected in vector.GetProperty("rejected").EnumerateArray())
+            {
+                await Assert.That(names.Contains(rejected.GetString(), StringComparer.Ordinal)).IsFalse();
+            }
+        }
+        else
+        {
+            await Assert.That(declared.ValueKind).IsEqualTo(JsonValueKind.Null);
+            await Assert.That(vector.GetProperty("rejected").GetArrayLength()).IsEqualTo(0);
+            var consumer = ValidEndpoint(protocol, "consumer");
+            var result = EndpointDefinition.MaterializeMedia(consumer);
+            await Assert.That(result.GetProtocolOption("streamformat").ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            await Assert.That(() => RegistryDomainRules.ValidateMediaEndpointMetadata(consumer.RootElement)).ThrowsNothing();
+            foreach (var accepted in vector.GetProperty("accepted").EnumerateArray())
+            {
+                var input = JsonNode.Parse(consumer.RootElement.GetRawText())!.AsObject();
+                input["protocoloptions"]!["streamformat"] = accepted.GetString();
+                var metadata = RegistryJson.Parse(input.ToJsonString());
+                await Rejects(metadata, "/protocoloptions/streamformat");
+                await RejectsCanonicalMediaMetadata(metadata, "/protocoloptions/streamformat");
+            }
+        }
+    }
+
+    private static JsonDocument CanonicalMediaVectors() => ReadCanonicalMediaSource("MediaValidationVectors",
+        "F140A1F1F38190ED87E83579E7207A2492DB44CE1B7C9934081E85C25484B260", 2270);
+
+    private static JsonDocument ReadCanonicalMediaSource(string name, string hash, int length)
+    {
+        using var stream = typeof(MediaEndpointDefinitionTests).Assembly.GetManifestResourceStream(
+            "XRegistry.Models.Tests." + name + ".json")
+            ?? throw new InvalidDataException("The pinned Media validation source is missing: " + name);
+        using var buffer = new MemoryStream();
+        stream.CopyTo(buffer);
+        var bytes = buffer.ToArray();
+        if (bytes.Length != length || Convert.ToHexString(SHA256.HashData(bytes)) != hash)
+        {
+            throw new InvalidDataException("The pinned Media validation source has changed: " + name);
+        }
+        return JsonDocument.Parse(bytes);
+    }
+
+    private static async Task RejectsCanonicalMediaMetadata(RegistryJson metadata, string path)
+    {
+        var failure = await Assert.That(() => RegistryDomainRules.ValidateMediaEndpointMetadata(metadata.RootElement))
+            .Throws<RegistryException>() ?? throw new InvalidOperationException("The canonical invalid Media metadata was accepted.");
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo("invalid_attribute");
+        await Assert.That(failure.Diagnostic.Path).IsEqualTo(path);
+    }
 
     private static RegistryJson ValidEndpoint(string protocol, string usage)
     {

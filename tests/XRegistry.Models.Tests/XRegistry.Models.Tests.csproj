@@ -15,5 +15,9 @@
     <Content Include="..\Conformance\Vectors\WotResolution\vectors.json"
              Link="Conformance\Vectors\WotResolution\vectors.json"
              CopyToOutputDirectory="PreserveNewest" />
+    <EmbeddedResource Include="..\Conformance\Successors\pr571-811de7d2\workingdrafts\models\media-endpoints\tests\validation-vectors.json"
+                      LogicalName="XRegistry.Models.Tests.MediaValidationVectors.json" />
+    <EmbeddedResource Include="..\Conformance\Successors\pr571-811de7d2\workingdrafts\models\media-endpoints\model.json"
+                      LogicalName="XRegistry.Models.Tests.MediaValidationModel.json" />
   </ItemGroup>
 </Project>
