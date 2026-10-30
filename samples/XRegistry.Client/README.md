@@ -14,6 +14,7 @@ preparation/publication, built-in model compilation and document validation.
 ```powershell
 dotnet run --project samples\XRegistry.Client -- --help
 dotnet run --project samples\XRegistry.Client -- model cloudevents
+dotnet run --project samples\XRegistry.Client -- model media
 dotnet run --project samples\XRegistry.Client -- inspect https://registry.example/xreg
 dotnet run --project samples\XRegistry.Client -- get https://registry.example/xreg /schemagroups
 dotnet run --project samples\XRegistry.Client -- pages https://registry.example/xreg /schemagroups --query limit=100

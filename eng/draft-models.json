@@ -15,6 +15,34 @@
       "file": "tests/Conformance/DraftSources/publication/model.json",
       "sha256": "f287f3c0972e5fda9a8e3c5e8a727ecc43c536f254795cf6a6433a4d69e6d134"
     },
+    "media-endpoints": {
+      "sourceRepository": "https://github.com/xregistry/spec",
+      "sourceCommit": "811de7d20711dd3edc8c676ae634adebee235188",
+      "sourcePath": "workingdrafts/models/media-endpoints/model.json",
+      "file": "tests/Conformance/DraftSources/media-endpoints/model.json",
+      "sha256": "f8a0fa6cbd975f4c38ee211d291d5b64416bccc4d9a7242eaf4f9da34367cfa8"
+    },
+    "media-endpoints-options": {
+      "sourceRepository": "https://github.com/xregistry/spec",
+      "sourceCommit": "811de7d20711dd3edc8c676ae634adebee235188",
+      "sourcePath": "workingdrafts/models/media-endpoints/protocol-options.json",
+      "file": "tests/Conformance/DraftSources/media-endpoints/protocol-options.json",
+      "sha256": "4fcf905ad2ca26ea8ce03d5ee0a92338622733f313bbca8dd7543a7b2f04d8fb"
+    },
+    "media-endpoints-endpoint-source": {
+      "sourceRepository": "https://github.com/xregistry/spec",
+      "sourceCommit": "811de7d20711dd3edc8c676ae634adebee235188",
+      "sourcePath": "workingdrafts/models/media-endpoints/sources/endpoint-model.source.json",
+      "file": "tests/Conformance/DraftSources/media-endpoints/sources/endpoint-model.source.json",
+      "sha256": "e1acb299119866671bcc2b8561ddc240c7c85261740f91b732e13a799bd04f4b"
+    },
+    "media-endpoints-message-source": {
+      "sourceRepository": "https://github.com/xregistry/spec",
+      "sourceCommit": "811de7d20711dd3edc8c676ae634adebee235188",
+      "sourcePath": "workingdrafts/models/media-endpoints/sources/message-model.source.json",
+      "file": "tests/Conformance/DraftSources/media-endpoints/sources/message-model.source.json",
+      "sha256": "473ad3ea899db6ea4cf5c9a11014901be1eb947ec117fc750c40628f54fde2d9"
+    },
     "wot": {
       "sourceRepository": "https://github.com/xregistry/spec",
       "sourceCommit": "811de7d20711dd3edc8c676ae634adebee235188",

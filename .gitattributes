@@ -26,4 +26,4 @@ tests/Conformance/DraftSources/** -text whitespace=cr-at-eol
 tests/Conformance/Successors/** -text whitespace=cr-at-eol
 tests/Conformance/Vectors/WotResolution/vectors.json -text
 tests/Conformance/Vectors/WotResolution/LICENSE -text
-src/XRegistry.Models/Resources/** -text
+src/XRegistry.Models/Resources/** -text whitespace=cr-at-eol

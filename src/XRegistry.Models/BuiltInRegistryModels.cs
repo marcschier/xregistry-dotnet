@@ -23,7 +23,7 @@ public static class BuiltInRegistryModels
         return CompileSource(RegistryJson.Parse(source.ToJsonString()), new Uri("https://xregistry.invalid/spec/all-models.json"));
     }
 
-    /// <summary>Compiles one composite Registry containing every scoped built-in Group model, without network acquisition.</summary>
+    /// <summary>Compiles the general-purpose Group models without network acquisition; the opt-in Media Endpoint model is excluded.</summary>
     public static RegistryModel CompileAll() =>
         CompileSource(AllSource(), new Uri("https://xregistry.invalid/spec/all-models.json"));
 
@@ -53,13 +53,17 @@ public static class BuiltInRegistryModels
             RegistryModelKind.Api => "api",
             RegistryModelKind.Publication => "publication",
             RegistryModelKind.Wot => "wot",
+            RegistryModelKind.Media => "media-endpoints",
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown built-in model.")
         };
 
-        return typeof(BuiltInRegistryModels).Assembly.GetManifestResourceStream(
+        return OpenPackagedSource(name);
+    }
+
+    private static Stream OpenPackagedSource(string name) =>
+        typeof(BuiltInRegistryModels).Assembly.GetManifestResourceStream(
             $"XRegistry.Models.BuiltIn.{name}.json")
             ?? throw new InvalidOperationException($"The built-in model resource '{name}' is missing.");
-    }
 
     /// <summary>Parses an independently owned original model source without resolving includes.</summary>
     /// <param name="kind">The included model to load.</param>
@@ -116,6 +120,7 @@ public static class BuiltInRegistryModels
             RegistryModelKind.Api => "workingdrafts/models/api",
             RegistryModelKind.Publication => "workingdrafts/models/publication",
             RegistryModelKind.Wot => "workingdrafts/models/wot",
+            RegistryModelKind.Media => "workingdrafts/models/media-endpoints",
             _ => throw new ArgumentOutOfRangeException(nameof(kind))
         };
         return new Uri("https://xregistry.invalid/spec/" + path + "/model.json");
@@ -125,6 +130,24 @@ public static class BuiltInRegistryModels
     {
         public RegistryJson Resolve(Uri documentUri)
         {
+            var mediaDependency = documentUri.AbsoluteUri switch
+            {
+                "https://xregistry.invalid/spec/workingdrafts/models/media-endpoints/protocol-options.json" =>
+                    "media-endpoints-options",
+                "https://xregistry.invalid/spec/workingdrafts/models/media-endpoints/sources/endpoint-model.source.json" =>
+                    "media-endpoints-endpoint-source",
+                // The Endpoint snapshot's relative Message include must resolve to its matching snapshot.
+                "https://xregistry.invalid/spec/workingdrafts/models/media-endpoints/sources/message-model.source.json" or
+                "https://xregistry.invalid/spec/workingdrafts/models/media-endpoints/message/model.json" =>
+                    "media-endpoints-message-source",
+                _ => null
+            };
+            if (mediaDependency is not null)
+            {
+                using var stream = OpenPackagedSource(mediaDependency);
+                using var source = JsonDocument.Parse(stream, new JsonDocumentOptions { MaxDepth = 128 });
+                return RegistryJson.FromElement(source.RootElement);
+            }
             foreach (var kind in Enum.GetValues<RegistryModelKind>())
             {
                 if (documentUri == SourceUri(kind))

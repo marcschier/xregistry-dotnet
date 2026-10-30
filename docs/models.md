@@ -6,7 +6,7 @@ For an application-specific worked example, start with
 `XRegistry.Models` embeds seven model sources from the pinned specification
 baseline and explicit [source corrections](spec-feedback.md): Core, Endpoint,
 Message, Schema, CloudEvents, Registry-of-Registries, and OpenUSD. It also
-embeds separately pinned working-draft API, Publication, and WoT models.
+embeds separately pinned working-draft API, Publication, WoT, and Media Endpoint models.
 Model-source loading does not require a filesystem, network connection, or
 domain runtime.
 
@@ -31,6 +31,20 @@ the explicitly packaged model-source resolver. It resolves relative model
 includes without network access. `RegistryDomainRules.ValidateEndpointUsage`
 checks the Endpoint domain's allowed role combinations separately: those
 procedural rules are not core scalar `enum` constraints on an array.
+
+`RegistryModelKind.Media` compiles the Media Endpoints model at specification
+commit `811de7d20711dd3edc8c676ae634adebee235188`. Its protocol options and
+Endpoint/Message source snapshots are packaged as exact, hash-checked bytes;
+relative includes resolve only to those snapshots. `CompileAll()` and
+`CompileAllForServer()` retain the general messaging Endpoint model rather than
+silently replacing it with the Media model.
+
+The compiled Media model retains the source's `subscriber` role enumeration
+and Message collection inheritance. Compilation does not make those declarations
+valid media behavior: use `EndpointDefinition.MaterializeMedia` or
+`RegistryDomainRules.ValidateMediaEndpointMetadata` for the draft's
+single producer/consumer role, message-association and protocol-specific rules.
+Successful metadata validation does not establish receiver compatibility.
 
 SPEC-008 aligns Message declaration names and shapes with the domain prose:
 `basemessage`, HTTP `status` and string-map `query`, NATS `reply-to`, optional
@@ -85,7 +99,7 @@ Group constraints compare exact normalized instants. `ValidateGroupConstraints`
 provides a pure host-facing check for already-populated values: it neither
 applies defaults nor mutates metadata or acquires references.
 
-Public TUnit tests compare all seven byte hashes with independent frozen values,
+Public TUnit tests compare all eleven built-in source hashes with independent frozen values,
 check model-specific contracts, unknown-kind errors and ownership. The
 `eng/test-model-packages.ps1` probe packs into a new local feed, uses a fresh
 package cache and package references (not project references), and publishes and

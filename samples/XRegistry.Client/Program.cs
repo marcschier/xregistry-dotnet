@@ -38,7 +38,7 @@ static async Task<int> RunAsync(string[] arguments)
               verify-oci-capture CAPTURE.json
               publish-oci OCI-REPOSITORY REFERENCE CAPTURE.json [network options]
               validate FORMAT FILE
-              model core|endpoint|message|schema|cloudevents|registry|openusd
+              model core|endpoint|message|schema|cloudevents|registry|openusd|media
               runtime-info
 
             Network options: --allow-loopback-http, --allow-private-origin, --token-env NAME, --decode-content.
@@ -86,6 +86,7 @@ static async Task<int> RunAsync(string[] arguments)
                     "cloudevents" => RegistryModelKind.CloudEvents,
                     "registry" => RegistryModelKind.Registry,
                     "openusd" => RegistryModelKind.OpenUsd,
+                    "media" => RegistryModelKind.Media,
                     _ => throw new ArgumentException("Unknown built-in model name.")
                 };
                 using (var output = Console.OpenStandardOutput())

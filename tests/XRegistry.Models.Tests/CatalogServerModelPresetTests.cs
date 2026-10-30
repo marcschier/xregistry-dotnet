@@ -107,7 +107,7 @@ public class CatalogServerModelPresetTests
 
     [Test]
     [Arguments(-1)]
-    [Arguments(10)]
+    [Arguments(11)]
     [Arguments(int.MaxValue)]
     public async Task UnknownServerPresetKindsDoNotFallBackToAValidModel(int kind)
     {

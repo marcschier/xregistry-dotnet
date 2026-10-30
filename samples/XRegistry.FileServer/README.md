@@ -47,10 +47,16 @@ Registry-relative `.xregistry` and origin-root `/.well-known/xregistry`.
 
 ## Models and files
 
-Use `--Model all|core|endpoint|message|schema|cloudevents|registry|openusd`, or
+Use `--Model all|core|endpoint|message|schema|cloudevents|registry|openusd|media`, or
 `--ModelFile MODEL.json` for a custom model. The latter does not implicitly fetch
 external includes. `--InitialMetadata METADATA.json` supplies required custom
 Registry attributes for first initialization.
+
+The opt-in `media` choice compiles the pinned Media Endpoints model and its
+packaged dependencies. It does not replace the messaging Endpoint model in
+`all`. Model compilation does not apply the separate Media materialization
+contract or establish runtime media compatibility; see
+[built-in models](../../docs/models.md).
 
 The `registry` and `all` choices (including the default `all`) use explicit
 trusted server presets: `BuiltInRegistryModels.CompileForServer(RegistryModelKind.Registry)`

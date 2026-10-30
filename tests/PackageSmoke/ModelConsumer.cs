@@ -25,7 +25,8 @@ if (RuntimeFeature.IsDynamicCodeSupported || RuntimeFeature.IsDynamicCodeCompile
     (RegistryModelKind.OpenUsd, "bd2209ff833d3016809eb699330c5ebf798f610925a583796998427eff7a242d"),
     (RegistryModelKind.Api, "c3d333b91a8b5b926ba3c41a88c6a55a141697c6f514dc53d820da1608e4250f"),
     (RegistryModelKind.Publication, "f287f3c0972e5fda9a8e3c5e8a727ecc43c536f254795cf6a6433a4d69e6d134"),
-    (RegistryModelKind.Wot, "5a1cd2f60e8b54dd7151d6be25d033701a251780c14468711227b2e69a86d832")
+    (RegistryModelKind.Wot, "5a1cd2f60e8b54dd7151d6be25d033701a251780c14468711227b2e69a86d832"),
+    (RegistryModelKind.Media, "f8a0fa6cbd975f4c38ee211d291d5b64416bccc4d9a7242eaf4f9da34367cfa8")
 ];
 
 foreach (var model in models)
@@ -55,6 +56,17 @@ if (catalog.RootElement.GetProperty("groups").GetProperty("categories")
     .GetProperty("resources").GetProperty("registries").GetProperty("hasdocument").GetBoolean())
 {
     throw new InvalidOperationException("Packaged catalog registries must be documentless.");
+}
+
+var media = BuiltInRegistryModels.Compile(RegistryModelKind.Media);
+var signaling = media.Groups["endpoints"].Attributes["protocol"].IfValues["WebRTC"]["protocoloptions"].Attributes["signaling"];
+if (!signaling.Required || !signaling.Strict ||
+    string.Join(",", signaling.EnumValues.Select(static value => value.GetString())) !=
+        "WHIP/RFC9725,WHEP/draft-ietf-wish-whep-03,external" ||
+    !media.Groups["messagegroups"].Resources.ContainsKey("messages") ||
+    BuiltInRegistryModels.CompileAll().Groups["endpoints"].Attributes["protocol"].IfValues.ContainsKey("WebRTC"))
+{
+    throw new InvalidOperationException("The packaged Media model lost its pinned dependencies or opt-in boundary.");
 }
 
 Console.WriteLine(

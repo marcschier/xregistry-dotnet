@@ -36,7 +36,7 @@ static async Task<int> RunAsync(string[] args)
               [--AllowAnonymousReads true]
 
             Models:
-              --Model all|core|endpoint|message|schema|cloudevents|registry|openusd
+              --Model all|core|endpoint|message|schema|cloudevents|registry|openusd|media
               --ModelFile MODEL.json instead of --Model (external includes are not implicitly fetched)
               --InitialMetadata METADATA.json supplies required custom Registry attributes.
               Persisted models take precedence after initialization.
@@ -236,6 +236,7 @@ static async ValueTask<RegistryModel> ModelAsync(IConfiguration configuration, C
         "cloudevents" => RegistryModelKind.CloudEvents,
         "registry" => RegistryModelKind.Registry,
         "openusd" => RegistryModelKind.OpenUsd,
+        "media" => RegistryModelKind.Media,
         _ => throw new ArgumentException("Unknown built-in model selection.")
     });
 }

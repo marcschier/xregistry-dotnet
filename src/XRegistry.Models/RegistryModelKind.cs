@@ -34,5 +34,8 @@ public enum RegistryModelKind
     Publication,
 
     /// <summary>WoT Thing Models and Thing Descriptions.</summary>
-    Wot
+    Wot,
+
+    /// <summary>The opt-in Media Endpoints working-draft model.</summary>
+    Media
 }
