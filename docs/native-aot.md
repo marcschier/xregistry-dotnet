@@ -57,7 +57,8 @@ Every repository test project now includes the same opt-in
 `XREGISTRY_NATIVE_PROOF_PATH` captures that process's dynamic-code flags and JIT
 count. Set a distinct proof path for each separately executed test host.
 Evaluated compile items contain exactly one copy in each of the 16 projects.
-The complete managed gate passes 10,852 cases plus 283 tooling tests.
+At the common-proof checkpoint, the managed gate passed 10,852 cases plus
+283 tooling tests.
 The additional proof cases establish availability of the measurement, not
 native execution or specification coverage.
 
@@ -73,9 +74,16 @@ python eng\run_native_suites.py --framework net10.0 --rid win-x64 --project XReg
 ```
 
 Omit `--project` to run all thirteen suites, or repeat it to select several.
-Keep `dotnet`, Git and Python on `PATH`; Windows link fixtures also need
-PowerShell (`pwsh`). Missing tools fail before publication, not as skipped
-interoperability or filesystem cases.
+Keep `dotnet`, Git and Python on `PATH`; Windows link fixtures use both `pwsh`
+and `powershell.exe`. Install the File/OCI independent-oracle dependency
+closure, with versions and hashes constrained by the existing oracle lock:
+
+```powershell
+python -m pip install --require-hashes --only-binary=:all: -c eng\requirements-oracles.lock 'jsonschema[format-nongpl]'
+```
+
+Missing tools or oracle dependencies fail the gate; they do not turn cases
+into skips.
 Both roots must already exist and be absolute paths. The artifact root gets a
 fresh run directory; the work root supplies `TEMP`, `TMP` and `TMPDIR` for the
 test processes. Use local NTFS/ext4 for storage tests. The selected RID must

@@ -51,6 +51,12 @@ class NativeSuiteCiWorkflowTests(unittest.TestCase):
         self.assertIn('sudo umount "$RUNNER_TEMP/xregistry-suites-work"', self.job)
         self.assertIn("if: always() && runner.os == 'Linux'", self.job)
 
+    def test_native_suite_workflow_installs_hashed_oracle_dependencies_before_execution(self) -> None:
+        install = "python -m pip install --require-hashes --only-binary=:all: -c eng/requirements-oracles.lock 'jsonschema[format-nongpl]'"
+        self.assertIn(install, self.job)
+        self.assertLess(self.job.index(install), self.job.index("python eng/run_native_suites.py"))
+        self.assertNotIn("-r eng/requirements-oracles.lock", self.job)
+
 
 if __name__ == "__main__":
     unittest.main()

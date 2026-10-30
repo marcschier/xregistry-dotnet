@@ -58,6 +58,9 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.13'
+      - name: Install independently hashed oracle dependencies
+        run: |
+          python -m pip install --require-hashes --only-binary=:all: -c eng/requirements-oracles.lock 'jsonschema[format-nongpl]'
       - name: Provision isolated Linux ext4 test data volume
         if: runner.os == 'Linux'
         shell: bash
