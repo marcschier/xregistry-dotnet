@@ -586,8 +586,15 @@ the publisher's selector table also match declared types, including `number`,
 aliases for lists. `string` includes enum specializations and `integer` includes
 intEnum specializations. A member ID matches `member`, not the member's target
 type. Surrounding ASCII whitespace is ignored; names remain case-sensitive.
-A type mismatch is invalid. Other selector expressions report `Unsupported`
-when their target exists; an optional absent target does not require evaluation.
+A type mismatch is invalid; an optional absent target does not require evaluation.
+Type-token sequences intersect their predicates. Type-only `:test` predicates
+match when any argument matches, and `:not` requires exactly one argument and
+negates its result. These functions can nest and compose with type tokens.
+The evaluator checks the entire supported expression before returning a result;
+unsupported attributes, graph traversal or functions do not become matches
+through a true branch or a negated false branch. Empty arguments and partially
+parsed expressions report `Unsupported`. Nesting and token scanning consume the
+shared depth and work budgets.
 Well-formed relative IDs report `Unsupported` because this selector does not
 perform IDL assembly. Required references to implicit
 prelude shapes outside the supported prelude table also report `Unsupported`,

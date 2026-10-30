@@ -2309,7 +2309,7 @@ public static partial class ApiOperationDocumentResolver
             if (found && !wildcard)
             {
                 var kind = member is not null ? "member" : implicitKind ?? target.GetProperty("type").GetString()!;
-                var matches = MatchSmithyTypeSelector(selectorText, kind);
+                var matches = MatchSmithyReferenceSelector(selectorText, kind, path);
                 if (matches is null)
                 {
                     ValidationContext.Fail(DocumentValidationStatus.Unsupported, path, "smithy.id_ref_selector",
@@ -2317,6 +2317,88 @@ public static partial class ApiOperationDocumentResolver
                 }
                 ValidationContext.Require(matches.Value, path, "document.trait_id_ref_selector",
                     "The Smithy idRef target must match its type selector.");
+            }
+        }
+
+        private bool? MatchSmithyReferenceSelector(string text, string kind, string path)
+        {
+            var position = 0;
+            var result = Sequence(0);
+            return position == text.Length ? result : null;
+
+            bool? Sequence(int depth)
+            {
+                if (depth > Capabilities.MaxReferenceDepth)
+                {
+                    ValidationContext.Fail(DocumentValidationStatus.Indeterminate, path, "limit.reference_depth",
+                        "The Smithy reference selector nesting limit was exceeded.");
+                }
+                var matched = true;
+                var count = 0;
+                SkipWhitespace();
+                while (position < text.Length && text[position] is not (',' or ')'))
+                {
+                    budget.Work(path: path);
+                    bool? current;
+                    if (text[position] == '*')
+                    {
+                        position++;
+                        current = true;
+                    }
+                    else if (text[position] == ':')
+                    {
+                        position++;
+                        SkipWhitespace();
+                        var function = Identifier();
+                        SkipWhitespace();
+                        if (function is not ("test" or "not") || position == text.Length || text[position++] != '(')
+                        {
+                            return null;
+                        }
+                        var any = false;
+                        while (true)
+                        {
+                            var argument = Sequence(depth + 1);
+                            if (argument is null) { return null; }
+                            any |= argument.Value;
+                            if (position == text.Length) { return null; }
+                            var delimiter = text[position++];
+                            if (delimiter == ')') { break; }
+                            if (delimiter != ',' || function == "not") { return null; }
+                        }
+                        current = function == "not" ? !any : any;
+                    }
+                    else
+                    {
+                        var token = Identifier();
+                        current = token.Length == 0 ? null : MatchSmithyTypeSelector(token, kind);
+                    }
+                    if (current is null) { return null; }
+                    matched &= current.Value;
+                    count++;
+                    SkipWhitespace();
+                }
+                return count == 0 ? null : matched;
+            }
+
+            string Identifier()
+            {
+                var start = position;
+                while (position < text.Length && (char.IsAsciiLetterOrDigit(text[position]) || text[position] == '_'))
+                {
+                    budget.Work(path: path);
+                    position++;
+                }
+                return text[start..position];
+            }
+
+            void SkipWhitespace()
+            {
+                while (position < text.Length && text[position] is ' ' or '\t' or '\r' or '\n')
+                {
+                    budget.Work(path: path);
+                    position++;
+                }
             }
         }
 

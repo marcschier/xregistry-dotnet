@@ -249,8 +249,12 @@ vocabulary/source mapping. It does not supply their implementation.
   overrides and optional missing targets. References do not trigger schema
   traversal or acquisition. Single type selectors match concrete types and
   documented categories, including enum/intEnum specializations and list aliases.
-  Member IDs match the member shape rather than its target. Relative ID assembly,
-  compound selectors on existing targets and required references to unindexed
+  Member IDs match the member shape rather than its target. Type-token sequences
+  intersect predicates; nested type-only `:test` and `:not` expressions support
+  alternatives and negation with bounded scanning and nesting. Unsupported or
+  partially parsed expressions cannot yield a match through short-circuiting.
+  Relative ID assembly, other selectors on existing targets and required
+  references to unindexed
   implicit prelude shapes report `Unsupported`. General selector syntax and
   evaluation remain unvalidated.
   `traitValidators` checks trait-definition targets, nonempty event IDs and rule
