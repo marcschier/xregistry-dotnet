@@ -57,6 +57,14 @@ class NativeSuiteCiWorkflowTests(unittest.TestCase):
         self.assertLess(self.job.index(install), self.job.index("python eng/run_native_suites.py"))
         self.assertNotIn("-r eng/requirements-oracles.lock", self.job)
 
+    def test_native_suite_workflow_retains_the_hashed_managed_control_assembly(self) -> None:
+        upload = self.job.split("name: Retain native suite source, binary, case and rejected-control evidence", 1)[1]
+        self.assertIn("if: always()", upload)
+        paths = re.search(r"(?m)^          path: \|\n((?:            .+\n)+)", upload)
+        self.assertIsNotNone(paths)
+        self.assertIn("artifacts/native-suites/*/*/build/bin/**/XRegistry.*.Tests.dll",
+                      [line.strip() for line in paths.group(1).splitlines()])
+
 
 if __name__ == "__main__":
     unittest.main()

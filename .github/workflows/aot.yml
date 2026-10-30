@@ -90,6 +90,7 @@ jobs:
             artifacts/native-suites/*/*/results/**
             artifacts/native-suites/*/*/control-results/**
             artifacts/native-suites/*/*/native/**
+            artifacts/native-suites/*/*/build/bin/**/XRegistry.*.Tests.dll
           if-no-files-found: error
           retention-days: 14
       - name: Unmount only this job's suite test data volume

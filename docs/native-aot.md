@@ -102,10 +102,12 @@ receipt converter without creating a receipt.
 
 Each run retains source inventories and a summary; each suite retains publish
 and execution logs, the actual native executable, both TRX files, process
-proofs and a native receipt. The summary binds the source commit to executable,
-managed-assembly, TRX, proof and receipt hashes. A failed suite remains failed
-while later suites run; a source change aborts the remaining suites. Neither a
-partial run nor a receipt inside a failed summary qualifies that cell.
+proofs and a native receipt. CI also retains the matching managed test assembly
+so its recorded hash can be checked after the runner is gone. The summary binds
+the source commit to executable, managed-assembly, TRX, proof and receipt hashes.
+A failed suite remains failed while later suites run; a source change aborts
+the remaining suites. Neither a partial run nor a receipt inside a failed
+summary qualifies that cell.
 
 The `native-module-suites` job in `aot.yml` schedules all eight framework/RID
 cells and uploads evidence after failure as well as success. Linux jobs
@@ -126,9 +128,38 @@ unchanged. Evidence is retained in `D:\temp\native-suites-mfdnfwlc` (.NET 8)
 and `D:\temp\native-suites-rh3auxlv` (.NET 10). These selected subsets do not
 qualify a complete thirteen-project cell.
 
+The complete .NET 10/Windows x64 cell subsequently passed at
+`1bdfa6fa3a9416c479dc21ff748daaf07ab24828`: all thirteen suites executed
+5,082 native cases and matching complete managed baselines. Every publication
+ran ILC without IL diagnostics; native processes reported zero JIT compilations,
+and every managed control was rejected without a receipt. The source inventories
+remained identical. `D:\temp\native-suites-p15lg48q` retains the passing summary
+and each suite's executable, case reports, proofs and hashes. This is a complete
+development cell, not requirement-level release qualification.
+
 ## Current evidence and uncovered cells
 
-The [native matrix at `c7ff014`](https://github.com/marcschier/xregistry-dotnet/actions/runs/41044488180)
+The [native matrix at `1bdfa6f`](https://github.com/marcschier/xregistry-dotnet/actions/runs/41054105332)
+completed with 32 successful jobs and four failed jobs. All four .NET 10
+complete-suite cells passed on Windows/Linux x64 and ARM64, as did the 28
+separate package, sample and storage jobs. Each .NET 8 complete-suite cell
+failed the IL diagnostic gate for AspNetCore, HTTP, Federation and Git test
+hosts. The other nine suites passed in each failed cell, including the File/OCI
+oracle cases after their hashed dependencies were installed. A failed
+thirteen-project summary does not qualify a .NET 8 cell.
+
+The retained suite artifacts are in `D:\temp\xregistry-native-modules-1bdfa6f`.
+They include failure evidence; Linux test volumes unmounted successfully.
+All eight downloaded summaries were audited against their retained native
+executables, TRX files, proofs and receipts, including complete managed/native
+case inventories and rejection of managed proofs. This run did not retain the
+managed assemblies themselves; their recorded hashes cannot be independently
+rechecked. The upload rule now retains them for future runs.
+These results belong to `1bdfa6f`, before the W25 source reconciliation was
+retained locally. They do not establish native qualification against that
+later source inventory or complete requirement mappings.
+
+The earlier [native matrix at `c7ff014`](https://github.com/marcschier/xregistry-dotnet/actions/runs/41044488180)
 passed all 28 jobs on Windows/Linux x64 and ARM64: eight generic package-consumer
 cells, four model-consumer jobs executing both frameworks, eight storage cells,
 and four jobs each for the client and bridge samples. The .NET 10 storage jobs
