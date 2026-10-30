@@ -440,8 +440,10 @@ unsupported. Text comparisons consume the shared work budget.
 The `(length)` property counts array items and object entries, including null
 values. Empty aggregates have a present length of zero. Numeric comparisons
 and presence checks can use the result; further property access yields absence.
-Object-entry counting consumes the shared work budget. String length and
-string rendering of computed lengths remain unsupported. A quoted `'(length)'`
+Object-entry counting consumes the shared work budget. Computed lengths and
+trait counts use invariant decimal digits with the supported string comparators;
+numeric operands for those comparators still require quotes. String length
+remains unsupported. A quoted `'(length)'`
 is a literal object key, not a function property.
 The trait attribute also supports `[trait|(length)]`, which counts every trait
 applied directly to the selected shape, regardless of its payload value.

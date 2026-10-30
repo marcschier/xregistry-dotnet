@@ -2513,11 +2513,13 @@ public static partial class ApiOperationDocumentResolver
                         }
                         if (stringOperands is not null)
                         {
-                            if (nodeLength is not null || node.ValueKind == JsonValueKind.Number) { return null; }
+                            if (node.ValueKind == JsonValueKind.Number) { return null; }
                             current = false;
-                            if (node.ValueKind != JsonValueKind.Undefined)
+                            if (nodeLength is not null || node.ValueKind != JsonValueKind.Undefined)
                             {
-                                var value = node.ValueKind switch
+                                var value = nodeLength is { } countValue
+                                    ? countValue.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                                    : node.ValueKind switch
                                 {
                                     JsonValueKind.String => node.GetString()!,
                                     JsonValueKind.True => "true",

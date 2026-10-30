@@ -242,8 +242,9 @@ vocabulary/source mapping. It does not supply their implementation.
   Node `(length)` counts array items or object entries, including null values;
   empty aggregates have a present zero length. Numeric and presence predicates
   accept computed lengths, and subsequent property access yields absence.
-  Object counting consumes the shared work budget. String length and string
-  rendering of computed counts remain unsupported.
+  Object counting consumes the shared work budget. Computed counts use invariant
+  decimal digits with supported string comparators and quoted numeric operands.
+  String length remains unsupported.
   `[trait|(length)]` counts the selected shape's own applied traits, including
   a present zero when its traits object is omitted or empty. Payload truthiness
   does not affect the count. Malformed traits objects remain invalid; implicit
