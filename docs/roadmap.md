@@ -227,9 +227,12 @@ vocabulary/source mapping. It does not supply their implementation.
   to custom values and decoded map keys, with member constraints replacing
   target constraints. Length counts scalar values, decoded bytes or entries;
   range comparisons remain exact. Pattern matching and special-float range
-  checks report `Unsupported`. Enum value membership, collection uniqueness,
-  `idRef` value resolution and complete custom application schemas remain
-  unvalidated.
+  checks report `Unsupported`. Custom `uniqueItems` lists now use typed value
+  equality: exact numbers, decoded blobs, timestamp instants and recursive
+  aggregates. Nested lists retain order; maps ignore entry order. Absent members
+  remain distinct from supplied defaults. Comparisons consume the shared work
+  and depth budgets. Enum value membership, `idRef` value resolution and complete
+  custom application schemas remain unvalidated.
   Reached `protocolDefinition` declarations share the structure-trait target
   and required-trait reference checks; `noInlineDocumentSupport` requires a
   Boolean. Protocol selection and the service-closure document prohibition

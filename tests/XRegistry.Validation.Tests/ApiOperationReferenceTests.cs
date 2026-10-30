@@ -9955,6 +9955,234 @@ public class ApiOperationReferenceTests
         await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
     }
 
+    [Test]
+    [Arguments("string", "[]", true, -1)]
+    [Arguments("string", """["one"]""", true, -1)]
+    [Arguments("string", """["a","b","a"]""", false, 2)]
+    [Arguments("string", """["a","A"]""", true, -1)]
+    [Arguments("string", """["\u00e9","e\u0301"]""", true, -1)]
+    [Arguments("string", """["\u0061","a"]""", false, 1)]
+    [Arguments("string", """["a","a\u0000"]""", true, -1)]
+    [Arguments("boolean", "[true,false]", true, -1)]
+    [Arguments("boolean", "[false,false]", false, 1)]
+    [Arguments("boolean", "[true,true]", false, 1)]
+    [Arguments("blob", """["YQ=="," Y Q = = \n"]""", false, 1)]
+    [Arguments("blob", """["YQ==","Yg=="]""", true, -1)]
+    [Arguments("blob", """[""," \n"]""", false, 1)]
+    [Arguments("integer", "[1,2]", true, -1)]
+    [Arguments("bigDecimal", """["1.001",1.002]""", true, -1)]
+    public async Task SmithyJsonCustomTraitUniqueItemsUseTypedScalarEquality(string kind, string value, bool valid, int duplicateIndex)
+    {
+        var document = SmithyUniqueTraitDocument(kind, value);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid)
+        {
+            await Assert.That(result.Diagnostic).IsNull();
+            await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_unique_items");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/example#Custom/" +
+                duplicateIndex.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("byte", "[-0,0]")]
+    [Arguments("short", "[1,1.00]")]
+    [Arguments("integer", "[123,1.23e2]")]
+    [Arguments("long", "[9223372036854775807,9223372036854775807.0]")]
+    [Arguments("bigInteger", """["123456789012345678901234567890",123456789012345678901234567890]""")]
+    [Arguments("bigDecimal", """["1.2340",1234e-3]""")]
+    [Arguments("bigDecimal", """["0e-100",0]""")]
+    [Arguments("bigDecimal", """["1e1000","10e999"]""")]
+    public async Task SmithyJsonCustomTraitUniqueItemsCompareExactMathematicalNumbers(string kind, string value)
+    {
+        var result = ResolveSmithy(SmithyUniqueTraitDocument(kind, value).ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_unique_items");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/example#Custom/1");
+    }
+
+    [Test]
+    [Arguments("""[0,"1970-01-01T00:00:00Z"]""", false)]
+    [Arguments("""[-0.001,"1969-12-31T23:59:59.999Z"]""", false)]
+    [Arguments("""[0.1,"1970-01-01T00:00:00.100000Z"]""", false)]
+    [Arguments("""[0.12,"1970-01-01T00:00:00.12Z"]""", false)]
+    [Arguments("""["1970-01-01T00:00:00.0Z","1970-01-01T00:00:00Z"]""", false)]
+    [Arguments("""[-62135596800,"0001-01-01T00:00:00Z"]""", false)]
+    [Arguments("""[253402300799.999,"9999-12-31T23:59:59.999Z"]""", false)]
+    [Arguments("""[0e-100,"1970-01-01T00:00:00Z"]""", false)]
+    [Arguments("""[0,"1970-01-01T00:00:00.001Z"]""", true)]
+    [Arguments("""["1969-12-31T23:59:59.999Z","1970-01-01T00:00:00.001Z"]""", true)]
+    public async Task SmithyJsonCustomTraitUniqueItemsCompareTimestampInstants(string value, bool valid)
+    {
+        var result = ResolveSmithy(SmithyUniqueTraitDocument("timestamp", value).ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_unique_items");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/example#Custom/1");
+        }
+    }
+
+    [Test]
+    [Arguments("[[],[]]", false)]
+    [Arguments("[[1,2],[1.0,2e0]]", false)]
+    [Arguments("[[1,2],[2,1]]", true)]
+    [Arguments("[[1],[1,2]]", true)]
+    [Arguments("[[1,2],[1,3]]", true)]
+    public async Task SmithyJsonCustomTraitUniqueItemsPreserveNestedListOrder(string value, bool valid)
+    {
+        var document = SmithyUniqueTraitDocument("list", value);
+        document["shapes"]!["example#Item"]!["member"] = JsonNode.Parse("""{"target":"smithy.api#Integer"}""");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (!valid) { await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_unique_items"); }
+        else { await Assert.That(result.Diagnostic).IsNull(); }
+    }
+
+    [Test]
+    [Arguments("""[{},{}]""", false)]
+    [Arguments("""[{"a":1,"b":2},{"b":2.0,"a":1e0}]""", false)]
+    [Arguments("""[{"a":1},{"a":2}]""", true)]
+    [Arguments("""[{"a":1},{"b":1}]""", true)]
+    [Arguments("""[{"a":1},{"a":1,"b":2}]""", true)]
+    [Arguments("""[{"a":null},{"a":null}]""", false)]
+    [Arguments("""[{"a":null},{"a":0}]""", true)]
+    [Arguments("""[{"a":null},{}]""", true)]
+    [Arguments("""[{"a/b~c":1},{"a/b~c":1.0}]""", false)]
+    public async Task SmithyJsonCustomTraitUniqueItemsCompareUnorderedSparseMaps(string value, bool valid)
+    {
+        var document = SmithyUniqueTraitDocument("map", value);
+        document["shapes"]!["example#Item"]!["value"] = JsonNode.Parse("""{"target":"smithy.api#Integer"}""");
+        document["shapes"]!["example#Item"]!["traits"] = JsonNode.Parse("""{"smithy.api#sparse":{}}""");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (!valid) { await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_unique_items"); }
+        else { await Assert.That(result.Diagnostic).IsNull(); }
+    }
+
+    [Test]
+    [Arguments("structure", """[{"a":1,"b":2},{"b":2.0,"a":1e0}]""", false)]
+    [Arguments("structure", """[{"a":1},{"a":1,"b":0}]""", true)]
+    [Arguments("structure", """[{"a":1},{"a":2}]""", true)]
+    [Arguments("union", """[{"a":1},{"a":1.0}]""", false)]
+    [Arguments("union", """[{"a":1},{"b":1}]""", true)]
+    [Arguments("union", """[{"a":1},{"a":2}]""", true)]
+    public async Task SmithyJsonCustomTraitUniqueItemsCompareTypedAggregateMembers(string kind, string value, bool valid)
+    {
+        var document = SmithyUniqueTraitDocument(kind, value);
+        document["shapes"]!["example#Item"]!["members"] = JsonNode.Parse("""
+            {"a":{"target":"smithy.api#Integer"},"b":{"target":"smithy.api#Integer","traits":{"smithy.api#default":0}}}
+            """);
+        if (kind == "union") { document["shapes"]!["example#Item"]!["members"]!["b"]!.AsObject().Remove("traits"); }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (!valid) { await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_unique_items"); }
+        else
+        {
+            await Assert.That(result.Diagnostic).IsNull();
+            await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        }
+    }
+
+    [Test]
+    public async Task SmithyJsonCustomTraitUniqueItemsValidateNestedApplicationsAndEscapedPaths()
+    {
+        var document = SmithyUniqueTraitDocument("integer", "[1,2]");
+        document["shapes"]!["example#Custom"]!["traits"]!.AsObject().Remove("smithy.api#trait");
+        document["shapes"]!["example#Wrapper"] = JsonNode.Parse("""
+            {"type":"map","traits":{"smithy.api#trait":{}},"key":{"target":"smithy.api#String"},
+             "value":{"target":"example#Custom"}}
+            """);
+        document["shapes"]!["example#Get"]!["traits"] = JsonNode.Parse("""
+            {"example#Wrapper":{"a/b~c":[1,1.0]}}
+            """);
+        var invalid = ResolveSmithy(document.ToJsonString());
+        await Assert.That(invalid.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(invalid.Diagnostic!.Code).IsEqualTo("document.trait_unique_items");
+        await Assert.That(invalid.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/example#Wrapper/a~1b~0c/1");
+    }
+
+    [Test]
+    [Arguments("String", """["a","a"]""")]
+    [Arguments("Integer", "[1,1.0]")]
+    [Arguments("Timestamp", """[0,"1970-01-01T00:00:00Z"]""")]
+    [Arguments("Unit", "[{},{}]")]
+    [Arguments("Blob", """["YQ=="," YQ=="]""")]
+    [Arguments("Boolean", "[false,false]")]
+    public async Task SmithyJsonCustomTraitUniqueItemsCompareImplicitPreludeTargets(string type, string value)
+    {
+        var document = SmithyUniqueTraitDocument("string", value);
+        document["shapes"]!["example#Custom"]!["member"]!["target"] = "smithy.api#" + type;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_unique_items");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/example#Custom/1");
+    }
+
+    [Test]
+    [Arguments("enum", """["a","a"]""")]
+    [Arguments("intEnum", "[1,1.0]")]
+    public async Task SmithyJsonCustomTraitUniqueItemsCompareEnumValues(string kind, string value)
+    {
+        var document = SmithyUniqueTraitDocument(kind, value);
+        document["shapes"]!["example#Item"]!["members"] = kind == "enum"
+            ? JsonNode.Parse("""{"A":{"target":"smithy.api#Unit","traits":{"smithy.api#enumValue":"a"}}}""")
+            : JsonNode.Parse("""{"A":{"target":"smithy.api#Unit","traits":{"smithy.api#enumValue":1}}}""");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_unique_items");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/example#Custom/1");
+    }
+
+    [Test]
+    public async Task SmithyJsonCustomTraitUniqueItemsDoNotConstrainOrdinaryListsOrLiteralDocuments()
+    {
+        var document = SmithyUniqueTraitDocument("integer", "[1,1]");
+        document["shapes"]!["example#Custom"]!["traits"]!.AsObject().Remove("smithy.api#uniqueItems");
+        document["shapes"]!["example#Unused"] = JsonNode.Parse("""
+            {"type":"list","member":{"target":"smithy.api#Integer"},"traits":{"smithy.api#trait":{},"smithy.api#uniqueItems":{}}}
+            """);
+        document["shapes"]!["example#Literal"] = JsonNode.Parse("""{"type":"document","traits":{"smithy.api#trait":{}}}""");
+        document["shapes"]!["example#Get"]!["traits"]!["example#Literal"] = JsonNode.Parse("""
+            {"example#Unused":[1,1],"smithy.api#uniqueItems":[true,true]}
+            """);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+    }
+
+    [Test]
+    public async Task SmithyJsonCustomTraitUniqueItemsBoundComparisonWork()
+    {
+        var document = SmithyUniqueTraitDocument("integer", "[]");
+        var values = new JsonArray();
+        for (var index = 0; index < 1600; index++) { values.Add(index); }
+        document["shapes"]!["example#Get"]!["traits"]!["example#Custom"] = values;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("limit.work");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    private static JsonObject SmithyUniqueTraitDocument(string kind, string value)
+    {
+        var document = SmithyCustomNodeDocument("list", value);
+        document["shapes"]!["example#Custom"]!["traits"]!["smithy.api#uniqueItems"] = new JsonObject();
+        document["shapes"]!["example#Custom"]!["member"]!["target"] = "example#Item";
+        var item = SmithyCustomNodeDocument(kind, "{}")["shapes"]!["example#Custom"]!.DeepClone();
+        item.AsObject().Remove("traits");
+        document["shapes"]!["example#Item"] = item;
+        return document;
+    }
+
     private static JsonObject SmithyCustomNodeDocument(string kind, string value)
     {
         var shape = new JsonObject { ["type"] = kind, ["traits"] = JsonNode.Parse("""{"smithy.api#trait":{}}""") };

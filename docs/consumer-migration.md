@@ -422,8 +422,16 @@ for strings, decoded bytes for blobs and entries for collections. Range checks
 use exact inclusive numeric comparisons, including string-encoded large numbers.
 Pattern matching and range checks on special floating-point strings report
 `Unsupported`; optional members that are absent need no value evaluation.
-Enum value membership, collection uniqueness and `idRef` value resolution remain
-unvalidated.
+Lists marked `uniqueItems` reject equal custom trait values using the declared
+member type. Numbers compare by exact mathematical value, blobs by decoded bytes
+and timestamps by instant, including numeric/string equivalents. Nested lists
+retain order; maps ignore entry order. Structures compare the same supplied
+members, and unions compare the selected member and its value. Omitted defaults
+remain omitted, so they do not equal an explicitly supplied member. Sparse nulls
+in nested collections compare as nulls. Comparisons consume the shared work and
+depth budgets; exhaustion reports `Indeterminate`, without returning an operation.
+Ordinary lists and arbitrary document values are not uniqueness-checked.
+Enum value membership and `idRef` value resolution remain unvalidated.
 
 The `conflicts` property must be an array of absolute root trait IDs. A custom
 trait cannot coexist on the same shape with any trait named in that array,

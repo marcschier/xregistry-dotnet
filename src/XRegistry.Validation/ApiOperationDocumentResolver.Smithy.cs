@@ -2048,6 +2048,20 @@ public static partial class ApiOperationDocumentResolver
                     var listMember = shape.GetProperty("member");
                     ValidateTraitNode(listMember.GetProperty("target").GetString()!, item, itemPath, depth + 1, listMember);
                 }
+                if (TryTrait(shape, "smithy.api#uniqueItems", out _))
+                {
+                    var target = shape.GetProperty("member").GetProperty("target").GetString()!;
+                    for (var current = 1; current < value.GetArrayLength(); current++)
+                    {
+                        var itemPath = path + "/" + current.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                        for (var previous = 0; previous < current; previous++)
+                        {
+                            ValidationContext.Require(!TraitNodeEquals(target, value[previous], value[current], itemPath, depth + 1),
+                                itemPath, "document.trait_unique_items",
+                                "A Smithy uniqueItems trait list must not contain equal values.");
+                        }
+                    }
+                }
             }
             if (kind == "map")
             {
@@ -2091,6 +2105,100 @@ public static partial class ApiOperationDocumentResolver
                     }
                 }
             }
+        }
+
+        private bool TraitNodeEquals(string id, JsonElement left, JsonElement right, string path, int depth)
+        {
+            budget.Work(path: path);
+            if (depth > Capabilities.MaxReferenceDepth)
+            {
+                ValidationContext.Fail(DocumentValidationStatus.Indeterminate, path, "limit.reference_depth",
+                    "The Smithy trait value comparison depth limit was exceeded.");
+            }
+            if (left.ValueKind == JsonValueKind.Null || right.ValueKind == JsonValueKind.Null)
+            {
+                return left.ValueKind == right.ValueKind;
+            }
+            var supplied = shapes.TryGetProperty(id, out var shape);
+            var kind = supplied ? shape.GetProperty("type").GetString() : SmithyPreludeKind(id);
+            if (kind is "string" or "enum")
+            {
+                var a = left.GetString()!;
+                var b = right.GetString()!;
+                budget.Work((long)a.Length + b.Length, path);
+                return string.Equals(a, b, StringComparison.Ordinal);
+            }
+            if (kind == "boolean") { return left.ValueKind == right.ValueKind; }
+            if (kind == "blob")
+            {
+                var a = left.GetString()!;
+                var b = right.GetString()!;
+                budget.Work((long)a.Length + b.Length, path);
+                return Convert.FromBase64String(a).AsSpan().SequenceEqual(Convert.FromBase64String(b));
+            }
+            if (IsNumericKind(kind) || kind == "intEnum")
+            {
+                var a = kind is "bigInteger" or "bigDecimal"
+                    ? ReadSmithyNumber(left, path, "smithy.numeric_string_trait") : JsonNumber.Read(left, budget, path);
+                var b = kind is "bigInteger" or "bigDecimal"
+                    ? ReadSmithyNumber(right, path, "smithy.numeric_string_trait") : JsonNumber.Read(right, budget, path);
+                return a.CompareTo(b) == 0;
+            }
+            if (kind == "timestamp")
+            {
+                return TraitTimestampTicks(left, path) == TraitTimestampTicks(right, path);
+            }
+            if (kind == "list")
+            {
+                if (left.GetArrayLength() != right.GetArrayLength()) { return false; }
+                var target = shape.GetProperty("member").GetProperty("target").GetString()!;
+                for (var index = 0; index < left.GetArrayLength(); index++)
+                {
+                    if (!TraitNodeEquals(target, left[index], right[index], path, depth + 1)) { return false; }
+                }
+                return true;
+            }
+            var other = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+            foreach (var item in right.EnumerateObject())
+            {
+                budget.Work(item.Name.Length + 1L, path);
+                other.Add(item.Name, item.Value);
+            }
+            var count = 0;
+            foreach (var item in left.EnumerateObject())
+            {
+                budget.Work(item.Name.Length + 1L, path);
+                count++;
+                if (!other.TryGetValue(item.Name, out var value)) { return false; }
+                var target = kind == "map" ? shape.GetProperty("value").GetProperty("target").GetString()!
+                    : shape.GetProperty("members").GetProperty(item.Name).GetProperty("target").GetString()!;
+                if (!TraitNodeEquals(target, item.Value, value, path, depth + 1)) { return false; }
+            }
+            return count == other.Count;
+        }
+
+        private long TraitTimestampTicks(JsonElement value, string path)
+        {
+            if (value.ValueKind == JsonValueKind.Number)
+            {
+                var number = JsonNumber.Read(value, budget, path);
+                if (number.IsZero) { return DateTime.UnixEpoch.Ticks; }
+                var ticks = System.Numerics.BigInteger.Parse(number.Digits,
+                    System.Globalization.CultureInfo.InvariantCulture) *
+                    System.Numerics.BigInteger.Pow(10, (int)number.Exponent + 7);
+                return DateTime.UnixEpoch.Ticks + (long)(number.Negative ? -ticks : ticks);
+            }
+            var text = value.GetString()!;
+            budget.Work(text.Length, path);
+            var date = new DateTime(Part(0, 4), Part(5, 2), Part(8, 2),
+                Part(11, 2), Part(14, 2), Part(17, 2), DateTimeKind.Utc);
+            var fractionLength = Math.Min(3, text.Length - 21);
+            var milliseconds = fractionLength <= 0 ? 0
+                : Part(20, fractionLength) * (fractionLength == 1 ? 100 : fractionLength == 2 ? 10 : 1);
+            return date.Ticks + milliseconds * TimeSpan.TicksPerMillisecond;
+
+            int Part(int start, int count) => int.Parse(text.AsSpan(start, count),
+                System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture);
         }
 
         private void ValidateTraitNodeConstraints(string kind, JsonElement shape, JsonElement member,
