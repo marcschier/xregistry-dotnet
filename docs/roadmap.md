@@ -226,6 +226,11 @@ vocabulary/source mapping. It does not supply their implementation.
   timestamp root/member eligibility and the three declared serialization formats.
   Neither annotation rewrites the selected operation or changes default-node
   representations; protocol serialization and full name mapping remain open.
+  `mediaType` checks blob/string roots, including enum string specializations,
+  string values, RFC 6838 type/subtype names and parameter syntax. Each name
+  component permits 1 through 127 characters. Wildcards are rejected without
+  restricting names to registered IANA values. The selector preserves casing
+  and parameters without interpreting default content or assigning HTTP headers.
   `xmlName` checks structure/union roots and data members against the
   publisher's ASCII identifier or prefix:identifier grammar, rather than the
   broader XML name grammar. `xmlAttribute` checks object-valued structure-member

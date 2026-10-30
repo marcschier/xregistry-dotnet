@@ -506,6 +506,15 @@ string values. Separate containers can reuse a name. The selector preserves
 authored names without renaming model members or generating serialized objects.
 These checks do not qualify a protocol's complete property-name mapping.
 
+The `mediaType` trait requires a string on a blob or string root, including
+an enum string specialization. Members cannot carry this root-only annotation.
+The value must parse as a media type with valid parameter assignments.
+Type and subtype names follow RFC 6838's restricted-name grammar and each
+contain between 1 and 127 ASCII characters. Wildcards are not media type names;
+unregistered names remain permitted without an IANA lookup. Casing and
+parameters remain authored metadata. Selection neither validates default
+content against the media type nor converts bytes or assigns HTTP headers.
+
 The `xmlName` trait requires a string on a structure or union root, or on a
 data member. Its value must follow the publisher's ASCII grammar: each
 identifier starts with a letter or underscore and continues with letters,

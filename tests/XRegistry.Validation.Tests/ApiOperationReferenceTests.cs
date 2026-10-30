@@ -6579,6 +6579,168 @@ public class ApiOperationReferenceTests
         await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
     }
 
+    [Test]
+    [Arguments("application/json")]
+    [Arguments("Video/QuickTime")]
+    [Arguments("application/vnd.example.events+json")]
+    [Arguments("example/x.private")]
+    [Arguments("a/0")]
+    [Arguments("a!#$&-^_.+/b!#$&-^_.+")]
+    [Arguments("text/plain; charset=utf-8")]
+    [Arguments("text/plain; note=\"two words\"")]
+    public async Task SmithyJsonMediaTypesRetainOpenNamesCasingAndParameters(string mediaType)
+    {
+        var document = SmithyMediaTypeDocument("string", JsonValue.Create(mediaType));
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+    }
+
+    [Test]
+    [Arguments("")]
+    [Arguments("application")]
+    [Arguments("/json")]
+    [Arguments("application/")]
+    [Arguments("application/json/extra")]
+    [Arguments("*/*")]
+    [Arguments("application/*")]
+    [Arguments("_application/json")]
+    [Arguments("application/.json")]
+    [Arguments("application/j%son")]
+    [Arguments("application/j'son")]
+    [Arguments("application/j*son")]
+    [Arguments("application/j\u00e9son")]
+    [Arguments("application/json\r\nX-Header: value")]
+    [Arguments("text/plain; charset")]
+    [Arguments("text/plain; charset=")]
+    [Arguments("text/plain; note=\"unterminated")]
+    public async Task SmithyJsonMediaTypesRejectInvalidNamesAndParameters(string mediaType)
+    {
+        var result = ResolveSmithy(SmithyMediaTypeDocument("blob", JsonValue.Create(mediaType)).ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.media_type");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Target/traits/smithy.api#mediaType");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments(true, 126, true)]
+    [Arguments(true, 127, true)]
+    [Arguments(true, 128, false)]
+    [Arguments(false, 126, true)]
+    [Arguments(false, 127, true)]
+    [Arguments(false, 128, false)]
+    public async Task SmithyJsonMediaTypeComponentLengthsUseTheRfc6838Boundary(bool type, int length, bool valid)
+    {
+        var name = new string('a', length);
+        var mediaType = type ? name + "/json" : "application/" + name;
+        var result = ResolveSmithy(SmithyMediaTypeDocument("string", JsonValue.Create(mediaType)).ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.media_type");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("blob", true)]
+    [Arguments("string", true)]
+    [Arguments("enum", true)]
+    [Arguments("integer", false)]
+    [Arguments("intEnum", false)]
+    [Arguments("document", false)]
+    [Arguments("structure", false)]
+    [Arguments("union", false)]
+    [Arguments("list", false)]
+    [Arguments("map", false)]
+    [Arguments("operation", false)]
+    [Arguments("member", false)]
+    public async Task SmithyJsonMediaTypeRequiresABlobOrStringRoot(string kind, bool valid)
+    {
+        var result = ResolveSmithy(SmithyMediaTypeDocument(kind, JsonValue.Create("application/json")).ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("null")]
+    [Arguments("true")]
+    [Arguments("1")]
+    [Arguments("{}")]
+    [Arguments("[]")]
+    public async Task SmithyJsonMediaTypeRequiresAStringValue(string value)
+    {
+        var result = ResolveSmithy(SmithyMediaTypeDocument("string", JsonNode.Parse(value)).ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_value");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Target/traits/smithy.api#mediaType");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("string", "not-json")]
+    [Arguments("blob", "bm90LWpzb24=")]
+    public async Task SmithyJsonMediaTypeDoesNotValidateOrConvertDefaultContent(string kind, string value)
+    {
+        var document = SmithyMediaTypeDocument(kind, JsonValue.Create("application/json"));
+        document["shapes"]!["example#Target"]!["traits"]!["smithy.api#default"] = value;
+        document["shapes"]!["example#Event"]!["members"]!["data"]!["traits"] = JsonNode.Parse("""{"smithy.api#default":null}""");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+    }
+
+    [Test]
+    public async Task SmithyJsonMediaTypesPreserveNativeMetadataWithoutAcquisitionOrUnrelatedScanning()
+    {
+        var document = SmithyMediaTypeDocument("string", JsonValue.Create("application/json"));
+        document["shapes"]!["example#Get"]!["traits"] = JsonNode.Parse("""
+            {"smithy.api#examples":[{"title":"literal","input":{"smithy.api#mediaType":false,"target":"example#Absent"}}]}
+            """);
+        document["shapes"]!["example#Unused"] = JsonNode.Parse("""{"type":"integer","traits":{"smithy.api#mediaType":[]}}""");
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Media types are not dependency URLs."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
+    private static JsonNode SmithyMediaTypeDocument(string kind, JsonNode? mediaType)
+    {
+        var document = SmithyEventBindingDocument("eventHeader");
+        document["shapes"]!["example#Event"]!["members"]!["data"]!.AsObject().Remove("traits");
+        if (kind == "operation")
+        { document["shapes"]!["example#Get"]!["traits"] = new JsonObject { ["smithy.api#mediaType"] = mediaType }; }
+        else if (kind == "member")
+        { document["shapes"]!["example#Event"]!["members"]!["data"]!["traits"] = new JsonObject { ["smithy.api#mediaType"] = mediaType }; }
+        else
+        {
+            var target = JsonNode.Parse(kind switch
+            {
+                "enum" => """{"type":"enum","members":{"one":{"target":"smithy.api#Unit"}}}""",
+                "intEnum" => """{"type":"intEnum","members":{"one":{"target":"smithy.api#Unit","traits":{"smithy.api#enumValue":1}}}}""",
+                _ => """{"type":"KIND"}""".Replace("KIND", kind, StringComparison.Ordinal)
+            })!;
+            target["traits"] = new JsonObject { ["smithy.api#mediaType"] = mediaType };
+            document["shapes"]!["example#Target"] = target;
+        }
+        return document;
+    }
+
     private static JsonNode SmithyEventBindingDocument(string trait)
     {
         var document = JsonNode.Parse(SmithyStreamingDocument())!;

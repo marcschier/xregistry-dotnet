@@ -1,6 +1,7 @@
 // Copyright (c) 2026 xregistry-dotnet contributors.
 // SPDX-License-Identifier: MIT
 
+using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -35,6 +36,18 @@ public static partial class ApiOperationDocumentResolver
     [GeneratedRegex(@"\A(?:[A-Za-z0-9._~!$&'()*+,;=:@/?-]|%[A-Fa-f0-9]{2})*\z",
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
     private static partial Regex SmithyUriFragment();
+
+    [GeneratedRegex(@"\A[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*\z",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
+    private static partial Regex SmithyMediaTypeComponent();
+
+    private static bool IsSmithyMediaTypeName(string value)
+    {
+        var slash = value.IndexOf('/');
+        return slash is >= 1 and <= 127 && value.Length - slash - 1 is >= 1 and <= 127 &&
+            SmithyMediaTypeComponent().IsMatch(value.AsSpan(0, slash)) &&
+            SmithyMediaTypeComponent().IsMatch(value.AsSpan(slash + 1));
+    }
 
     private static bool IsSmithyNamespaceUri(string value)
     {
@@ -1084,6 +1097,7 @@ public static partial class ApiOperationDocumentResolver
                     "smithy.api#idempotencyToken" => memberContainer == "structure",
                     "smithy.api#eventPayload" or "smithy.api#eventHeader" => memberContainer == "structure",
                     "smithy.api#jsonName" => memberContainer is "structure" or "union",
+                    "smithy.api#mediaType" => memberContainer is null && kind is "blob" or "string" or "enum",
                     "smithy.api#xmlName" => memberContainer is not null ||
                         kind is "structure" or "union",
                     "smithy.api#xmlAttribute" => memberContainer == "structure",
@@ -1150,6 +1164,17 @@ public static partial class ApiOperationDocumentResolver
                         ValidationContext.Require(millis.IsInteger && FitsNumericRange("integer", millis) &&
                             millis.CompareTo(new(false, "1", 0)) >= 0, timeoutPath, "document.long_poll_timeout",
                             "Smithy longPoll timeoutMillis must be a positive signed 32-bit integer.");
+                        continue;
+                    case "smithy.api#mediaType":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.String, traitPath,
+                            "document.trait_value", "The Smithy mediaType trait requires a string value.");
+                        var mediaTypeText = trait.Value.GetString()!;
+                        budget.Work(mediaTypeText.Length, traitPath);
+                        ValidationContext.Require(MediaTypeHeaderValue.TryParse(mediaTypeText, out var mediaType) &&
+                            mediaType.MediaType is not null && IsSmithyMediaTypeName(mediaType.MediaType) &&
+                            mediaType.Parameters.All(static parameter => parameter.Value is not null),
+                            traitPath, "document.media_type",
+                            "The Smithy media type requires RFC 6838 type/subtype names and valid parameters.");
                         continue;
                     case "smithy.api#xmlNamespace":
                         ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
