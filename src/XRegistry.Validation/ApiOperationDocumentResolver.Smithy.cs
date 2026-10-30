@@ -1409,6 +1409,22 @@ public static partial class ApiOperationDocumentResolver
                     "Conflicting Smithy prelude traits cannot be applied to the same shape.");
                 switch (trait.Name)
                 {
+                    case "smithy.api#unstable":
+                        ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
+                            "document.trait_value", "The Smithy unstable trait requires an object value.");
+                        if (trait.Value.TryGetProperty("featureId", out var featureId))
+                        {
+                            var featurePath = traitPath + "/featureId";
+                            ValidationContext.Require(featureId.ValueKind == JsonValueKind.String, featurePath,
+                                "document.trait_value", "A Smithy unstable featureId must be a string.");
+                            var featureText = featureId.GetString()!;
+                            budget.Work(featureText.Length, featurePath);
+                            var featureLength = 0;
+                            foreach (var rune in featureText.EnumerateRunes()) { featureLength++; }
+                            ValidationContext.Require(featureLength <= 100, featurePath, "document.unstable_feature",
+                                "A Smithy unstable featureId cannot exceed 100 Unicode scalar values.");
+                        }
+                        continue;
                     case "smithy.api#endpoint":
                         ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.Object, traitPath,
                             "document.trait_value", "The Smithy endpoint trait requires an object value.");

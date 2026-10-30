@@ -8403,6 +8403,167 @@ public class ApiOperationReferenceTests
         await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
     }
 
+    [Test]
+    [Arguments("null")]
+    [Arguments("true")]
+    [Arguments("[]")]
+    [Arguments("\"preview\"")]
+    [Arguments("100")]
+    public async Task SmithyJsonUnstableRequiresAnObjectAnnotation(string annotation)
+    {
+        var document = SmithyEndpointDocument();
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#unstable"] = JsonNode.Parse(annotation);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_value");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/smithy.api#unstable");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("null")]
+    [Arguments("true")]
+    [Arguments("[]")]
+    [Arguments("{}")]
+    [Arguments("100")]
+    public async Task SmithyJsonUnstableFeatureIdRequiresAString(string value)
+    {
+        var document = SmithyEndpointDocument();
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#unstable"] =
+            new JsonObject { ["featureId"] = JsonNode.Parse(value) };
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_value");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/smithy.api#unstable/featureId");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments(0, false)]
+    [Arguments(1, false)]
+    [Arguments(99, false)]
+    [Arguments(100, false)]
+    [Arguments(101, false)]
+    [Arguments(99, true)]
+    [Arguments(100, true)]
+    [Arguments(101, true)]
+    public async Task SmithyJsonUnstableFeatureIdsUseUnicodeScalarLengthAtTheDeclaredBoundary(int length, bool supplementary)
+    {
+        var document = SmithyEndpointDocument();
+        var text = supplementary ? string.Concat(Enumerable.Repeat("\U0001F680", length)) : new string('a', length);
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#unstable"] = new JsonObject { ["featureId"] = text };
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(length <= 100
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (length <= 100)
+        {
+            await Assert.That(result.Diagnostic).IsNull();
+            await Assert.That(result.Operation.GetProperty("traits").GetProperty("smithy.api#unstable")
+                .GetProperty("featureId").GetString()).IsEqualTo(text);
+        }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.unstable_feature");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/smithy.api#unstable/featureId");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    public async Task SmithyJsonUnstableFeatureIdsCountCombiningCharactersWithoutNormalization()
+    {
+        var document = SmithyEndpointDocument();
+        var composed = new string('\u00e9', 100);
+        var decomposed = string.Concat(Enumerable.Repeat("e\u0301", 100));
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#unstable"] = new JsonObject { ["featureId"] = composed };
+        var selected = ResolveSmithy(document.ToJsonString());
+        await Assert.That(selected.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(selected.Diagnostic).IsNull();
+        await Assert.That(selected.Operation.GetProperty("traits").GetProperty("smithy.api#unstable")
+            .GetProperty("featureId").GetString()).IsEqualTo(composed);
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#unstable"]!["featureId"] = decomposed;
+        var invalid = ResolveSmithy(document.ToJsonString());
+        await Assert.That(invalid.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(invalid.Diagnostic!.Code).IsEqualTo("document.unstable_feature");
+        await Assert.That(invalid.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("operation")]
+    [Arguments("structure")]
+    [Arguments("member")]
+    [Arguments("string")]
+    [Arguments("union")]
+    [Arguments("list")]
+    [Arguments("map")]
+    [Arguments("enum")]
+    [Arguments("intEnum")]
+    public async Task SmithyJsonUnstableAppliesToReachedRootsAndAllDataMemberKinds(string location)
+    {
+        var document = SmithyEndpointDocument();
+        document["shapes"]!["example#Get"]!.AsObject().Remove("traits");
+        document["shapes"]!["example#Input"]!["members"]!["id"]!.AsObject().Remove("traits");
+        JsonNode target;
+        if (location == "operation") { target = document["shapes"]!["example#Get"]!; }
+        else if (location == "structure") { target = document["shapes"]!["example#Input"]!; }
+        else if (location == "member") { target = document["shapes"]!["example#Input"]!["members"]!["id"]!; }
+        else
+        {
+            document["shapes"]!["example#Identifier"] = SmithyHttpBindingTarget(location);
+            target = location switch
+            {
+                "list" => document["shapes"]!["example#Identifier"]!["member"]!,
+                "map" => document["shapes"]!["example#Identifier"]!["value"]!,
+                "union" => document["shapes"]!["example#Identifier"]!["members"]!["value"]!,
+                "enum" or "intEnum" => document["shapes"]!["example#Identifier"]!["members"]!["ONE"]!,
+                _ => document["shapes"]!["example#Identifier"]!
+            };
+        }
+        target["traits"] ??= new JsonObject();
+        target["traits"]!["smithy.api#unstable"] = new JsonObject();
+        var selected = ResolveSmithy(document.ToJsonString());
+        await Assert.That(selected.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(selected.Diagnostic).IsNull();
+        target["traits"]!["smithy.api#unstable"] = false;
+        var invalid = ResolveSmithy(document.ToJsonString());
+        await Assert.That(invalid.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(invalid.Diagnostic!.Code).IsEqualTo("document.trait_value");
+        await Assert.That(invalid.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonUnstableFeatureMetadataDoesNotAcquireShapesOrClaimServiceFeatureValidation()
+    {
+        var document = SmithyEndpointDocument();
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#unstable"] =
+            new JsonObject { ["featureId"] = "example#Absent" };
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#examples"] = JsonNode.Parse("""
+            [{"title":"literal metadata","input":{"smithy.api#unstable":false,"target":"example#Absent"}}]
+            """);
+        document["shapes"]!["example#Unused"] = JsonNode.Parse("""{"type":"string","traits":{"smithy.api#unstable":false}}""");
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Feature IDs are not acquisition edges."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
+    [Test]
+    public async Task SmithyJsonUnstableMetadataCannotSupplyMissingDataDefinitions()
+    {
+        var document = SmithyEndpointDocument();
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#unstable"] = new JsonObject();
+        document["shapes"]!.AsObject().Remove("example#Identifier");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("dependency.unresolved");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Identifier");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
     private static JsonNode SmithyEndpointDocument()
     {
         var document = SmithyHttpOperationDocument();

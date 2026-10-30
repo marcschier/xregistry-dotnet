@@ -209,6 +209,10 @@ vocabulary/source mapping. It does not supply their implementation.
   `longPoll` requires an operation object annotation with a positive signed
   32-bit integer `timeoutMillis`, checked exactly without rounding. The check
   does not execute polling or modify request timeout configuration.
+  `unstable` checks object declarations and optional string `featureId` values
+  with a 100-Unicode-scalar limit, without normalization or shape acquisition.
+  Enclosing-service `unstableFeatures` membership, generated warnings and
+  model-diff behavior remain unvalidated.
   `endpoint` checks operation applicability, object/string declarations,
   registered-name prefix literals and distinct nonadjacent labels. Labels
   require exact-name top-level input members with required string-valued

@@ -499,6 +499,17 @@ including structures outside an event stream, without serializing events or
 choosing a framing protocol. Literal example content and unrelated event
 definitions remain outside the selected closure.
 
+The `unstable` trait requires an object on reached shapes and members.
+Its optional `featureId` must be a string of at most 100 Unicode scalar values;
+supplementary characters count once and combining characters are not normalized.
+An omitted feature ID remains valid. Feature IDs are metadata, not shape
+references, and do not trigger acquisition.
+
+These are local declaration checks. Selection does not establish that each
+feature ID appears in every enclosing service's `unstableFeatures` map,
+generate preview warnings or relax model-diff rules. Full preview-feature
+validation remains pending.
+
 The operation-only `endpoint` trait requires an object with a string
 `hostPrefix`. Prefix literals follow the RFC 3986 registered-name grammar,
 without schemes, user information or ports. Labels must have distinct valid
