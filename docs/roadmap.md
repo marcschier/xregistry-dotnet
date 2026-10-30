@@ -244,9 +244,9 @@ vocabulary/source mapping. It does not supply their implementation.
   trait definitions marked with object-valued `authDefinition`; required trait
   IDs are traversed with schema dependencies and private-access checks, without
   requiring that dependency list to be unique. Missing definitions remain
-  unresolved without acquisition. Complete implicit required-trait coverage,
-  enclosing-service scheme application/inheritance and custom application
-  schemas remain unvalidated.
+  unresolved without acquisition. Complete implicit required-trait coverage
+  and enclosing-service scheme application/inheritance remain unvalidated.
+  Explicit custom scheme applications use the schema checks described below.
   Custom trait applications now check scalar node kinds, base64, exact numeric
   type bounds and supported string timestamps after schema-closure validation.
   Their application sites also check type-token selectors and supported
@@ -302,15 +302,17 @@ vocabulary/source mapping. It does not supply their implementation.
   empty projection. The extracted value retains its node or identity type.
   Projections are unordered; use this property only when a single value is
   expected rather than relying on cross-implementation ordering. Expansion is
-  work-charged before extraction. Scoped selectors and projection-to-projection
-  operators remain unsupported.
+  work-charged before extraction. Scoped assertions and projection subset
+  comparisons are described below; graph traversal and projection equality
+  remain unsupported.
   String trait/node predicates support ordinal `=`, `!=`, `^=`, `$=` and `*=`
   with operand alternatives. Booleans use their lowercase text; present nulls
   and aggregates compare as empty strings, while missing attributes never
-  match. Numeric rendering, unquoted numeric operands, empty quoted operands
-  remain unsupported. String comparisons accept `i` for ASCII-only values and
-  operands; non-ASCII folding remains unsupported. Trait/property names remain
-  exact. Character checks and repeated comparison consume the shared work budget.
+  match. Numeric string rendering, unquoted numeric string operands and empty
+  quoted operands remain unsupported. String comparisons accept `i` for
+  ASCII-only values and operands; non-ASCII folding remains unsupported.
+  Trait/property names remain exact. Character checks and repeated comparison
+  consume the shared work budget.
   The `id` attribute exposes absolute root/member identity, its namespace/name/
   member parts and their `(length)`. Root member parts are absent. Application
   and `idRef` selectors inspect their respective selected identities, including
@@ -476,7 +478,7 @@ vocabulary/source mapping. It does not supply their implementation.
   `requestCompression` checks operation applicability, a nonempty array of
   case-insensitive gzip encodings and the conflict with length-requiring
   streaming inputs. Authored declarations are preserved without compression,
-  length calculation or stream execution. HTTP payload binding remains open.
+  length calculation or stream execution.
   `eventHeader`/`eventPayload` check object values, structure-member applicability,
   declared target kinds and enum specializations. Their mutual conflict is
   property-order independent. A structure can declare only one explicit payload;
@@ -517,7 +519,8 @@ vocabulary/source mapping. It does not supply their implementation.
   `uniqueItems` checks list-only applicability, object values and the conflict
   with `sparse`. Its transitive data graph cannot contain float, double or
   document shapes; recursive traversal excludes trait-definition dependencies.
-  Instance uniqueness and value equality are not evaluated.
+  Applied custom-trait lists check typed value equality and uniqueness as
+  described above; ordinary data-instance validation remains outside the selector.
   Private shapes reject reached data/custom-trait references from other exact
   namespaces, including repeated references after a permitted visit. Private
   member markings do not change target accessibility; literal values and
@@ -526,13 +529,16 @@ vocabulary/source mapping. It does not supply their implementation.
   and exact integral signed-64-bit bounds. Non-null defaults check effective
   bounds, with member traits superseding target traits. Strings count Unicode
   scalars, blobs count decoded bytes, and empty list/map defaults count zero.
-  Null member overrides are not measured; instance length evaluation remains open.
+  Null member overrides are not measured. Applied custom-trait values and map
+  keys also check effective length bounds; ordinary data-instance validation
+  remains outside the selector.
   `range` declarations check numeric targets, required bounds, integral bounds
   for integral targets and exact native limits. Numeric defaults check
   inclusive effective bounds, with member traits replacing target traits.
   Null overrides remain valid. String-encoded bounds support bounded JSON-number
   spellings; other spellings and special floating defaults with ranges report
-  unsupported. Instance range checks remain open.
+  unsupported. Applied custom-trait values also check effective range bounds;
+  ordinary data-instance validation remains outside the selector.
   `pattern` declarations check string/enum targets and string values through
   the shared bounded ECMA-262 syntax checker. Unsupported syntax and non-null
   defaults requiring matching report unsupported; no anchors or .NET matching
