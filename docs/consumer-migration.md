@@ -26,7 +26,7 @@ complete xRegistry conformance.
 | HTTP serving | `XRegistry.AspNetCore.MapXRegistry` | Maps a concrete `RegistryEngine`; it does not start or secure a host. |
 | Transactional persistence | Application-owned `IRegistryPersistence`, or `LocalRegistryPersistence` over `LocalFileStore` | Storage generations are not entity epochs or remote Registry revisions. |
 | Schema-source validation | `XRegistry.Validation` | Supported schema formats and policies, not OPC UA NodeSets/sessions/projection. |
-| API Registry and operation references | `XRegistry.Models` (`RegistryModelKind.Api`) and `XRegistry.Validation` (`ApiOperationReference`, `ApiOperationDocumentResolver`) | The model describes versioned API definitions. The parser accepts operation, service, interface, GraphQL and JSON Pointer selectors. Document resolution supports OpenAPI 3.0/3.1 and Swagger 2.0 JSON operations by `operationId` or JSON Pointer, and OpenRPC 1.4 JSON methods by exact `name`. These selectors do not validate the full API document; other language resolvers remain unsupported. |
+| API Registry and operation references | `XRegistry.Models` (`RegistryModelKind.Api`) and `XRegistry.Validation` (`ApiOperationReference`, `ApiOperationDocumentResolver`) | The model describes versioned API definitions. The parser accepts operation, service, interface, GraphQL and JSON Pointer selectors. Document resolution supports OpenAPI 3.0/3.1 and Swagger 2.0 JSON operations by `operationId` or JSON Pointer, OpenRPC 1.4 JSON methods by exact `name`, and Avro Protocol 1.12.0 JSON messages by exact member name. These selectors do not validate the full API document; other language resolvers remain unsupported. |
 | Federation read acquisition | `IFederationReadSource` / `HttpFederationReadSource` | A read-source seam, not a write dispatcher or immutable live snapshot. |
 | OPC UA access and federation reads | `XRegistry.Bindings.OpcUa` | Uses OPC UA Client Stack 2.0.1 to discover endpoints, apply caller policy, open a Session, remap the portable root through `NamespaceArray`, and verify Registry type and Core version. `OpcUaRegistryReadSource` maps Registry, Group, Resource, Meta, Version and collection views, and reads local FileType Documents or returns external-reference descriptors. `OpcUaRegistryWriter` updates Properties and calls Methods, including Resource Document replacement. Callers supply Group, Resource and ResourceVersions ObjectType mappings. Fake-Session tests cover reader, source and writer behavior; in-process server tests cover Session establishment, XREG-Events subscription management, writes, methods and document transfer. Two-server tests cover trusted external Resource and Version resolution. Core API views and NodeSet projection remain unimplemented. Endpoint security policy is caller-selected. Generic packages remain free of OPC UA types. |
 
@@ -43,6 +43,17 @@ reports an unavailable dependency; throwing `UnauthorizedAccessException`
 reports `Denied`. A required dependency failure prevents selection even if an
 earlier method matched. Caller cancellation propagates; deadline expiry reports
 `Indeterminate`. Resolution never invokes an API.
+
+For `AvroProtocol/1.12.0`, `#operations/GetUser` selects the exact `GetUser`
+member of `messages`. An absent or empty `messages` object has no selectable
+operations; an Avro data schema without a protocol declaration is rejected.
+The returned object preserves the native request, response, declared errors and
+one-way flag. A one-way message requires a null response and no declared errors.
+The resolver checks protocol/message shapes, not complete Avro schemas, name
+binding or defaults. Named types remain in the caller's original protocol;
+selection does not inline them or synthesize the implicit system-error branch.
+Avro JSON metadata, including a member named `$ref`, never triggers dependency
+acquisition. This does not add Avro IDL parsing or full protocol validation.
 
 SemVer-profile WoT minimum-version floors exclude build metadata and fit the
 128-character Core id limit. Generated `0.0.0-N` floors are forbidden, with

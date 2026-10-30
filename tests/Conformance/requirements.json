@@ -112860,13 +112860,28 @@
       ],
       "text": "The `format` identifier for Apache Avro Protocol is `AvroProtocol`. The version identifies the Apache Avro release used to define the protocol. `AvroProtocol/1.12.0` identifies a JSON document conforming to the [Avro 1.12.0 protocol rules][avro]. The document MUST contain a protocol declaration; Avro data schemas are outside this API profile.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The JSON operation resolver requires a protocol declaration and selects exact native message names with bounded parsing and structural guards. The mapped tests establish selection, message preservation and rejection of schema-only inputs, not complete Avro 1.12.0 protocol conformance. Schema definitions, name binding and defaults are not fully validated; SupportsApiDocumentValidation remains false. Keep this format requirement pending.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.AvroProtocolSelectionPreservesTheDeclaredMessageWithoutResolvingMetadataReferences",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.AvroProtocolSelectionRejectsInvalidProtocolAndMessageShapes",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.AvroProtocolMissingAndDifferentCaseMessagesDoNotSelectAResult",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.AvroProtocolDoesNotHideMalformedMessagesAfterAnEarlyMatch",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.AvroProtocolReturnsOwnedNativeResponseAndOneWayShapes",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.AvroProtocolOnlyAcceptsItsNativeMessageNameLocator",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.AvroProtocolMessageNamesArePercentDecodedExactlyOnce",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.AvroProtocolDuplicateMessagesFailInsteadOfSelectingTheLastDeclaration",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.AvroProtocolUsesTheSharedByteLimitAndCallerCancellation",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.AvroProtocolDoesNotAdvertiseOtherReleasesOrIdlParsing"
+        ],
         "nativeEvidence": []
       }
     },

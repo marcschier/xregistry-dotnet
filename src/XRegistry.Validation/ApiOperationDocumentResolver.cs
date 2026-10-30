@@ -20,7 +20,8 @@ public sealed class ApiOperationResolverCapabilities
 {
     internal ApiOperationResolverCapabilities()
     {
-        Formats = Array.AsReadOnly(["OpenAPI/3.0", "OpenAPI/3.1", "Swagger/2.0", "OpenRPC/1.4"]);
+        Formats = Array.AsReadOnly(["OpenAPI/3.0", "OpenAPI/3.1", "Swagger/2.0", "OpenRPC/1.4",
+            "AvroProtocol/1.12.0"]);
         ContentTypes = Array.AsReadOnly(["application/json"]);
         Selectors = Array.AsReadOnly([ApiOperationSelectorKind.Operation, ApiOperationSelectorKind.JsonPointer]);
         SupportsCallerProvidedPathItemReferences = true;
@@ -43,7 +44,7 @@ public sealed class ApiOperationResolverCapabilities
     public bool SupportsCallerProvidedPathItemReferences { get; }
 
     /// <summary>
-    /// Gets whether operationId selection can resolve Operation Object references through a caller-supplied resolver.
+    /// Gets whether OpenAPI/Swagger and OpenRPC selection can follow operation references through a caller-supplied resolver.
     /// </summary>
     public bool SupportsCallerProvidedOperationReferences { get; }
 
@@ -98,10 +99,10 @@ public sealed class ApiOperationResolutionResult
     /// <summary>Gets the resolution outcome.</summary>
     public ApiOperationResolutionStatus Status { get; }
 
-    /// <summary>Gets the selected native JSON operation or method object.</summary>
+    /// <summary>Gets the selected native JSON operation, method or protocol message object.</summary>
     public JsonElement Operation { get; }
 
-    /// <summary>Gets the document-local JSON Pointer to the selected Operation Object.</summary>
+    /// <summary>Gets the document-local JSON Pointer to the selected operation, method or message.</summary>
     public string? DocumentPath { get; }
 
     /// <summary>Gets the source document URI when the selected operation came from a referenced document.</summary>
@@ -136,7 +137,7 @@ public enum ApiOperationResolutionStatus
     Denied,
 }
 
-/// <summary>Selects OpenAPI, Swagger and OpenRPC operations from an already acquired JSON document.</summary>
+/// <summary>Selects OpenAPI, Swagger, OpenRPC and Avro Protocol operations from an acquired JSON document.</summary>
 public static partial class ApiOperationDocumentResolver
 {
     private static readonly string[] s_methods =
@@ -207,7 +208,8 @@ public static partial class ApiOperationDocumentResolver
                 "The API operation resolver accepts JSON documents only.");
         }
         if (reference.Selector.Kind is not (ApiOperationSelectorKind.Operation or ApiOperationSelectorKind.JsonPointer) ||
-            format == "OpenRPC/1.4" && reference.Selector.Kind != ApiOperationSelectorKind.Operation)
+            format is "OpenRPC/1.4" or "AvroProtocol/1.12.0" &&
+            reference.Selector.Kind != ApiOperationSelectorKind.Operation)
         {
             return Failure(ApiOperationResolutionStatus.Unsupported, "selector.unsupported",
                 "The API operation selector is not supported for the selected format.");
@@ -244,6 +246,10 @@ public static partial class ApiOperationDocumentResolver
             {
                 return ResolvePointer(root, reference.Selector.Tokens, cancellationToken);
             }
+            if (format == "AvroProtocol/1.12.0")
+            {
+                return ResolveAvroMessage(root, reference.Selector.Tokens[^1], documentUri, cancellationToken);
+            }
             using var references = new ReferenceContext(parsed, documentUri, resolveReference, budget);
             if (format == "OpenRPC/1.4")
             {
@@ -261,6 +267,27 @@ public static partial class ApiOperationDocumentResolver
         {
             return Failure(ApiOperationResolutionStatus.Invalid, "document.root",
                 "An API document must be a JSON object.");
+        }
+        if (format == "AvroProtocol/1.12.0")
+        {
+            if (!root.TryGetProperty("protocol", out var protocol) || protocol.ValueKind != JsonValueKind.String ||
+                string.IsNullOrEmpty(protocol.GetString()))
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid, "document.protocol",
+                    "An Avro API document must contain a non-empty protocol declaration.", "$/protocol");
+            }
+            if (root.TryGetProperty("namespace", out var protocolNamespace) &&
+                protocolNamespace.ValueKind != JsonValueKind.String)
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid, "document.namespace",
+                    "An Avro protocol namespace must be a string.", "$/namespace");
+            }
+            if (root.TryGetProperty("messages", out var messages) && messages.ValueKind != JsonValueKind.Object)
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid, "document.messages",
+                    "Avro protocol messages must be a JSON object.", "$/messages");
+            }
+            return null;
         }
         if (format == "OpenRPC/1.4")
         {
@@ -301,6 +328,68 @@ public static partial class ApiOperationDocumentResolver
                 "The API document must contain a paths object.", "$/paths");
         }
         return null;
+    }
+
+    private static ApiOperationResolutionResult ResolveAvroMessage(JsonElement root, string messageName,
+        Uri? documentUri, CancellationToken cancellationToken)
+    {
+        JsonElement selected = default;
+        if (root.TryGetProperty("messages", out var messages))
+        {
+            foreach (var message in messages.EnumerateObject())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var pointer = "$/messages/" + Escape(message.Name);
+                if (message.Value.ValueKind != JsonValueKind.Object)
+                {
+                    return Failure(ApiOperationResolutionStatus.Invalid, "document.message",
+                        "An Avro message declaration must be an object.", pointer);
+                }
+                if (!message.Value.TryGetProperty("request", out var request) ||
+                    request.ValueKind != JsonValueKind.Array)
+                {
+                    return Failure(ApiOperationResolutionStatus.Invalid, "document.request",
+                        "An Avro message must declare a request parameter array.", pointer + "/request");
+                }
+                if (!message.Value.TryGetProperty("response", out var response) ||
+                    response.ValueKind is not (JsonValueKind.String or JsonValueKind.Object or JsonValueKind.Array))
+                {
+                    return Failure(ApiOperationResolutionStatus.Invalid, "document.response",
+                        "An Avro message must declare a response schema.", pointer + "/response");
+                }
+                var hasErrors = message.Value.TryGetProperty("errors", out var errors);
+                if (hasErrors && errors.ValueKind != JsonValueKind.Array)
+                {
+                    return Failure(ApiOperationResolutionStatus.Invalid, "document.errors",
+                        "An Avro message's declared errors must be an array.", pointer + "/errors");
+                }
+                if (message.Value.TryGetProperty("one-way", out var oneWay))
+                {
+                    if (oneWay.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                    {
+                        return Failure(ApiOperationResolutionStatus.Invalid, "document.one_way",
+                            "An Avro message's one-way flag must be a boolean.", pointer + "/one-way");
+                    }
+                    var nullResponse = response.ValueKind == JsonValueKind.String && response.GetString() == "null" ||
+                        response.ValueKind == JsonValueKind.Object &&
+                        response.TryGetProperty("type", out var type) &&
+                        type.ValueKind == JsonValueKind.String && type.GetString() == "null";
+                    if (oneWay.GetBoolean() && (!nullResponse || hasErrors && errors.GetArrayLength() > 0))
+                    {
+                        return Failure(ApiOperationResolutionStatus.Invalid, "document.one_way",
+                            "A one-way Avro message requires a null response and no declared errors.", pointer + "/one-way");
+                    }
+                }
+                if (string.Equals(message.Name, messageName, StringComparison.Ordinal))
+                {
+                    selected = message.Value;
+                }
+            }
+        }
+        return selected.ValueKind == JsonValueKind.Undefined
+            ? Failure(ApiOperationResolutionStatus.NotFound, "selection.not_found",
+                $"No message has the exact name '{messageName}'.")
+            : Selected(selected, "$/messages/" + Escape(messageName), documentUri);
     }
 
     private static async ValueTask<ApiOperationResolutionResult> ResolveOpenRpcMethodAsync(JsonElement root,

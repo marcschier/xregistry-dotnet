@@ -127,8 +127,10 @@ vocabulary/source mapping. It does not supply their implementation.
   qualification remain open. WoT publication closure needs the four contracts
   above; do not substitute live targets for captured closure.
 - Add full API format validators and the remaining language resolvers. The
-  OpenAPI/Swagger and OpenRPC JSON selectors do not establish format validation,
-  YAML support, or gRPC, Thrift, Avro Protocol/IDL, GraphQL, WSDL or Smithy support.
+  OpenAPI/Swagger, OpenRPC and Avro Protocol JSON selectors do not establish
+  full format validation, YAML support, or gRPC, Thrift, Avro IDL, GraphQL,
+  WSDL or Smithy support. Avro message selection preserves the declared native
+  message but does not check all schema definitions, name binding or defaults.
 - Complete end-to-end event/outbox delivery qualification while preserving
   atomic mutation publication and caller-visible failure semantics.
 - Provide an application-specific adapter or forwarding layer when an existing

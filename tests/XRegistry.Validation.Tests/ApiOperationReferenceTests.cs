@@ -31,7 +31,8 @@ public class ApiOperationReferenceTests
     private static readonly string[] s_registryPointerTokens =
         ["apigroups", "users", "apis", "Profile", "versions", "2"];
     private static readonly string[] s_singleDecodeTokens = ["operations", "a~1b%2F"];
-    private static readonly string[] s_supportedFormats = ["OpenAPI/3.0", "OpenAPI/3.1", "Swagger/2.0", "OpenRPC/1.4"];
+    private static readonly string[] s_supportedFormats =
+        ["OpenAPI/3.0", "OpenAPI/3.1", "Swagger/2.0", "OpenRPC/1.4", "AvroProtocol/1.12.0"];
     private static readonly ApiOperationSelectorKind[] s_supportedSelectors =
         [ApiOperationSelectorKind.Operation, ApiOperationSelectorKind.JsonPointer];
 
@@ -663,6 +664,191 @@ public class ApiOperationReferenceTests
             ApiOperationDocumentResolver.Resolve("OpenAPI/3.1", "application/json",
                 System.Text.Encoding.UTF8.GetBytes(OpenApiDocument), reference, cancellation.Token));
     }
+
+    [Test]
+    public async Task AvroProtocolSelectionPreservesTheDeclaredMessageWithoutResolvingMetadataReferences()
+    {
+        const string document = """
+            {"protocol":"Users","namespace":"com.example",
+             "types":[{"type":"record","name":"User","fields":[{"name":"id","type":"long"}]},
+                      {"type":"error","name":"Denied","fields":[]}],
+             "messages":{
+               "Other":{"request":[],"response":"null","one-way":true},
+               "GetUser":{"request":[{"name":"id","type":"long","default":0}],
+                          "response":"User","errors":["Denied"],"one-way":false,
+                          "$ref":"https://untrusted.example/not-an-avro-import",
+                          "custom":{"native":true}}}}
+            """;
+        var calls = 0;
+        var source = new Uri("https://registry.example/apis/users");
+        var result = await ApiOperationDocumentResolver.ResolveAsync("AvroProtocol/1.12.0",
+            "application/json; charset=utf-8", System.Text.Encoding.UTF8.GetBytes(document),
+            ApiOperationReference.Parse("/apigroups/users/apis/Profile#operations/GetUser"),
+            source, (_, _) =>
+            {
+                calls++;
+                throw new InvalidOperationException("Avro message metadata is not a document dependency.");
+            });
+
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.DocumentPath).IsEqualTo("$/messages/GetUser");
+        await Assert.That(result.DocumentUri).IsEqualTo(source);
+        await Assert.That(result.Diagnostic).IsNull();
+        using var original = JsonDocument.Parse(document);
+        await Assert.That(result.Operation.GetRawText())
+            .IsEqualTo(original.RootElement.GetProperty("messages").GetProperty("GetUser").GetRawText());
+        await Assert.That(result.Operation.GetProperty("request")[0].GetProperty("default").GetInt32()).IsEqualTo(0);
+        await Assert.That(result.Operation.GetProperty("response").GetString()).IsEqualTo("User");
+        await Assert.That(result.Operation.GetProperty("errors")[0].GetString()).IsEqualTo("Denied");
+        await Assert.That(result.Operation.GetProperty("one-way").GetBoolean()).IsFalse();
+        await Assert.That(calls).IsEqualTo(0);
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
+    [Test]
+    [Arguments("""{"protocol":"Users"}""")]
+    [Arguments("""{"protocol":"Users","messages":{}}""")]
+    [Arguments("""{"protocol":"Users","messages":{"getuser":{"request":[],"response":"null"}}}""")]
+    public async Task AvroProtocolMissingAndDifferentCaseMessagesDoNotSelectAResult(string document)
+    {
+        var result = ResolveAvroProtocol(document);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.NotFound);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("selection.not_found");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        await Assert.That(result.DocumentPath).IsNull();
+        await Assert.That(result.DocumentUri).IsNull();
+    }
+
+    [Test]
+    [Arguments("""{"type":"record","name":"Users","fields":[]}""", "document.protocol", "$/protocol")]
+    [Arguments("""{"protocol":null}""", "document.protocol", "$/protocol")]
+    [Arguments("""{"protocol":""}""", "document.protocol", "$/protocol")]
+    [Arguments("""{"protocol":"Users","namespace":1}""", "document.namespace", "$/namespace")]
+    [Arguments("""{"protocol":"Users","messages":[]}""", "document.messages", "$/messages")]
+    [Arguments("""{"protocol":"Users","messages":{"GetUser":null}}""", "document.message", "$/messages/GetUser")]
+    [Arguments("""{"protocol":"Users","messages":{"GetUser":{"response":"null"}}}""", "document.request", "$/messages/GetUser/request")]
+    [Arguments("""{"protocol":"Users","messages":{"GetUser":{"request":{},"response":"null"}}}""", "document.request", "$/messages/GetUser/request")]
+    [Arguments("""{"protocol":"Users","messages":{"GetUser":{"request":[]}}}""", "document.response", "$/messages/GetUser/response")]
+    [Arguments("""{"protocol":"Users","messages":{"GetUser":{"request":[],"response":null}}}""", "document.response", "$/messages/GetUser/response")]
+    [Arguments("""{"protocol":"Users","messages":{"GetUser":{"request":[],"response":"null","errors":{}}}}""", "document.errors", "$/messages/GetUser/errors")]
+    [Arguments("""{"protocol":"Users","messages":{"GetUser":{"request":[],"response":"null","one-way":"true"}}}""", "document.one_way", "$/messages/GetUser/one-way")]
+    [Arguments("""{"protocol":"Users","messages":{"GetUser":{"request":[],"response":"string","one-way":true}}}""", "document.one_way", "$/messages/GetUser/one-way")]
+    [Arguments("""{"protocol":"Users","messages":{"GetUser":{"request":[],"response":"null","errors":["Denied"],"one-way":true}}}""", "document.one_way", "$/messages/GetUser/one-way")]
+    public async Task AvroProtocolSelectionRejectsInvalidProtocolAndMessageShapes(string document, string code, string path)
+    {
+        var result = ResolveAvroProtocol(document);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        await Assert.That(result.Diagnostic.Path).IsEqualTo(path);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        await Assert.That(result.DocumentPath).IsNull();
+    }
+
+    [Test]
+    public async Task AvroProtocolDoesNotHideMalformedMessagesAfterAnEarlyMatch()
+    {
+        var result = ResolveAvroProtocol("""
+            {"protocol":"Users","messages":{
+              "GetUser":{"request":[],"response":"string"},
+              "Other":false}}
+            """);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.message");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/messages/Other");
+    }
+
+    [Test]
+    [Arguments("""{"request":[],"response":"null","one-way":true}""")]
+    [Arguments("""{"request":[],"response":{"type":"null"},"errors":[],"one-way":true}""")]
+    [Arguments("""{"request":[],"response":["null","string"]}""")]
+    [Arguments("""{"request":[],"response":{"type":"record","name":"User","fields":[]}}""")]
+    public async Task AvroProtocolReturnsOwnedNativeResponseAndOneWayShapes(string message)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(
+            """{"protocol":"Users","messages":{"GetUser":""" + message + "}}");
+        var result = ApiOperationDocumentResolver.Resolve("AvroProtocol/1.12.0", "application/json", bytes,
+            ApiOperationReference.Parse("/apigroups/users/apis/Profile#operations/GetUser"));
+        Array.Fill(bytes, (byte)' ');
+
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(message);
+    }
+
+    [Test]
+    [Arguments("/messages/GetUser")]
+    [Arguments("services/Users/operations/GetUser")]
+    [Arguments("operations/query/GetUser")]
+    public async Task AvroProtocolOnlyAcceptsItsNativeMessageNameLocator(string selector)
+    {
+        var result = ApiOperationDocumentResolver.Resolve("AvroProtocol/1.12.0", "application/json",
+            """{"protocol":"Users","messages":{}}"""u8.ToArray(),
+            ApiOperationReference.Parse("/apigroups/users/apis/Profile#" + selector));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Unsupported);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("selector.unsupported");
+    }
+
+    [Test]
+    public async Task AvroProtocolMessageNamesArePercentDecodedExactlyOnce()
+    {
+        const string document = """{"protocol":"Users","messages":{"GetUser":{"request":[],"response":"null"}}}""";
+        var result = ResolveAvroProtocol(document, "Get%55ser");
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.DocumentPath).IsEqualTo("$/messages/GetUser");
+        var doubleEncoded = ResolveAvroProtocol(document, "%2547etUser");
+        await Assert.That(doubleEncoded.Status).IsEqualTo(ApiOperationResolutionStatus.NotFound);
+        await Assert.That(doubleEncoded.Diagnostic!.Code).IsEqualTo("selection.not_found");
+    }
+
+    [Test]
+    public async Task AvroProtocolDuplicateMessagesFailInsteadOfSelectingTheLastDeclaration()
+    {
+        var result = ResolveAvroProtocol("""
+            {"protocol":"Users","messages":{
+              "GetUser":{"request":[],"response":"string"},
+              "GetUser":{"request":[],"response":"null"}}}
+            """);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.json");
+    }
+
+    [Test]
+    public async Task AvroProtocolUsesTheSharedByteLimitAndCallerCancellation()
+    {
+        const string document = """{"protocol":"Users","messages":{"GetUser":{"request":[],"response":"null"}}}""";
+        var padded = document.PadRight(ApiOperationDocumentResolver.Capabilities.MaxDocumentBytes);
+        var boundary = ResolveAvroProtocol(padded);
+        await Assert.That(boundary.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        var result = ResolveAvroProtocol(padded + " ");
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("limit.bytes");
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+            ApiOperationDocumentResolver.Resolve("AvroProtocol/1.12.0", "application/json",
+                """{"protocol":"Users"}"""u8.ToArray(),
+                ApiOperationReference.Parse("/apigroups/users/apis/Profile#operations/GetUser"), cancellation.Token));
+    }
+
+    [Test]
+    [Arguments("AvroProtocol/1.12.1", "application/json", "format.unsupported")]
+    [Arguments("AvroProtocol/1.11.0", "application/json", "format.unsupported")]
+    [Arguments("avroprotocol/1.12.0", "application/json", "format.unsupported")]
+    [Arguments("AvroIDL/1.12.0", "application/json", "format.unsupported")]
+    [Arguments("AvroProtocol/1.12.0", "text/plain", "contenttype.unsupported")]
+    public async Task AvroProtocolDoesNotAdvertiseOtherReleasesOrIdlParsing(string format, string mediaType, string code)
+    {
+        var result = ApiOperationDocumentResolver.Resolve(format, mediaType,
+            """{"protocol":"Users","messages":{}}"""u8.ToArray(),
+            ApiOperationReference.Parse("/apigroups/users/apis/Profile#operations/GetUser"));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Unsupported);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    private static ApiOperationResolutionResult ResolveAvroProtocol(string document, string message = "GetUser") =>
+        ApiOperationDocumentResolver.Resolve("AvroProtocol/1.12.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document),
+            ApiOperationReference.Parse("/apigroups/users/apis/Profile#operations/" + message));
 
     [Test]
     public async Task OpenRpcSelectionPreservesTheNativeMethodAndDecodesItsNameOnce()
