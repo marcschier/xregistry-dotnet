@@ -20,13 +20,23 @@ complete xRegistry conformance.
 | HTTP serving | `XRegistry.AspNetCore.MapXRegistry` | Maps a concrete `RegistryEngine`; it does not start or secure a host. |
 | Transactional persistence | Application-owned `IRegistryPersistence`, or `LocalRegistryPersistence` over `LocalFileStore` | Storage generations are not entity epochs or remote Registry revisions. |
 | Schema-source validation | `XRegistry.Validation` | Supported schema formats and policies, not OPC UA NodeSets/sessions/projection. |
-| API Registry and operation references | `XRegistry.Models` (`RegistryModelKind.Api`) and `XRegistry.Validation` (`ApiOperationReference`, `ApiOperationDocumentResolver`) | The model describes versioned synchronous API definitions. The parser accepts operation, service, interface, GraphQL and JSON Pointer selectors; document resolution supports OpenAPI 3.0/3.1 and Swagger 2.0 JSON operations by `operationId` or JSON Pointer, but does not validate the full API document or resolve GraphQL documents. |
+| API Registry and operation references | `XRegistry.Models` (`RegistryModelKind.Api`) and `XRegistry.Validation` (`ApiOperationReference`, `ApiOperationDocumentResolver`) | The model describes versioned API definitions. The parser accepts operation, service, interface, GraphQL and JSON Pointer selectors. Document resolution supports OpenAPI 3.0/3.1 and Swagger 2.0 JSON operations by `operationId` or JSON Pointer, and OpenRPC 1.4 JSON methods by exact `name`. These selectors do not validate the full API document; other language resolvers remain unsupported. |
 | Federation read acquisition | `IFederationReadSource` / `HttpFederationReadSource` | A read-source seam, not a write dispatcher or immutable live snapshot. |
 | OPC UA access and federation reads | `XRegistry.Bindings.OpcUa` | Uses OPC UA Client Stack 2.0.1 to discover endpoints, apply caller policy, open a Session, remap the portable root through `NamespaceArray`, and verify Registry type and Core version. `OpcUaRegistryReadSource` maps Registry, Group, Resource, Meta, Version and collection views, and reads local FileType Documents or returns external-reference descriptors. `OpcUaRegistryWriter` updates Properties and calls Methods, including Resource Document replacement. Callers supply Group, Resource and ResourceVersions ObjectType mappings. Fake-Session tests cover reader, source and writer behavior; in-process server tests cover Session establishment, XREG-Events subscription management, writes, methods and document transfer. Two-server tests cover trusted external Resource and Version resolution. Core API views and NodeSet projection remain unimplemented. Endpoint security policy is caller-selected. Generic packages remain free of OPC UA types. |
 
 Legacy prepare/replay/incarnation/generation extensions are not standard
 xRegistry HTTP. The in-process persistence/response preparation methods do not
 imply proprietary wire endpoints.
+
+`ApiOperationDocumentResolver.Capabilities` advertises finite parser and retrieval
+budgets: 1 MiB per document, 4 MiB total, 100,000 parsed JSON values, JSON nesting
+and reference-chain limits of 64, at most 32 external documents, and a 30-second
+operation deadline. Dependencies are acquired only through the caller's callback;
+the callback owns authorization, redirects and credential policy. Returning null
+reports an unavailable dependency; throwing `UnauthorizedAccessException`
+reports `Denied`. A required dependency failure prevents selection even if an
+earlier method matched. Caller cancellation propagates; deadline expiry reports
+`Indeterminate`. Resolution never invokes an API.
 
 ## Choose the real seam
 

@@ -116280,13 +116280,20 @@
       ],
       "text": "The token MUST match the `name` of exactly one resolved Method Object in `methods`. Parameters, result, and errors come from that object, not from an example JSON-RPC request.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The optional OpenRPC/1.4 document resolver selects one resolved Method Object by exact name and retains its parameters, result and errors. Full format validation, API-Version acquisition and native qualification remain separate obligations.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenRpcSelectionPreservesTheNativeMethodAndDecodesItsNameOnce",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenRpcResolutionDistinguishesAbsentAmbiguousAndInvalidDocuments",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenRpcResolvesLocalAndExternalMethodsThroughAuthorizedDocuments",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.OpenRpcDoesNotReturnAnEarlyMatchWhenAnotherMethodIsUnavailableOrDenied"
+        ],
         "nativeEvidence": []
       }
     },

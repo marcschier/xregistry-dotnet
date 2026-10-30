@@ -87,6 +87,15 @@ release safeguards remain in their subject guides.
 
 ## Integration work
 
+- Complete the approved draft-alignment scope against the immutable successor
+  sources in `eng/specification/successors.json`. The source inventory does not
+  replace clause review or execution evidence.
+- Implement the selected incremental WoT profile and provider integration.
+  WoT publication closure also needs the unresolved source-occurrence and target
+  mappings from the draft; do not substitute live targets for captured closure.
+- Add full API format validators and the remaining language resolvers. The
+  OpenAPI/Swagger and OpenRPC JSON selectors do not establish format validation,
+  YAML support, or gRPC, Thrift, Avro Protocol/IDL, GraphQL, WSDL or Smithy support.
 - Complete end-to-end event/outbox delivery qualification while preserving
   atomic mutation publication and caller-visible failure semantics.
 - Provide an application-specific adapter or forwarding layer when an existing

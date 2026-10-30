@@ -3,10 +3,15 @@
 
 using System.Collections.ObjectModel;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace XRegistry.Validation;
 
-/// <summary>Loads an explicitly authorized API dependency from its absolute document URI.</summary>
+/// <summary>
+/// Loads an explicitly authorized API dependency from its absolute document URI.
+/// A null result means unavailable; an UnauthorizedAccessException means policy denied access.
+/// The callback must enforce redirect, credential and origin policy and honor cancellation.
+/// </summary>
 public delegate ValueTask<ReadOnlyMemory<byte>?> ApiOperationDocumentDependencyResolver(
     string absoluteDocumentUri, CancellationToken cancellationToken);
 
@@ -15,7 +20,7 @@ public sealed class ApiOperationResolverCapabilities
 {
     internal ApiOperationResolverCapabilities()
     {
-        Formats = Array.AsReadOnly(["OpenAPI/3.0", "OpenAPI/3.1", "Swagger/2.0"]);
+        Formats = Array.AsReadOnly(["OpenAPI/3.0", "OpenAPI/3.1", "Swagger/2.0", "OpenRPC/1.4"]);
         ContentTypes = Array.AsReadOnly(["application/json"]);
         Selectors = Array.AsReadOnly([ApiOperationSelectorKind.Operation, ApiOperationSelectorKind.JsonPointer]);
         SupportsCallerProvidedPathItemReferences = true;
@@ -44,6 +49,24 @@ public sealed class ApiOperationResolverCapabilities
 
     /// <summary>Gets the maximum number of distinct referenced documents loaded for one resolution.</summary>
     public int MaxReferencedDocuments { get; }
+
+    /// <summary>Gets the inclusive per-document byte limit.</summary>
+    public int MaxDocumentBytes { get; } = 1_048_576;
+
+    /// <summary>Gets the inclusive operation-wide document byte limit.</summary>
+    public long MaxTotalDocumentBytes { get; } = 4_194_304;
+
+    /// <summary>Gets the inclusive reference-chain depth limit.</summary>
+    public int MaxReferenceDepth { get; } = 64;
+
+    /// <summary>Gets the inclusive JSON nesting depth limit.</summary>
+    public int MaxDocumentDepth { get; } = 64;
+
+    /// <summary>Gets the inclusive operation-wide parsed JSON node limit.</summary>
+    public int MaxDocumentNodes { get; } = 100_000;
+
+    /// <summary>Gets the operation deadline, including caller-provided dependency retrieval.</summary>
+    public TimeSpan MaxDuration { get; } = TimeSpan.FromSeconds(30);
 
     /// <summary>Gets whether full API document validation is available.</summary>
     public bool SupportsApiDocumentValidation { get; }
@@ -75,7 +98,7 @@ public sealed class ApiOperationResolutionResult
     /// <summary>Gets the resolution outcome.</summary>
     public ApiOperationResolutionStatus Status { get; }
 
-    /// <summary>Gets the selected OpenAPI or Swagger Operation Object.</summary>
+    /// <summary>Gets the selected native JSON operation or method object.</summary>
     public JsonElement Operation { get; }
 
     /// <summary>Gets the document-local JSON Pointer to the selected Operation Object.</summary>
@@ -108,13 +131,20 @@ public enum ApiOperationResolutionStatus
 
     /// <summary>An unresolved document reference prevents a conclusive result.</summary>
     Indeterminate,
+
+    /// <summary>Caller policy denied access to a required dependency.</summary>
+    Denied,
 }
 
-/// <summary>Selects OpenAPI and Swagger operations from an already acquired JSON document.</summary>
-public static class ApiOperationDocumentResolver
+/// <summary>Selects OpenAPI, Swagger and OpenRPC operations from an already acquired JSON document.</summary>
+public static partial class ApiOperationDocumentResolver
 {
     private static readonly string[] s_methods =
         ["get", "put", "post", "delete", "options", "head", "patch", "trace"];
+
+    [GeneratedRegex(@"\A1\.4\.(?:0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?\z",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
+    private static partial Regex OpenRpcVersion();
 
     /// <summary>Gets the exact optional resolution features available from this implementation.</summary>
     public static ApiOperationResolverCapabilities Capabilities { get; } = new();
@@ -146,6 +176,25 @@ public static class ApiOperationDocumentResolver
         }
         cancellationToken.ThrowIfCancellationRequested();
 
+        using var deadline = new CancellationTokenSource(Capabilities.MaxDuration);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
+        try
+        {
+            return await ResolveCoreAsync(format, contentType, document, reference, documentUri, resolveReference,
+                linked.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (deadline.IsCancellationRequested &&
+            !cancellationToken.IsCancellationRequested)
+        {
+            return Failure(ApiOperationResolutionStatus.Indeterminate, "limit.duration",
+                "The API operation resolution deadline was exceeded.");
+        }
+    }
+
+    private static async ValueTask<ApiOperationResolutionResult> ResolveCoreAsync(string format, string contentType,
+        ReadOnlyMemory<byte> document, ApiOperationReference reference, Uri? documentUri,
+        ApiOperationDocumentDependencyResolver? resolveReference, CancellationToken cancellationToken)
+    {
         if (!Capabilities.Formats.Contains(format, StringComparer.Ordinal))
         {
             return Failure(ApiOperationResolutionStatus.Unsupported, "format.unsupported",
@@ -157,21 +206,29 @@ public static class ApiOperationDocumentResolver
             return Failure(ApiOperationResolutionStatus.Unsupported, "contenttype.unsupported",
                 "The API operation resolver accepts JSON documents only.");
         }
-        if (reference.Selector.Kind is not (ApiOperationSelectorKind.Operation or ApiOperationSelectorKind.JsonPointer))
+        if (reference.Selector.Kind is not (ApiOperationSelectorKind.Operation or ApiOperationSelectorKind.JsonPointer) ||
+            format == "OpenRPC/1.4" && reference.Selector.Kind != ApiOperationSelectorKind.Operation)
         {
             return Failure(ApiOperationResolutionStatus.Unsupported, "selector.unsupported",
-                "The API operation selector is not supported for OpenAPI and Swagger.");
+                "The API operation selector is not supported for the selected format.");
         }
 
+        var budget = new ValidationContext(new()
+        {
+            MaxDocumentBytes = Capabilities.MaxDocumentBytes,
+            MaxTotalBytes = Capabilities.MaxTotalDocumentBytes,
+            MaxDepth = Capabilities.MaxDocumentDepth,
+            MaxNodes = Capabilities.MaxDocumentNodes,
+            MaxWork = 8_388_608,
+        }, cancellationToken);
         JsonDocument parsed;
         try
         {
-            parsed = JsonDocument.Parse(document);
+            parsed = budget.ReadJson(document);
         }
-        catch (JsonException exception)
+        catch (ValidationFailure failure)
         {
-            return Failure(ApiOperationResolutionStatus.Invalid, "document.json",
-                $"The API document is not valid JSON: {exception.Message}");
+            return ParseFailure(failure, "document.json", "$");
         }
 
         using (parsed)
@@ -187,7 +244,12 @@ public static class ApiOperationDocumentResolver
             {
                 return ResolvePointer(root, reference.Selector.Tokens, cancellationToken);
             }
-            using var references = new ReferenceContext(parsed, documentUri, resolveReference);
+            using var references = new ReferenceContext(parsed, documentUri, resolveReference, budget);
+            if (format == "OpenRPC/1.4")
+            {
+                return await ResolveOpenRpcMethodAsync(root, reference.Selector.Tokens[^1], references,
+                    cancellationToken).ConfigureAwait(false);
+            }
             return await ResolveOperationIdAsync(root, reference.Selector.Tokens[^1], references,
                 cancellationToken).ConfigureAwait(false);
         }
@@ -198,7 +260,22 @@ public static class ApiOperationDocumentResolver
         if (root.ValueKind != JsonValueKind.Object)
         {
             return Failure(ApiOperationResolutionStatus.Invalid, "document.root",
-                "An OpenAPI or Swagger document must be a JSON object.");
+                "An API document must be a JSON object.");
+        }
+        if (format == "OpenRPC/1.4")
+        {
+            if (!root.TryGetProperty("openrpc", out var openRpc) || openRpc.ValueKind != JsonValueKind.String ||
+                !OpenRpcVersion().IsMatch(openRpc.GetString()!))
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid, "document.openrpc_version",
+                    "The root openrpc value must match '1.4.*'.", "$/openrpc");
+            }
+            if (!root.TryGetProperty("methods", out var methods) || methods.ValueKind != JsonValueKind.Array)
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid, "document.methods",
+                    "An OpenRPC document must contain a methods array.", "$/methods");
+            }
+            return null;
         }
 
         if (format.StartsWith("OpenAPI/", StringComparison.Ordinal))
@@ -224,6 +301,43 @@ public static class ApiOperationDocumentResolver
                 "The API document must contain a paths object.", "$/paths");
         }
         return null;
+    }
+
+    private static async ValueTask<ApiOperationResolutionResult> ResolveOpenRpcMethodAsync(JsonElement root,
+        string methodName, ReferenceContext references, CancellationToken cancellationToken)
+    {
+        var matches = new List<OperationLocation>();
+        var index = 0;
+        foreach (var method in root.GetProperty("methods").EnumerateArray())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var pointer = "$/methods/" + (index++).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var resolved = await ResolveOperationAsync(method, references.Root, pointer, references,
+                new(StringComparer.Ordinal), cancellationToken).ConfigureAwait(false);
+            if (resolved.Failure is not null)
+            {
+                return resolved.Failure;
+            }
+            var location = resolved.Operation!;
+            if (!location.Operation.TryGetProperty("name", out var name) ||
+                name.ValueKind != JsonValueKind.String || string.IsNullOrEmpty(name.GetString()))
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid, "document.method_name",
+                    "An OpenRPC Method Object must have a non-empty name.", location.Pointer + "/name");
+            }
+            if (string.Equals(name.GetString(), methodName, StringComparison.Ordinal))
+            {
+                matches.Add(location);
+            }
+        }
+        return matches.Count switch
+        {
+            0 => Failure(ApiOperationResolutionStatus.NotFound, "selection.not_found",
+                $"No method has the exact name '{methodName}'."),
+            1 => Selected(matches[0].Operation, matches[0].Pointer, matches[0].DocumentUri),
+            _ => Failure(ApiOperationResolutionStatus.Ambiguous, "selection.ambiguous",
+                $"More than one method has the exact name '{methodName}'.")
+        };
     }
 
     private static async ValueTask<ApiOperationResolutionResult> ResolveOperationIdAsync(JsonElement root,
@@ -289,6 +403,11 @@ public static class ApiOperationDocumentResolver
         var operations = new Dictionary<string, OperationLocation>(StringComparer.Ordinal);
         if (pathItem.TryGetProperty("$ref", out var referenceValue))
         {
+            if (referencePath.Count >= Capabilities.MaxReferenceDepth)
+            {
+                return PathItemResolution.Failed(Failure(ApiOperationResolutionStatus.Indeterminate,
+                    "limit.reference_depth", "The API reference-chain depth limit was exceeded.", sourcePointer));
+            }
             if (referenceValue.ValueKind != JsonValueKind.String)
             {
                 return PathItemResolution.Failed(Failure(ApiOperationResolutionStatus.Invalid,
@@ -363,12 +482,17 @@ public static class ApiOperationDocumentResolver
         if (operation.ValueKind != JsonValueKind.Object)
         {
             return OperationReferenceResolution.Failed(Failure(ApiOperationResolutionStatus.Invalid,
-                "document.operation", "An HTTP method entry must be an Operation Object.", sourcePointer));
+                "document.operation", "An API operation must be an object.", sourcePointer));
         }
         if (!operation.TryGetProperty("$ref", out var referenceValue))
         {
             return OperationReferenceResolution.Succeeded(new(operation, sourcePointer,
                 source.IsRoot ? null : source.Uri));
+        }
+        if (referencePath.Count >= Capabilities.MaxReferenceDepth)
+        {
+            return OperationReferenceResolution.Failed(Failure(ApiOperationResolutionStatus.Indeterminate,
+                "limit.reference_depth", "The API reference-chain depth limit was exceeded.", sourcePointer));
         }
         if (referenceValue.ValueKind != JsonValueKind.String)
         {
@@ -464,6 +588,13 @@ public static class ApiOperationDocumentResolver
         string detail, string path = "$/selector") =>
         new(status, new(path, code, detail));
 
+    private static ApiOperationResolutionResult ParseFailure(ValidationFailure failure, string code, string path) =>
+        Failure(failure.Status == DocumentValidationStatus.Indeterminate
+            ? ApiOperationResolutionStatus.Indeterminate : ApiOperationResolutionStatus.Invalid,
+            failure.Diagnostic.Code.StartsWith("limit.", StringComparison.Ordinal)
+                ? failure.Diagnostic.Code : code,
+            failure.Diagnostic.Detail, path);
+
     private static string Escape(string token) =>
         token.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal);
 
@@ -514,10 +645,11 @@ public static class ApiOperationDocumentResolver
     {
         private readonly ApiOperationDocumentDependencyResolver? _resolver;
         private readonly Dictionary<string, ReferencedDocument> _documents = new(StringComparer.Ordinal);
+        private readonly ValidationContext _budget;
         private int _externalDocumentCount;
 
         internal ReferenceContext(JsonDocument root, Uri? rootUri,
-            ApiOperationDocumentDependencyResolver? resolver)
+            ApiOperationDocumentDependencyResolver? resolver, ValidationContext budget)
         {
             var uri = WithoutFragment(rootUri);
             Root = new(root, uri, uri?.AbsoluteUri ?? "$root", true);
@@ -526,6 +658,7 @@ public static class ApiOperationDocumentResolver
                 _documents.Add(uri.AbsoluteUri, Root);
             }
             _resolver = resolver;
+            _budget = budget;
         }
 
         internal ReferencedDocument Root { get; }
@@ -537,6 +670,11 @@ public static class ApiOperationDocumentResolver
             Uri resolved;
             try
             {
+                var fragmentAt = reference.IndexOf('#');
+                if (fragmentAt >= 0)
+                {
+                    _ = SchemaJson.DecodeFragment(reference[(fragmentAt + 1)..], path, "dependency.pointer", _budget);
+                }
                 if (reference.StartsWith('#'))
                 {
                     if (source.Uri is null)
@@ -575,6 +713,10 @@ public static class ApiOperationDocumentResolver
                 return ReferenceTargetResolution.Failed(Failure(ApiOperationResolutionStatus.Invalid,
                     "dependency.pointer", exception.Message, path));
             }
+            catch (ValidationFailure failure)
+            {
+                return ReferenceTargetResolution.Failed(ParseFailure(failure, "dependency.pointer", path));
+            }
 
             var documentUri = WithoutFragment(resolved)!;
             if (!_documents.TryGetValue(documentUri.AbsoluteUri, out var document))
@@ -590,7 +732,17 @@ public static class ApiOperationDocumentResolver
                         "limit.references", "The API reference document limit was exceeded.", path));
                 }
 
-                var bytes = await _resolver(documentUri.AbsoluteUri, cancellationToken).ConfigureAwait(false);
+                ReadOnlyMemory<byte>? bytes;
+                try
+                {
+                    bytes = await _resolver(documentUri.AbsoluteUri, cancellationToken).AsTask()
+                        .WaitAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (UnauthorizedAccessException exception)
+                {
+                    return ReferenceTargetResolution.Failed(Failure(ApiOperationResolutionStatus.Denied,
+                        "dependency.denied", $"Caller policy denied '{documentUri}': {exception.Message}", path));
+                }
                 cancellationToken.ThrowIfCancellationRequested();
                 if (bytes is null)
                 {
@@ -600,13 +752,11 @@ public static class ApiOperationDocumentResolver
                 JsonDocument parsed;
                 try
                 {
-                    parsed = JsonDocument.Parse(bytes.Value);
+                    parsed = _budget.ReadJson(bytes.Value);
                 }
-                catch (JsonException exception)
+                catch (ValidationFailure failure)
                 {
-                    return ReferenceTargetResolution.Failed(Failure(ApiOperationResolutionStatus.Invalid,
-                        "dependency.json", $"The referenced API document is not valid JSON: {exception.Message}",
-                        path));
+                    return ReferenceTargetResolution.Failed(ParseFailure(failure, "dependency.json", path));
                 }
 
                 document = new(parsed, documentUri, documentUri.AbsoluteUri, false);
@@ -618,69 +768,17 @@ public static class ApiOperationDocumentResolver
             {
                 return ReferenceTargetResolution.Succeeded(CreateTarget(document, resolved.Fragment));
             }
-            catch (FormatException exception)
+            catch (ValidationFailure failure)
             {
-                return ReferenceTargetResolution.Failed(Failure(ApiOperationResolutionStatus.Invalid,
-                    "dependency.pointer", exception.Message, path));
+                return ReferenceTargetResolution.Failed(ParseFailure(failure, "dependency.pointer", path));
             }
         }
 
-        private static ReferenceTarget CreateTarget(ReferencedDocument document, string reference)
+        private ReferenceTarget CreateTarget(ReferencedDocument document, string reference)
         {
-            var fragment = reference.StartsWith('#') ? reference[1..] : reference;
-            fragment = Uri.UnescapeDataString(fragment);
-            if (fragment.Length == 0)
-            {
-                return new(document, document.Root, "$");
-            }
-            if (fragment[0] != '/')
-            {
-                throw new FormatException("An API document reference fragment must be a JSON Pointer.");
-            }
-
-            var value = document.Root;
-            var decodedTokens = new List<string>();
-            foreach (var rawToken in fragment[1..].Split('/'))
-            {
-                var token = DecodePointerToken(rawToken);
-                decodedTokens.Add(token);
-                if (value.ValueKind == JsonValueKind.Object && value.TryGetProperty(token, out var property))
-                {
-                    value = property;
-                    continue;
-                }
-                if (value.ValueKind == JsonValueKind.Array && int.TryParse(token,
-                    System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture,
-                    out var index) && index >= 0 && index < value.GetArrayLength() &&
-                    index.ToString(System.Globalization.CultureInfo.InvariantCulture) == token)
-                {
-                    value = value[index];
-                    continue;
-                }
-                throw new FormatException($"The API document reference JSON Pointer '{fragment}' does not exist.");
-            }
-
-            return new(document, value, "$/" + string.Join("/", decodedTokens.Select(Escape)));
-        }
-
-        private static string DecodePointerToken(string token)
-        {
-            var decoded = new System.Text.StringBuilder(token.Length);
-            for (var index = 0; index < token.Length; index++)
-            {
-                if (token[index] != '~')
-                {
-                    decoded.Append(token[index]);
-                    continue;
-                }
-
-                if (++index >= token.Length || token[index] is not ('0' or '1'))
-                {
-                    throw new FormatException("An API document reference contains an invalid JSON Pointer escape.");
-                }
-                decoded.Append(token[index] == '0' ? '~' : '/');
-            }
-            return decoded.ToString();
+            var (value, pointer) = SchemaJson.Pointer(document.Root,
+                reference.StartsWith('#') ? reference : "#" + reference, "$/selector", _budget);
+            return new(document, value, pointer);
         }
 
         private static Uri? WithoutFragment(Uri? uri)
