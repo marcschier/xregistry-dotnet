@@ -126,7 +126,7 @@ public static partial class ApiOperationDocumentResolver
                     path, "document.error_trait", "A declared Smithy error must be a structure marked with an error trait.");
             }
             if (!_visited.TryAdd(id, shape)) { return; }
-            Traits(shape, path, depth);
+            Traits(shape, path, depth, kind);
             switch (kind)
             {
                 case "operation":
@@ -165,7 +165,7 @@ public static partial class ApiOperationDocumentResolver
                             ValidationContext.Require(IsSmithyShapeId("example#" + member.Name) && names.Add(member.Name),
                                 path + "/members", "document.member_name", "Smithy member names must be valid and case-insensitively unique.");
                             var memberPath = path + "/members/" + Escape(member.Name);
-                            Reference(member.Value, memberPath, depth);
+                            Reference(member.Value, memberPath, depth, memberContainer: kind);
                             if (kind is "enum" or "intEnum")
                             {
                                 ValidationContext.Require(member.Value.GetProperty("target").GetString() == "smithy.api#Unit",
@@ -316,21 +316,24 @@ public static partial class ApiOperationDocumentResolver
         {
             ValidationContext.Require(shape.TryGetProperty(name, out var value), path + "/" + name,
                 "document.target", "The Smithy shape is missing a required member reference.");
-            Reference(value, path + "/" + name, depth, expected);
+            Reference(value, path + "/" + name, depth, expected,
+                memberContainer: shape.GetProperty("type").GetString());
         }
 
-        private void Reference(JsonElement value, string path, int depth, string? expected = null, bool error = false)
+        private void Reference(JsonElement value, string path, int depth, string? expected = null, bool error = false,
+            string? memberContainer = null)
         {
             budget.Work();
             ValidationContext.Require(value.ValueKind == JsonValueKind.Object &&
                 value.TryGetProperty("target", out var target) && target.ValueKind == JsonValueKind.String &&
                 IsSmithyShapeId(target.GetString()!), path, "document.target",
                 "A Smithy shape reference must have an absolute root target ID.");
-            Traits(value, path, depth);
+            Traits(value, path, depth, memberContainer: memberContainer);
             Visit(value.GetProperty("target").GetString()!, depth + 1, expected, error);
         }
 
-        private void Traits(JsonElement shape, string path, int depth)
+        private void Traits(JsonElement shape, string path, int depth, string? kind = null,
+            string? memberContainer = null)
         {
             if (!shape.TryGetProperty("traits", out var traits)) { return; }
             ValidationContext.Require(traits.ValueKind == JsonValueKind.Object,
@@ -341,6 +344,31 @@ public static partial class ApiOperationDocumentResolver
                 ValidationContext.Require(IsSmithyShapeId(trait.Name), path + "/traits", "document.trait_id",
                     "A Smithy trait ID must be an absolute root shape ID.");
                 var traitPath = path + "/traits/" + Escape(trait.Name);
+                var targetAllowed = trait.Name switch
+                {
+                    "smithy.api#required" => memberContainer == "structure",
+                    "smithy.api#input" or "smithy.api#output" or "smithy.api#error" => kind == "structure",
+                    "smithy.api#readonly" or "smithy.api#idempotent" => kind == "operation",
+                    "smithy.api#trait" => memberContainer is null && kind is
+                        "blob" or "boolean" or "document" or "string" or "byte" or "short" or "integer" or "long" or
+                        "float" or "double" or "bigInteger" or "bigDecimal" or "timestamp" or
+                        "list" or "map" or "structure" or "union" or "enum" or "intEnum",
+                    _ => true
+                };
+                ValidationContext.Require(targetAllowed, traitPath, "document.trait_target",
+                    "The recognized Smithy prelude trait is not applicable to this shape.");
+                var conflict = trait.Name switch
+                {
+                    "smithy.api#readonly" => traits.TryGetProperty("smithy.api#idempotent", out _),
+                    "smithy.api#input" => traits.TryGetProperty("smithy.api#output", out _) ||
+                        traits.TryGetProperty("smithy.api#error", out _),
+                    "smithy.api#output" => traits.TryGetProperty("smithy.api#input", out _) ||
+                        traits.TryGetProperty("smithy.api#error", out _),
+                    "smithy.api#error" => traits.TryGetProperty("smithy.api#trait", out _),
+                    _ => false
+                };
+                ValidationContext.Require(!conflict, traitPath, "document.trait_conflict",
+                    "Conflicting Smithy prelude traits cannot be applied to the same shape.");
                 switch (trait.Name)
                 {
                     case "smithy.api#documentation":

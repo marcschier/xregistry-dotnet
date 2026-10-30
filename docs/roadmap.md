@@ -179,8 +179,10 @@ vocabulary/source mapping. It does not supply their implementation.
   implicit prelude is limited, and full trait/schema validation remains open.
   Recognized prelude traits now check documentation/error values and the object
   shape of annotation, idempotent and trait-marker values throughout the
-  selected closure. Trait member schemas, applicability selectors, conflicts
-  and default constraints still require validation.
+  selected closure. Explicit recognized prelude targets and their declared
+  readonly/idempotent, input/output/error and error/trait-definition conflicts
+  are checked. General applicability selectors, custom conflicts, complete
+  input/output usage, trait member schemas and default constraints remain open.
 - Complete end-to-end event/outbox delivery qualification while preserving
   atomic mutation publication and caller-visible failure semantics.
 - Provide an application-specific adapter or forwarding layer when an existing

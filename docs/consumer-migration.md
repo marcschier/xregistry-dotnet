@@ -280,8 +280,14 @@ Within the selected closure, `documentation` values must be strings and
 `input`, `output` and `readonly` annotation traits require object values, as do
 the structured `idempotent` and `trait` traits. These checks also apply to
 reachable member declarations and custom-trait definitions. They do not check
-every trait member, selector, conflict or default constraint. Unreachable
-declarations are not validated, and literal members inside trait payloads do
+every trait member or default constraint. Recognized applicability checks
+restrict `required` to structure members, `input`/`output`/`error` to structures,
+and `readonly`/`idempotent` to operations. Trait definitions must be simple or
+aggregate root shapes, not members. Selection rejects `readonly` with
+`idempotent`, input/output combinations, input or output with error, and error
+with a trait-definition marker. These checks do not interpret custom selectors
+or establish the complete input/output usage constraints across the model.
+Unreachable declarations are not validated, and literal members inside trait payloads do
 not become dependency references.
 
 SemVer-profile WoT minimum-version floors exclude build metadata and fit the

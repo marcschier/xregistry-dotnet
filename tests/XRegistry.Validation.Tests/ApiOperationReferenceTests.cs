@@ -2185,6 +2185,114 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
+    [Arguments("operation", """{"smithy.api#required":{}}""")]
+    [Arguments("operation", """{"smithy.api#input":{}}""")]
+    [Arguments("operation", """{"smithy.api#output":{}}""")]
+    [Arguments("operation", """{"smithy.api#error":"client"}""")]
+    [Arguments("operation", """{"smithy.api#trait":{}}""")]
+    [Arguments("structure", """{"smithy.api#required":{}}""")]
+    [Arguments("structure", """{"smithy.api#readonly":{}}""")]
+    [Arguments("structure", """{"smithy.api#idempotent":{}}""")]
+    [Arguments("member", """{"smithy.api#input":{}}""")]
+    [Arguments("member", """{"smithy.api#output":{}}""")]
+    [Arguments("member", """{"smithy.api#error":"server"}""")]
+    [Arguments("member", """{"smithy.api#readonly":{}}""")]
+    [Arguments("member", """{"smithy.api#idempotent":{}}""")]
+    [Arguments("member", """{"smithy.api#trait":{}}""")]
+    [Arguments("listMember", """{"smithy.api#required":{}}""")]
+    [Arguments("mapMember", """{"smithy.api#required":{}}""")]
+    [Arguments("unionMember", """{"smithy.api#required":{}}""")]
+    [Arguments("reference", """{"smithy.api#required":{}}""")]
+    [Arguments("reference", """{"smithy.api#input":{}}""")]
+    public async Task SmithyJsonRejectsPreludeTraitsOutsideTheirExplicitTargets(string position, string traits)
+    {
+        var document = JsonNode.Parse("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"example#Input"}},
+              "example#Input":{"type":"structure","members":{"value":{"target":"example#Container"}}},
+              "example#Container":{"type":"structure"}}}
+            """)!.AsObject();
+        var shapes = document["shapes"]!.AsObject();
+        JsonObject item;
+        var path = "$/shapes/";
+        switch (position)
+        {
+            case "operation":
+                item = shapes["example#Get"]!.AsObject();
+                path += "example#Get";
+                break;
+            case "structure":
+                item = shapes["example#Input"]!.AsObject();
+                path += "example#Input";
+                break;
+            case "reference":
+                item = shapes["example#Get"]!["input"]!.AsObject();
+                path += "example#Get/input";
+                break;
+            case "member":
+                item = shapes["example#Input"]!["members"]!["value"]!.AsObject();
+                path += "example#Input/members/value";
+                break;
+            default:
+                var kind = position == "listMember" ? "list" : position == "mapMember" ? "map" : "union";
+                var container = new JsonObject { ["type"] = kind };
+                item = new JsonObject { ["target"] = "smithy.api#String" };
+                if (kind == "list") { container["member"] = item; path += "example#Container/member"; }
+                else if (kind == "map")
+                {
+                    container["key"] = new JsonObject { ["target"] = "smithy.api#String" };
+                    container["value"] = item;
+                    path += "example#Container/value";
+                }
+                else
+                {
+                    container["members"] = new JsonObject { ["value"] = item };
+                    path += "example#Container/members/value";
+                }
+                shapes["example#Container"] = container;
+                break;
+        }
+        item["traits"] = JsonNode.Parse(traits);
+        var traitName = item["traits"]!.AsObject().First().Key;
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        var operationTrait = position == "operation" && traitName == "smithy.api#trait";
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(operationTrait ? "document.target_type" : "document.trait_target");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo(operationTrait ? path : path + "/traits/" + traitName);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("operation", """{"smithy.api#readonly":{},"smithy.api#idempotent":{}}""")]
+    [Arguments("operation", """{"smithy.api#idempotent":{},"smithy.api#readonly":{}}""")]
+    [Arguments("structure", """{"smithy.api#input":{},"smithy.api#output":{}}""")]
+    [Arguments("structure", """{"smithy.api#output":{},"smithy.api#input":{}}""")]
+    [Arguments("structure", """{"smithy.api#input":{},"smithy.api#error":"client"}""")]
+    [Arguments("structure", """{"smithy.api#error":"client","smithy.api#input":{}}""")]
+    [Arguments("structure", """{"smithy.api#output":{},"smithy.api#error":"server"}""")]
+    [Arguments("structure", """{"smithy.api#error":"server","smithy.api#output":{}}""")]
+    [Arguments("definition", """{"smithy.api#trait":{},"smithy.api#error":"client"}""")]
+    [Arguments("definition", """{"smithy.api#error":"client","smithy.api#trait":{}}""")]
+    public async Task SmithyJsonRejectsDeclaredPreludeConflictsInEitherPropertyOrder(string position, string traits)
+    {
+        var document = JsonNode.Parse("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"example#Input"},"traits":{"example#Custom":{}}},
+              "example#Input":{"type":"structure"},
+              "example#Custom":{"type":"structure","traits":{"smithy.api#trait":{}}}}}
+            """)!.AsObject();
+        var id = position == "operation" ? "example#Get" : position == "structure" ? "example#Input" : "example#Custom";
+        var item = document["shapes"]![id]!.AsObject();
+        item["traits"] = JsonNode.Parse(traits);
+        if (position == "operation") { item["traits"]!["example#Custom"] = new JsonObject(); }
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_conflict");
+        await Assert.That(result.Diagnostic.Path!.StartsWith("$/shapes/" + id + "/traits/", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
     [Arguments("""{"type":"operation","input":{"target":"example#Missing"}}""", "", ApiOperationResolutionStatus.Indeterminate, "dependency.unresolved")]
     [Arguments("""{"type":"operation","input":{"target":"smithy.api#String"}}""", "", ApiOperationResolutionStatus.Invalid, "document.target_type")]
     [Arguments("""{"type":"operation","input":null}""", "", ApiOperationResolutionStatus.Invalid, "document.target")]
