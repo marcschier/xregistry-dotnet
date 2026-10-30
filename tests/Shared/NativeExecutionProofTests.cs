@@ -3,6 +3,7 @@
 
 using System.Runtime;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using TUnit.Assertions;
 using TUnit.Core;
@@ -31,6 +32,8 @@ public class NativeExecutionProofTests
             writer.WriteStartObject();
             writer.WriteBoolean("nativeAot", nativeAot);
             writer.WriteNumber("jitCompiledMethods", compiledMethods);
+            writer.WriteString("os", OperatingSystem.IsWindows() ? "win" : OperatingSystem.IsLinux() ? "linux" : "other");
+            writer.WriteString("processArchitecture", RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant());
             writer.WriteEndObject();
             await writer.FlushAsync();
         }

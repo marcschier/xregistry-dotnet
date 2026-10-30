@@ -4,6 +4,7 @@
 """Offline contract checks for the managed CI scheduling and diagnostics."""
 
 from pathlib import Path
+import re
 import unittest
 
 
@@ -24,6 +25,30 @@ class ManagedCiWorkflowTests(unittest.TestCase):
         self.assertIn("uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9", WORKFLOW)
         self.assertIn("TestResults/**", WORKFLOW)
         self.assertIn("if-no-files-found: ignore", WORKFLOW)
+
+
+class NativeSuiteCiWorkflowTests(unittest.TestCase):
+    def setUp(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "aot.yml").read_text(encoding="utf-8")
+        self.job = workflow.split("  native-module-suites:", 1)[1].split("  native-all-package-consumers:", 1)[0]
+
+    def test_native_suite_workflow_declares_every_framework_rid_cell_once(self) -> None:
+        cells = re.findall(r"rid: (\S+)\s+framework: (\S+)", self.job)
+        expected = {(rid, framework) for rid in ("win-x64", "win-arm64", "linux-x64", "linux-arm64")
+                    for framework in ("net8.0", "net10.0")}
+        self.assertEqual(len(cells), 8)
+        self.assertEqual(set(cells), expected)
+        self.assertIn("fail-fast: false", self.job)
+        self.assertIn("runs-on: ${{ matrix.os }}", self.job)
+
+    def test_native_suite_workflow_retains_failure_evidence_and_unmounts_its_own_volume(self) -> None:
+        self.assertIn("python eng/run_native_suites.py --framework '${{ matrix.framework }}' --rid '${{ matrix.rid }}'", self.job)
+        self.assertIn("if: always()\n        uses: actions/upload-artifact@", self.job)
+        for path in ("*/*.json", "*/*/*.json", "*/*/*.log", "*/*/results/**", "*/*/control-results/**", "*/*/native/**"):
+            self.assertIn("artifacts/native-suites/" + path, self.job)
+        self.assertIn("if-no-files-found: error", self.job)
+        self.assertIn('sudo umount "$RUNNER_TEMP/xregistry-suites-work"', self.job)
+        self.assertIn("if: always() && runner.os == 'Linux'", self.job)
 
 
 if __name__ == "__main__":

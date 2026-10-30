@@ -61,6 +61,49 @@ The complete managed gate passes 10,852 cases plus 283 tooling tests.
 The additional proof cases establish availability of the measurement, not
 native execution or specification coverage.
 
+## Reproducing complete native module suites
+
+`eng\run_native_suites.py` publishes and executes all thirteen generic library
+test projects for one framework/RID cell. Unlike the package-consumer probes,
+it runs each complete native TUnit suite and its matching managed assembly.
+Select an individual project while investigating a failure:
+
+```powershell
+python eng\run_native_suites.py --framework net10.0 --rid win-x64 --project XRegistry.Core.Tests --artifacts-root D:\temp --work-root D:\temp
+```
+
+Omit `--project` to run all thirteen suites, or repeat it to select several.
+Both roots must already exist and be absolute paths. The artifact root gets a
+fresh run directory; the work root supplies `TEMP`, `TMP` and `TMPDIR` for the
+test processes. Use local NTFS/ext4 for storage tests. The selected RID must
+match the actual host, and each process's proof must report that OS and process
+architecture. Cross-compilation and emulated processes cannot qualify a cell.
+
+The driver requires a clean committed checkout, records hashes of all tracked
+files and rechecks them after every suite. Every publication uses a new build
+directory, must execute ILC and must emit no IL warning or error. Native and
+managed runs must pass every case and produce identical multisets of class,
+method and parameterized-case display names. Missing, changed or duplicated
+cases therefore fail the gate even when every observed native case passes.
+The native proof requires zero JIT compilations; the managed baseline must
+report non-native status with a positive JIT count and be rejected by the
+receipt converter without creating a receipt.
+
+Each run retains source inventories and a summary; each suite retains publish
+and execution logs, the actual native executable, both TRX files, process
+proofs and a native receipt. The summary binds the source commit to executable,
+managed-assembly, TRX, proof and receipt hashes. A failed suite remains failed
+while later suites run; a source change aborts the remaining suites. Neither a
+partial run nor a receipt inside a failed summary qualifies that cell.
+
+The `native-module-suites` job in `aot.yml` schedules all eight framework/RID
+cells and uploads evidence after failure as well as success. Linux jobs
+provision a separate ext4 test-data volume. OPC UA, sample-hosting and bridge
+tests are explicitly classified outside this generic-library gate; their
+omission is not evidence that they passed. Scheduling these cells does not
+establish that they pass, resolve the .NET 8 HTTP dependency warning below,
+review requirement mappings or promote a package's qualification status.
+
 ## Current evidence and uncovered cells
 
 The [native matrix at `c7ff014`](https://github.com/marcschier/xregistry-dotnet/actions/runs/41044488180)

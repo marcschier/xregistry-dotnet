@@ -13,6 +13,90 @@ permissions:
   contents: read
 
 jobs:
+  native-module-suites:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+            framework: net8.0
+          - os: windows-latest
+            rid: win-x64
+            framework: net10.0
+          - os: windows-11-arm
+            rid: win-arm64
+            framework: net8.0
+          - os: windows-11-arm
+            rid: win-arm64
+            framework: net10.0
+          - os: ubuntu-latest
+            rid: linux-x64
+            framework: net8.0
+          - os: ubuntu-latest
+            rid: linux-x64
+            framework: net10.0
+          - os: ubuntu-24.04-arm
+            rid: linux-arm64
+            framework: net8.0
+          - os: ubuntu-24.04-arm
+            rid: linux-arm64
+            framework: net10.0
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+      - name: Provision isolated Linux ext4 test data volume
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update && sudo apt-get install --yes --no-install-recommends clang zlib1g-dev e2fsprogs
+          truncate -s 1G "$RUNNER_TEMP/xregistry-suites.ext4"
+          mkfs.ext4 -q -F "$RUNNER_TEMP/xregistry-suites.ext4"
+          mkdir "$RUNNER_TEMP/xregistry-suites-work"
+          sudo mount -o loop,nosuid,nodev "$RUNNER_TEMP/xregistry-suites.ext4" "$RUNNER_TEMP/xregistry-suites-work"
+          sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/xregistry-suites-work"
+      - name: Publish and execute complete generic native and matching managed suites
+        shell: pwsh
+        run: |
+          $artifacts = Join-Path $env:GITHUB_WORKSPACE 'artifacts/native-suites'
+          New-Item -ItemType Directory -Path $artifacts -Force | Out-Null
+          $work = if ($IsLinux) { Join-Path $env:RUNNER_TEMP 'xregistry-suites-work' } else { $env:RUNNER_TEMP }
+          python eng/run_native_suites.py --framework '${{ matrix.framework }}' --rid '${{ matrix.rid }}' --artifacts-root $artifacts --work-root $work
+      - name: Retain native suite source, binary, case and rejected-control evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-module-suites-${{ matrix.rid }}-${{ matrix.framework }}
+          path: |
+            artifacts/native-suites/*/*.json
+            artifacts/native-suites/*/*/*.json
+            artifacts/native-suites/*/*/*.log
+            artifacts/native-suites/*/*/results/**
+            artifacts/native-suites/*/*/control-results/**
+            artifacts/native-suites/*/*/native/**
+          if-no-files-found: error
+          retention-days: 14
+      - name: Unmount only this job's suite test data volume
+        if: always() && runner.os == 'Linux'
+        shell: bash
+        run: |
+          if mountpoint -q "$RUNNER_TEMP/xregistry-suites-work"; then
+            sudo umount "$RUNNER_TEMP/xregistry-suites-work"
+          fi
+          rm -f "$RUNNER_TEMP/xregistry-suites.ext4"
+
   native-all-package-consumers:
     strategy:
       fail-fast: false

@@ -48,11 +48,14 @@ release safeguards remain in their subject guides.
   including all 34 incremental publication-to-resolution workflow cases and
   their file-backed deletion/restart paths. Its receipt covers 137 methods,
   with zero IL/JIT and a rejected managed control.
-  Remaining work: decide how the existing native CI matrix (or a new job) runs the full suites
-  across all eight `net8.0`/`net10.0` × `win-x64`/`win-arm64`/`linux-x64`/
-  `linux-arm64` cells and uploads receipts, then map each reviewed
-  requirement's `testIds` to real method names and attach the resulting
-  evidence per requirement.
+  `eng/run_native_suites.py` and the `native-module-suites` CI job now schedule
+  the thirteen generic suites across all eight framework/RID cells. Each
+  suite must pass natively and in its matching managed baseline with identical
+  case inventories, source-bound hashes, zero IL diagnostics and a rejected
+  managed receipt. Remaining work: execute every cell, resolve failures without
+  suppression, then map each reviewed requirement's `testIds` to real method
+  names and attach the resulting evidence per requirement. Scheduling and
+  driver unit tests do not establish native execution.
 
 ## Native platforms and package consumers
 
