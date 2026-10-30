@@ -140,25 +140,38 @@ development cell, not requirement-level release qualification.
 ## Current evidence and uncovered cells
 
 The [corrected matrix at `e502e5d`](https://github.com/marcschier/xregistry-dotnet/actions/runs/41133118088)
-has completed both Linux .NET 10 cells successfully. The downloaded Linux ARM64
-cell passed all thirteen suites, with 9,118 native cases and 2,636 methods.
-Each retained managed control DLL matches its summary hash. Native executable,
-TRX, proof and receipt hashes also match; complete native/managed case
+completed all four .NET 10 cells successfully on Windows/Linux x64 and ARM64.
+Each downloaded cell passed all thirteen suites, with 9,118 native cases and
+2,636 methods. Each retained managed control DLL matches its summary hash.
+Native executable, TRX, proof and receipt hashes also match; complete native/managed case
 inventories agree, managed proofs are rejected, publications have no IL
-diagnostics, and source inventories remain unchanged. The artifact is retained
-at `D:\temp\xregistry-native-41133118088-linux-arm64-net10\native-suites-68p2vdvt`.
+diagnostics, and source inventories remain unchanged. The artifacts are retained
+under `D:\temp\xregistry-native-41133118088-<rid>-net10` for each corresponding
+RID; the Linux ARM64 run directory is `native-suites-68p2vdvt`.
 This demonstrates the managed-assembly retention rule for all thirteen suites.
 
-At the same source, the downloaded Linux ARM64/.NET 8 cell passed nine suites
-and 7,675 cases, including all 4,563 Validation cases. Its retained managed
-controls, proofs and receipts match their recorded hashes. AspNetCore, HTTP,
-Federation and Git still fail publication with IL2026/IL3050 diagnostics from
+At the same source, the downloaded Windows x64 and Linux x64/ARM64 .NET 8 cells
+each passed nine suites and 7,675 cases, including all 4,563 Validation cases.
+Their retained managed controls, proofs and receipts match their recorded hashes.
+AspNetCore, HTTP, Federation and Git still fail publication with IL2026/IL3050 diagnostics from
 `JsonOptions.CreateDefaultTypeResolver`. The Windows ARM64/.NET 8 job failed
 earlier, during SDK installation, with an internal CLR error; no suite harness
-ran in that job. Other cells remain unresolved at this inspection checkpoint.
+ran in that job. An isolated retry was accepted after the initial workflow
+attempt completed; its result remains unresolved at this inspection checkpoint.
 These results belong to `e502e5d`, before the subsequent scoped-selector
 changes. They remain development evidence with `releaseQualified: false`;
 no per-requirement native qualification has been promoted.
+
+The later selector source at `b09fd42df28f331a9f5955688090dbe9b4b12627`
+passed the complete Validation suite on Windows x64 under both .NET 8 and
+.NET 10: 4,745 cases and 838 methods per framework. Both publications ran ILC
+without IL diagnostics, complete native/managed case inventories agree, and
+managed proofs are rejected. Native executable, managed control, TRX, proof and
+receipt hashes match; source inventories remain unchanged. Evidence is retained
+at `D:\temp\xregistry-validation-b09fd42-net8\native-suites-e481dfqb` and
+`D:\temp\xregistry-validation-b09fd42-net10\native-suites-e33jus9b`.
+These selected Validation runs do not qualify complete thirteen-suite cells or
+promote requirement-level evidence.
 
 The earlier [native matrix at `1bdfa6f`](https://github.com/marcschier/xregistry-dotnet/actions/runs/41054105332)
 completed with 32 successful jobs and four failed jobs. All four .NET 10
