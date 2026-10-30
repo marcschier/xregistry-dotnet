@@ -16,6 +16,10 @@ public static partial class ApiOperationDocumentResolver
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
     private static partial Regex SmithyTraitDiffPointer();
 
+    [GeneratedRegex(@"\A[A-Za-z_][A-Za-z_0-9]*\z",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
+    private static partial Regex SmithyEnumConstantName();
+
     private static ApiOperationResolutionResult ResolveSmithyOperation(JsonElement root, string shapeId,
         Uri? documentUri, ValidationContext budget)
     {
@@ -682,6 +686,18 @@ public static partial class ApiOperationDocumentResolver
                 ValidationContext.Require(found, path, "document.default_value",
                     "A Smithy enum default must match a declared value.");
             }
+            if (kind == "string" && TryTrait(target, "smithy.api#enum", out var legacyEnum))
+            {
+                var found = false;
+                foreach (var item in legacyEnum.EnumerateArray())
+                {
+                    var declared = item.GetProperty("value").GetString()!;
+                    budget.Work(declared.Length, path);
+                    found |= string.Equals(value.GetString(), declared, StringComparison.Ordinal);
+                }
+                ValidationContext.Require(found, path, "document.default_enum",
+                    "A Smithy string default must match a declared enum trait value.");
+            }
             if (kind is "string" or "enum" &&
                 (TryTrait(memberShape, "smithy.api#pattern", out _) || TryTrait(target, "smithy.api#pattern", out _)))
             {
@@ -806,6 +822,7 @@ public static partial class ApiOperationDocumentResolver
                 var traitPath = path + "/traits/" + Escape(trait.Name);
                 var targetAllowed = trait.Name switch
                 {
+                    "smithy.api#enum" => memberContainer is null && kind == "string",
                     "smithy.api#required" or "smithy.api#clientOptional" => memberContainer == "structure",
                     "smithy.api#addedDefault" => memberContainer == "structure" &&
                         traits.TryGetProperty("smithy.api#default", out _),
@@ -838,6 +855,9 @@ public static partial class ApiOperationDocumentResolver
                     "Conflicting Smithy prelude traits cannot be applied to the same shape.");
                 switch (trait.Name)
                 {
+                    case "smithy.api#enum":
+                        ValidateLegacyEnum(trait.Value, traitPath);
+                        continue;
                     case "smithy.api#pattern":
                         var patternKind = kind;
                         if (memberContainer is not null)
@@ -938,6 +958,67 @@ public static partial class ApiOperationDocumentResolver
                     }
                 }
                 Visit(trait.Name, depth + 1, traitDefinition: true, sourceId: sourceId, referencePath: traitPath);
+            }
+        }
+
+        private void ValidateLegacyEnum(JsonElement value, string path)
+        {
+            ValidationContext.Require(value.ValueKind == JsonValueKind.Array && value.GetArrayLength() > 0,
+                path, "document.enum_trait", "A Smithy enum trait requires a nonempty array.");
+            var values = new HashSet<string>(StringComparer.Ordinal);
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            var index = 0;
+            bool? named = null;
+            foreach (var item in value.EnumerateArray())
+            {
+                var at = path + "/" + (index++).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                budget.Work(path: at);
+                ValidationContext.Require(item.ValueKind == JsonValueKind.Object, at, "document.enum_trait",
+                    "A Smithy enum definition must be an object.");
+                ValidationContext.Require(item.TryGetProperty("value", out var entry) &&
+                    entry.ValueKind == JsonValueKind.String && entry.GetString()!.Length > 0,
+                    at + "/value", "document.enum_trait_value", "A Smithy enum definition requires a nonempty string value.");
+                var text = entry.GetString()!;
+                budget.Work(text.Length, at + "/value");
+                ValidationContext.Require(values.Add(text), at + "/value", "document.enum_trait_value",
+                    "Smithy enum trait values must be unique.");
+                var hasName = item.TryGetProperty("name", out var name);
+                ValidationContext.Require(named is null || named == hasName, at + "/name", "document.enum_trait_name",
+                    "Smithy enum trait definitions must either all declare names or all omit them.");
+                named = hasName;
+                if (hasName)
+                {
+                    ValidationContext.Require(name.ValueKind == JsonValueKind.String, at + "/name",
+                        "document.enum_trait_name", "A Smithy enum constant name must be a string.");
+                    var label = name.GetString()!;
+                    budget.Work(label.Length, at + "/name");
+                    ValidationContext.Require(SmithyEnumConstantName().IsMatch(label) && names.Add(label),
+                        at + "/name", "document.enum_trait_name",
+                        "Smithy enum constant names must be valid ASCII identifiers and unique.");
+                }
+                if (item.TryGetProperty("documentation", out var documentation))
+                {
+                    ValidationContext.Require(documentation.ValueKind == JsonValueKind.String,
+                        at + "/documentation", "document.enum_trait_metadata", "Enum documentation must be a string.");
+                }
+                if (item.TryGetProperty("deprecated", out var deprecated))
+                {
+                    ValidationContext.Require(deprecated.ValueKind is JsonValueKind.True or JsonValueKind.False,
+                        at + "/deprecated", "document.enum_trait_metadata", "Enum deprecated must be a boolean.");
+                }
+                if (item.TryGetProperty("tags", out var tags))
+                {
+                    ValidationContext.Require(tags.ValueKind == JsonValueKind.Array, at + "/tags",
+                        "document.enum_trait_metadata", "Enum tags must be an array of nonempty strings.");
+                    var tagIndex = 0;
+                    foreach (var tag in tags.EnumerateArray())
+                    {
+                        var tagPath = at + "/tags/" + (tagIndex++).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                        budget.Work(path: tagPath);
+                        ValidationContext.Require(tag.ValueKind == JsonValueKind.String && tag.GetString()!.Length > 0,
+                            tagPath, "document.enum_trait_metadata", "Enum tags must be nonempty strings.");
+                    }
+                }
             }
         }
 

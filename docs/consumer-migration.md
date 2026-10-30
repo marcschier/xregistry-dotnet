@@ -284,7 +284,7 @@ The implicit prelude support covers `Blob`, `Boolean`, `Document`, `String`,
 `PrimitiveDouble`, and the traits
 `error`, `documentation`, `required`, `clientOptional`, `addedDefault`, `sparse`,
 `uniqueItems`, `private`, `length`, `range`, `pattern`, `input`, `output`, `readonly`, `idempotent`,
-`default`, `enumValue` and `trait`
+`default`, `enum`, `enumValue` and `trait`
 in `smithy.api`. Other required definitions
 must be supplied in the AST. These checks do not validate every Smithy shape
 constraint, trait value or selector. Full Smithy validation and model assembly
@@ -359,6 +359,16 @@ Patterns are retained without adding anchors. Non-null defaults requiring
 pattern matching also report `Unsupported`, even when the pattern appears
 simple; the resolver does not substitute .NET regular-expression semantics.
 Null member overrides need no matching.
+
+The deprecated `enum` trait remains supported on string roots, not members or
+enum shapes. Its nonempty definition array requires nonempty, exact-case unique
+values. Names must be unique ASCII identifiers and either present on every
+definition or absent from every definition. Documentation, tags and deprecation
+fields retain their declared types; tags may be empty arrays but each tag must
+be a nonempty string. Non-null authored defaults must match a declared value,
+and applicable length checks still apply. Null member overrides remain valid.
+The resolver retains the original trait representation without migrating it
+to enum shapes or generating client behavior.
 
 Reachable trait definitions require a string `selector`, when supplied, and
 restrict `structurallyExclusive` to `member` or `target`. These are property

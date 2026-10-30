@@ -214,6 +214,10 @@ vocabulary/source mapping. It does not supply their implementation.
   the shared bounded ECMA-262 syntax checker. Unsupported syntax and non-null
   defaults requiring matching report unsupported; no anchors or .NET matching
   semantics are substituted. Pattern matching remains open.
+  The deprecated `enum` trait checks string-root applicability, nonempty unique
+  values, valid unique all-or-none names and optional metadata types. Authored
+  defaults check membership and effective length bounds; null overrides remain
+  valid. No enum-shape conversion or client generation is performed.
   Idempotent `exists`/`notFound` declarations are mutually exclusive
   arrays of absolute IDs whose targets must occur in the operation's own errors.
   Their native hints are retained without execution or fallback to service errors.

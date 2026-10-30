@@ -3906,6 +3906,148 @@ public class ApiOperationReferenceTests
         await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
     }
 
+    [Test]
+    [Arguments("null", "document.enum_trait", "")]
+    [Arguments("{}", "document.enum_trait", "")]
+    [Arguments("[]", "document.enum_trait", "")]
+    [Arguments("[null]", "document.enum_trait", "/0")]
+    [Arguments("[{}]", "document.enum_trait_value", "/0/value")]
+    [Arguments("""[{"value":null}]""", "document.enum_trait_value", "/0/value")]
+    [Arguments("""[{"value":1}]""", "document.enum_trait_value", "/0/value")]
+    [Arguments("""[{"value":""}]""", "document.enum_trait_value", "/0/value")]
+    [Arguments("""[{"value":"a"},{"value":"a"}]""", "document.enum_trait_value", "/1/value")]
+    [Arguments("""[{"value":"a","name":null}]""", "document.enum_trait_name", "/0/name")]
+    [Arguments("""[{"value":"a","name":""}]""", "document.enum_trait_name", "/0/name")]
+    [Arguments("""[{"value":"a","name":"1A"}]""", "document.enum_trait_name", "/0/name")]
+    [Arguments("""[{"value":"a","name":"a-b"}]""", "document.enum_trait_name", "/0/name")]
+    [Arguments("""[{"value":"a","name":"A\n"}]""", "document.enum_trait_name", "/0/name")]
+    [Arguments("""[{"value":"a","name":"\u00c4"}]""", "document.enum_trait_name", "/0/name")]
+    [Arguments("""[{"value":"a","name":"A"},{"value":"b","name":"A"}]""", "document.enum_trait_name", "/1/name")]
+    [Arguments("""[{"value":"a","name":"A"},{"value":"b"}]""", "document.enum_trait_name", "/1/name")]
+    [Arguments("""[{"value":"a"},{"value":"b","name":"B"}]""", "document.enum_trait_name", "/1/name")]
+    [Arguments("""[{"value":"a","documentation":null}]""", "document.enum_trait_metadata", "/0/documentation")]
+    [Arguments("""[{"value":"a","documentation":1}]""", "document.enum_trait_metadata", "/0/documentation")]
+    [Arguments("""[{"value":"a","deprecated":"true"}]""", "document.enum_trait_metadata", "/0/deprecated")]
+    [Arguments("""[{"value":"a","deprecated":null}]""", "document.enum_trait_metadata", "/0/deprecated")]
+    [Arguments("""[{"value":"a","tags":null}]""", "document.enum_trait_metadata", "/0/tags")]
+    [Arguments("""[{"value":"a","tags":{}}]""", "document.enum_trait_metadata", "/0/tags")]
+    [Arguments("""[{"value":"a","tags":[""]}]""", "document.enum_trait_metadata", "/0/tags/0")]
+    [Arguments("""[{"value":"a","tags":["tag",null]}]""", "document.enum_trait_metadata", "/0/tags/1")]
+    public async Task SmithyJsonLegacyEnumDeclarationsCheckValuesNamesAndMetadata(string declaration, string code, string suffix)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("string", "null", false))!;
+        document["shapes"]!["example#Value"]!["traits"] =
+            new JsonObject { ["smithy.api#enum"] = JsonNode.Parse(declaration) };
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Value/traits/smithy.api#enum" + suffix);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("""[{"value":"a"}]""")]
+    [Arguments("""[{"value":"a"},{"value":"A"}]""")]
+    [Arguments("""[{"value":"a","name":"A"},{"value":"b","name":"a"}]""")]
+    [Arguments("""[{"value":"a","name":"_"},{"value":"b","name":"a_1"}]""")]
+    [Arguments("""[{"value":"\u00e9"},{"value":"e\u0301"}]""")]
+    [Arguments("""[{"value":"a","documentation":"","tags":[],"deprecated":false}]""")]
+    [Arguments("""[{"value":"a","documentation":"text","tags":["tag","tag"],"deprecated":true}]""")]
+    public async Task SmithyJsonLegacyEnumsRetainExactIdentifiersAndOptionalMetadata(string declaration)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("string", "null", false))!;
+        document["shapes"]!["example#Value"]!["traits"] =
+            new JsonObject { ["smithy.api#enum"] = JsonNode.Parse(declaration) };
+        document["shapes"]!["example#Unused"] = JsonNode.Parse("""
+            {"type":"string","traits":{"smithy.api#enum":[{"value":""}]}}
+            """);
+        document["metadata"] = JsonNode.Parse("""
+            {"literal":{"target":"https://example.test/not-an-import","traits":{"smithy.api#enum":null}}}
+            """);
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Enum values are not imports."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
+    [Test]
+    [Arguments("\"a\"", true)]
+    [Arguments("\"b\"", true)]
+    [Arguments("\"A\"", false)]
+    [Arguments("\"\"", false)]
+    [Arguments("\"c\"", false)]
+    public async Task SmithyJsonLegacyEnumDefaultsMustMatchExactDeclaredValues(string value, bool valid)
+    {
+        foreach (var rootDefault in new[] { false, true })
+        {
+            var document = JsonNode.Parse(SmithyDefaultDocument("string", value, rootDefault))!;
+            var target = document["shapes"]!["example#Value"]!;
+            if (target["traits"] is null) { target["traits"] = new JsonObject(); }
+            target["traits"]!["smithy.api#enum"] = JsonNode.Parse("""[{"value":"a"},{"value":"b"}]""");
+            if (rootDefault)
+            {
+                document["shapes"]!["example#Input"]!["members"]!["value"]!["traits"]!["smithy.api#default"] = null;
+            }
+            var result = ResolveSmithy(document.ToJsonString());
+            await Assert.That(result.Status).IsEqualTo(valid
+                ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+            if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+            else
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.default_enum");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo((rootDefault
+                    ? "$/shapes/example#Value" : "$/shapes/example#Input/members/value") + "/traits/smithy.api#default");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("enum", false)]
+    [Arguments("intEnum", false)]
+    [Arguments("integer", false)]
+    [Arguments("blob", false)]
+    [Arguments("list", false)]
+    [Arguments("structure", false)]
+    [Arguments("string", true)]
+    public async Task SmithyJsonLegacyEnumTraitRejectsNonStringRootsAndAllMembers(string kind, bool onMember)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument(kind, "null", false))!;
+        var member = document["shapes"]!["example#Input"]!["members"]!["value"]!;
+        member.AsObject().Remove("traits");
+        var owner = onMember ? member : document["shapes"]!["example#Value"]!;
+        owner["traits"] = JsonNode.Parse("""{"smithy.api#enum":[{"value":"a"}]}""");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo((onMember
+            ? "$/shapes/example#Input/members/value" : "$/shapes/example#Value") + "/traits/smithy.api#enum");
+    }
+
+    [Test]
+    public async Task SmithyJsonLegacyEnumDefaultsRetainNullOverrideAndLengthConstraints()
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument("string", "null", false))!;
+        document["shapes"]!["example#Value"]!["traits"] = JsonNode.Parse("""
+            {"smithy.api#enum":[{"value":"ab"}],"smithy.api#length":{"min":2,"max":2}}
+            """);
+        var member = document["shapes"]!["example#Input"]!["members"]!["value"]!;
+        var nullResult = ResolveSmithy(document.ToJsonString());
+        await Assert.That(nullResult.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        member["traits"]!["smithy.api#default"] = "ab";
+        var valid = ResolveSmithy(document.ToJsonString());
+        await Assert.That(valid.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        member["traits"]!["smithy.api#length"] = JsonNode.Parse("""{"max":1}""");
+        var invalid = ResolveSmithy(document.ToJsonString());
+        await Assert.That(invalid.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(invalid.Diagnostic!.Code).IsEqualTo("document.default_length");
+        await Assert.That(invalid.Diagnostic.Path).IsEqualTo("$/shapes/example#Input/members/value/traits/smithy.api#default");
+    }
+
     private static string SmithyDefaultDocument(string kind, string value, bool rootDefault)
     {
         var target = new JsonObject { ["type"] = kind };
