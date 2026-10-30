@@ -3192,6 +3192,131 @@ public class ApiOperationReferenceTests
         await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
     }
 
+    [Test]
+    [Arguments("null", "document.length_bounds", "")]
+    [Arguments("[]", "document.length_bounds", "")]
+    [Arguments("{}", "document.length_bounds", "")]
+    [Arguments("""{"min":null}""", "document.length_bound", "/min")]
+    [Arguments("""{"min":"1"}""", "document.length_bound", "/min")]
+    [Arguments("""{"min":false}""", "document.length_bound", "/min")]
+    [Arguments("""{"max":1.1}""", "document.length_bound", "/max")]
+    [Arguments("""{"max":9223372036854775808}""", "document.length_bound", "/max")]
+    [Arguments("""{"min":-9223372036854775809}""", "document.length_bound", "/min")]
+    [Arguments("""{"min":0,"max":{}}""", "document.length_bound", "/max")]
+    public async Task SmithyJsonLengthDeclarationsRequireIntegralLongBounds(string bounds, string code, string suffix)
+    {
+        var result = ResolveSmithy("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"example#Input"}},
+              "example#Input":{"type":"structure","members":{"value":{"target":"smithy.api#String",
+                "traits":{"smithy.api#length":BOUNDS}}}}}}
+            """.Replace("BOUNDS", bounds, StringComparison.Ordinal));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        await Assert.That(result.Diagnostic.Path)
+            .IsEqualTo("$/shapes/example#Input/members/value/traits/smithy.api#length" + suffix);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("""{"min":0}""")]
+    [Arguments("""{"max":9223372036854775807}""")]
+    [Arguments("""{"min":-9223372036854775808}""")]
+    [Arguments("""{"min":1.0,"max":1e1}""")]
+    public async Task SmithyJsonLengthDeclarationsRetainExactBoundsWithoutAcquisition(string bounds)
+    {
+        var document = """
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"example#Input"}},
+              "example#Input":{"type":"structure","members":{"value":{"target":"smithy.api#String",
+                "traits":{"smithy.api#length":BOUNDS}}}}}}
+            """.Replace("BOUNDS", bounds, StringComparison.Ordinal);
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Length bounds are not imports."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        using var original = JsonDocument.Parse(document);
+        await Assert.That(result.Operation.GetRawText())
+            .IsEqualTo(original.RootElement.GetProperty("shapes").GetProperty("example#Get").GetRawText());
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
+    [Test]
+    [Arguments("string", false, true)]
+    [Arguments("string", true, true)]
+    [Arguments("blob", false, true)]
+    [Arguments("blob", true, true)]
+    [Arguments("enum", false, true)]
+    [Arguments("enum", true, true)]
+    [Arguments("list", false, true)]
+    [Arguments("list", true, true)]
+    [Arguments("map", false, true)]
+    [Arguments("map", true, true)]
+    [Arguments("integer", false, false)]
+    [Arguments("integer", true, false)]
+    [Arguments("structure", false, false)]
+    [Arguments("structure", true, false)]
+    [Arguments("union", false, false)]
+    [Arguments("union", true, false)]
+    public async Task SmithyJsonLengthDeclarationTargetsRespectRootAndMemberKinds(string kind, bool onMember, bool valid)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument(kind, "null", false))!;
+        var member = document["shapes"]!["example#Input"]!["members"]!["value"]!;
+        member.AsObject().Remove("traits");
+        var target = onMember ? member : document["shapes"]!["example#Value"]!;
+        target["traits"] = JsonNode.Parse("""{"smithy.api#length":{"min":0}}""");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(valid
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (valid) { await Assert.That(result.Diagnostic).IsNull(); }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo((onMember
+                ? "$/shapes/example#Input/members/value" : "$/shapes/example#Value") + "/traits/smithy.api#length");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("list", "member")]
+    [Arguments("map", "key")]
+    [Arguments("map", "value")]
+    [Arguments("union", "members/value")]
+    public async Task SmithyJsonLengthAnnotationsAlsoApplyToNonStructureMembers(string kind, string position)
+    {
+        var document = JsonNode.Parse(SmithyDefaultDocument(kind, "null", false))!;
+        document["shapes"]!["example#Input"]!["members"]!["value"]!.AsObject().Remove("traits");
+        var member = document["shapes"]!["example#Value"]!;
+        foreach (var segment in (kind == "union" ? "members/A" : position).Split('/')) { member = member[segment]!; }
+        member["traits"] = JsonNode.Parse("""{"smithy.api#length":{"max":10}}""");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+    }
+
+    [Test]
+    public async Task SmithyJsonLengthDeclarationsDoNotResolveMissingTargetsOrValidateUnrelatedDefinitions()
+    {
+        var document = JsonNode.Parse("""
+            {"smithy":"2.0","shapes":{
+              "example#Get":{"type":"operation","input":{"target":"example#Input"}},
+              "example#Input":{"type":"structure","members":{"value":{"target":"example#Missing",
+                "traits":{"smithy.api#length":{"min":1}}}}},
+              "example#Unused":{"type":"string","traits":{"smithy.api#length":null}}}}
+            """)!;
+        var missing = ResolveSmithy(document.ToJsonString());
+        await Assert.That(missing.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(missing.Diagnostic!.Code).IsEqualTo("dependency.unresolved");
+        await Assert.That(missing.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        document["shapes"]!["example#Missing"] = JsonNode.Parse("""{"type":"string"}""");
+        var selected = ResolveSmithy(document.ToJsonString());
+        await Assert.That(selected.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(selected.Diagnostic).IsNull();
+    }
+
     private static string SmithyDefaultDocument(string kind, string value, bool rootDefault)
     {
         var target = new JsonObject { ["type"] = kind };

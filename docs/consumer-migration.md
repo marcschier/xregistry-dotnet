@@ -283,7 +283,8 @@ The implicit prelude support covers `Blob`, `Boolean`, `Document`, `String`,
 `PrimitiveShort`, `PrimitiveInteger`, `PrimitiveLong`, `PrimitiveFloat`,
 `PrimitiveDouble`, and the traits
 `error`, `documentation`, `required`, `clientOptional`, `addedDefault`, `sparse`,
-`uniqueItems`, `private`, `input`, `output`, `readonly`, `idempotent`, `default`, `enumValue` and `trait`
+`uniqueItems`, `private`, `length`, `input`, `output`, `readonly`, `idempotent`,
+`default`, `enumValue` and `trait`
 in `smithy.api`. Other required definitions
 must be supplied in the AST. These checks do not validate every Smithy shape
 constraint, trait value or selector. Full Smithy validation and model assembly
@@ -328,6 +329,14 @@ A member's trait application uses its declaring shape's namespace, not the
 namespace of the member's target. A private member does not make its target
 private, and direct operation selection is not a model reference. Unrelated
 references and literal trait values remain outside this check.
+
+The `length` trait checks root and member applicability to string, blob, list
+and map targets, including enum string specializations. Its object value must
+declare at least one of `min` or `max`; each supplied bound must be an integral
+signed-64-bit number, compared without floating-point rounding. Missing target
+definitions still report unresolved dependencies. These declaration checks do
+not measure default values or instances, and unrelated definitions remain
+unchecked.
 
 Reachable trait definitions require a string `selector`, when supplied, and
 restrict `structurallyExclusive` to `member` or `target`. These are property

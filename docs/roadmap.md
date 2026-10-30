@@ -200,6 +200,9 @@ vocabulary/source mapping. It does not supply their implementation.
   namespaces, including repeated references after a permitted visit. Private
   member markings do not change target accessibility; literal values and
   unrelated model references remain outside the selected-closure check.
+  `length` declarations check eligible root/member kinds, at least one bound,
+  and exact integral signed-64-bit bounds. Default and instance length
+  evaluation remain open.
   Idempotent `exists`/`notFound` declarations are mutually exclusive
   arrays of absolute IDs whose targets must occur in the operation's own errors.
   Their native hints are retained without execution or fallback to service errors.

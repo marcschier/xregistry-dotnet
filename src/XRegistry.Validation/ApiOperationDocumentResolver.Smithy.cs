@@ -764,6 +764,20 @@ public static partial class ApiOperationDocumentResolver
                     "Conflicting Smithy prelude traits cannot be applied to the same shape.");
                 switch (trait.Name)
                 {
+                    case "smithy.api#length":
+                        var lengthKind = kind;
+                        if (memberContainer is not null)
+                        {
+                            var targetId = shape.GetProperty("target").GetString()!;
+                            lengthKind = shapes.TryGetProperty(targetId, out var lengthTarget)
+                                ? lengthTarget.GetProperty("type").GetString() : SmithyPreludeKind(targetId);
+                        }
+                        ValidationContext.Require(memberContainer is not null && lengthKind is null ||
+                            lengthKind is "string" or "enum" or "blob" or "list" or "map",
+                            traitPath, "document.trait_target",
+                            "Smithy length requires a string, blob, list or map, or a member targeting one.");
+                        ValidateLengthDeclaration(trait.Value, traitPath);
+                        continue;
                     case "smithy.api#documentation":
                         ValidationContext.Require(trait.Value.ValueKind == JsonValueKind.String, traitPath,
                             "document.trait_value", "The Smithy documentation trait requires a string value.");
@@ -822,6 +836,26 @@ public static partial class ApiOperationDocumentResolver
                     }
                 }
                 Visit(trait.Name, depth + 1, traitDefinition: true, sourceId: sourceId, referencePath: traitPath);
+            }
+        }
+
+        private void ValidateLengthDeclaration(JsonElement value, string path)
+        {
+            ValidationContext.Require(value.ValueKind == JsonValueKind.Object &&
+                (value.TryGetProperty("min", out _) || value.TryGetProperty("max", out _)),
+                path, "document.length_bounds", "A Smithy length requires at least one min or max bound.");
+            foreach (var name in new[] { "min", "max" })
+            {
+                if (!value.TryGetProperty(name, out var bound)) { continue; }
+                var at = path + "/" + name;
+                budget.Work(path: at);
+                ValidationContext.Require(bound.ValueKind == JsonValueKind.Number, at, "document.length_bound",
+                    "A Smithy length bound must be a signed 64-bit integer.");
+                var number = JsonNumber.Read(bound, budget, at);
+                ValidationContext.Require(number.IsInteger &&
+                    number.CompareTo(new(true, "9223372036854775808", 0)) >= 0 &&
+                    number.CompareTo(new(false, "9223372036854775807", 0)) <= 0,
+                    at, "document.length_bound", "A Smithy length bound must be a signed 64-bit integer.");
             }
         }
 
