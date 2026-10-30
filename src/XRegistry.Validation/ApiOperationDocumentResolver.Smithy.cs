@@ -2927,8 +2927,7 @@ public static partial class ApiOperationDocumentResolver
                 {
                     if (function && name == "length")
                     {
-                        if (!AsciiText(value.Text!)) { return false; }
-                        result.Add(new(SmithyAttributeKind.Length, Length: value.Text!.Length));
+                        result.Add(new(SmithyAttributeKind.Length, Length: CharacterLength(value.Text!)));
                     }
                     return true;
                 }
@@ -2942,8 +2941,7 @@ public static partial class ApiOperationDocumentResolver
                         if (node.ValueKind == JsonValueKind.String)
                         {
                             var textValue = node.GetString()!;
-                            if (!AsciiText(textValue)) { return false; }
-                            length = textValue.Length;
+                            length = CharacterLength(textValue);
                         }
                         else if (node.ValueKind == JsonValueKind.Array) { length = node.GetArrayLength(); }
                         else if (node.ValueKind == JsonValueKind.Object) { length = ObjectLength(node); }
@@ -2983,6 +2981,14 @@ public static partial class ApiOperationDocumentResolver
                     if (selected.ValueKind != JsonValueKind.Undefined) { result.Add(new(SmithyAttributeKind.Node, selected)); }
                 }
                 return true;
+            }
+
+            int CharacterLength(string value)
+            {
+                budget.Work(value.Length, path);
+                var count = 0;
+                foreach (var rune in value.EnumerateRunes()) { count++; }
+                return count;
             }
 
             string Identifier()

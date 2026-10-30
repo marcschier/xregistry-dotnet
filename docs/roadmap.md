@@ -257,9 +257,11 @@ vocabulary/source mapping. It does not supply their implementation.
   accept computed lengths, and subsequent property access yields absence.
   Object counting consumes the shared work budget. Computed counts use invariant
   decimal digits with supported string comparators and quoted numeric operands.
-  ASCII string length counts decoded characters, including empty strings and
-  escaped controls, against the work budget. Non-ASCII string length remains
-  unsupported.
+  String length counts decoded Unicode scalar values, including empty strings
+  and escaped controls, against the work budget. Supplementary characters count
+  once; combining marks and joiners remain separate, without normalization or
+  grapheme clustering. Node values, projected keys and scoped text share these
+  rules; Unicode case folding remains unsupported.
   `[trait|(length)]` counts the selected shape's own applied traits, including
   a present zero when its traits object is omitted or empty. Payload truthiness
   does not affect the count. Malformed traits objects remain invalid; implicit
