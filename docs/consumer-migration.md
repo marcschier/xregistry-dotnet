@@ -334,13 +334,18 @@ explicitly owned caches and work children are removed.
 ## Current evidence and limits
 
 All eight generic package-consumer cells in
-[native run `41024778707`](https://github.com/marcschier/xregistry-dotnet/actions/runs/41024778707)
-passed at source commit `ecd2a3bb92e5c390590b121ae96b598671361305`:
+[native run `41044488180`](https://github.com/marcschier/xregistry-dotnet/actions/runs/41044488180)
+passed at source commit `c7ff0146084dd85272e13073a00f5706a276139f`:
 .NET 8/.NET 10 on Windows/Linux x64 and ARM64. Each cell executed all 27
 native cases and both managed negative controls. The run retains source,
 package, binary and execution evidence in its `native-all-packages-*`
 artifacts. This is development qualification of the consumer fixture, not
 full native test-suite coverage or release qualification.
+
+The refreshed artifacts were also checked against their source commit and
+actual executable hashes. Each cell retains its own raw source inventory;
+Git's declared text line-ending rules account for platform-specific checkout
+bytes without changing those inventory hashes.
 
 The development runs at `D:\temp\97aa2a5176f5` (net8.0/win-x64) and
 `D:\temp\cac5584c2f5c` (net10.0/win-x64) each passed all 27 native cases,

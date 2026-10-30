@@ -63,7 +63,7 @@ native execution or specification coverage.
 
 ## Current evidence and uncovered cells
 
-The [native matrix at `ecd2a3b`](https://github.com/marcschier/xregistry-dotnet/actions/runs/41024778707)
+The [native matrix at `c7ff014`](https://github.com/marcschier/xregistry-dotnet/actions/runs/41044488180)
 passed all 28 jobs on Windows/Linux x64 and ARM64: eight generic package-consumer
 cells, four model-consumer jobs executing both frameworks, eight storage cells,
 and four jobs each for the client and bridge samples. The .NET 10 storage jobs
@@ -71,6 +71,17 @@ also executed the durable HTTP probe. Generic consumer receipts are described
 in [consumer embedding](consumer-migration.md#current-evidence-and-limits).
 These jobs qualify their development probes, not the complete native TUnit
 suites or every specification obligation.
+
+The eight generic consumer artifacts each contain 27 passed cases, zero
+IL diagnostics or JIT compilations, both rejected managed controls and matching
+executable hashes. Their raw before/after source inventories agree; comparison to the
+source commit respects the repository's declared Git text line-ending rules.
+The downloaded reports and binaries are retained at
+`D:\temp\xregistry-native-matrix-c7ff014`. Four reports for each of the client,
+bridge and durable HTTP samples and eight process-crash/restart reports also
+passed.
+This refresh replaces the older package-consumer checkpoint at `ecd2a3b`;
+it does not refresh every module's full-suite receipt.
 
 The complete Federation TUnit suite passed 626 native cases on .NET 10/Windows
 x64 at `6d143c4456a9d5d9f369e9c62daebbefc770d12a`, including all 157 scoped,
@@ -195,6 +206,26 @@ for .NET 8 and
 `f1903e361214ee771213945c2cb5b579f8d0a00158b452d223ce223666af90df`
 for .NET 10. These two Core cells do not qualify other module suites, the
 remaining platforms or reviewed specification requirements.
+
+The complete Models suite was then refreshed at
+`611fb0be03be89d9a005437a65ba29aae9b796d8`: 1,006 native cases passed on
+each of .NET 8 and .NET 10/Windows x64, including all 76 Media Endpoint cases.
+Those cases cover every declared producer streamformat, exact-case open
+codec identifiers and the absence of a codec/format compatibility matrix.
+The full managed gate passed 10,894 cases plus 283 tooling tests.
+Both native publications ran ILC without IL diagnostics, reported zero JIT
+compilations and rejected their managed controls, false/4,006 and false/3,999.
+
+Evidence directories are `D:\temp\xregistry-models-native-611fb0b-net8` and
+`D:\temp\xregistry-models-native-611fb0b`, with publish/run logs beside them.
+Each receipt aggregates 332 distinct passed methods, zero failed and zero
+skipped. Executable SHA-256 values:
+`97657b8df7c7ee1ea945bc42388d5e9f671feed42fac1639674775eeac5493fb`
+for .NET 8 and
+`5c81a0cb37a46301e469f657fccfcb16e410a6758dac526b20e70052dc788825`
+for .NET 10. Three W26 successor blocks now map to reviewed public tests;
+the complete model-type matrix and provider/receiver execution remain pending.
+No requirement was promoted to native qualification or global semantic review.
 
 The module-level receipts below are historical and have not been refreshed
 against the complete successor source set. Do not treat their counts as

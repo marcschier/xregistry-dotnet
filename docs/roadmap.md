@@ -41,6 +41,9 @@ release safeguards remain in their subject guides.
   636 cases, including all 31 incremental selector and 10 incremental provider
   cases. Their receipts cover 329 and 250 distinct methods, with zero IL/JIT and
   rejected managed controls.
+  Models was subsequently refreshed at `611fb0b` on both .NET 8 and .NET 10/
+  Windows x64: 1,006 cases, 332 methods per receipt, zero IL/JIT and rejected
+  managed controls. All 76 Media Endpoint cases passed on each framework.
   At `449d229`, the complete HTTP suite passed 427 native cases in that cell,
   including all 34 incremental publication-to-resolution workflow cases and
   their file-backed deletion/restart paths. Its receipt covers 137 methods,
@@ -54,14 +57,15 @@ release safeguards remain in their subject guides.
 ## Native platforms and package consumers
 
 The selected generic package, model, client/bridge sample and storage matrix
-passed all 28 jobs at `ecd2a3b` on Windows/Linux x64 and ARM64. See
+passed all 28 jobs at `c7ff014` on Windows/Linux x64 and ARM64. See
 [native evidence](native-aot.md#current-evidence-and-uncovered-cells).
-Full native TUnit requirement receipts remain incomplete. Models and Federation
-passed 985 and 636 native cases at `c196737`; Server and Storage.File passed
-886 and 32 at `f97af1b`. All four are .NET 10/Windows x64 receipts tied to their
-own sources. They do not refresh the package-consumer matrix or qualify the
-other platforms. The complete HTTP suite subsequently passed 427 native cases
-in the same cell at `449d229`; its receipt is likewise source-specific.
+Full native TUnit requirement receipts remain incomplete. Models passed 1,006
+cases per framework at `611fb0b` on .NET 8 and .NET 10/Windows x64; Core passed
+756 per framework at `c7ff014`. Federation passed 636 cases at `c196737`;
+Server and Storage.File passed 886 and 32 at `f97af1b`; HTTP passed 427 at
+`449d229`. These last four receipts cover .NET 10/Windows x64 only. Each suite
+remains tied to its source; the package matrix does not qualify every module
+suite on the other platforms.
 
 - Refresh source-matched package-consumer and sample evidence after material
   package changes. Preserve exact source, package, executable, and report hashes.
