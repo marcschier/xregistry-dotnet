@@ -1340,7 +1340,8 @@ public static partial class ApiOperationDocumentResolver
                         traits.TryGetProperty("smithy.api#error", out _),
                     "smithy.api#httpError" => memberContainer is null && kind == "structure" &&
                         traits.TryGetProperty("smithy.api#error", out _),
-                    "smithy.api#http" or "smithy.api#endpoint" => memberContainer is null && kind == "operation",
+                    "smithy.api#http" or "smithy.api#endpoint" or "smithy.api#httpChecksumRequired" =>
+                        memberContainer is null && kind == "operation",
                     "smithy.api#hostLabel" => memberContainer == "structure",
                     "smithy.api#httpLabel" or "smithy.api#httpPayload" or "smithy.api#httpHeader" or
                         "smithy.api#httpPrefixHeaders" or "smithy.api#httpQuery" or "smithy.api#httpQueryParams" =>
@@ -1730,6 +1731,7 @@ public static partial class ApiOperationDocumentResolver
                             "document.trait_value", "The Smithy error trait requires client or server.");
                         continue;
                     case "smithy.api#required":
+                    case "smithy.api#httpChecksumRequired":
                     case "smithy.api#httpPayload":
                     case "smithy.api#streaming":
                     case "smithy.api#requiresLength":

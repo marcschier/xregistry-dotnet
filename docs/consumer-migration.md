@@ -515,6 +515,12 @@ Selection preserves the authored prefix without expanding it, resolving hosts
 or changing protocol serialization. Runtime empty/null label values and the
 validity of the final combined endpoint host remain client responsibilities.
 
+The operation-only `httpChecksumRequired` annotation requires an object value,
+with or without an accompanying `http` trait. Selection preserves the
+declaration without calculating a checksum or inserting a `Content-MD5` header.
+Literal example data and annotations on unrelated operations remain outside
+the selected closure; the annotation cannot supply missing shape definitions.
+
 The operation-only `http` trait requires an object with string `method` and
 `uri` values. Methods remain literal, without an allowlist or inferred safety
 traits. An explicit success `code` must be an exact integer from 100 to 999;

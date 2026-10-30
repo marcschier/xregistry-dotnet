@@ -217,6 +217,8 @@ vocabulary/source mapping. It does not supply their implementation.
   not become template dependencies. Trailing-period guidance remains a
   recommendation; runtime prefix expansion, label values and the final combined
   host are not evaluated.
+  `httpChecksumRequired` checks operation applicability and object annotations
+  without requiring an `http` trait, calculating a checksum or inserting headers.
   `http` checks operation applicability, required string method/URI values and
   exact success codes from 100 to 999. Methods remain literal. Local URI rules
   reject invalid origin-form syntax, dot/empty segments, fragments, query labels

@@ -8309,6 +8309,100 @@ public class ApiOperationReferenceTests
         await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
     }
 
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task SmithyJsonHttpChecksumRequiredPreservesOperationDeclarationsWithoutExecutingChecksums(bool httpBound)
+    {
+        var document = SmithyHttpOperationDocument();
+        if (!httpBound) { document["shapes"]!["example#Get"]!.AsObject().Remove("traits"); }
+        document["shapes"]!["example#Get"]!["traits"] ??= new JsonObject();
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#httpChecksumRequired"] = new JsonObject();
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+        await Assert.That(result.Operation.GetProperty("traits").TryGetProperty("smithy.api#httpHeader", out _)).IsFalse();
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+    }
+
+    [Test]
+    [Arguments("null")]
+    [Arguments("true")]
+    [Arguments("false")]
+    [Arguments("0")]
+    [Arguments("\"MD5\"")]
+    [Arguments("[]")]
+    public async Task SmithyJsonHttpChecksumRequiredRequiresAnObjectAnnotation(string annotation)
+    {
+        var document = SmithyHttpOperationDocument();
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#httpChecksumRequired"] = JsonNode.Parse(annotation);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_value");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/smithy.api#httpChecksumRequired");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("structure")]
+    [Arguments("string")]
+    [Arguments("member")]
+    [Arguments("list")]
+    [Arguments("map")]
+    public async Task SmithyJsonHttpChecksumRequiredRejectsNonOperationTargets(string location)
+    {
+        var document = SmithyHttpOperationDocument();
+        JsonNode target;
+        if (location == "structure") { target = document["shapes"]!["example#Input"]!; }
+        else if (location == "string") { target = document["shapes"]!["example#Identifier"]!; }
+        else if (location == "member") { target = document["shapes"]!["example#Input"]!["members"]!["id"]!; }
+        else
+        {
+            document["shapes"]!["example#Identifier"] = SmithyHttpBindingTarget(location);
+            document["shapes"]!["example#Input"]!["members"]!["id"]!.AsObject().Remove("traits");
+            target = document["shapes"]!["example#Identifier"]![location == "list" ? "member" : "value"]!;
+        }
+        target["traits"] ??= new JsonObject();
+        target["traits"]!["smithy.api#httpChecksumRequired"] = new JsonObject();
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_target");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    public async Task SmithyJsonHttpChecksumRequiredDoesNotInspectLiteralPayloadsOrUnrelatedOperations()
+    {
+        var document = SmithyHttpOperationDocument();
+        document["shapes"]!["example#Unused"] = JsonNode.Parse("""
+            {"type":"operation","traits":{"smithy.api#httpChecksumRequired":false}}
+            """);
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#examples"] = JsonNode.Parse("""
+            [{"title":"literal checksum text","input":{"smithy.api#httpChecksumRequired":false,"target":"example#Absent"}}]
+            """);
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+    }
+
+    [Test]
+    public async Task SmithyJsonHttpChecksumRequiredCannotSupplyMissingInputDefinitions()
+    {
+        var document = SmithyHttpOperationDocument();
+        document["shapes"]!["example#Get"]!["traits"]!["smithy.api#httpChecksumRequired"] = new JsonObject();
+        document["shapes"]!.AsObject().Remove("example#Input");
+        var result = await ApiOperationDocumentResolver.ResolveAsync("Smithy/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/example%23Get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Checksum metadata cannot supply shape definitions."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("dependency.unresolved");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Input");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
     private static JsonNode SmithyEndpointDocument()
     {
         var document = SmithyHttpOperationDocument();
