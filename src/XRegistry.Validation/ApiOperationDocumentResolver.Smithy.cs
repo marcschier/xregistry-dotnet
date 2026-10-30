@@ -2391,6 +2391,9 @@ public static partial class ApiOperationDocumentResolver
                         }
                         var acceptsPresent = true;
                         var acceptsAbsent = false;
+                        var numericComparator = '\0';
+                        var inclusive = false;
+                        List<JsonNumber?>? numericOperands = null;
                         if (position < text.Length && text[position] == '?')
                         {
                             position++;
@@ -2403,6 +2406,23 @@ public static partial class ApiOperationDocumentResolver
                                 if (expected is not ("true" or "false")) { return null; }
                                 acceptsPresent |= expected == "true";
                                 acceptsAbsent |= expected == "false";
+                                SkipWhitespace();
+                                if (position == text.Length || text[position] != ',') { break; }
+                                position++;
+                            }
+                        }
+                        else if (position < text.Length && text[position] is '>' or '<')
+                        {
+                            numericComparator = text[position++];
+                            inclusive = position < text.Length && text[position] == '=';
+                            if (inclusive) { position++; }
+                            numericOperands = [];
+                            while (true)
+                            {
+                                SkipWhitespace();
+                                var operand = NumericOperand();
+                                if (operand is null) { return null; }
+                                numericOperands.Add(SelectorNumber(operand));
                                 SkipWhitespace();
                                 if (position == text.Length || text[position] != ',') { break; }
                                 position++;
@@ -2424,7 +2444,32 @@ public static partial class ApiOperationDocumentResolver
                         {
                             foreach (var property in properties) { node = Property(node, property); }
                         }
-                        current = node.ValueKind != JsonValueKind.Undefined ? acceptsPresent : acceptsAbsent;
+                        if (numericOperands is null)
+                        {
+                            current = node.ValueKind != JsonValueKind.Undefined ? acceptsPresent : acceptsAbsent;
+                        }
+                        else
+                        {
+                            var number = node.ValueKind switch
+                            {
+                                JsonValueKind.Number => JsonNumber.Read(node, budget, path),
+                                JsonValueKind.String => SelectorNumber(node.GetString()!),
+                                _ => (JsonNumber?)null
+                            };
+                            current = false;
+                            if (number is { } left)
+                            {
+                                foreach (var operand in numericOperands)
+                                {
+                                    budget.Work(path: path);
+                                    if (operand is not { } right) { continue; }
+                                    budget.Work(left.Digits.Length + right.Digits.Length, path);
+                                    var comparison = left.CompareTo(right);
+                                    current |= (inclusive && comparison == 0) ||
+                                        (numericComparator == '>' ? comparison > 0 : comparison < 0);
+                                }
+                            }
+                        }
                     }
                     else if (text[position] == ':')
                     {
@@ -2518,6 +2563,35 @@ public static partial class ApiOperationDocumentResolver
                     }
                 }
                 return default;
+            }
+
+            string? NumericOperand()
+            {
+                if (position < text.Length && text[position] is '\'' or '"') { return AttributeName(); }
+                var start = position;
+                while (position < text.Length && (char.IsAsciiLetterOrDigit(text[position]) ||
+                    text[position] is '_' or '.' or '#' or '-' or '+'))
+                {
+                    budget.Work(path: path);
+                    position++;
+                }
+                var value = text[start..position];
+                return SmithyEncodedNumber().IsMatch(value) ||
+                    IsSmithyShapeId(value.Contains('#', StringComparison.Ordinal) ? value : "smithy.api#" + value)
+                    ? value : null;
+            }
+
+            JsonNumber? SelectorNumber(string value)
+            {
+                budget.Work(value.Length, path);
+                if (!SmithyEncodedNumber().IsMatch(value)) { return null; }
+                if (value.Length > 256)
+                {
+                    ValidationContext.Fail(DocumentValidationStatus.Indeterminate, path, "limit.number",
+                        "Numeric selector values are limited to 256 source characters.");
+                }
+                using var parsed = JsonDocument.Parse(value);
+                return JsonNumber.Read(parsed.RootElement, budget, path);
             }
 
             void SkipWhitespace()

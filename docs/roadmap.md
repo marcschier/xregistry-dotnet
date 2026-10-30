@@ -234,6 +234,11 @@ vocabulary/source mapping. It does not supply their implementation.
   absence; present nulls still exist. Property scans consume the shared work
   budget. Unquoted numeric path tokens, projections and function properties remain
   unsupported.
+  Numeric trait/node predicates support `>`, `>=`, `<` and `<=` with exact
+  decimal comparison and comma-separated alternatives. Both sides must contain
+  Smithy number spellings; absent or nonnumeric values do not match.
+  Numeric spellings have a 256-character limit, and repeated parsing/comparison
+  consumes the shared work budget. Other value comparators remain open.
   Each application is checked independently. Type mismatches are invalid;
   unsupported grammar reports `Unsupported` at the application without changing
   unapplied declaration checks or masking earlier missing schema dependencies.

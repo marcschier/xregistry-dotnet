@@ -420,6 +420,15 @@ Missing properties and descent through scalars or arrays yield absence; a
 property containing null still exists. Unquoted numeric keys, projections and
 function properties remain unsupported. Property scans consume the shared work
 budget.
+Trait and nested-property predicates also support `>`, `>=`, `<` and `<=`.
+Both sides must contain Smithy number spellings, either as numbers or strings;
+other node kinds, missing properties and nonnumeric strings do not match.
+Comparisons use exact decimal values and accept comma-separated alternatives.
+Every operand is parsed, including alternatives after an earlier match.
+Numeric spellings are limited to 256 characters, and parsing and comparison
+consume the shared work budget. Existing document-ingestion limits still apply
+to numeric JSON tokens. These checks do not add string, projection or scoped
+comparators.
 A member is not matched as its target or container type. An omitted selector
 permits every shape; each reached application is checked independently.
 Type mismatches are invalid. Other selector expressions report `Unsupported`
