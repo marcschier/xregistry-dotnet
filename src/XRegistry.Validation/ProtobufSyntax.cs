@@ -470,6 +470,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                 "protobuf.syntax", "The document syntax disagrees with the declared format.");
             _package = FindFilePackage();
             var packageSeen = false;
+            var options = new HashSet<string>(StringComparer.Ordinal);
             while (Current.Kind != TokenKind.End)
             {
                 if (Take(";")) { continue; }
@@ -494,7 +495,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                 else if (Take("message")) { Message(_package); }
                 else if (Take("enum")) { Enumeration(_package); }
                 else if (Take("service")) { Service(); }
-                else if (Take("option")) { Option(OptionTarget.File); }
+                else if (Take("option")) { Option(OptionTarget.File, options); }
                 else if (Take("extend")) { Unsupported("Custom extensions are not yet supported by this validator."); }
                 else { Fail("Unexpected top-level declaration."); }
             }
@@ -544,12 +545,13 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             var numbers = new HashSet<int>();
             var reservedNames = new HashSet<string>(StringComparer.Ordinal);
             var reservedNumbers = new List<(int First, int Last)>();
+            var options = new HashSet<string>(StringComparer.Ordinal);
             while (!Take("}"))
             {
                 if (Take(";")) { continue; }
                 if (Take("message")) { Message(full); }
                 else if (Take("enum")) { Enumeration(full); }
-                else if (Take("option")) { Option(OptionTarget.Message); }
+                else if (Take("option")) { Option(OptionTarget.Message, options); }
                 else if (Take("extensions") || Take("extend") || Take("group"))
                 {
                     Unsupported("Protobuf extensions and groups require a separate declared validator policy.");
@@ -560,9 +562,10 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                     var oneof = Identifier();
                     owner.RegisterSymbol(oneof, full);
                     Expect("{");
+                    var oneofOptions = new HashSet<string>(StringComparer.Ordinal);
                     while (!Take("}"))
                     {
-                        if (Take("option")) { Option(OptionTarget.Oneof); }
+                        if (Take("option")) { Option(OptionTarget.Oneof, oneofOptions); }
                         else if (!Take(";")) { AddField(Field(full, true)); }
                     }
                 }
@@ -688,6 +691,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             Expect("{");
             var values = new List<(string Name, int Number)>();
             var allowAlias = false;
+            var options = new HashSet<string>(StringComparer.Ordinal);
             var reservedNames = new HashSet<string>(StringComparer.Ordinal);
             var reservedNumbers = new List<(int First, int Last)>();
             while (!Take("}"))
@@ -705,6 +709,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                     Expect(";");
                     if (option is not ("allow_alias" or "deprecated")) { Unsupported("Unsupported enum option."); }
                     Require(IsBoolean(value), "protobuf.option", "The enum option must be boolean.");
+                    Require(options.Add(option), "protobuf.option", "Singular enum options must be assigned only once.");
                     if (option == "allow_alias") { allowAlias = value.Text == "true"; }
                 }
                 else if (Take("reserved")) { Reserved(reservedNames, reservedNumbers, enumeration: true); }
@@ -791,10 +796,11 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             owner.RegisterSymbol(Identifier(), _package);
             Expect("{");
             var methods = new HashSet<string>(StringComparer.Ordinal);
+            var options = new HashSet<string>(StringComparer.Ordinal);
             while (!Take("}"))
             {
                 if (Take(";")) { continue; }
-                if (Take("option")) { Option(OptionTarget.Service); continue; }
+                if (Take("option")) { Option(OptionTarget.Service, options); continue; }
                 Expect("rpc");
                 Require(methods.Add(Identifier()), "protobuf.duplicate", "RPC names must be unique.");
                 Expect("("); Take("stream");
@@ -804,18 +810,19 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                 Expect(")");
                 if (Take("{"))
                 {
+                    var methodOptions = new HashSet<string>(StringComparer.Ordinal);
                     while (!Take("}"))
                     {
                         if (Take(";")) { continue; }
                         Expect("option");
-                        Option(OptionTarget.Method);
+                        Option(OptionTarget.Method, methodOptions);
                     }
                 }
                 else { Expect(";"); }
             }
         }
 
-        private void Option(OptionTarget target)
+        private void Option(OptionTarget target, HashSet<string> seen)
         {
             if (Current.Kind == TokenKind.Symbol && Current.Text == "(")
             {
@@ -846,6 +853,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                     "protobuf.option", "Invalid optimization mode.");
             }
             else { Unsupported("This Protobuf option has no implemented validation policy."); }
+            Require(seen.Add(option), "protobuf.option", "Singular declaration options must be assigned only once.");
         }
 
         private void Reference(string type, string scope, bool messageOnly = false)

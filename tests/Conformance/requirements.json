@@ -43882,6 +43882,11 @@
           "JsTypeOptionsRejectTypesOutsideTheDeclaredIntegralSet",
           "JsTypeOptionsRequireNativeDeclaredEnumConstants",
           "JsTypeOptionsRemainUniqueWithinAField",
+          "SingularDeclarationOptionsRejectRepeatedAssignments",
+          "SingularFileOptionsRejectDuplicateStringsEnumsAndBooleans",
+          "SingularEnumAliasOptionCannotBeOverwritten",
+          "SingularOptionsHaveIndependentContainingDeclarationsAndFiles",
+          "NestedDeclarationsDoNotResetTheirParentOptionSet",
           "EnumAndEnumValueUnknownOptionPoliciesRemainUnsupported",
           "EnumOptionPoliciesPreserveKnownBooleansAliasesAndInvalidSyntax"
         ],

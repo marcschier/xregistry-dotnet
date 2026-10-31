@@ -166,6 +166,15 @@ values report `protobuf.option`. Repeated and oneof fields retain the same
 type restriction. This checks the descriptor's declared JavaScript hint
 without generating code or choosing the implementation-dependent `JS_NORMAL`
 representation.
+
+Supported singular declaration options can be assigned only once within their
+containing file, message, enum, service or RPC method. Repeating the same value
+or assigning a conflicting value reports `protobuf.option`, including repeated
+enum `allow_alias` statements. Separate declarations and imported files retain
+independent option sets; entering a nested declaration does not reset its parent.
+The publisher's descriptor schema declares these options as singular fields.
+Unknown and custom option policies remain unsupported.
+
 Enum and enum-value options use the same explicit policy boundary as other
 declarations. Unknown option names or actual custom-option syntax report
 `Unsupported`, rather than treating an unimplemented option as malformed solely

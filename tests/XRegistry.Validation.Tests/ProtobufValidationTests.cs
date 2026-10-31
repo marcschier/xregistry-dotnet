@@ -751,6 +751,102 @@ public class ProtobufValidationTests
     }
 
     [Test]
+    [Arguments("true", "true")]
+    [Arguments("true", "false")]
+    [Arguments("false", "true")]
+    [Arguments("false", "false")]
+    public async Task SingularDeclarationOptionsRejectRepeatedAssignments(string first, string second)
+    {
+        var options = $"option deprecated={first}; ; option deprecated={second};";
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            foreach (var body in new[]
+            {
+                $"{options} message Root {{}}",
+                $"message Root {{ {options} }}",
+                $"enum E {{ ZERO=0; {options} }}",
+                $"message Root {{}} service S {{ {options} }}",
+                $"message Root {{}} service S {{ rpc Get(Root) returns (Root) {{ {options} }} }}"
+            })
+            {
+                var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                    Encoding.UTF8.GetBytes($"syntax='proto{syntax}'; {body}"));
+                await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+                await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.option");
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("java_package='example'", "java_package='example'")]
+    [Arguments("java_package='ex' 'ample'", "java_package='other'")]
+    [Arguments("optimize_for=SPEED", "optimize_for=CODE_SIZE")]
+    [Arguments("java_multiple_files=true", "java_multiple_files=false")]
+    public async Task SingularFileOptionsRejectDuplicateStringsEnumsAndBooleans(string first, string second)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            Encoding.UTF8.GetBytes($"syntax='proto3'; option {first}; message Root {{}} option {second};"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.option");
+    }
+
+    [Test]
+    [Arguments("true", "true")]
+    [Arguments("true", "false")]
+    [Arguments("false", "true")]
+    [Arguments("false", "false")]
+    public async Task SingularEnumAliasOptionCannotBeOverwritten(string first, string second)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            Encoding.UTF8.GetBytes($"syntax='proto3'; enum E {{ option allow_alias={first}; " +
+                $"ZERO=0; option deprecated=false; option allow_alias={second}; OTHER=0; }}"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.option");
+    }
+
+    [Test]
+    public async Task SingularOptionsHaveIndependentContainingDeclarationsAndFiles()
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var requests = 0;
+            var root = $"syntax='proto{syntax}'; option deprecated=false; option java_package='root'; import 'dep.proto'; " +
+                "message Root { option deprecated=true; message Child { option deprecated=false; } " +
+                "enum E { option deprecated=false; ZERO=0 [deprecated=false]; OTHER=1 [deprecated=true]; } } " +
+                "message Other { option deprecated=false; } enum F { option deprecated=true; ZERO=0; } " +
+                "service S { option deprecated=true; " +
+                "rpc Get(Root) returns (Root) { option deprecated=true; } " +
+                "rpc Set(Root) returns (Root) { option deprecated=false; } } " +
+                "service T { option deprecated=false; }";
+            var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                Encoding.UTF8.GetBytes(root), new()
+                {
+                    ResolveReference = (_, _) =>
+                    {
+                        requests++;
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+                            Encoding.UTF8.GetBytes($"syntax='proto{syntax}'; package dep; " +
+                                "option deprecated=true; option java_package='dep'; message Child { option deprecated=true; }"));
+                    }
+                });
+            await Assert.That(requests).IsEqualTo(1);
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+            await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+        }
+    }
+
+    [Test]
+    [Arguments("message Root { option deprecated=true; message Child { option deprecated=false; } option deprecated=false; }")]
+    [Arguments("message Root {} service S { option deprecated=true; rpc Get(Root) returns (Root) { option deprecated=false; } option deprecated=false; }")]
+    public async Task NestedDeclarationsDoNotResetTheirParentOptionSet(string body)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            Encoding.UTF8.GetBytes($"syntax='proto3'; {body}"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.option");
+    }
+
+    [Test]
     [Arguments("unknown=true")]
     [Arguments("unknown=17")]
     [Arguments("unknown=\"text\"")]

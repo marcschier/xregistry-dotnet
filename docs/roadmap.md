@@ -207,6 +207,11 @@ vocabulary/source mapping. It does not supply their implementation.
   Quoted/unknown constants and duplicate options fail; JavaScript code
   generation and the implementation-dependent normal representation are not
   added.
+  Supported singular declaration options now reject repeated assignments
+  within each containing file, message, enum, service and RPC method. Equal
+  values also fail, and `allow_alias` cannot be overwritten. Independent
+  declarations/files retain separate sets; unknown/custom policies remain
+  unsupported.
   Enum and enum-value unknown/custom options now report the same unsupported
   policy outcome as other declarations; supported boolean and alias rules,
   enum-value duplicate checks and token-kind checks remain enforced.
