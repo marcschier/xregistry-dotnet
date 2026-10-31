@@ -15237,14 +15237,16 @@
       "text": "- MUST remove the Version `formatvalidated` and `compatibilityvalidated` attributes from Version serializations.",
       "review": {
         "status": "reviewed",
-        "note": "Engine and producer Doc branches remove the two validation booleans. No direct current-source test in the reviewed set asserts their absence for a validating Version, and related reason fields remain after removal (reported separately); do not promote based on unvalidated export fixtures.",
+        "note": "A validating Version retains both validation booleans and their reasons in API view; document view removes all four fields without changing the underlying API representation.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DocVersionOmitsValidationReasonsButApiRetainsThem"
+        ],
         "nativeEvidence": []
       }
     },
@@ -75798,13 +75800,17 @@
       ],
       "text": "- MUST remove the Version `formatvalidated` and `compatibilityvalidated` attributes from Version serializations.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A validating Version retains both validation booleans and their reasons in API view; document view removes all four fields without changing the underlying API representation.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DocVersionOmitsValidationReasonsButApiRetainsThem"
+        ],
         "nativeEvidence": []
       }
     },
