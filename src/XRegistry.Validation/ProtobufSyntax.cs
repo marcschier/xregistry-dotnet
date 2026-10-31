@@ -75,6 +75,12 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                     "protobuf.packed", "The packed option is only valid on repeated packable scalars or enums.");
             }
 
+            if (field.HasLazyOption)
+            {
+                Require(field.Type != "map" && resolved is { IsEnum: false },
+                    "protobuf.lazy", "The lazy option is only valid on message-type fields.");
+            }
+
             if (field.Default is { } value)
             {
                 ValidateDefault(field, value, resolved);
@@ -429,7 +435,8 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             }
         }
     }
-    private sealed record Field(string Name, int Number, string Type, string Scope, string Label, bool HasPackedOption, Token? Default);
+    private sealed record Field(string Name, int Number, string Type, string Scope, string Label,
+        bool HasPackedOption, bool HasLazyOption, Token? Default);
     private sealed class Definition(bool isEnum, bool isRoot, string document, int syntax)
     {
         internal bool IsEnum { get; } = isEnum;
@@ -615,6 +622,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             var number = Tag();
             Token? defaultValue = null;
             var hasPackedOption = false;
+            var hasLazyOption = false;
             if (Take("["))
             {
                 var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -643,9 +651,12 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                             _ = value.Text;
                             break;
                         case "deprecated":
-                        case "lazy":
                         case "weak":
                             Require(IsBoolean(value), "protobuf.option", "This field option must be boolean.");
+                            break;
+                        case "lazy":
+                            Require(IsBoolean(value), "protobuf.option", "lazy must be boolean.");
+                            hasLazyOption = true;
                             break;
                         default:
                             Unsupported("This field option has no implemented validation policy.");
@@ -657,7 +668,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             }
 
             Expect(";");
-            return new(name, number, type, scope, label, hasPackedOption, defaultValue);
+            return new(name, number, type, scope, label, hasPackedOption, hasLazyOption, defaultValue);
         }
 
         private void Enumeration(string scope)

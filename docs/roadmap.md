@@ -198,6 +198,10 @@ vocabulary/source mapping. It does not supply their implementation.
   Explicit `packed` options require repeated packable scalar or enum fields,
   including when set to `false`; omission remains distinct from an explicit
   setting.
+  Explicit `lazy` settings require resolved message-type fields, including
+  when false. Scalar, enum and map fields fail; native Boolean, duplicate-option
+  and import-visibility checks remain enforced. This validates the declared
+  hint without adding lazy runtime parsing or `unverified_lazy` support.
   Enum and enum-value unknown/custom options now report the same unsupported
   policy outcome as other declarations; supported boolean and alias rules,
   enum-value duplicate checks and token-kind checks remain enforced.

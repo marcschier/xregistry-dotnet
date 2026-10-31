@@ -43873,6 +43873,11 @@
           "ExplicitPackedOptionsRejectOneofFieldsEvenWhenFalse",
           "ExplicitPackedOptionsRetainImportedEnumAndMessageTypeChecks",
           "ExplicitPackedOptionsKeepBooleanKindsAndDuplicateChecks",
+          "ExplicitLazyOptionsRejectNonMessageTypes",
+          "ExplicitLazyOptionsAcceptResolvedMessageFields",
+          "LazyOptionsRetainImportedTypeIdentityAndKind",
+          "LazyOptionsKeepNativeBooleanAndDuplicateChecks",
+          "LazyMessageFieldsRetainPublicImportVisibility",
           "EnumAndEnumValueUnknownOptionPoliciesRemainUnsupported",
           "EnumOptionPoliciesPreserveKnownBooleansAliasesAndInvalidSyntax"
         ],

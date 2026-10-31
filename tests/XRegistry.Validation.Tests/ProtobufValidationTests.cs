@@ -140,7 +140,7 @@ public class ProtobufValidationTests
     [Arguments("message M { optional int32 value=1 $ deprecated=true]; }", "[")]
     [Arguments("message M { optional int32 value=1 [deprecated=true $ ; }", "]")]
     [Arguments("message M { optional int32 value=1 [deprecated $ true]; }", "=")]
-    [Arguments("message M { optional int32 value=1 [deprecated=true $ lazy=false]; }", ",")]
+    [Arguments("message M { message Child {} optional Child value=1 [deprecated=true $ lazy=false]; }", ",")]
     [Arguments("message M { $ Choice { ZERO=0; } }", "enum")]
     [Arguments("message M { $ Nested {} }", "message")]
     [Arguments("message M { $ choice { string value=1; } }", "oneof")]
@@ -539,6 +539,130 @@ public class ProtobufValidationTests
             await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
             await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.option");
         }
+    }
+
+    [Test]
+    [Arguments("double")]
+    [Arguments("float")]
+    [Arguments("int32")]
+    [Arguments("int64")]
+    [Arguments("uint32")]
+    [Arguments("uint64")]
+    [Arguments("sint32")]
+    [Arguments("sint64")]
+    [Arguments("fixed32")]
+    [Arguments("fixed64")]
+    [Arguments("sfixed32")]
+    [Arguments("sfixed64")]
+    [Arguments("bool")]
+    [Arguments("string")]
+    [Arguments("bytes")]
+    [Arguments("E")]
+    [Arguments("map<string,Child>")]
+    public async Task ExplicitLazyOptionsRejectNonMessageTypes(string type)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            foreach (var option in new[] { "", "[lazy=false]", "[lazy=true]" })
+            {
+                var label = type.StartsWith("map", StringComparison.Ordinal) ? "" : "optional ";
+                var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                    Encoding.UTF8.GetBytes($"syntax='proto{syntax}'; enum E {{ ZERO=0; }} message Child {{}} " +
+                        $"message Root {{ {label}{type} value=1 {option}; }}"));
+                await Assert.That(result.Status).IsEqualTo(option.Length == 0
+                    ? DocumentValidationStatus.Valid : DocumentValidationStatus.Invalid);
+                if (option.Length == 0) { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+                else { await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.lazy"); }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("true")]
+    [Arguments("false")]
+    public async Task ExplicitLazyOptionsAcceptResolvedMessageFields(string value)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            foreach (var body in new[]
+            {
+                $"optional Child value=1 [lazy={value}];",
+                $"repeated Child value=1 [lazy={value}];",
+                $"oneof choice {{ Child value=1 [lazy={value}]; }}"
+            })
+            {
+                var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                    Encoding.UTF8.GetBytes($"syntax='proto{syntax}'; message Child {{}} message Root {{ {body} }}"));
+                await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+                await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("dep.Child", DocumentValidationStatus.Valid, "")]
+    [Arguments("dep.E", DocumentValidationStatus.Invalid, "protobuf.lazy")]
+    [Arguments("dep.Missing", DocumentValidationStatus.Invalid, "protobuf.type")]
+    public async Task LazyOptionsRetainImportedTypeIdentityAndKind(
+        string type, DocumentValidationStatus expected, string code)
+    {
+        foreach (var value in new[] { "true", "false" })
+        {
+            var requests = new List<string>();
+            var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+                Encoding.UTF8.GetBytes($"syntax='proto3'; import 'dep.proto'; message Root {{ {type} value=1 [lazy={value}]; }}"),
+                new()
+                {
+                    ResolveReference = (name, _) =>
+                    {
+                        requests.Add(name);
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+                            """syntax="proto3"; package dep; message Child {} enum E { ZERO=0; }"""u8.ToArray());
+                    }
+                });
+            await Assert.That(requests.Count).IsEqualTo(1);
+            await Assert.That(requests[0]).IsEqualTo("dep.proto");
+            await Assert.That(result.Status).IsEqualTo(expected);
+            if (expected == DocumentValidationStatus.Valid) { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+            else { await Assert.That(result.Diagnostics[0].Code).IsEqualTo(code); }
+        }
+    }
+
+    [Test]
+    [Arguments("lazy='false'")]
+    [Arguments("lazy='fa' 'lse'")]
+    [Arguments("lazy=1")]
+    [Arguments("lazy=false,lazy=true")]
+    [Arguments("lazy=true,lazy=false")]
+    public async Task LazyOptionsKeepNativeBooleanAndDuplicateChecks(string options)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            Encoding.UTF8.GetBytes($"syntax='proto3'; message Child {{}} message Root {{ Child value=1 [{options}]; }}"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.option");
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task LazyMessageFieldsRetainPublicImportVisibility(bool forwarded)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            """syntax="proto3"; import "bridge.proto"; message Root { dep.Child value=1 [lazy=false]; }"""u8.ToArray(),
+            new()
+            {
+                ResolveReference = (name, _) => ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+                    Encoding.UTF8.GetBytes(name switch
+                    {
+                        "bridge.proto" => $"syntax='proto3'; import {(forwarded ? "public " : "")}'dep.proto';",
+                        "dep.proto" => "syntax='proto3'; package dep; message Child {}",
+                        _ => throw new InvalidOperationException("Unexpected import: " + name)
+                    }))
+            });
+        await Assert.That(result.Status).IsEqualTo(forwarded
+            ? DocumentValidationStatus.Valid : DocumentValidationStatus.Invalid);
+        if (forwarded) { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+        else { await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.type"); }
     }
 
     [Test]
@@ -1029,7 +1153,7 @@ public class ProtobufValidationTests
     [Arguments("""message Root { option deprecated="false"; }""")]
     [Arguments("""message Root { repeated int32 value=1 [packed="true"]; }""")]
     [Arguments("""message Root { optional int32 value=1 [deprecated="true"]; }""")]
-    [Arguments("""message Root { optional int32 value=1 [lazy="false"]; }""")]
+    [Arguments("""message Root { message Child {} optional Child value=1 [lazy="false"]; }""")]
     [Arguments("""message Root { optional int32 value=1 [weak="false"]; }""")]
     [Arguments("""enum State { option allow_alias="true"; ZERO=0; }""")]
     [Arguments("""enum State { option deprecated="false"; ZERO=0; }""")]
