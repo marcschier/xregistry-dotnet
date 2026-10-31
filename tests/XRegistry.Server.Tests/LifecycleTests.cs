@@ -151,6 +151,46 @@ public class LifecycleTests
     }
 
     [Test]
+    public async Task ImplicitParentWithUnsatisfiedRequiredAttributeFailsAtThatParentAndRollsBack()
+    {
+        const string model = """
+            {"groups":{"teams":{"singular":"team","attributes":{"tenant":{"type":"string","required":true}},
+              "resources":{"notes":{"singular":"note","hasdocument":false}}}}}
+            """;
+        var engine = Create(model);
+
+        var failure = await Assert.That(async () =>
+            await Send(engine, RegistryAction.Replace, "/teams/g/notes/n", """{"versionid":"v1"}"""))
+            .Throws<RegistryException>();
+
+        await Assert.That(failure!.Diagnostic.Code).IsEqualTo("required_attribute_missing");
+        await Assert.That(failure.Diagnostic.Path).IsEqualTo("/teams/g");
+        var arguments = failure.Data["xregistry.args"] as IReadOnlyDictionary<string, string>;
+        await Assert.That(arguments).IsNotNull();
+        await Assert.That(arguments!["list"]).IsEqualTo("tenant");
+        await Assert.That((await Send(engine, RegistryAction.Read, "/")).Metadata!.RootElement
+            .GetProperty("teamscount").GetInt32()).IsEqualTo(0);
+        await ExpectCode(() => Send(engine, RegistryAction.Read, "/teams/g"), "not_found");
+    }
+
+    [Test]
+    public async Task DefaultSatisfiesRequiredAttributeForImplicitParentCreation()
+    {
+        const string model = """
+            {"groups":{"teams":{"singular":"team","attributes":{"tenant":{"type":"string","required":true,"default":"default-tenant"}},
+              "resources":{"notes":{"singular":"note","hasdocument":false}}}}}
+            """;
+        var engine = Create(model);
+
+        var created = await Send(engine, RegistryAction.Replace, "/teams/g/notes/n", """{"versionid":"v1"}""");
+
+        await Assert.That(created.Kind).IsEqualTo(RegistryResultKind.Created);
+        var group = await Send(engine, RegistryAction.Read, "/teams/g");
+        await Assert.That(group.Metadata!.RootElement.GetProperty("tenant").GetString()).IsEqualTo("default-tenant");
+        await Assert.That(group.Metadata.RootElement.GetProperty("notescount").GetInt32()).IsEqualTo(1);
+    }
+
+    [Test]
     public async Task StickyDefaultAndDeletingItsVersionSelectNewest()
     {
         var engine = Create();

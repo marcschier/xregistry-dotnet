@@ -618,14 +618,16 @@
       "text": "To reduce the number of interactions needed when creating an entity, if any of its parent entities do not exist, then they MUST be implicitly created. Each of those entities MUST be created with the appropriate `<SINGULAR>id` as specified by the protocol-specific mechanism by which the nested entity is identified. For example, in HTTP the `<PATH>` would include the `<SINGULAR>id` values of the parent entities. If any of those entities have REQUIRED attributes, then they cannot be implicitly created, and would need to be created directly. This also means that the creation of the original entity would fail and generate an error ([required_attribute_missing](./spec.md#required_attribute_missing)) for the appropriate parent entity.",
       "review": {
         "status": "reviewed",
-        "note": "Implicit Group/Resource creation and authorization-before-body-read are directly exercised. Missing direct evidence for the compound clause: an unsatisfied required parent extension preventing implicit creation, the exact parent required_attribute_missing subject, and rollback of all requested descendants. Generated system fields and satisfiable defaults must be distinguished from missing client-supplied requirements.",
+        "note": "A child write with a missing required Group extension fails as required_attribute_missing at the Group path and leaves no Group; a modeled default satisfies the same required attribute during implicit creation.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
+          "ImplicitParentWithUnsatisfiedRequiredAttributeFailsAtThatParentAndRollsBack",
+          "DefaultSatisfiesRequiredAttributeForImplicitParentCreation",
           "ImplicitParentsDefaultVersionAndRetentionAreAtomic",
           "AuthorizationCoversImplicitParentsAndEveryNestedEntityBeforeDocumentConsumption",
           "NestedFailureRollsBackEveryEntity"
