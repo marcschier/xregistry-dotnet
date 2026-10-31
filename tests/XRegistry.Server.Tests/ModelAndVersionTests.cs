@@ -12,6 +12,75 @@ namespace XRegistry.Server.Tests;
 public class ModelAndVersionTests
 {
     [Test]
+    public async Task ModifiedAtAncestryUsesTimestampTiesAndPersistsRepairedOrdering()
+    {
+        const string model = """
+            {"groups":{"teams":{"singular":"team","resources":{"notes":{
+              "singular":"note","hasdocument":false,"maxversions":0,"versionmode":"modifiedat"
+            }}}}}
+            """;
+        var store = new InMemoryRegistryPersistence();
+        var options = new RegistryEngineOptions
+        {
+            RegistryId = "ordering",
+            PublicRoot = new Uri("https://registry.example"),
+            TimeProvider = new OrderingClock(),
+            Model = RegistryModel.Compile(RegistryJson.Parse(model))
+        };
+        var engine = new RegistryEngine(options, store, new PermitPolicy());
+        await Send(engine, RegistryAction.Patch, "/teams/g/notes/n/versions", """
+            {"Z":{"createdat":"2000-01-01T00:00:00Z","modifiedat":"2040-01-01T00:00:00Z"},
+             "b":{"createdat":"2010-01-01T00:00:00Z","modifiedat":"2040-01-01T00:00:00.0000Z"},
+             "A":{"createdat":"2020-01-01T00:00:00Z","modifiedat":"2040-01-01T00:00:00Z"}}
+            """);
+        await AssertChainAsync(["A", "b", "Z"]);
+        var before = (await Send(engine, RegistryAction.Read, "/export")).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        await ExpectCode(() => Send(engine, RegistryAction.Patch, "/teams/g/notes/n/versions", """
+            {"Z":{"modifiedat":"2030-01-01T00:00:00Z"},"Bad":{"modifiedat":"invalid"}}
+            """), "invalid_attribute");
+        await Assert.That((await Send(new RegistryEngine(options, store, new PermitPolicy()), RegistryAction.Read, "/export"))
+            .Metadata!.RootElement.GetRawText()).IsEqualTo(before);
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        await Send(engine, RegistryAction.Patch, "/teams/g/notes/n/versions/Z",
+            """{"modifiedat":"2030-01-01T00:00:00Z"}""");
+        await AssertChainAsync(["Z", "A", "b"]);
+        await Send(engine, RegistryAction.Delete, "/teams/g/notes/n/versions/A");
+        await AssertChainAsync(["Z", "b"]);
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n/versions/New",
+            """{"createdat":"1990-01-01T00:00:00Z","modifiedat":"2050-01-01T00:00:00Z"}""");
+        await AssertChainAsync(["Z", "b", "New"]);
+        await Send(engine, RegistryAction.Patch, "/teams/g/notes/n/meta", """{"defaultversionid":"Z"}""");
+        await Send(engine, RegistryAction.Replace, "/modelsource",
+            model.Replace("\"maxversions\":0", "\"maxversions\":2", StringComparison.Ordinal));
+        await AssertChainAsync(["Z", "New"], "Z");
+        var repaired = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n/versions/New")).Metadata!.RootElement;
+        await Assert.That(repaired.GetProperty("modifiedat").GetString()).IsEqualTo("2040-01-01T00:00:00.0000000Z");
+        await Assert.That(repaired.GetProperty("createdat").GetString()).IsEqualTo("1990-01-01T00:00:00Z");
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events + 5);
+
+        async Task AssertChainAsync(string[] ids, string? selected = null)
+        {
+            var exported = (await Send(engine, RegistryAction.Read, "/export")).Metadata!.RootElement.GetRawText();
+            foreach (var current in new[] { engine, new RegistryEngine(options, store, new PermitPolicy()) })
+            {
+                var versions = (await Send(current, RegistryAction.Read, "/teams/g/notes/n/versions")).Metadata!.RootElement;
+                await Assert.That(versions.EnumerateObject().Count()).IsEqualTo(ids.Length);
+                for (var index = 0; index < ids.Length; index++)
+                {
+                    var version = versions.GetProperty(ids[index]);
+                    await Assert.That(version.GetProperty("ancestorid").GetString()).IsEqualTo(ids[Math.Max(0, index - 1)]);
+                    await Assert.That(version.GetProperty("isdefault").GetBoolean()).IsEqualTo(ids[index] == (selected ?? ids[^1]));
+                }
+                var meta = (await Send(current, RegistryAction.Read, "/teams/g/notes/n/meta")).Metadata!.RootElement;
+                await Assert.That(meta.GetProperty("defaultversionid").GetString()).IsEqualTo(selected ?? ids[^1]);
+                await Assert.That(meta.GetProperty("defaultversionsticky").GetBoolean()).IsEqualTo(selected is not null);
+                await Assert.That((await Send(current, RegistryAction.Read, "/export")).Metadata!.RootElement.GetRawText()).IsEqualTo(exported);
+            }
+        }
+    }
+
+    [Test]
     [Arguments(false)]
     [Arguments(true)]
     public async Task CreatedAtAncestryReordersTiesUpdatesDeletionAndRetentionAtomically(bool explicitSingleRoot)
