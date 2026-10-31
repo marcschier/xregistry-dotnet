@@ -583,13 +583,17 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                 if (Take(";")) { continue; }
                 if (Take("option"))
                 {
-                    var option = Identifier();
+                    if (Current.Kind == TokenKind.Symbol && Current.Text == "(")
+                    {
+                        Unsupported("Custom enum options require an explicit extension policy.");
+                    }
+                    var option = FullIdentifier();
                     Expect("=");
                     var value = Constant();
                     Expect(";");
+                    if (option is not ("allow_alias" or "deprecated")) { Unsupported("Unsupported enum option."); }
                     Require(IsBoolean(value), "protobuf.option", "The enum option must be boolean.");
                     if (option == "allow_alias") { allowAlias = value.Text == "true"; }
-                    else if (option != "deprecated") { Unsupported("Unsupported enum option."); }
                 }
                 else if (Take("reserved")) { Reserved(reservedNames, reservedNumbers, enumeration: true); }
                 else
@@ -603,9 +607,21 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                     Require(definition.EnumNames.Add(member), "protobuf.duplicate", "The enum value name is duplicated.");
                     if (Take("["))
                     {
-                        Require(Identifier() == "deprecated", "protobuf.option", "Unsupported enum value option.");
-                        Expect("=");
-                        Require(IsBoolean(Constant()), "protobuf.option", "deprecated must be boolean.");
+                        var seen = new HashSet<string>(StringComparer.Ordinal);
+                        do
+                        {
+                            if (Current.Kind == TokenKind.Symbol && Current.Text == "(")
+                            {
+                                Unsupported("Custom enum value options require an explicit extension policy.");
+                            }
+                            var option = FullIdentifier();
+                            Require(seen.Add(option), "protobuf.option", "Enum value options must be unique.");
+                            Expect("=");
+                            var value = Constant();
+                            if (option != "deprecated") { Unsupported("Unsupported enum value option."); }
+                            Require(IsBoolean(value), "protobuf.option", "deprecated must be boolean.");
+                        }
+                        while (Take(","));
                         Expect("]");
                     }
 

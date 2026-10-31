@@ -118,6 +118,13 @@ string, bytes, message, map or oneof field therefore reports `Invalid` with
 `protobuf.packed`; omitting the option does not impose that restriction.
 The [publisher's option guidance](https://protobuf.dev/programming-guides/proto3/#options)
 defines packed and unpacked encoding for repeated basic numeric fields.
+Enum and enum-value options use the same explicit policy boundary as other
+declarations. Unknown option names or actual custom-option syntax report
+`Unsupported`, rather than treating an unimplemented option as malformed solely
+because its value is not boolean. Supported enum `allow_alias` and `deprecated`
+options and enum-value `deprecated` still require native boolean constants.
+Duplicate enum-value options report `Invalid` with `protobuf.option`; quoted
+parentheses cannot stand in for custom-option syntax.
 Editions, custom extensions, complete weak-import semantics and gRPC API
 selection remain unsupported.
 

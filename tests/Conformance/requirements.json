@@ -43850,7 +43850,9 @@
           "ExplicitPackedOptionsRejectNonPackableFieldsEvenWhenFalse",
           "ExplicitPackedOptionsRejectOneofFieldsEvenWhenFalse",
           "ExplicitPackedOptionsRetainImportedEnumAndMessageTypeChecks",
-          "ExplicitPackedOptionsKeepBooleanKindsAndDuplicateChecks"
+          "ExplicitPackedOptionsKeepBooleanKindsAndDuplicateChecks",
+          "EnumAndEnumValueUnknownOptionPoliciesRemainUnsupported",
+          "EnumOptionPoliciesPreserveKnownBooleansAliasesAndInvalidSyntax"
         ],
         "nativeEvidence": []
       }

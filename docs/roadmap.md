@@ -183,6 +183,9 @@ vocabulary/source mapping. It does not supply their implementation.
   Explicit `packed` options require repeated packable scalar or enum fields,
   including when set to `false`; omission remains distinct from an explicit
   setting.
+  Enum and enum-value unknown/custom options now report the same unsupported
+  policy outcome as other declarations; supported boolean and alias rules,
+  enum-value duplicate checks and token-kind checks remain enforced.
   Editions and custom extensions remain unsupported. This does not add gRPC
   API operation selection.
 - Add full API format validators and the remaining language resolvers. The

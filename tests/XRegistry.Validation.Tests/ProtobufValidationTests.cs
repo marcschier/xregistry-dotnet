@@ -542,6 +542,63 @@ public class ProtobufValidationTests
     }
 
     [Test]
+    [Arguments("unknown=true")]
+    [Arguments("unknown=17")]
+    [Arguments("unknown=\"text\"")]
+    [Arguments("unknown=VALUE")]
+    [Arguments("unknown.part=false")]
+    [Arguments("(custom.flag)=true")]
+    [Arguments("(custom.flag)=\"text\"")]
+    public async Task EnumAndEnumValueUnknownOptionPoliciesRemainUnsupported(string option)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            foreach (var body in new[]
+            {
+                $"option {option}; ZERO=0;",
+                $"ZERO=0; option {option};",
+                $"ZERO=0 [{option}];",
+                $"ZERO=0 [deprecated=false, {option}];"
+            })
+            {
+                var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                    Encoding.UTF8.GetBytes($"syntax=\"proto{syntax}\"; enum E {{ {body} }}"));
+                await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Unsupported);
+                await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.unsupported");
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("option deprecated=true; ZERO=0 [deprecated=false];", DocumentValidationStatus.Valid, "")]
+    [Arguments("option deprecated=false; ZERO=0 [deprecated=true];", DocumentValidationStatus.Valid, "")]
+    [Arguments("option allow_alias=true; ZERO=0; OTHER=0;", DocumentValidationStatus.Valid, "")]
+    [Arguments("option allow_alias=false; ZERO=0; OTHER=0;", DocumentValidationStatus.Invalid, "protobuf.enum")]
+    [Arguments("option allow_alias=\"true\"; ZERO=0;", DocumentValidationStatus.Invalid, "protobuf.option")]
+    [Arguments("option deprecated=1; ZERO=0;", DocumentValidationStatus.Invalid, "protobuf.option")]
+    [Arguments("ZERO=0 [deprecated=\"false\"];", DocumentValidationStatus.Invalid, "protobuf.option")]
+    [Arguments("ZERO=0 [deprecated=false, deprecated=true];", DocumentValidationStatus.Invalid, "protobuf.option")]
+    [Arguments("ZERO=0 [deprecated=true, deprecated=false];", DocumentValidationStatus.Invalid, "protobuf.option")]
+    [Arguments("ZERO=0 [deprecated=false, deprecated=false];", DocumentValidationStatus.Invalid, "protobuf.option")]
+    [Arguments("option \"(\" custom.flag)=true; ZERO=0;", DocumentValidationStatus.Invalid, "protobuf.identifier")]
+    [Arguments("ZERO=0 [\"(\" custom.flag)=true];", DocumentValidationStatus.Invalid, "protobuf.identifier")]
+    public async Task EnumOptionPoliciesPreserveKnownBooleansAliasesAndInvalidSyntax(
+        string body, DocumentValidationStatus expected, string code)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                Encoding.UTF8.GetBytes($"syntax=\"proto{syntax}\"; enum E {{ {body} }}"));
+            await Assert.That(result.Status).IsEqualTo(expected);
+            if (expected == DocumentValidationStatus.Valid)
+            {
+                await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+            }
+            else { await Assert.That(result.Diagnostics[0].Code).IsEqualTo(code); }
+        }
+    }
+
+    [Test]
     [Arguments("optional string foo=1; message foo {}")]
     [Arguments("message foo {} optional string foo=1;")]
     [Arguments("optional string foo=1; enum foo { ZERO=0; }")]
