@@ -546,6 +546,61 @@ public class ModelAndVersionTests
     }
 
     [Test]
+    [Arguments("manual")]
+    [Arguments("createdat")]
+    [Arguments("modifiedat")]
+    [Arguments("semver")]
+    public async Task RetentionSkipsStickyDefaultUsingEachVersionModeOrdering(string mode)
+    {
+        var singleRoot = mode == "manual" ? "" : ",\"singleversionroot\":true";
+        var model = """
+            {"groups":{"teams":{"singular":"team","resources":{"notes":{
+              "singular":"note","hasdocument":false,"maxversions":3,"versionmode":"MODE" ROOT
+            }}}}}
+            """.Replace("MODE", mode, StringComparison.Ordinal)
+                .Replace("ROOT", singleRoot, StringComparison.Ordinal);
+        var store = new InMemoryRegistryPersistence();
+        var options = new RegistryEngineOptions
+        {
+            RegistryId = "retention",
+            PublicRoot = new Uri("https://registry.example"),
+            TimeProvider = new OrderingClock(),
+            Model = RegistryModel.Compile(RegistryJson.Parse(model))
+        };
+        var engine = new RegistryEngine(options, store, new PermitPolicy());
+        string VersionId(int number) => mode == "semver" ? number + ".0.0" : number.ToString(
+            System.Globalization.CultureInfo.InvariantCulture);
+        string Version() => mode == "manual"
+            ? "{\"ancestorid\":\"1\",\"createdat\":\"2040-01-01T00:00:00Z\"}"
+            : "{\"createdat\":\"2040-01-01T00:00:00Z\",\"modifiedat\":\"2040-01-01T00:00:00Z\"}";
+
+        for (var number = 1; number <= 3; number++)
+        {
+            var id = VersionId(number);
+            await Send(engine, RegistryAction.Replace, "/teams/g/notes/n/versions/" + Uri.EscapeDataString(id), Version());
+        }
+
+        var defaultId = VersionId(1);
+        await Send(engine, RegistryAction.Patch, "/teams/g/notes/n/meta", "{\"defaultversionid\":\"" + defaultId + "\"}");
+        var newestId = VersionId(4);
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n/versions/" + Uri.EscapeDataString(newestId), Version());
+
+        foreach (var current in new[] { engine, new RegistryEngine(options, store, new PermitPolicy()) })
+        {
+            var versions = (await Send(current, RegistryAction.Read, "/teams/g/notes/n/versions")).Metadata!.RootElement;
+            await Assert.That(versions.EnumerateObject().Count()).IsEqualTo(3);
+            await Assert.That(versions.TryGetProperty(VersionId(2), out _)).IsFalse();
+            await Assert.That(versions.GetProperty(defaultId).GetProperty("ancestorid").GetString()).IsEqualTo(defaultId);
+            var expectedAncestor = mode == "manual" ? defaultId : VersionId(3);
+            await Assert.That(versions.GetProperty(VersionId(3)).GetProperty("ancestorid").GetString()).IsEqualTo(defaultId);
+            await Assert.That(versions.GetProperty(newestId).GetProperty("ancestorid").GetString()).IsEqualTo(expectedAncestor);
+            var meta = (await Send(current, RegistryAction.Read, "/teams/g/notes/n/meta")).Metadata!.RootElement;
+            await Assert.That(meta.GetProperty("defaultversionid").GetString()).IsEqualTo(defaultId);
+            await Assert.That(meta.GetProperty("defaultversionsticky").GetBoolean()).IsTrue();
+        }
+    }
+
+    [Test]
     [Arguments("", true)]
     [Arguments("manual", false)]
     [Arguments("MaNuAl", true)]

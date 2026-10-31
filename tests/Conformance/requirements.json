@@ -31632,14 +31632,16 @@
       "text": "- When the limit is exceeded, implementations MUST prune Versions by deleting the oldest Version first (based on the Resource's [`versionmode`](#groupsstringresourcesstringversionmode) algorithm), skipping the Version marked as \"default\". Once the single oldest Version is determined, delete it. A special case for the pruning rules is that if `maxversions` is set to one (1), then the \"default\" Version is not skipped, which means it will be deleted and the new Version will become \"default\".",
       "review": {
         "status": "reviewed",
-        "note": "FinalizeResource orders/prunes one Version at a time, rebuilding ancestry; it skips the selected default except at limit one. Tests prove limit-two deletion/rerooting and limit-one replacement after compatibility checking, but not all versionmode, tie and sticky-default pruning combinations in this compound algorithm.",
+        "note": "FinalizeResource orders/prunes one Version at a time, rebuilding ancestry; it skips the selected default except at limit one. RetentionSkipsStickyDefaultUsingEachVersionModeOrdering covers all four modes, including timestamp ties, while RetentionBoundariesPreserveExactNewestChainAcrossVersionModes proves limits zero, one, two and omitted across the modes, including limit-one replacement of the prior default.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
+          "RetentionSkipsStickyDefaultUsingEachVersionModeOrdering",
+          "RetentionBoundariesPreserveExactNewestChainAcrossVersionModes",
           "ImplicitParentsDefaultVersionAndRetentionAreAtomic",
           "RetentionCannotEraseAnAncestorBeforeCompatibilityIsChecked"
         ],
