@@ -7714,20 +7714,18 @@
       "text": "- [`<GROUP>id`](#singularid-id-attribute) - REQUIRED in API and document views. OPTIONAL in requests.",
       "review": {
         "status": "reviewed",
-        "note": "This common-field index row imports API/document presence and request semantics, not just the field name. Direct examples cover root/Group identity, timestamps or short URLs but not every independent presence/ignore/guard clause for this exact plane. See the field's primary clause for stronger scoped evidence.",
+        "note": "Server assertions cover generated Group fields in API/document output, omit body id/timestamps, submit conflicting self/shortself/xid/epoch values, and patch without epoch. Bridge tests assert required Group metadata in both views and response-local/absolute self URLs.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "RootCapabilitiesAndDiscoveryUseConfiguredPublicRoot",
+          "GroupRequiredMetadataUsesCanonicalEntityValuesInBothViews",
           "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
-          "EveryEntityAndCollectionUsesItsActualResponseRoot",
-          "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks",
-          "ShortSelfCoversEntityPlanesWithoutRewritingDomainUrlsOrDocuments"
+          "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks"
         ],
         "nativeEvidence": []
       }
@@ -7749,20 +7747,19 @@
       "text": "- [`self`](#self-attribute) - REQUIRED in API and document views. OPTIONAL/ignored in requests.",
       "review": {
         "status": "reviewed",
-        "note": "This common-field index row imports API/document presence and request semantics, not just the field name. Direct examples cover root/Group identity, timestamps or short URLs but not every independent presence/ignore/guard clause for this exact plane. See the field's primary clause for stronger scoped evidence.",
+        "note": "Server assertions cover generated Group fields in API/document output, omit body id/timestamps, submit conflicting self/shortself/xid/epoch values, and patch without epoch. Bridge tests assert required Group metadata in both views and response-local/absolute self URLs.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "RootCapabilitiesAndDiscoveryUseConfiguredPublicRoot",
+          "GroupRequiredMetadataUsesCanonicalEntityValuesInBothViews",
           "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
-          "EveryEntityAndCollectionUsesItsActualResponseRoot",
           "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks",
-          "ShortSelfCoversEntityPlanesWithoutRewritingDomainUrlsOrDocuments"
+          "EveryEntityAndCollectionUsesItsActualResponseRoot"
         ],
         "nativeEvidence": []
       }
@@ -7783,18 +7780,17 @@
       "text": "- [`shortself`](#shortself-attribute) - OPTIONAL in API and document views, based on the `shortself` capability. OPTIONAL/ignored in requests.",
       "review": {
         "status": "reviewed",
-        "note": "This common-field index row imports API/document presence and request semantics, not just the field name. Direct examples cover root/Group identity, timestamps or short URLs but not every independent presence/ignore/guard clause for this exact plane. See the field's primary clause for stronger scoped evidence.",
+        "note": "Server assertions cover generated Group fields in API/document output, omit body id/timestamps, submit conflicting self/shortself/xid/epoch values, and patch without epoch. Bridge tests assert required Group metadata in both views and response-local/absolute self URLs.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "RootCapabilitiesAndDiscoveryUseConfiguredPublicRoot",
+          "GroupRequiredMetadataUsesCanonicalEntityValuesInBothViews",
           "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
-          "EveryEntityAndCollectionUsesItsActualResponseRoot",
           "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks",
           "ShortSelfCoversEntityPlanesWithoutRewritingDomainUrlsOrDocuments"
         ],
@@ -7818,20 +7814,18 @@
       "text": "- [`xid`](#xid-attribute) - REQUIRED in API and document views. OPTIONAL/ignored in requests.",
       "review": {
         "status": "reviewed",
-        "note": "This common-field index row imports API/document presence and request semantics, not just the field name. Direct examples cover root/Group identity, timestamps or short URLs but not every independent presence/ignore/guard clause for this exact plane. See the field's primary clause for stronger scoped evidence.",
+        "note": "Server assertions cover generated Group fields in API/document output, omit body id/timestamps, submit conflicting self/shortself/xid/epoch values, and patch without epoch. Bridge tests assert required Group metadata in both views and response-local/absolute self URLs.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "RootCapabilitiesAndDiscoveryUseConfiguredPublicRoot",
+          "GroupRequiredMetadataUsesCanonicalEntityValuesInBothViews",
           "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
-          "EveryEntityAndCollectionUsesItsActualResponseRoot",
-          "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks",
-          "ShortSelfCoversEntityPlanesWithoutRewritingDomainUrlsOrDocuments"
+          "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks"
         ],
         "nativeEvidence": []
       }
@@ -7853,20 +7847,19 @@
       "text": "- [`epoch`](#epoch-attribute) - REQUIRED in API and document views. OPTIONAL in requests.",
       "review": {
         "status": "reviewed",
-        "note": "This common-field index row imports API/document presence and request semantics, not just the field name. Direct examples cover root/Group identity, timestamps or short URLs but not every independent presence/ignore/guard clause for this exact plane. See the field's primary clause for stronger scoped evidence.",
+        "note": "Server assertions cover generated Group fields in API/document output, omit body id/timestamps, submit conflicting self/shortself/xid/epoch values, and patch without epoch. Bridge tests assert required Group metadata in both views and response-local/absolute self URLs.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "RootCapabilitiesAndDiscoveryUseConfiguredPublicRoot",
+          "GroupRequiredMetadataUsesCanonicalEntityValuesInBothViews",
           "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
-          "EveryEntityAndCollectionUsesItsActualResponseRoot",
           "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks",
-          "ShortSelfCoversEntityPlanesWithoutRewritingDomainUrlsOrDocuments"
+          "EpochCreationIgnoresSubmittedValuesAndCollectionChangesTouchOnlyTheirOwner"
         ],
         "nativeEvidence": []
       }
@@ -8028,20 +8021,20 @@
       "text": "- [`createdat`](#createdat-attribute) - REQUIRED in API and document views. OPTIONAL in requests.",
       "review": {
         "status": "reviewed",
-        "note": "This common-field index row imports API/document presence and request semantics, not just the field name. Direct examples cover root/Group identity, timestamps or short URLs but not every independent presence/ignore/guard clause for this exact plane. See the field's primary clause for stronger scoped evidence.",
+        "note": "Server assertions cover generated Group fields in API/document output, omit body id/timestamps, submit conflicting self/shortself/xid/epoch values, and patch without epoch. Bridge tests assert required Group metadata in both views and response-local/absolute self URLs.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "RootCapabilitiesAndDiscoveryUseConfiguredPublicRoot",
+          "GroupRequiredMetadataUsesCanonicalEntityValuesInBothViews",
           "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
-          "EveryEntityAndCollectionUsesItsActualResponseRoot",
           "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks",
-          "ShortSelfCoversEntityPlanesWithoutRewritingDomainUrlsOrDocuments"
+          "EntitiesCreatedInOneRequestShareTheSameCurrentTimestamp",
+          "ExplicitTimestampsArePreservedAndEqualOrNullModifiedAtTouchesNow"
         ],
         "nativeEvidence": []
       }
@@ -8063,20 +8056,20 @@
       "text": "- [`modifiedat`](#modifiedat-attribute) - REQUIRED in API and document views. OPTIONAL in requests.",
       "review": {
         "status": "reviewed",
-        "note": "This common-field index row imports API/document presence and request semantics, not just the field name. Direct examples cover root/Group identity, timestamps or short URLs but not every independent presence/ignore/guard clause for this exact plane. See the field's primary clause for stronger scoped evidence.",
+        "note": "Server assertions cover generated Group fields in API/document output, omit body id/timestamps, submit conflicting self/shortself/xid/epoch values, and patch without epoch. Bridge tests assert required Group metadata in both views and response-local/absolute self URLs.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "RootCapabilitiesAndDiscoveryUseConfiguredPublicRoot",
+          "GroupRequiredMetadataUsesCanonicalEntityValuesInBothViews",
           "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
-          "EveryEntityAndCollectionUsesItsActualResponseRoot",
           "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks",
-          "ShortSelfCoversEntityPlanesWithoutRewritingDomainUrlsOrDocuments"
+          "EntitiesCreatedInOneRequestShareTheSameCurrentTimestamp",
+          "ExplicitTimestampsArePreservedAndEqualOrNullModifiedAtTouchesNow"
         ],
         "nativeEvidence": []
       }
@@ -68046,13 +68039,20 @@
       ],
       "text": "- [`<GROUP>id`](#singularid-id-attribute) - REQUIRED in API and document views. OPTIONAL in requests.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Server assertions cover generated Group fields in API/document output, omit body id/timestamps, submit conflicting self/shortself/xid/epoch values, and patch without epoch. Bridge tests assert required Group metadata in both views and response-local/absolute self URLs.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "GroupRequiredMetadataUsesCanonicalEntityValuesInBothViews",
+          "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
+          "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks"
+        ],
         "nativeEvidence": []
       }
     },
@@ -68078,13 +68078,21 @@
       ],
       "text": "- [`self`](#self-attribute) - REQUIRED in API and document views. OPTIONAL/ignored in requests.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Server assertions cover generated Group fields in API/document output, omit body id/timestamps, submit conflicting self/shortself/xid/epoch values, and patch without epoch. Bridge tests assert required Group metadata in both views and response-local/absolute self URLs.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "GroupRequiredMetadataUsesCanonicalEntityValuesInBothViews",
+          "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
+          "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks",
+          "EveryEntityAndCollectionUsesItsActualResponseRoot"
+        ],
         "nativeEvidence": []
       }
     },
@@ -68109,13 +68117,21 @@
       ],
       "text": "- [`shortself`](#shortself-attribute) - OPTIONAL in API and document views, based on the `shortself` capability. OPTIONAL/ignored in requests.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Server assertions cover generated Group fields in API/document output, omit body id/timestamps, submit conflicting self/shortself/xid/epoch values, and patch without epoch. Bridge tests assert required Group metadata in both views and response-local/absolute self URLs.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "GroupRequiredMetadataUsesCanonicalEntityValuesInBothViews",
+          "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
+          "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks",
+          "ShortSelfCoversEntityPlanesWithoutRewritingDomainUrlsOrDocuments"
+        ],
         "nativeEvidence": []
       }
     },
@@ -68141,13 +68157,20 @@
       ],
       "text": "- [`xid`](#xid-attribute) - REQUIRED in API and document views. OPTIONAL/ignored in requests.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Server assertions cover generated Group fields in API/document output, omit body id/timestamps, submit conflicting self/shortself/xid/epoch values, and patch without epoch. Bridge tests assert required Group metadata in both views and response-local/absolute self URLs.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "GroupRequiredMetadataUsesCanonicalEntityValuesInBothViews",
+          "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
+          "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks"
+        ],
         "nativeEvidence": []
       }
     },
@@ -68173,13 +68196,21 @@
       ],
       "text": "- [`epoch`](#epoch-attribute) - REQUIRED in API and document views. OPTIONAL in requests.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Server assertions cover generated Group fields in API/document output, omit body id/timestamps, submit conflicting self/shortself/xid/epoch values, and patch without epoch. Bridge tests assert required Group metadata in both views and response-local/absolute self URLs.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "GroupRequiredMetadataUsesCanonicalEntityValuesInBothViews",
+          "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
+          "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks",
+          "EpochCreationIgnoresSubmittedValuesAndCollectionChangesTouchOnlyTheirOwner"
+        ],
         "nativeEvidence": []
       }
     },
@@ -68360,13 +68391,22 @@
       ],
       "text": "- [`createdat`](#createdat-attribute) - REQUIRED in API and document views. OPTIONAL in requests.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Server assertions cover generated Group fields in API/document output, omit body id/timestamps, submit conflicting self/shortself/xid/epoch values, and patch without epoch. Bridge tests assert required Group metadata in both views and response-local/absolute self URLs.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "GroupRequiredMetadataUsesCanonicalEntityValuesInBothViews",
+          "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
+          "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks",
+          "EntitiesCreatedInOneRequestShareTheSameCurrentTimestamp",
+          "ExplicitTimestampsArePreservedAndEqualOrNullModifiedAtTouchesNow"
+        ],
         "nativeEvidence": []
       }
     },
@@ -68392,13 +68432,22 @@
       ],
       "text": "- [`modifiedat`](#modifiedat-attribute) - REQUIRED in API and document views. OPTIONAL in requests.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Server assertions cover generated Group fields in API/document output, omit body id/timestamps, submit conflicting self/shortself/xid/epoch values, and patch without epoch. Bridge tests assert required Group metadata in both views and response-local/absolute self URLs.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "GroupRequiredMetadataUsesCanonicalEntityValuesInBothViews",
+          "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
+          "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks",
+          "EntitiesCreatedInOneRequestShareTheSameCurrentTimestamp",
+          "ExplicitTimestampsArePreservedAndEqualOrNullModifiedAtTouchesNow"
+        ],
         "nativeEvidence": []
       }
     },

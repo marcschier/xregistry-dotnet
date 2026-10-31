@@ -27,6 +27,12 @@ public class BridgeViewTests
         await Assert.That(root.GetProperty("dirscount").GetInt32()).IsEqualTo(1);
         var resource = root.GetProperty("dirs").GetProperty("g").GetProperty("files").GetProperty("shared");
         var group = root.GetProperty("dirs").GetProperty("g");
+        await Assert.That(group.GetProperty("dirid").GetString()).IsEqualTo("g");
+        await Assert.That(group.GetProperty("self").GetString()).IsEqualTo("#/dirs/g");
+        await Assert.That(group.GetProperty("xid").GetString()).IsEqualTo("/dirs/g");
+        await Assert.That(group.GetProperty("epoch").GetInt32()).IsEqualTo(1);
+        await Assert.That(group.GetProperty("createdat").GetString()).IsEqualTo("2026-09-04T00:00:00Z");
+        await Assert.That(group.GetProperty("modifiedat").GetString()).IsEqualTo("2026-09-04T00:00:00Z");
         await Assert.That(group.GetProperty("filesurl").GetString()).IsEqualTo("#/dirs/g/files");
         await Assert.That(group.GetProperty("filescount").GetInt32()).IsEqualTo(2);
         await Assert.That(group.TryGetProperty("notes", out _)).IsFalse();
@@ -148,6 +154,12 @@ public class BridgeViewTests
         await Assert.That(root.GetProperty("dirsurl").GetString()).IsEqualTo("https://bridge.example/registry/dirs");
         await Assert.That(root.GetProperty("dirscount").GetInt32()).IsEqualTo(1);
         var group = root.GetProperty("dirs").GetProperty("g");
+        await Assert.That(group.GetProperty("dirid").GetString()).IsEqualTo("g");
+        await Assert.That(group.GetProperty("self").GetString()).IsEqualTo("https://bridge.example/registry/dirs/g");
+        await Assert.That(group.GetProperty("xid").GetString()).IsEqualTo("/dirs/g");
+        await Assert.That(group.GetProperty("epoch").GetInt32()).IsEqualTo(1);
+        await Assert.That(group.GetProperty("createdat").GetString()).IsEqualTo("2026-09-04T00:00:00Z");
+        await Assert.That(group.GetProperty("modifiedat").GetString()).IsEqualTo("2026-09-04T00:00:00Z");
         await Assert.That(group.GetProperty("filesurl").GetString()).IsEqualTo("https://bridge.example/registry/dirs/g/files");
         await Assert.That(group.GetProperty("filescount").GetInt32()).IsEqualTo(1);
         var resource = group.GetProperty("files").GetProperty("shared");

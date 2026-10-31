@@ -31,6 +31,38 @@ public class RegistryRepresentationTests
     }
 
     [Test]
+    public async Task GroupRequiredMetadataUsesCanonicalEntityValuesInBothViews()
+    {
+        var engine = MutableEngine();
+        await Send(engine, RegistryAction.Patch, "/capabilities", """{"shortself":true}""");
+        var api = (await Send(engine, RegistryAction.Replace, "/teams/g", """
+            {"self":"https://forged.example/group","shortself":"forged","xid":"/forged","epoch":99}
+            """)).Metadata!.RootElement;
+
+        await Assert.That(api.GetProperty("teamid").GetString()).IsEqualTo("g");
+        await Assert.That(api.GetProperty("self").GetString()).IsEqualTo("https://registry.example/catalog/teams/g");
+        await Assert.That(api.GetProperty("shortself").GetString()).IsNotNullOrEmpty();
+        await Assert.That(api.GetProperty("shortself").GetString()).IsNotEqualTo("forged");
+        await Assert.That(api.GetProperty("xid").GetString()).IsEqualTo("/teams/g");
+        await Assert.That(api.GetProperty("epoch").GetInt32()).IsEqualTo(0);
+        await Assert.That(api.GetProperty("createdat").GetString()).IsNotNullOrEmpty();
+        await Assert.That(api.GetProperty("modifiedat").GetString()).IsNotNullOrEmpty();
+
+        var doc = (await Send(engine, RegistryAction.Read, "/teams/g", null,
+            new KeyValuePair<string, string?>("doc", null))).Metadata!.RootElement;
+        await Assert.That(doc.GetProperty("teamid").GetString()).IsEqualTo("g");
+        await Assert.That(doc.GetProperty("self").GetString()).IsEqualTo("#/");
+        await Assert.That(doc.TryGetProperty("shortself", out _)).IsFalse();
+        await Assert.That(doc.GetProperty("xid").GetString()).IsEqualTo("/teams/g");
+        await Assert.That(doc.GetProperty("epoch").GetInt32()).IsEqualTo(0);
+        await Assert.That(doc.GetProperty("createdat").GetString()).IsEqualTo(api.GetProperty("createdat").GetString());
+        await Assert.That(doc.GetProperty("modifiedat").GetString()).IsEqualTo(api.GetProperty("modifiedat").GetString());
+
+        var updated = (await Send(engine, RegistryAction.Patch, "/teams/g", """{"name":"updated"}""")).Metadata!.RootElement;
+        await Assert.That(updated.GetProperty("epoch").GetInt32()).IsEqualTo(1);
+    }
+
+    [Test]
     public async Task CollectionsOnlyRootDoesNotExposeItsShortSelf()
     {
         var engine = MutableEngine();
