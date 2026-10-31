@@ -271,9 +271,11 @@ public class BuiltInValidationAdapterTests
     }
 
     [Test]
-    public async Task InvalidSyntaxRejectsPublicationInsteadOfBecomingAValidationFlag()
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task InvalidSyntaxRejectsPublicationInsteadOfBecomingAValidationFlag(bool strict)
     {
-        var engine = ValidatingEngine();
+        var engine = ValidatingEngine(strict: strict);
         await ExpectCode(() => Send(engine, RegistryAction.Replace, "/sets/g/schemas/s$details", """
             {"format":"JsonSchema/draft-07","schema":{"type":"not-a-type"}}
             """), "format_violation");
@@ -291,6 +293,9 @@ public class BuiltInValidationAdapterTests
             new KeyValuePair<string, string?>("inline", "schema"));
         await Assert.That(unchanged.Metadata!.RootElement.GetProperty("schema").GetProperty("type").GetString()).IsEqualTo("string");
         await Assert.That(unchanged.Metadata.RootElement.GetProperty("epoch").GetInt32()).IsEqualTo(0);
+        await Assert.That(unchanged.Metadata.RootElement.GetProperty("formatvalidated").GetBoolean()).IsTrue();
+        await Assert.That(unchanged.Metadata.RootElement.TryGetProperty("formatvalidatedreason", out _)).IsFalse();
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(1);
     }
 
     [Test]
@@ -315,9 +320,11 @@ public class BuiltInValidationAdapterTests
     }
 
     [Test]
-    public async Task IncompatibleAvroRejectsWithoutAddingVersionsEvenWhenStrictValidationIsFalse()
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task IncompatibleAvroRejectsWithoutAddingVersionsEvenWhenStrictValidationIsFalse(bool strict)
     {
-        var engine = ValidatingEngine();
+        var engine = ValidatingEngine(strict: strict);
         await Send(engine, RegistryAction.Replace, "/sets/g/schemas/s$details", """
             {"versionid":"v1","format":"Avro/1.11.0","schema":"int","meta":{"compatibility":"forward"}}
             """);
@@ -327,6 +334,14 @@ public class BuiltInValidationAdapterTests
         var resource = (await Send(engine, RegistryAction.Read, "/sets/g/schemas/s$details")).Metadata!.RootElement;
         await Assert.That(resource.GetProperty("versionid").GetString()).IsEqualTo("v1");
         await Assert.That(resource.GetProperty("versionscount").GetInt32()).IsEqualTo(1);
+        await Assert.That(resource.GetProperty("formatvalidated").GetBoolean()).IsTrue();
+        await Assert.That(resource.GetProperty("compatibilityvalidated").GetBoolean()).IsTrue();
+        await Assert.That(resource.TryGetProperty("formatvalidatedreason", out _)).IsFalse();
+        await Assert.That(resource.TryGetProperty("compatibilityvalidatedreason", out _)).IsFalse();
+        var stored = await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/versions/v1");
+        using var bytes = stored.Document!.OpenRead();
+        using var reader = new StreamReader(bytes, Encoding.UTF8);
+        await Assert.That(await reader.ReadToEndAsync()).IsEqualTo("\"int\"");
         await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(1);
     }
 
@@ -497,13 +512,17 @@ public class BuiltInValidationAdapterTests
     [Arguments("XSD/1.1", "<schema/>")]
     public async Task UnsupportedVariantsRemainUncheckedWithReasonsAndStrictModeRejects(string format, string document)
     {
-        var metadata = "{\"format\":\"" + format + "\",\"schemabase64\":\"" + Convert.ToBase64String(Encoding.UTF8.GetBytes(document)) + "\"}";
+        var metadata = "{\"format\":\"" + format + "\",\"schemabase64\":\"" + Convert.ToBase64String(Encoding.UTF8.GetBytes(document)) +
+            "\",\"meta\":{\"compatibility\":\"full\"}}";
         var accepted = await Send(ValidatingEngine(), RegistryAction.Replace, "/sets/g/schemas/s$details", metadata);
         await Assert.That(accepted.Metadata!.RootElement.GetProperty("formatvalidated").GetBoolean()).IsFalse();
         await Assert.That(accepted.Metadata.RootElement.GetProperty("formatvalidatedreason").GetString()!).Contains("format.unsupported");
+        await Assert.That(accepted.Metadata.RootElement.GetProperty("compatibilityvalidated").GetBoolean()).IsFalse();
+        await Assert.That(accepted.Metadata.RootElement.GetProperty("compatibilityvalidatedreason").GetString()).IsNotNullOrEmpty();
         var strict = ValidatingEngine(strict: true);
         await ExpectCode(() => Send(strict, RegistryAction.Replace, "/sets/g/schemas/s$details", metadata), "format_unknown");
         await Assert.That((await Send(strict, RegistryAction.Read, "/")).Metadata!.RootElement.GetProperty("setscount").GetInt32()).IsEqualTo(0);
+        await Assert.That((await strict.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(0);
     }
 
     [Test]

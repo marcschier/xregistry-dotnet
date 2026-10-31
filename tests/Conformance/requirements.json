@@ -72311,13 +72311,18 @@
       ],
       "text": "A value of `true` indicates that the server has validated the Version and it adheres to the `format` attribute's rules. When `true` the Version's [`formatvalidatedreason`](#formatvalidatedreason-attribute) MUST NOT be present.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Successful syntax checks omit format reasons. Local-to-external-to-local reversal removes prior unchecked reasons and restores true flags without acquiring external bytes.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AllQualifiedSyntaxFamiliesProduceValidatedMetadata",
+          "ExternalDocumentsRemainUncheckedAndStrictFailuresPreserveLocalValidation"
+        ],
         "nativeEvidence": []
       }
     },
@@ -72342,13 +72347,18 @@
       ],
       "text": "When [`strictvalidation`](model.md#groupsstringresourcesstringstrictvalidation)` is `true`, the above conditions MUST generate an error ([format_unknown](#format_unknown) or [format_external](#format_external)) and reject the update request instead.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Strict unsupported-format publication rejects format_unknown with no Group or event. Strict external publication and local-to-external replacement reject format_external and retain previously valid local bytes.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "UnsupportedVariantsRemainUncheckedWithReasonsAndStrictModeRejects",
+          "ExternalDocumentsRemainUncheckedAndStrictFailuresPreserveLocalValidation"
+        ],
         "nativeEvidence": []
       }
     },
@@ -72373,13 +72383,18 @@
       ],
       "text": "When `false`, the [`formatvalidatedreason`](#formatvalidatedreason-attribute) MUST be present with an explanation as to why the server was unable to perform validation of the Version. Additionally, when `false`, if `compatibility` validation is enabled, the Version's [`compatibilityvalidated`](#compatibility-attribute) attribute MUST also be `false`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Non-strict unsupported formats with a compatibility mode produce false format and compatibility flags with non-empty reasons. External publication and replacement prove the same coupled unchecked state.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "UnsupportedVariantsRemainUncheckedWithReasonsAndStrictModeRejects",
+          "ExternalDocumentsRemainUncheckedAndStrictFailuresPreserveLocalValidation"
+        ],
         "nativeEvidence": []
       }
     },
@@ -72405,13 +72420,17 @@
       ],
       "text": "Note that `\"false\"` MUST NOT be used for validation failure. In those cases the write operation MUST generate an error ([format_violation](#format_violation)) and reject the request regardless of the value of the [`strictvalidation`](model.md#groupsstringresourcesstringstrictvalidation)` model aspect.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Invalid syntax rejects creation and replacement with format_violation under both strictness settings. Failed creation leaves no Group/event; failed replacement preserves valid bytes, true flag, absent reason, epoch and event count.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "InvalidSyntaxRejectsPublicationInsteadOfBecomingAValidationFlag"
+        ],
         "nativeEvidence": []
       }
     },
@@ -72533,13 +72552,19 @@
       ],
       "text": "- MUST be present if the Resource model's `validateformat` attribute is `true` and the Version's `format` attribute is present.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Enabled format validation with a declared format produces true flags for supported syntax and false flags for unchecked unsupported or external Documents.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AllQualifiedSyntaxFamiliesProduceValidatedMetadata",
+          "UnsupportedVariantsRemainUncheckedWithReasonsAndStrictModeRejects",
+          "ExternalDocumentsRemainUncheckedAndStrictFailuresPreserveLocalValidation"
+        ],
         "nativeEvidence": []
       }
     },
@@ -72564,13 +72589,19 @@
       ],
       "text": "- MUST NOT be present if the Resource model's `validateformat` attribute is `false` or the Version's `format` attribute is absent.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "False or omitted format validation leaves flags absent despite recognized format and otherwise invalid bytes. Independently absent format skips all checks even with compatibility mode present; removal clears prior results under both strictness settings.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DisabledFormatValidationSkipsRecognizedFormatsAndOmitsResultFlags",
+          "VersionsWithoutFormatSkipValidatorCallsAndValidationFlags",
+          "RemovingFormatClearsPriorValidationFlagsWithoutAnotherValidatorCall"
+        ],
         "nativeEvidence": []
       }
     },
@@ -72595,13 +72626,19 @@
       ],
       "text": "- Description: When [`formatvalidated`](#formatvalidated-attribute) has a value of `false`, this attribute MUST provide information as to why the format validation check was not performed.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Unchecked unsupported syntax reports format.unsupported; unresolved explicit references report reference.unresolved without automatic acquisition. External Documents also retain a non-empty explanation.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "UnsupportedVariantsRemainUncheckedWithReasonsAndStrictModeRejects",
+          "MissingSchemaReferencesRemainUncheckedWithoutAnyAutomaticAcquisition",
+          "ExternalDocumentsRemainUncheckedAndStrictFailuresPreserveLocalValidation"
+        ],
         "nativeEvidence": []
       }
     },
@@ -72657,13 +72694,18 @@
       ],
       "text": "- When specified, MUST be a non-empty string.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Unsupported-format diagnostics are retrieved as strings containing format.unsupported. External unchecked results separately require non-empty string reasons.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "UnsupportedVariantsRemainUncheckedWithReasonsAndStrictModeRejects",
+          "ExternalDocumentsRemainUncheckedAndStrictFailuresPreserveLocalValidation"
+        ],
         "nativeEvidence": []
       }
     },
@@ -72723,13 +72765,18 @@
       ],
       "text": "- MUST be present when [`formatvalidated`](#formatvalidated-attribute) is present with a value of `false`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Unsupported and external Documents with false format flags require their format reasons at publication and local-to-external replacement.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "UnsupportedVariantsRemainUncheckedWithReasonsAndStrictModeRejects",
+          "ExternalDocumentsRemainUncheckedAndStrictFailuresPreserveLocalValidation"
+        ],
         "nativeEvidence": []
       }
     },
@@ -72754,13 +72801,20 @@
       ],
       "text": "- MUST NOT be present when [`formatvalidated`](#formatvalidated-attribute) is absent or has a value of `true`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Successful syntax checks omit reasons; disabled/omitted format validation and independently absent format omit both flag and reason. External-to-local reversal clears old unchecked reasons.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AllQualifiedSyntaxFamiliesProduceValidatedMetadata",
+          "DisabledFormatValidationSkipsRecognizedFormatsAndOmitsResultFlags",
+          "VersionsWithoutFormatSkipValidatorCallsAndValidationFlags",
+          "ExternalDocumentsRemainUncheckedAndStrictFailuresPreserveLocalValidation"
+        ],
         "nativeEvidence": []
       }
     },
@@ -72785,13 +72839,19 @@
       ],
       "text": "When [`strictvalidation`](model.md#groupsstringresourcesstringstrictvalidation)` is `true`, the above conditions MUST generate an error ([format_unknown](#format_unknown), [compatibility_unknown](#compatibility_unknown) or [format_external](#format_external)) and reject the update request instead.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "With compatibility enabled and mode present, strict unsupported format rejects format_unknown, unsupported selected mode rejects compatibility_unknown, and external Document rejects format_external. Rejected mutations retain prior state and bytes.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "UnsupportedVariantsRemainUncheckedWithReasonsAndStrictModeRejects",
+          "UnsupportedCompatibilityModeIsUnknownRatherThanAnEstablishedViolation",
+          "ExternalDocumentsRemainUncheckedAndStrictFailuresPreserveLocalValidation"
+        ],
         "nativeEvidence": []
       }
     },
@@ -72816,13 +72876,20 @@
       ],
       "text": "When `false`, the [`compatibilityvalidatedreason`](#compatibilityvalidatedreason-attribute) MUST be present with an explanation as to why the server was unable to perform validation of the Version.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Unchecked compatibility flags retain non-empty reasons for unsupported format, unsupported selected mode and external Document. Changed non-Avro schema bytes identify compatibility.policy rather than claiming a violation.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "UnsupportedVariantsRemainUncheckedWithReasonsAndStrictModeRejects",
+          "UnsupportedCompatibilityModeIsUnknownRatherThanAnEstablishedViolation",
+          "ExternalDocumentsRemainUncheckedAndStrictFailuresPreserveLocalValidation",
+          "NonAvroCompatibilityEstablishesOnlyValidatedByteIdentity"
+        ],
         "nativeEvidence": []
       }
     },
@@ -72848,13 +72915,17 @@
       ],
       "text": "Note that `false` MUST NOT be used for validation failure. In those cases the write operation MUST generate an error ([compatibility_violation](#compatibility_violation)) and reject the request regardless of the value of the [`strictvalidation`](model.md#groupsstringresourcesstringstrictvalidation)` model aspect.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Proven Avro incompatibility rejects a new Version with compatibility_violation under both strictness settings. Existing Version identity/count, exact bytes, true validation flags, absent reasons and event count remain unchanged.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "IncompatibleAvroRejectsWithoutAddingVersionsEvenWhenStrictValidationIsFalse"
+        ],
         "nativeEvidence": []
       }
     },
@@ -72976,13 +73047,19 @@
       ],
       "text": "- MUST be present if the Resource model's `validatecompatibility` attribute is `true`, the Version's `format` value is present, and the Resource's `meta.compatibility` attribute is present.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Enabled compatibility with both format and mode produces true flags for checked ancestry and false flags for unsupported selected mode. Adding a mode creates results for both existing Versions.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AvroCompatibilityUsesTheDeclaredDirectionAndAncestry",
+          "UnsupportedCompatibilityModeIsUnknownRatherThanAnEstablishedViolation",
+          "AbsentCompatibilityModeSkipsRechecksAndRemovingItClearsPriorResults"
+        ],
         "nativeEvidence": []
       }
     },
@@ -73007,13 +73084,19 @@
       ],
       "text": "- MUST NOT be present if the Resource model's `validatecompatibility` attribute is `false`, or the Version's `format` value is absent, or the Resource's `meta.compatibility` attribute is absent.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "False/omitted compatibility validation, independently absent format with mode retained, and independently absent mode with format retained each omit compatibility flags. Removing a mode clears results for both Versions under both strictness settings.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DisabledCompatibilityAvoidsDependencyRechecksWhileFormatValidationRemainsEnabled",
+          "VersionsWithoutFormatSkipValidatorCallsAndValidationFlags",
+          "AbsentCompatibilityModeSkipsRechecksAndRemovingItClearsPriorResults"
+        ],
         "nativeEvidence": []
       }
     },
@@ -73038,13 +73121,20 @@
       ],
       "text": "- Description: When [`compatibilityvalidated`](#compatibilityvalidated-attribute) has a value of `false`, this attribute MUST provide information as to why the compatibility validation check was not performed.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Changed non-Avro syntax identifies compatibility.policy and unqualified ancestry depth identifies limit.history. Selected unsupported modes and external Documents separately require non-empty compatibility explanations.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "NonAvroCompatibilityEstablishesOnlyValidatedByteIdentity",
+          "RequiredHistoryIsNeverSilentlyTruncatedAtTheConfiguredLimit",
+          "UnsupportedCompatibilityModeIsUnknownRatherThanAnEstablishedViolation",
+          "ExternalDocumentsRemainUncheckedAndStrictFailuresPreserveLocalValidation"
+        ],
         "nativeEvidence": []
       }
     },
@@ -73100,13 +73190,19 @@
       ],
       "text": "- When specified, MUST be a non-empty string.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Selected unsupported mode and external Documents require non-empty string reasons. Conservative changed-schema compatibility also supplies a string containing compatibility.policy.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "UnsupportedCompatibilityModeIsUnknownRatherThanAnEstablishedViolation",
+          "ExternalDocumentsRemainUncheckedAndStrictFailuresPreserveLocalValidation",
+          "NonAvroCompatibilityEstablishesOnlyValidatedByteIdentity"
+        ],
         "nativeEvidence": []
       }
     },
@@ -73166,13 +73262,19 @@
       ],
       "text": "- MUST be present when [`compatibilityvalidated`](#compatibilityvalidated-attribute) is present with a value of `false`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "False compatibility flags require reasons for unsupported format, unsupported selected mode and external Document; no unchecked outcome is returned without an explanation.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "UnsupportedVariantsRemainUncheckedWithReasonsAndStrictModeRejects",
+          "UnsupportedCompatibilityModeIsUnknownRatherThanAnEstablishedViolation",
+          "ExternalDocumentsRemainUncheckedAndStrictFailuresPreserveLocalValidation"
+        ],
         "nativeEvidence": []
       }
     },
@@ -73197,13 +73299,21 @@
       ],
       "text": "- MUST NOT be present when [`compatibilityvalidated`](#compatibilityvalidated-attribute) is absent or has a value of `true`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Successful ancestry checks omit compatibility reasons. Disabled/omitted compatibility, absent format and absent/removed mode omit reasons with their flags; external-to-local reversal removes earlier unchecked reasons.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AvroCompatibilityUsesTheDeclaredDirectionAndAncestry",
+          "DisabledCompatibilityAvoidsDependencyRechecksWhileFormatValidationRemainsEnabled",
+          "VersionsWithoutFormatSkipValidatorCallsAndValidationFlags",
+          "AbsentCompatibilityModeSkipsRechecksAndRemovingItClearsPriorResults",
+          "ExternalDocumentsRemainUncheckedAndStrictFailuresPreserveLocalValidation"
+        ],
         "nativeEvidence": []
       }
     },
