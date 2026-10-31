@@ -382,6 +382,21 @@ public class RegistryModelTests
     }
 
     [Test]
+    [Arguments("""{"singular":"file","attributes":{"a":{"type":"object","matchversions":true}}}""", "/attributes/a/matchversions")]
+    [Arguments("""{"singular":"file","attributes":{"a":{"type":"array","item":"string","matchversions":true}}}""", "/attributes/a/matchversions")]
+    [Arguments("""{"singular":"file","attributes":{"a":{"type":"map","item":"string","matchversions":true}}}""", "/attributes/a/matchversions")]
+    [Arguments("""{"singular":"file","attributes":{"*":{"type":"integer","matchversions":true}}}""", "/attributes/*/matchversions")]
+    [Arguments("""{"singular":"file","attributes":{"mode":{"type":"string","ifvalues":{"on":{"siblingattributes":{"value":{"type":"integer","matchversions":true}}}}}}}""", "/attributes/mode/ifvalues/on/siblingattributes/value/matchversions")]
+    [Arguments("""{"singular":"file","attributes":{"items":{"type":"array","item":{"type":"object","attributes":{"value":{"type":"integer","matchversions":true}}}}}}""", "/attributes/items/item/attributes/value/matchversions")]
+    [Arguments("""{"singular":"file","attributes":{"items":{"type":"map","item":{"type":"object","attributes":{"value":{"type":"integer","matchversions":true}}}}}}""", "/attributes/items/item/attributes/value/matchversions")]
+    public async Task RejectsMatchVersionsOutsideStaticScalarVersionAttributes(string resource, string path)
+    {
+        var diagnostic = TestErrors.Capture(() => CompileResource(resource));
+        await Assert.That(diagnostic.Code).IsEqualTo("model_error");
+        await Assert.That(diagnostic.Path).IsEqualTo("/groups/dirs/resources/files" + path);
+    }
+
+    [Test]
     [Arguments("manual", false)]
     [Arguments("createdat", true)]
     [Arguments("MODIFIEDAT", true)]

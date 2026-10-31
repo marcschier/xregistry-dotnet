@@ -28563,17 +28563,18 @@
       "text": "- This aspect MUST only be `true` for attribute definitions that:",
       "review": {
         "status": "reviewed",
-        "note": "The subordinate list is enforced as a conjunction: versioned, scalar, static, not wildcard/conditional, and outside maps/arrays; nested objects remain allowed. Tests prove a nested static scalar and reject Registry/array placements, but do not directly cover every prohibited placement.",
+        "note": "Tests reject matchversions on object, array, map, wildcard, conditional, array-item, and map-item definitions; a static scalar nested object attribute is accepted.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "CompilesNestedItemsAndStaticVersionMatchObligations",
-          "RejectsInvalidModelAspectsWithExactPointers"
+          "RejectsInvalidModelAspectsWithExactPointers",
+          "RejectsMatchVersionsOutsideStaticScalarVersionAttributes"
         ],
         "nativeEvidence": []
       }
