@@ -101,6 +101,20 @@ public class RegistryModelTests
     }
 
     [Test]
+    public async Task GroupDescriptionIsOptionalAndPreservedInEffectiveModel()
+    {
+        var omitted = RegistryModel.Compile(RegistryJson.Parse(
+            """{"groups":{"dirs":{"singular":"dir"}}}"""));
+        var authored = RegistryModel.Compile(RegistryJson.Parse(
+            """{"groups":{"dirs":{"singular":"dir","description":"Files & related data"}}}"""));
+
+        await Assert.That(omitted.Groups["dirs"].Annotations.Description).IsNull();
+        await Assert.That(authored.Groups["dirs"].Annotations.Description).IsEqualTo("Files & related data");
+        await Assert.That(authored.EffectiveModel.RootElement.GetProperty("groups").GetProperty("dirs")
+            .GetProperty("description").GetString()).IsEqualTo("Files & related data");
+    }
+
+    [Test]
     public async Task InvalidGroupLabelMapsFailAtTheirModelPaths()
     {
         foreach (var (labels, path) in new[]

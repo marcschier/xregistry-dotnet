@@ -30220,15 +30220,17 @@
       "text": "- OPTIONAL",
       "review": {
         "status": "reviewed",
-        "note": "Group descriptions are optional human-readable strings processed by Annotations and WriteAnnotations, with no runtime domain constraint. No direct Group-description source/effective roundtrip assertion was found.",
+        "note": "GroupDescriptionIsOptionalAndPreservedInEffectiveModel verifies omission and the authored description in compiled annotations and the effective model.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "GroupDescriptionIsOptionalAndPreservedInEffectiveModel"
+        ],
         "nativeEvidence": []
       }
     },
