@@ -12,6 +12,144 @@ namespace XRegistry.Server.Tests;
 public class ModelAndVersionTests
 {
     [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task DefaultVersionUrlsUseAuthoritativeMetadataAndDocumentPointers(bool hasDocument)
+    {
+        var store = new InMemoryRegistryPersistence();
+        var engine = Create(persistence: store);
+        var collection = hasDocument ? "files" : "notes";
+        var resource = "/teams/g/" + collection + "/r";
+        var detailsSuffix = hasDocument ? "$details" : "";
+        var versionId = "v~:@";
+        var versionPath = resource + "/versions/" + Uri.EscapeDataString(versionId);
+        await Send(engine, RegistryAction.Replace, versionPath + detailsSuffix,
+            hasDocument ? """{"filebase64":"AAE="}""" : """{"name":"stored"}""");
+        var expectedUrl = "https://registry.example/catalog" + versionPath + detailsSuffix;
+        await AssertApiAsync(engine);
+        foreach (var action in new[] { RegistryAction.Patch, RegistryAction.Replace })
+        {
+            foreach (var body in new[] { """{"defaultversionurl":null}""", """{"defaultversionurl":{}}""",
+                """{"defaultversionurl":"https://forged.example/document"}""" })
+            {
+                await Send(engine, action, resource + "/meta", body);
+                await AssertApiAsync(engine);
+            }
+        }
+        var restarted = Create(persistence: store);
+        await AssertApiAsync(restarted);
+        var exported = (await Send(restarted, RegistryAction.Read, "/export")).Metadata!.RootElement;
+        var exportedResource = exported.GetProperty("teams").GetProperty("g").GetProperty(collection).GetProperty("r");
+        var pointer = "#/teams/g/" + collection + "/r/versions/v~0:@";
+        await Assert.That(exportedResource.GetProperty("meta").GetProperty("defaultversionurl").GetString()).IsEqualTo(pointer);
+        await Assert.That(exportedResource.GetProperty("versions").GetProperty(versionId).GetProperty("self").GetString())
+            .IsEqualTo(pointer);
+        var unexpanded = (await Send(restarted, RegistryAction.Read, resource + detailsSuffix, null,
+            new("doc", null), new("inline", "meta"))).Metadata!.RootElement;
+        await Assert.That(unexpanded.TryGetProperty("versions", out _)).IsFalse();
+        await Assert.That(unexpanded.GetProperty("meta").GetProperty("defaultversionurl").GetString()).IsEqualTo(expectedUrl);
+        await Send(restarted, RegistryAction.Post, resource + detailsSuffix,
+            hasDocument ? """{"versionid":"next","filebase64":"Ag=="}""" : """{"versionid":"next","name":"newer"}""");
+        versionId = "next";
+        versionPath = resource + "/versions/next";
+        expectedUrl = "https://registry.example/catalog" + versionPath + detailsSuffix;
+        await AssertApiAsync(restarted);
+        await AssertApiAsync(Create(persistence: store));
+
+        async Task AssertApiAsync(RegistryEngine current)
+        {
+            var meta = (await Send(current, RegistryAction.Read, resource + "/meta")).Metadata!.RootElement;
+            var version = (await Send(current, RegistryAction.Read, versionPath + detailsSuffix)).Metadata!.RootElement;
+            await Assert.That(meta.GetProperty("defaultversionid").GetString()).IsEqualTo(versionId);
+            await Assert.That(meta.GetProperty("defaultversionurl").GetString()).IsEqualTo(expectedUrl);
+            await Assert.That(version.GetProperty("self").GetString()).IsEqualTo(expectedUrl);
+        }
+    }
+
+    [Test]
+    [Arguments(RegistryAction.Patch)]
+    [Arguments(RegistryAction.Replace)]
+    public async Task DefaultStickyRequiresJsonBooleansAndRejectsOtherTypesAtomically(RegistryAction action)
+    {
+        var store = new InMemoryRegistryPersistence();
+        var engine = Create(persistence: store);
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n", """{"versionid":"only","name":"stored"}""");
+        var before = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n/meta")).Metadata!.RootElement.GetRawText();
+        var version = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n/versions/only")).Metadata!.RootElement.GetRawText();
+        foreach (var value in new[] { "\"true\"", "\"false\"", "\"True\"", "\"FALSE\"", "0", "1", "{}", "[]" })
+        {
+            await ExpectCode(() => Send(engine, action, "/teams/g/notes/n/meta",
+                "{\"defaultversionsticky\":" + value + "}"), "invalid_attribute");
+            await Assert.That((await Send(engine, RegistryAction.Read, "/teams/g/notes/n/meta")).Metadata!.RootElement.GetRawText())
+                .IsEqualTo(before);
+            await Assert.That((await Send(engine, RegistryAction.Read, "/teams/g/notes/n/versions/only")).Metadata!.RootElement.GetRawText())
+                .IsEqualTo(version);
+            await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(1);
+        }
+        engine = Create(persistence: store);
+        await Assert.That((await Send(engine, RegistryAction.Read, "/teams/g/notes/n/meta")).Metadata!.RootElement.GetRawText())
+            .IsEqualTo(before);
+        foreach (var value in new[] { "true", "false", "true", "null" })
+        {
+            await Send(engine, action, "/teams/g/notes/n/meta", "{\"defaultversionsticky\":" + value + "}");
+            var meta = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n/meta")).Metadata!.RootElement;
+            await Assert.That(meta.GetProperty("defaultversionsticky").GetBoolean()).IsEqualTo(value == "true");
+            engine = Create(persistence: store);
+            var persisted = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n/meta")).Metadata!.RootElement;
+            await Assert.That(persisted.GetProperty("defaultversionsticky").GetBoolean()).IsEqualTo(value == "true");
+        }
+    }
+
+    [Test]
+    [Arguments(RegistryAction.Patch)]
+    [Arguments(RegistryAction.Replace)]
+    public async Task OneVersionResourceRejectsExplicitAndImplicitStickyDefaults(RegistryAction action)
+    {
+        var store = new InMemoryRegistryPersistence();
+        const string model = """
+            {"groups":{"teams":{"singular":"team","resources":{"notes":{
+              "singular":"note","hasdocument":false,"maxversions":1
+            }}}}}
+            """;
+        var engine = Create(model, persistence: store);
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n", """{"versionid":"only","name":"stored"}""");
+        var before = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n/meta")).Metadata!.RootElement.GetRawText();
+        var version = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n/versions/only")).Metadata!.RootElement.GetRawText();
+        var bodies = action == RegistryAction.Patch
+            ? new[] { """{"defaultversionsticky":true}""", """{"defaultversionid":"only"}""" }
+            : new[] { """{"defaultversionsticky":true}""", """{"defaultversionid":"only","defaultversionsticky":true}""" };
+        foreach (var body in bodies)
+        {
+            await ExpectCode(() => Send(engine, action, "/teams/g/notes/n/meta", body), "setdefaultversionsticky_false");
+            await Assert.That((await Send(engine, RegistryAction.Read, "/teams/g/notes/n/meta")).Metadata!.RootElement.GetRawText())
+                .IsEqualTo(before);
+            await Assert.That((await Send(engine, RegistryAction.Read, "/teams/g/notes/n/versions/only")).Metadata!.RootElement.GetRawText())
+                .IsEqualTo(version);
+            await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(1);
+        }
+        engine = Create(model, persistence: store);
+        await Assert.That((await Send(engine, RegistryAction.Read, "/teams/g/notes/n/meta")).Metadata!.RootElement.GetRawText())
+            .IsEqualTo(before);
+        await Assert.That((await Send(engine, RegistryAction.Read, "/teams/g/notes/n/versions/only")).Metadata!.RootElement.GetRawText())
+            .IsEqualTo(version);
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(1);
+        foreach (var value in new[] { "false", "null" })
+        {
+            await Send(engine, action, "/teams/g/notes/n/meta", "{\"defaultversionsticky\":" + value + "}");
+            var accepted = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n/meta")).Metadata!.RootElement;
+            await Assert.That(accepted.GetProperty("defaultversionid").GetString()).IsEqualTo("only");
+            await Assert.That(accepted.GetProperty("defaultversionsticky").GetBoolean()).IsFalse();
+        }
+        await Send(engine, RegistryAction.Post, "/teams/g/notes/n", """{"versionid":"next","name":"replacement"}""");
+        var meta = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n/meta")).Metadata!.RootElement;
+        await Assert.That(meta.GetProperty("defaultversionid").GetString()).IsEqualTo("next");
+        await Assert.That(meta.GetProperty("defaultversionsticky").GetBoolean()).IsFalse();
+        await ExpectCode(() => Send(engine, RegistryAction.Read, "/teams/g/notes/n/versions/only"), "not_found");
+        var retained = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n/versions/next")).Metadata!.RootElement;
+        await Assert.That(retained.GetProperty("ancestorid").GetString()).IsEqualTo("next");
+    }
+
+    [Test]
     [Arguments("select", true, "1.0.0")]
     [Arguments("clear", false, "2.0.0")]
     [Arguments("nonsticky", false, "2.0.0")]

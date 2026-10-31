@@ -70676,13 +70676,17 @@
       ],
       "text": "- REQUIRED.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "API Meta exposes the exact default URL for document-bearing and documentless Resources before and after publication, read-only input attempts and persisted restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultVersionUrlsUseAuthoritativeMetadataAndDocumentPointers"
+        ],
         "nativeEvidence": []
       }
     },
@@ -70707,13 +70711,17 @@
       ],
       "text": "- MUST be an absolute URL to the default Version of the Resource, and MUST be the same as that Version's `self` attribute.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "API Meta URLs equal the selected Version metadata self for document-bearing and documentless Resources, including URI-escaped IDs, newer publication and persisted restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultVersionUrlsUseAuthoritativeMetadataAndDocumentPointers"
+        ],
         "nativeEvidence": []
       }
     },
@@ -70738,13 +70746,17 @@
       ],
       "text": "- MUST be a read-only attribute.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Meta PATCH and replacement cannot override the computed default URL with null, an object or a forged URL. The authoritative URL remains equal to Version self after restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultVersionUrlsUseAuthoritativeMetadataAndDocumentPointers"
+        ],
         "nativeEvidence": []
       }
     },
@@ -70769,13 +70781,17 @@
       ],
       "text": "- If the Resource type's [`hasdocument` aspect](./model.md#groupsstringresourcesstringhasdocument) is set to `true`, then this URL MUST reference the xRegistry metadata view of the Version, not the domain-specific document view. In the HTTP protocol case, this means using the `$details` suffix.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Document-bearing default URLs include $details and equal metadata self; documentless URLs omit the suffix. Both retain the correct metadata target after newer publication and restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultVersionUrlsUseAuthoritativeMetadataAndDocumentPointers"
+        ],
         "nativeEvidence": []
       }
     },
@@ -70800,13 +70816,17 @@
       ],
       "text": "- REQUIRED.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Both full document export and document view with only Meta inlined expose the required default URL for document-bearing and documentless Resources after restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultVersionUrlsUseAuthoritativeMetadataAndDocumentPointers"
+        ],
         "nativeEvidence": []
       }
     },
@@ -70831,13 +70851,17 @@
       ],
       "text": "- If the default Version is inlined in the document, then this attribute MUST be a relative URL of the form `#JSON-POINTER` where the `JSON-POINTER` locates the default Version within the current document. See [Doc Flag](#doc-flag) for more information.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Full export uses a relative JSON Pointer to the exact inlined default Version. The legal ID v~:@ proves tilde escaping separately from API URI escaping for both Resource document settings.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultVersionUrlsUseAuthoritativeMetadataAndDocumentPointers"
+        ],
         "nativeEvidence": []
       }
     },
@@ -70862,13 +70886,17 @@
       ],
       "text": "- If the default Version is not inlined in the document, then this attribute MUST be an absolute URL per the API view constraints listed above.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Document view with only Meta inlined has no Versions collection and retains the absolute default metadata URL, including $details only for document-bearing Resources.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultVersionUrlsUseAuthoritativeMetadataAndDocumentPointers"
+        ],
         "nativeEvidence": []
       }
     },
@@ -71000,13 +71028,17 @@
       ],
       "text": "- When specified, it MUST be a case-sensitive `true` or `false`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "PATCH and Meta replacement accept JSON true and false, clear sticky through null, and reject quoted Boolean spellings, numbers, objects and arrays with invalid_attribute. Rejection preserves exact Meta/Version state and event count; accepted values survive restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultStickyRequiresJsonBooleansAndRejectsOtherTypesAtomically"
+        ],
         "nativeEvidence": []
       }
     },
@@ -71066,13 +71098,17 @@
       ],
       "text": "- When a Resource type's `maxversions` is set to `1`, any attempt to set this attribute to `true` MUST generate an error ([setdefaultversionsticky_false](#setdefaultversionsticky_false)) since setting a default/sticky Version is unnecessary when there can only be one Version.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "One-Version Resources reject explicit sticky true through PATCH and Meta replacement and implicit sticky selection through PATCH. Exact Meta/Version state and events survive rejection and restart; subsequent publication replaces the sole Version, retains automatic selection and repairs ancestry.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "OneVersionResourceRejectsExplicitAndImplicitStickyDefaults"
+        ],
         "nativeEvidence": []
       }
     },
