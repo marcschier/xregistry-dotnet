@@ -84261,13 +84261,17 @@
       ],
       "text": "- When not specified, the default value MUST be `false`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "ManualSingleRootDefaultsAllowIndependentRootsAndRejectInvalidModelTightening proves omitted and explicit false compile to a multiple-root manual policy, admits two authored self-roots and preserves them through restart. Tightening to true rejects without changing model/export/events, then succeeds after joining the roots.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ManualSingleRootDefaultsAllowIndependentRootsAndRejectInvalidModelTightening"
+        ],
         "nativeEvidence": []
       }
     },
@@ -84292,13 +84296,18 @@
       ],
       "text": "- A value of `true` indicates that only one Version of the Resource can be a root, and the server MUST generate an error ([multiple_roots](./spec.md#multiple_roots)) if any request results in a state where more than one Version of a Resource is a root of an ancestor tree.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "SingleRootPolicyRejectsCreationUpdateAndDeletionRepairWithoutPartialState rejects a new independent root, rerooting an existing child, a mixed batch with a valid candidate edit, and deleting a branched parent whose children would become independent roots. Every failure reports multiple_roots and retains export, persistence generation and event count through restart. Deleting one branch first allows parent deletion and leaves the sole child self-rooted. The model-tightening test also proves rejection of existing multiple roots and acceptance after joining them.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ManualSingleRootDefaultsAllowIndependentRootsAndRejectInvalidModelTightening",
+          "SingleRootPolicyRejectsCreationUpdateAndDeletionRepairWithoutPartialState"
+        ],
         "nativeEvidence": []
       }
     },

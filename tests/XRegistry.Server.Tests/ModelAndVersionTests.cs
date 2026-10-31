@@ -12,6 +12,85 @@ namespace XRegistry.Server.Tests;
 public class ModelAndVersionTests
 {
     [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task ManualSingleRootDefaultsAllowIndependentRootsAndRejectInvalidModelTightening(bool explicitFalse)
+    {
+        var model = """
+            {"groups":{"teams":{"singular":"team","resources":{"notes":{
+              "singular":"note","hasdocument":false,"maxversions":0 ROOT
+            }}}}}
+            """.Replace("ROOT", explicitFalse ? ",\"singleversionroot\":false" : "", StringComparison.Ordinal);
+        await Assert.That(RegistryModel.Compile(RegistryJson.Parse(model)).Groups["teams"].Resources["notes"].SingleVersionRoot)
+            .IsFalse();
+        var store = new InMemoryRegistryPersistence();
+        var engine = Create(model, persistence: store);
+        await Send(engine, RegistryAction.Patch, "/teams/g/notes/n/versions",
+            """{"A":{"ancestorid":"A"},"B":{"ancestorid":"B"}}""");
+        var before = (await Send(engine, RegistryAction.Read, "/export")).Metadata!.RootElement.GetRawText();
+        var source = (await Send(engine, RegistryAction.Read, "/modelsource")).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        var tightened = explicitFalse
+            ? model.Replace("\"singleversionroot\":false", "\"singleversionroot\":true", StringComparison.Ordinal)
+            : model.Replace("\"maxversions\":0", "\"maxversions\":0,\"singleversionroot\":true", StringComparison.Ordinal);
+        await ExpectCode(() => Send(engine, RegistryAction.Replace, "/modelsource", tightened), "multiple_roots");
+        var restarted = Create(model, persistence: store);
+        await Assert.That((await Send(restarted, RegistryAction.Read, "/export")).Metadata!.RootElement.GetRawText()).IsEqualTo(before);
+        await Assert.That((await Send(restarted, RegistryAction.Read, "/modelsource")).Metadata!.RootElement.GetRawText()).IsEqualTo(source);
+        await Assert.That((await restarted.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        var versions = (await Send(restarted, RegistryAction.Read, "/teams/g/notes/n/versions")).Metadata!.RootElement;
+        await Assert.That(versions.GetProperty("A").GetProperty("ancestorid").GetString()).IsEqualTo("A");
+        await Assert.That(versions.GetProperty("B").GetProperty("ancestorid").GetString()).IsEqualTo("B");
+        await Send(engine, RegistryAction.Patch, "/teams/g/notes/n/versions/B", """{"ancestorid":"A"}""");
+        await Send(engine, RegistryAction.Replace, "/modelsource", tightened);
+        var compiled = (await Send(Create(model, persistence: store), RegistryAction.Read, "/model")).Metadata!.RootElement;
+        await Assert.That(compiled.GetProperty("groups").GetProperty("teams").GetProperty("resources")
+            .GetProperty("notes").GetProperty("singleversionroot").GetBoolean()).IsTrue();
+    }
+
+    [Test]
+    public async Task SingleRootPolicyRejectsCreationUpdateAndDeletionRepairWithoutPartialState()
+    {
+        const string model = """
+            {"groups":{"teams":{"singular":"team","resources":{"notes":{
+              "singular":"note","hasdocument":false,"maxversions":0,"singleversionroot":true
+            }}}}}
+            """;
+        var store = new InMemoryRegistryPersistence();
+        var engine = Create(model, persistence: store);
+        await Send(engine, RegistryAction.Patch, "/teams/g/notes/n/versions",
+            """{"Root":{"ancestorid":"Root"},"A":{"ancestorid":"Root"},"B":{"ancestorid":"Root"}}""");
+        var before = (await Send(engine, RegistryAction.Read, "/export")).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        foreach (var (action, path, body) in new[]
+        {
+            (RegistryAction.Replace, "/teams/g/notes/n/versions/New", """{"ancestorid":"New"}"""),
+            (RegistryAction.Patch, "/teams/g/notes/n/versions/A", """{"ancestorid":"A"}"""),
+            (RegistryAction.Patch, "/teams/g/notes/n/versions", """{"A":{"name":"candidate"},"New":{"ancestorid":"New"}}"""),
+            (RegistryAction.Delete, "/teams/g/notes/n/versions/Root", (string?)null)
+        })
+        {
+            using var snapshot = await store.ReadSnapshotAsync();
+            await ExpectCode(() => Send(engine, action, path, body), "multiple_roots");
+            using var after = await store.ReadSnapshotAsync();
+            await Assert.That(after.Generation).IsEqualTo(snapshot.Generation);
+            await Assert.That((await Send(engine, RegistryAction.Read, "/export")).Metadata!.RootElement.GetRawText()).IsEqualTo(before);
+            await Assert.That((await Send(Create(model, persistence: store), RegistryAction.Read, "/export")).Metadata!.RootElement.GetRawText())
+                .IsEqualTo(before);
+            await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        }
+        await Send(engine, RegistryAction.Delete, "/teams/g/notes/n/versions/A");
+        await Send(engine, RegistryAction.Delete, "/teams/g/notes/n/versions/Root");
+        foreach (var current in new[] { engine, Create(model, persistence: store) })
+        {
+            var versions = (await Send(current, RegistryAction.Read, "/teams/g/notes/n/versions")).Metadata!.RootElement;
+            await Assert.That(versions.EnumerateObject().Count()).IsEqualTo(1);
+            await Assert.That(versions.GetProperty("B").GetProperty("ancestorid").GetString()).IsEqualTo("B");
+            await Assert.That((await current.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events + 2);
+        }
+    }
+
+    [Test]
     public async Task ModifiedAtAncestryUsesTimestampTiesAndPersistsRepairedOrdering()
     {
         const string model = """
