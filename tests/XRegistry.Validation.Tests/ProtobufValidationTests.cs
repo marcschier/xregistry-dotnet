@@ -666,6 +666,91 @@ public class ProtobufValidationTests
     }
 
     [Test]
+    [Arguments("int64")]
+    [Arguments("uint64")]
+    [Arguments("sint64")]
+    [Arguments("fixed64")]
+    [Arguments("sfixed64")]
+    public async Task JsTypeOptionsAcceptEveryDeclared64BitIntegralType(string type)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            foreach (var value in new[] { "JS_NORMAL", "JS_STRING", "JS_NUMBER" })
+            {
+                foreach (var body in new[]
+                {
+                    $"optional {type} value=1 [jstype={value}];",
+                    $"repeated {type} value=1 [jstype={value},packed=false];",
+                    $"oneof choice {{ {type} value=1 [jstype={value}]; }}"
+                })
+                {
+                    var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                        Encoding.UTF8.GetBytes($"syntax='proto{syntax}'; message Root {{ {body} }}"));
+                    await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+                    await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+                }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("double")]
+    [Arguments("float")]
+    [Arguments("int32")]
+    [Arguments("uint32")]
+    [Arguments("sint32")]
+    [Arguments("fixed32")]
+    [Arguments("sfixed32")]
+    [Arguments("bool")]
+    [Arguments("string")]
+    [Arguments("bytes")]
+    [Arguments("Child")]
+    [Arguments("E")]
+    [Arguments("map<string,int64>")]
+    public async Task JsTypeOptionsRejectTypesOutsideTheDeclaredIntegralSet(string type)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            foreach (var value in new[] { "JS_NORMAL", "JS_STRING", "JS_NUMBER" })
+            {
+                var label = type.StartsWith("map", StringComparison.Ordinal) ? "" : "optional ";
+                var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                    Encoding.UTF8.GetBytes($"syntax='proto{syntax}'; enum E {{ ZERO=0; }} message Child {{}} " +
+                        $"message Root {{ {label}{type} value=1 [jstype={value}]; }}"));
+                await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+                await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.jstype");
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("'JS_STRING'")]
+    [Arguments("'JS_' 'STRING'")]
+    [Arguments("JS_string")]
+    [Arguments("UNKNOWN")]
+    [Arguments("true")]
+    [Arguments("1")]
+    [Arguments("-JS_STRING")]
+    public async Task JsTypeOptionsRequireNativeDeclaredEnumConstants(string value)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            Encoding.UTF8.GetBytes($"syntax='proto3'; message Root {{ int64 value=1 [jstype={value}]; }}"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.option");
+    }
+
+    [Test]
+    [Arguments("jstype=JS_STRING,jstype=JS_STRING")]
+    [Arguments("jstype=JS_NUMBER,jstype=JS_NORMAL")]
+    public async Task JsTypeOptionsRemainUniqueWithinAField(string options)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            Encoding.UTF8.GetBytes($"syntax='proto3'; message Root {{ int64 value=1 [{options}]; }}"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.option");
+    }
+
+    [Test]
     [Arguments("unknown=true")]
     [Arguments("unknown=17")]
     [Arguments("unknown=\"text\"")]

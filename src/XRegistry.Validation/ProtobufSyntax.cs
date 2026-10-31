@@ -658,6 +658,13 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                             Require(IsBoolean(value), "protobuf.option", "lazy must be boolean.");
                             hasLazyOption = true;
                             break;
+                        case "jstype":
+                            Require(value.Kind == TokenKind.Identifier &&
+                                value.Text is "JS_NORMAL" or "JS_STRING" or "JS_NUMBER",
+                                "protobuf.option", "jstype must be a declared native JSType constant.");
+                            Require(type is "int64" or "uint64" or "sint64" or "fixed64" or "sfixed64",
+                                "protobuf.jstype", "jstype is only valid on 64-bit integral fields.");
+                            break;
                         default:
                             Unsupported("This field option has no implemented validation policy.");
                             break;

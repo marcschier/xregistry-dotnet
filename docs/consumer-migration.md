@@ -159,6 +159,13 @@ with `protobuf.lazy`; omitted options impose no such restriction. Imported
 message fields retain their normal type-visibility checks. The publisher's
 descriptor schema defines this message-only hint; validation does not implement
 lazy runtime parsing or assign a policy to `unverified_lazy`.
+The `jstype` option accepts native `JS_NORMAL`, `JS_STRING` and `JS_NUMBER`
+constants only on `int64`, `uint64`, `sint64`, `fixed64` and `sfixed64`
+fields. Other types report `protobuf.jstype`; quoted, unknown or duplicate
+values report `protobuf.option`. Repeated and oneof fields retain the same
+type restriction. This checks the descriptor's declared JavaScript hint
+without generating code or choosing the implementation-dependent `JS_NORMAL`
+representation.
 Enum and enum-value options use the same explicit policy boundary as other
 declarations. Unknown option names or actual custom-option syntax report
 `Unsupported`, rather than treating an unimplemented option as malformed solely

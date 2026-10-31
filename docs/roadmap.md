@@ -202,6 +202,11 @@ vocabulary/source mapping. It does not supply their implementation.
   when false. Scalar, enum and map fields fail; native Boolean, duplicate-option
   and import-visibility checks remain enforced. This validates the declared
   hint without adding lazy runtime parsing or `unverified_lazy` support.
+  The `jstype` policy checks the three native declared constants and restricts
+  them to the five 64-bit integral types, including repeated and oneof fields.
+  Quoted/unknown constants and duplicate options fail; JavaScript code
+  generation and the implementation-dependent normal representation are not
+  added.
   Enum and enum-value unknown/custom options now report the same unsupported
   policy outcome as other declarations; supported boolean and alias rules,
   enum-value duplicate checks and token-kind checks remain enforced.
