@@ -60677,13 +60677,21 @@
       ],
       "text": "- `map` - set of key/value pairs, where the key MUST be of type string. The value MUST be of one of the types defined here.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Map declarations require a typed item definition. The compiler parses item types through the Core type registry, and runtime validation applies that item definition to every value; tests preserve typed string values and reject null or integer values for a string map.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EveryCoreDataTypeCompilesAsMutableByDefault",
+          "TypedCollectionItemsHaveNoInventedAttributeNameOrAggregateScalarLimit",
+          "CollectionAndNestedErrorsRetainPrecisePointers"
+        ],
         "nativeEvidence": []
       }
     },
@@ -60708,13 +60716,20 @@
       ],
       "text": "- Each key MUST: - Be a non-empty string consisting of only lowercase alphanumeric characters (`[a-z0-9]`), `:`, `-`, `_` or a `.`. - Be no longer than 63 characters. - Start with an alphanumeric character. - Be unique within the scope of this map.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The validator enforces the map-key grammar and 63-character limit. `MapKeysFollowCoreCharacterAndLengthRules` checks allowed punctuation, the maximum length, and invalid forms; `DuplicateMapKeysAreRejectedDuringJsonParsing` rejects duplicate members at the map path.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "MapKeysFollowCoreCharacterAndLengthRules",
+          "DuplicateMapKeysAreRejectedDuringJsonParsing"
+        ],
         "nativeEvidence": []
       }
     },

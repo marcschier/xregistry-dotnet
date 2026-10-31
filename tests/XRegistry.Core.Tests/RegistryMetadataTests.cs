@@ -95,6 +95,7 @@ public class RegistryMetadataTests
     [Arguments("""{"items":[1,"2"]}""", "invalid_attribute", "/items/1")]
     [Arguments("""{"labels":{"Bad":"value"}}""", "invalid_attribute", "/labels/Bad")]
     [Arguments("""{"labels":{"valid":null}}""", "invalid_attribute", "/labels/valid")]
+    [Arguments("""{"labels":{"valid":42}}""", "invalid_attribute", "/labels/valid")]
     [Arguments("""{"nested":{"unknown":1}}""", "unknown_attribute", "/nested/unknown")]
     public async Task CollectionAndNestedErrorsRetainPrecisePointers(string metadata, string expectedCode, string expectedPath)
     {
@@ -106,6 +107,35 @@ public class RegistryMetadataTests
         var diagnostic = TestErrors.Capture(() => RegistryMetadataValidator.Validate(RegistryJson.Parse(metadata), definitions));
         await Assert.That(diagnostic.Code).IsEqualTo(expectedCode);
         await Assert.That(diagnostic.Path).IsEqualTo(expectedPath);
+    }
+
+    [Test]
+    public async Task MapKeysFollowCoreCharacterAndLengthRules()
+    {
+        var definitions = Shape("""{"labels":{"type":"map","item":{"type":"string"}}}""");
+        var boundaryKey = new string('a', 63);
+        var accepted = RegistryMetadataValidator.Validate(RegistryJson.Parse(
+            "{\"labels\":{\"a:b_0.c\":\"value\",\"" + boundaryKey + "\":\"boundary\"}}"), definitions);
+
+        await Assert.That(accepted.Metadata.RootElement.GetProperty("labels").GetProperty("a:b_0.c").GetString())
+            .IsEqualTo("value");
+        await Assert.That(accepted.Metadata.RootElement.GetProperty("labels").GetProperty(boundaryKey).GetString())
+            .IsEqualTo("boundary");
+
+        foreach (var key in new[] { "", "_leading", "-leading", "Upper", "bad?key", new string('a', 64) })
+        {
+            var input = RegistryJson.Parse("{\"labels\":{\"" + key + "\":\"value\"}}");
+            var error = TestErrors.Capture(() => RegistryMetadataValidator.Validate(input, definitions));
+            await Assert.That(error.Code).IsEqualTo("invalid_attribute");
+        }
+    }
+
+    [Test]
+    public async Task DuplicateMapKeysAreRejectedDuringJsonParsing()
+    {
+        var error = TestErrors.Capture(() => RegistryJson.Parse("""{"labels":{"key":"one","key":"two"}}"""));
+        await Assert.That(error.Code).IsEqualTo("duplicate_member");
+        await Assert.That(error.Path).IsEqualTo("/labels/key");
     }
 
     [Test]
