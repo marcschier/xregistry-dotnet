@@ -61123,13 +61123,17 @@
       ],
       "text": "- If an attribute's type is not fully defined (i.e. it is defined as an `any` type) but a concrete type is needed to successfully process it, then the server SHOULD default it to type `string`. For example, if an extension is defined as a map whose values are of type `any`, but it appears in an HTTP header with a value of `5` (and it is not clear if this would be an integer or a string), if the server needs to convert this to a concrete data type, then `string` is the default choice.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The HTTP header codec uses the raw field text as a string for Any-valued attributes and map members when conversion to JSON metadata is required.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AnyHeadersUseStringFallbackAndComplexHeadersOnlyPermitExplicitDeletion"
+        ],
         "nativeEvidence": []
       }
     },
@@ -61154,13 +61158,19 @@
       ],
       "text": "- There might be cases when it is not possible to know whether a field name is part of an object (in which case it is an \"attribute name\"), or is part of a map (in which case it is a \"key name\"). This decision would impact verification of the field since key names allow for a superset of the characters allowed for attribute names. This will only happen when the `any` type has been used higher-up in the model. As a result, any portion of the entity that appears under the scope of an `any` typed attribute or map-value is NOT REQUIRED to be validated except to ensure that the syntax is valid per the rules of the serialization format used.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Any-typed attributes and map values are preserved without recursive model validation; outer map keys remain validated and JSON syntax is still parsed.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AnyAttributesPreserveConcreteRuntimeJsonKinds",
+          "AnyScopedContentRequiresOnlyValidJsonSyntax"
+        ],
         "nativeEvidence": []
       }
     },
@@ -61186,13 +61196,19 @@
       ],
       "text": "- Attribute instances that have no value (and have no default value defined) are semantically equivalent to having a value of `null` or not being present at all, and for the sake of brevity, SHOULD NOT be serialized as part of its owning entity in server responses. Likewise, specifying them with a value of `null` in client requests SHOULD be reserved for cases where the client needs to indicate a request to delete that attribute value rather than to leave the attribute untouched (absent in the request), such as when `PATCH` is used in the [HTTP Binding Protocol](./http.md).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Complete metadata validation omits explicit null values without defaults; client-input validation preserves null as a deletion request and distinguishes it from omission.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "NullValuesAreOmittedFromCompleteMetadataButPreservedAsClientDeletions",
+          "NullEmptyAndAbsentRemainDistinctForClientInput"
+        ],
         "nativeEvidence": []
       }
     },
@@ -61217,13 +61233,17 @@
       ],
       "text": "- Unless otherwise stated, requests to update read-only attributes MUST be silently ignored by servers, even if the contents of those attributes are invalid.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Client-input validation skips read-only values before inspecting their JSON shape, so invalid submitted content is ignored.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SubmittedReadonlyValuesAreIgnoredWithoutResettingDefaultsOrNullDeletions"
+        ],
         "nativeEvidence": []
       }
     },
@@ -61248,13 +61268,18 @@
       ],
       "text": "- <a id=\"read-only-changed\"></a>Unless otherwise stated, server managed changes to read-only attributes MUST NOT be treated the same as user initiated changes to non-read-only attributes with respect to updating attributes such as `modifiedat` and `epoch`. In other words, as these read-only attributes are changed, the entity MUST NOT be considered \"updated\".",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Resource validation updates read-only validation metadata without advancing the Version epoch or modifiedat; a direct user update to a mutable attribute advances both.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "MetaOnlyValidationRecomputationPersistsWithoutUpdatingVersionEpochOrEvents",
+          "ReadonlyValidationDoesNotChangeModifiedTimeVersionOrdering"
+        ],
         "nativeEvidence": []
       }
     },
@@ -61280,9 +61305,12 @@
       ],
       "text": "Implementations of this specification MAY define additional (extension) attributes. However, they MUST adhere to the following rules:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The following entries specify extension-attribute model and validation obligations; this introductory clause has no independent behavior.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -61311,13 +61339,18 @@
       ],
       "text": "- All extension attributes that appear in the serialization of an entity MUST conform to the model definition of the Registry, otherwise an error ([unknown_attribute](#unknown_attribute)) MUST be generated. This means that they MUST satisfy at least one of the following:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Declared extension values are validated against the effective model; undeclared top-level and nested fields produce unknown_attribute.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AnyAttributesPreserveConcreteRuntimeJsonKinds",
+          "CollectionAndNestedErrorsRetainPrecisePointers"
+        ],
         "nativeEvidence": []
       }
     },
@@ -61342,13 +61375,18 @@
       ],
       "text": "- They MUST NOT conflict with the name of an attribute defined by this specification, including the `<RESOURCE>*` and `<COLLECTION>*` attributes that are implicitly defined. Note that if a Resource type has the [`hasdocument` aspect](./model.md#groupsstringresourcesstringhasdocument) set the `false` then this rule does not apply for the `<RESOURCE>*` attributes as those attributes are not implicitly defined for that Resource type.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The compiler rejects incompatible definitions of document and collection system attributes. Resource document names are available as extensions when hasdocument is false.",
+        "roles": [
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EnforcesNamingAndSystemAttributeOverlayRules",
+          "DocumentAndCollectionAttributeNamesRespectSystemReservations"
+        ],
         "nativeEvidence": []
       }
     },
@@ -61373,9 +61411,11 @@
       ],
       "text": "- It is RECOMMENDED that extension attributes on different entities do not use the same name unless they have the exact same semantic meaning.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "This recommendation guides extension-model authors; the server cannot determine whether same-named attributes on different entities have identical semantics.",
+        "roles": [
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -61404,9 +61444,11 @@
       ],
       "text": "- It is STRONGLY RECOMMENDED that they be named in such a way as to avoid potential conflicts with future xRegistry specification-defined attributes. For example, use of a model (or domain) specific prefix could be used to help avoid possible future conflicts.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Prefix choice is guidance for extension-model authors and cannot be enforced without imposing a naming convention absent from the specification.",
+        "roles": [
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -61435,13 +61477,18 @@
       ],
       "text": "Use of an attribute (specification-defined, or extension) that does not conform to this specification MUST generate an error ([invalid_attribute](#invalid_attribute)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Invalid scalar, typed collection, and name/value constraints produce invalid_attribute diagnostics.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "InvalidScalarsReturnExactFieldDiagnostics",
+          "CollectionAndNestedErrorsRetainPrecisePointers"
+        ],
         "nativeEvidence": []
       }
     },

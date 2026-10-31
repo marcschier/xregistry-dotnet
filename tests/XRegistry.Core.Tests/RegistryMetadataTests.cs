@@ -55,6 +55,25 @@ public class RegistryMetadataTests
     }
 
     [Test]
+    public async Task AnyScopedContentRequiresOnlyValidJsonSyntax()
+    {
+        var definitions = Shape("""{"value":"any","values":{"type":"map","item":{"type":"any"}}}""");
+        var result = RegistryMetadataValidator.Validate(RegistryJson.Parse(
+            """{"value":{"Bad-key":null,"deep":{"Upper.Key":[true,null]}},"values":{"entry":{"Bad-key":null}}}"""),
+            definitions);
+        var metadata = result.Metadata.RootElement;
+
+        await Assert.That(metadata.GetProperty("value").GetProperty("Bad-key").ValueKind)
+            .IsEqualTo(JsonValueKind.Null);
+        await Assert.That(metadata.GetProperty("value").GetProperty("deep").GetProperty("Upper.Key")[0].GetBoolean())
+            .IsTrue();
+        await Assert.That(metadata.GetProperty("value").GetProperty("deep").GetProperty("Upper.Key")[1].ValueKind)
+            .IsEqualTo(JsonValueKind.Null);
+        await Assert.That(metadata.GetProperty("values").GetProperty("entry").GetProperty("Bad-key").ValueKind)
+            .IsEqualTo(JsonValueKind.Null);
+    }
+
+    [Test]
     [Arguments("integer", "1.1")]
     [Arguments("uinteger", "-1")]
     [Arguments("boolean", "\"true\"")]
@@ -87,6 +106,21 @@ public class RegistryMetadataTests
     }
 
     [Test]
+    public async Task NullValuesAreOmittedFromCompleteMetadataButPreservedAsClientDeletions()
+    {
+        var definitions = Shape("""{"value":"string"}""");
+        var complete = RegistryMetadataValidator.Validate(RegistryJson.Parse("""{"value":null}"""), definitions);
+        var absentRequest = RegistryMetadataValidator.Validate(RegistryJson.Parse("{}"), definitions,
+            new() { Mode = RegistryMetadataMode.ClientInput });
+        var deleteRequest = RegistryMetadataValidator.Validate(RegistryJson.Parse("""{"value":null}"""), definitions,
+            new() { Mode = RegistryMetadataMode.ClientInput });
+
+        await Assert.That(complete.Metadata.RootElement.TryGetProperty("value", out _)).IsFalse();
+        await Assert.That(absentRequest.Metadata.RootElement.TryGetProperty("value", out _)).IsFalse();
+        await Assert.That(deleteRequest.Metadata.RootElement.GetProperty("value").ValueKind).IsEqualTo(JsonValueKind.Null);
+    }
+
+    [Test]
     public async Task SubmittedReadonlyValuesAreIgnoredWithoutResettingDefaultsOrNullDeletions()
     {
         var definitions = Shape("""
@@ -111,6 +145,7 @@ public class RegistryMetadataTests
     [Arguments("""{"labels":{"valid":null}}""", "invalid_attribute", "/labels/valid")]
     [Arguments("""{"labels":{"valid":42}}""", "invalid_attribute", "/labels/valid")]
     [Arguments("""{"nested":{"unknown":1}}""", "unknown_attribute", "/nested/unknown")]
+    [Arguments("""{"unknown":1}""", "unknown_attribute", "/unknown")]
     public async Task CollectionAndNestedErrorsRetainPrecisePointers(string metadata, string expectedCode, string expectedPath)
     {
         var definitions = Shape("""

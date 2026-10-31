@@ -624,6 +624,25 @@ public class RegistryModelTests
     }
 
     [Test]
+    public async Task DocumentAndCollectionAttributeNamesRespectSystemReservations()
+    {
+        var documentConflict = TestErrors.Capture(() => CompileResource(
+            """{"singular":"file","attributes":{"fileurl":"string"}}"""));
+        var withoutDocument = CompileResource(
+            """{"singular":"file","hasdocument":false,"attributes":{"fileurl":"string","filebase64":"string"}}""");
+        var collectionConflict = TestErrors.Capture(() => RegistryModel.Compile(RegistryJson.Parse("""
+            {"groups":{"dirs":{"singular":"dir","attributes":{"filescount":"string"},
+              "resources":{"files":{"singular":"file"}}}}}
+            """)));
+
+        await Assert.That(documentConflict.Code).IsEqualTo("model_error");
+        await Assert.That(documentConflict.Path).IsEqualTo("/groups/dirs/resources/files/attributes/fileurl");
+        await Assert.That(withoutDocument.Attributes["fileurl"].Type).IsEqualTo(RegistryValueType.String);
+        await Assert.That(withoutDocument.Attributes["filebase64"].Type).IsEqualTo(RegistryValueType.String);
+        await Assert.That(collectionConflict.Code).IsEqualTo("model_error");
+    }
+
+    [Test]
     public async Task CompilesNestedItemsAndStaticVersionMatchObligations()
     {
         var resource = CompileResource("""
