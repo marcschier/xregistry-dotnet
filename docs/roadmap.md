@@ -407,7 +407,11 @@ vocabulary/source mapping. It does not supply their implementation.
   optional string/Boolean fields. Custom application values check absolute
   root/member ID syntax and exact-case local presence, with whole-member
   overrides and optional missing targets. References do not trigger schema
-  traversal or acquisition. Single type selectors match concrete types and
+  traversal or acquisition. Missing required targets and supported-selector
+  mismatches use the effective authored `errorMessage` verbatim, without
+  changing codes or paths. Syntax and capability failures retain their own
+  diagnostics; member overrides replace the entire declaration.
+  Single type selectors match concrete types and
   documented categories, including enum/intEnum specializations and list aliases.
   Member IDs match the member shape rather than its target. Type-token sequences
   intersect predicates; nested `:test` and `:not` expressions support

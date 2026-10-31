@@ -2325,7 +2325,8 @@ public static partial class ApiOperationDocumentResolver
                     "Existence checks for this implicit Smithy prelude reference are not supported.");
             }
             ValidationContext.Require(found || !required, path, "document.trait_id_ref_missing",
-                "A required Smithy idRef trait target is absent from the assembled model.");
+                reference.TryGetProperty("errorMessage", out var missingMessage) ? missingMessage.GetString()! :
+                    "A required Smithy idRef trait target is absent from the assembled model.");
             if (found && !wildcard)
             {
                 var kind = member is not null ? "member" : implicitKind ?? target.GetProperty("type").GetString()!;
@@ -2342,7 +2343,8 @@ public static partial class ApiOperationDocumentResolver
                         "This Smithy idRef selector requires unsupported selector evaluation.");
                 }
                 ValidationContext.Require(matches.Value, path, "document.trait_id_ref_selector",
-                    "The Smithy idRef target must match its type selector.");
+                    reference.TryGetProperty("errorMessage", out var selectorMessage) ? selectorMessage.GetString()! :
+                        "The Smithy idRef target must match its type selector.");
             }
         }
 

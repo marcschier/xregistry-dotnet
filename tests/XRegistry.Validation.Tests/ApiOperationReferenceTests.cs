@@ -10534,6 +10534,68 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
+    [Arguments(false, "Required target was not supplied.")]
+    [Arguments(true, "Expected a numeric target.")]
+    [Arguments(false, "")]
+    [Arguments(true, "Keep {id}, $value and\nUnicode \u00e9 literal.")]
+    public async Task SmithyJsonCustomTraitIdRefsUseAuthoredFailureMessages(bool mismatch, string message)
+    {
+        var declaration = new JsonObject
+        {
+            ["failWhenMissing"] = true, ["selector"] = mismatch ? "integer" : "*", ["errorMessage"] = message
+        };
+        var document = SmithyIdRefTraitDocument(mismatch ? "example#Target" : "example#Missing", declaration.ToJsonString());
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(mismatch
+            ? "document.trait_id_ref_selector" : "document.trait_id_ref_missing");
+        await Assert.That(result.Diagnostic.Detail).IsEqualTo(message);
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/example#Custom");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task SmithyJsonCustomTraitIdRefMessagesRespectWholeMemberOverrides(bool overrideMessage)
+    {
+        var document = SmithyIdRefTraitDocument("example#Target",
+            """{"failWhenMissing":true,"errorMessage":"Target-level message."}""");
+        document["shapes"]!["example#Custom"]!["traits"]!.AsObject().Remove("smithy.api#trait");
+        document["shapes"]!["example#Wrapper"] = JsonNode.Parse("""
+            {"type":"structure","traits":{"smithy.api#trait":{}},"members":{"value":{"target":"example#Custom",
+             "traits":{"smithy.api#idRef":{"failWhenMissing":true}}}}}
+            """);
+        if (overrideMessage)
+        {
+            document["shapes"]!["example#Wrapper"]!["members"]!["value"]!["traits"]!["smithy.api#idRef"]!["errorMessage"] =
+                "Member-level message.";
+        }
+        document["shapes"]!["example#Get"]!["traits"] = JsonNode.Parse("""{"example#Wrapper":{"value":"example#Missing"}}""");
+        var result = ResolveSmithy(document.ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_id_ref_missing");
+        await Assert.That(result.Diagnostic.Detail).IsEqualTo(overrideMessage
+            ? "Member-level message." : "A required Smithy idRef trait target is absent from the assembled model.");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Get/traits/example#Wrapper/value");
+    }
+
+    [Test]
+    [Arguments("bad!", "*", "document.trait_id_ref", ApiOperationResolutionStatus.Invalid)]
+    [Arguments("Target", "*", "smithy.relative_id_ref", ApiOperationResolutionStatus.Unsupported)]
+    [Arguments("example#Target", "> string", "smithy.id_ref_selector", ApiOperationResolutionStatus.Unsupported)]
+    public async Task SmithyJsonCustomTraitIdRefMessagesDoNotHideSyntaxOrCapabilityFailures(
+        string value, string selector, string code, ApiOperationResolutionStatus status)
+    {
+        var declaration = new JsonObject { ["errorMessage"] = "Do not replace diagnostics.", ["selector"] = selector };
+        var result = ResolveSmithy(SmithyIdRefTraitDocument(value, declaration.ToJsonString()).ToJsonString());
+        await Assert.That(result.Status).IsEqualTo(status);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        await Assert.That(result.Diagnostic.Detail).IsNotEqualTo("Do not replace diagnostics.");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
     [Arguments(false)]
     [Arguments(true)]
     public async Task SmithyJsonCustomTraitIdRefsValidateEscapedMapKeysBeforeSparseNulls(bool key)
@@ -10590,9 +10652,9 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
-    public async Task SmithyJsonCustomTraitIdRefsCheckEveryApplicationWithoutDisclosingCustomMessages()
+    public async Task SmithyJsonCustomTraitIdRefsCheckEveryApplicationWithAuthoredMessages()
     {
-        var document = SmithyIdRefTraitDocument("example#Target", """{"failWhenMissing":true,"errorMessage":"secret-value"}""");
+        var document = SmithyIdRefTraitDocument("example#Target", """{"failWhenMissing":true,"errorMessage":"The member must identify a known shape."}""");
         document["shapes"]!["example#Get"]!["input"] = JsonNode.Parse("""{"target":"example#Input"}""");
         document["shapes"]!["example#Input"] = JsonNode.Parse("""
             {"type":"structure","members":{"value":{"target":"smithy.api#String","traits":{"example#Custom":"example#Missing"}}}}
@@ -10601,7 +10663,7 @@ public class ApiOperationReferenceTests
         await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
         await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.trait_id_ref_missing");
         await Assert.That(result.Diagnostic.Path).IsEqualTo("$/shapes/example#Input/members/value/traits/example#Custom");
-        await Assert.That(result.Diagnostic.Detail.Contains("secret-value", StringComparison.Ordinal)).IsFalse();
+        await Assert.That(result.Diagnostic.Detail).IsEqualTo("The member must identify a known shape.");
     }
 
     [Test]

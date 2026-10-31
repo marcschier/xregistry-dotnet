@@ -793,7 +793,15 @@ model. `failWhenMissing: true` rejects absent targets; omitted or false permits
 absence. Member `idRef` declarations replace the whole target declaration.
 Checks include nested values and decoded map keys before sparse null values are
 skipped. A reference does not add the identified shape to the schema traversal
-or trigger acquisition, and custom error messages are not emitted.
+or trigger acquisition. When a required target is missing or a found target
+fails its supported selector, the diagnostic detail uses the effective
+`errorMessage` verbatim, including an explicitly empty string, as defined by the
+[Smithy idRef trait](https://smithy.io/2.0/spec/constraint-traits.html#idref-trait).
+Codes and paths remain stable. Member overrides do not inherit an omitted
+target-level message. Invalid ID syntax and unsupported assembly or selector
+evaluation retain their own diagnostics. These are caller-supplied diagnostic
+strings, not templates or instructions; consumers must treat them as untrusted
+text when displaying or logging them.
 
 An omitted selector or `*` matches every found target. Single type tokens from
 the publisher's selector table also match declared types, including `number`,
