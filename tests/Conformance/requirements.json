@@ -3680,15 +3680,17 @@
       "text": "- REQUIRED.",
       "review": {
         "status": "reviewed",
-        "note": "Direct cases assert supplied createdat on creation, retained createdat and null reset to the injected clock. The full row is not promoted without a direct non-null replacement of an already existing createdat and the applicable completed-plane checks.",
+        "note": "The model test verifies required Timestamp attributes on Registry, Group, Resource, Resource Meta, and Version definitions. Server cases assert nested creation values and explicit/null createdat updates.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "ExplicitTimestampsArePreservedAndEqualOrNullModifiedAtTouchesNow"
+          "CoreTimestampsAreRequiredTimestampAttributesAcrossEntityKinds",
+          "ExplicitTimestampsArePreservedAndEqualOrNullModifiedAtTouchesNow",
+          "EntitiesCreatedInOneRequestShareTheSameCurrentTimestamp"
         ],
         "nativeEvidence": []
       }
@@ -3718,6 +3720,7 @@
         "status": "implemented",
         "testIds": [
           "ExplicitTimestampsArePreservedAndEqualOrNullModifiedAtTouchesNow",
+          "CoreTimestampsAreRequiredTimestampAttributesAcrossEntityKinds",
           "ScalarValuesPreserveTypePrecisionAndNormalizeTimestamps",
           "InvalidScalarsReturnExactFieldDiagnostics"
         ],
@@ -3767,14 +3770,15 @@
       "text": "- If present in a write operation request, the value MUST override any existing value, however a value of `null` MUST use the current date/time as the new value.",
       "review": {
         "status": "reviewed",
-        "note": "Direct cases assert supplied createdat on creation, retained createdat and null reset to the injected clock. The full row is not promoted without a direct non-null replacement of an already existing createdat and the applicable completed-plane checks.",
+        "note": "The server test replaces an existing createdat with a distinct value and confirms that null resets it to the injected clock; the model test verifies the timestamp attribute planes.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
+          "CoreTimestampsAreRequiredTimestampAttributesAcrossEntityKinds",
           "ExplicitTimestampsArePreservedAndEqualOrNullModifiedAtTouchesNow"
         ],
         "nativeEvidence": []
@@ -3827,18 +3831,15 @@
       "text": "- During the processing of a single request, all entities that have their `createdat` or `modifiedat` attributes set to the current date/time MUST use the same value in all cases.",
       "review": {
         "status": "reviewed",
-        "note": "Request captures one _now and reuses it for all touched entities. The event test checks canonical event time, not equality of every affected entity's createdat/modifiedat in the same request; direct entity-timestamp evidence remains missing.",
+        "note": "A single request creates a Group, Resource, and Version; the test asserts that each createdat and modifiedat value is equal across those entities.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "AttributeEventsMatchTheChangedEntityAndItsDefaultProjection",
-          "DeletionEventsCoverDescendantsAndOnlyTheImmediateParentCollection",
-          "CommittedEventsUseCoreStructuredIdsAndOneCanonicalInteractionTime",
-          "CorrelationReservationAndOutboxShareTheAtomicPublicationQuota"
+          "EntitiesCreatedInOneRequestShareTheSameCurrentTimestamp"
         ],
         "nativeEvidence": []
       }
@@ -3859,20 +3860,16 @@
       "text": "- REQUIRED.",
       "review": {
         "status": "reviewed",
-        "note": "Source implements modifiedat completion and local membership/touch rules. Reviewed assertions prove distinct and equal supplied values, but do not separately assert every absent/null/no-op update, both parent add/remove timestamps and required presence across all entity planes. Epoch or event-name checks are not substituted for timestamp assertions.",
+        "note": "The model test verifies required Timestamp attributes on Registry, Group, Resource, Resource Meta, and Version definitions. Server cases assert timestamps on created entities and collection membership changes.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "ExplicitTimestampsArePreservedAndEqualOrNullModifiedAtTouchesNow",
-          "IdenticalWritesTouchOnlyTheEntity",
-          "AttributeEventsMatchTheChangedEntityAndItsDefaultProjection",
-          "DeletionEventsCoverDescendantsAndOnlyTheImmediateParentCollection",
-          "CommittedEventsUseCoreStructuredIdsAndOneCanonicalInteractionTime",
-          "CorrelationReservationAndOutboxShareTheAtomicPublicationQuota"
+          "CoreTimestampsAreRequiredTimestampAttributesAcrossEntityKinds",
+          "EntitiesCreatedInOneRequestShareTheSameCurrentTimestamp"
         ],
         "nativeEvidence": []
       }
@@ -3902,6 +3899,7 @@
         "status": "implemented",
         "testIds": [
           "ExplicitTimestampsArePreservedAndEqualOrNullModifiedAtTouchesNow",
+          "CoreTimestampsAreRequiredTimestampAttributesAcrossEntityKinds",
           "ScalarValuesPreserveTypePrecisionAndNormalizeTimestamps",
           "InvalidScalarsReturnExactFieldDiagnostics"
         ],
@@ -3951,20 +3949,15 @@
       "text": "- Any update operation (even one that does not change any attribute, MUST update this attribute. This then acts like a `touch` type of operation.",
       "review": {
         "status": "reviewed",
-        "note": "Source implements modifiedat completion and local membership/touch rules. Reviewed assertions prove distinct and equal supplied values, but do not separately assert every absent/null/no-op update, both parent add/remove timestamps and required presence across all entity planes. Epoch or event-name checks are not substituted for timestamp assertions.",
+        "note": "The server test submits an empty update and asserts that modifiedat advances to the injected current time.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "ExplicitTimestampsArePreservedAndEqualOrNullModifiedAtTouchesNow",
-          "IdenticalWritesTouchOnlyTheEntity",
-          "AttributeEventsMatchTheChangedEntityAndItsDefaultProjection",
-          "DeletionEventsCoverDescendantsAndOnlyTheImmediateParentCollection",
-          "CommittedEventsUseCoreStructuredIdsAndOneCanonicalInteractionTime",
-          "CorrelationReservationAndOutboxShareTheAtomicPublicationQuota"
+          "ExplicitTimestampsArePreservedAndEqualOrNullModifiedAtTouchesNow"
         ],
         "nativeEvidence": []
       }
@@ -3986,20 +3979,15 @@
       "text": "- Updates to an existing entity in an xRegistry collection MUST NOT cause an update to its parent entity's `modifiedat` value. However, adding or removing an entity from a nested xRegistry collection MUST update the `modifiedat` value of the parent entity.",
       "review": {
         "status": "reviewed",
-        "note": "Source implements modifiedat completion and local membership/touch rules. Reviewed assertions prove distinct and equal supplied values, but do not separately assert every absent/null/no-op update, both parent add/remove timestamps and required presence across all entity planes. Epoch or event-name checks are not substituted for timestamp assertions.",
+        "note": "The test asserts that Group, Resource, and Resource Meta modifiedat values advance on child creation or removal, while updates to existing children leave the parent's modifiedat unchanged.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "ExplicitTimestampsArePreservedAndEqualOrNullModifiedAtTouchesNow",
-          "IdenticalWritesTouchOnlyTheEntity",
-          "AttributeEventsMatchTheChangedEntityAndItsDefaultProjection",
-          "DeletionEventsCoverDescendantsAndOnlyTheImmediateParentCollection",
-          "CommittedEventsUseCoreStructuredIdsAndOneCanonicalInteractionTime",
-          "CorrelationReservationAndOutboxShareTheAtomicPublicationQuota"
+          "ParentModifiedAtTracksCollectionMembershipButNotExistingChildUpdates"
         ],
         "nativeEvidence": []
       }
@@ -4020,20 +4008,15 @@
       "text": "- If present in a write operation request, the following applies: - If the request value is `null` or the same as the existing value, then the current date/time MUST be used as its new value. - If the request value is different than the existing value, then the request value MUST be used as its new value.",
       "review": {
         "status": "reviewed",
-        "note": "Source implements modifiedat completion and local membership/touch rules. Reviewed assertions prove distinct and equal supplied values, but do not separately assert every absent/null/no-op update, both parent add/remove timestamps and required presence across all entity planes. Epoch or event-name checks are not substituted for timestamp assertions.",
+        "note": "The server test asserts that distinct supplied values replace modifiedat, while equal and null values reset it to the injected current time.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "ExplicitTimestampsArePreservedAndEqualOrNullModifiedAtTouchesNow",
-          "IdenticalWritesTouchOnlyTheEntity",
-          "AttributeEventsMatchTheChangedEntityAndItsDefaultProjection",
-          "DeletionEventsCoverDescendantsAndOnlyTheImmediateParentCollection",
-          "CommittedEventsUseCoreStructuredIdsAndOneCanonicalInteractionTime",
-          "CorrelationReservationAndOutboxShareTheAtomicPublicationQuota"
+          "ExplicitTimestampsArePreservedAndEqualOrNullModifiedAtTouchesNow"
         ],
         "nativeEvidence": []
       }
@@ -4054,20 +4037,15 @@
       "text": "- When absent in a write operation request, it MUST be set to the current date/time.",
       "review": {
         "status": "reviewed",
-        "note": "Source implements modifiedat completion and local membership/touch rules. Reviewed assertions prove distinct and equal supplied values, but do not separately assert every absent/null/no-op update, both parent add/remove timestamps and required presence across all entity planes. Epoch or event-name checks are not substituted for timestamp assertions.",
+        "note": "The server test omits modifiedat from an update and asserts that the injected current time is used; the empty update also verifies the touch behavior.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "ExplicitTimestampsArePreservedAndEqualOrNullModifiedAtTouchesNow",
-          "IdenticalWritesTouchOnlyTheEntity",
-          "AttributeEventsMatchTheChangedEntityAndItsDefaultProjection",
-          "DeletionEventsCoverDescendantsAndOnlyTheImmediateParentCollection",
-          "CommittedEventsUseCoreStructuredIdsAndOneCanonicalInteractionTime",
-          "CorrelationReservationAndOutboxShareTheAtomicPublicationQuota"
+          "ExplicitTimestampsArePreservedAndEqualOrNullModifiedAtTouchesNow"
         ],
         "nativeEvidence": []
       }
@@ -4088,18 +4066,15 @@
       "text": "- During the processing of a single request, all entities that have their `createdat` or `modifiedat` attributes set to the current date/time MUST use the same value in all cases.",
       "review": {
         "status": "reviewed",
-        "note": "Request captures one _now and reuses it for all touched entities. The event test checks canonical event time, not equality of every affected entity's createdat/modifiedat in the same request; direct entity-timestamp evidence remains missing.",
+        "note": "A single request creates a Group, Resource, and Version; the test asserts that each createdat and modifiedat value is equal across those entities.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "AttributeEventsMatchTheChangedEntityAndItsDefaultProjection",
-          "DeletionEventsCoverDescendantsAndOnlyTheImmediateParentCollection",
-          "CommittedEventsUseCoreStructuredIdsAndOneCanonicalInteractionTime",
-          "CorrelationReservationAndOutboxShareTheAtomicPublicationQuota"
+          "EntitiesCreatedInOneRequestShareTheSameCurrentTimestamp"
         ],
         "nativeEvidence": []
       }
@@ -63701,13 +63676,19 @@
       ],
       "text": "- REQUIRED.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The model test verifies required Timestamp attributes on Registry, Group, Resource, Resource Meta, and Version definitions. Server cases assert nested creation values and explicit/null createdat updates.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CoreTimestampsAreRequiredTimestampAttributesAcrossEntityKinds",
+          "ExplicitTimestampsArePreservedAndEqualOrNullModifiedAtTouchesNow",
+          "EntitiesCreatedInOneRequestShareTheSameCurrentTimestamp"
+        ],
         "nativeEvidence": []
       }
     },
@@ -63732,13 +63713,19 @@
       ],
       "text": "- MUST be a [RFC3339](https://tools.ietf.org/html/rfc3339) timestamp.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Timestamp parsing accepts RFC3339 values and normalizes offsets to UTC; scalar tests cover invalid values and fractional precision.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CoreTimestampsAreRequiredTimestampAttributesAcrossEntityKinds",
+          "ScalarValuesPreserveTypePrecisionAndNormalizeTimestamps",
+          "InvalidScalarsReturnExactFieldDiagnostics"
+        ],
         "nativeEvidence": []
       }
     },
@@ -63763,13 +63750,17 @@
       ],
       "text": "- This specification places no restrictions on the value of this attribute, nor on its value relative to its `modifiedat` value or the current date/time. Implementations MAY choose to restrict its values if necessary.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The server test replaces an existing createdat with a distinct value and confirms that null resets it to the injected clock.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ExplicitTimestampsArePreservedAndEqualOrNullModifiedAtTouchesNow"
+        ],
         "nativeEvidence": []
       }
     },
@@ -63825,13 +63816,19 @@
       ],
       "text": "- When absent in an update request, any existing value MUST remain unchanged.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Server and scalar tests confirm that updates omitting createdat preserve the existing value.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ExplicitTimestampsArePreservedAndEqualOrNullModifiedAtTouchesNow",
+          "ScalarValuesPreserveTypePrecisionAndNormalizeTimestamps",
+          "InvalidScalarsReturnExactFieldDiagnostics"
+        ],
         "nativeEvidence": []
       }
     },
@@ -63856,13 +63853,17 @@
       ],
       "text": "- During the processing of a single request, all entities that have their `createdat` or `modifiedat` attributes set to the current date/time MUST use the same value in all cases.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A single request creates a Group, Resource, and Version; the test asserts that each createdat and modifiedat value is equal across those entities.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EntitiesCreatedInOneRequestShareTheSameCurrentTimestamp"
+        ],
         "nativeEvidence": []
       }
     },
@@ -63887,13 +63888,18 @@
       ],
       "text": "- REQUIRED.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The model test verifies required Timestamp attributes on Registry, Group, Resource, Resource Meta, and Version definitions. Server cases assert timestamps on created entities and collection membership changes.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CoreTimestampsAreRequiredTimestampAttributesAcrossEntityKinds",
+          "EntitiesCreatedInOneRequestShareTheSameCurrentTimestamp"
+        ],
         "nativeEvidence": []
       }
     },
@@ -63918,13 +63924,20 @@
       ],
       "text": "- MUST be a [RFC3339](https://tools.ietf.org/html/rfc3339) timestamp representing the time when the entity was last updated.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Server and scalar tests verify RFC3339 timestamp values, UTC normalization, and invalid timestamp rejection.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CoreTimestampsAreRequiredTimestampAttributesAcrossEntityKinds",
+          "ExplicitTimestampsArePreservedAndEqualOrNullModifiedAtTouchesNow",
+          "ScalarValuesPreserveTypePrecisionAndNormalizeTimestamps",
+          "InvalidScalarsReturnExactFieldDiagnostics"
+        ],
         "nativeEvidence": []
       }
     },
@@ -63980,13 +63993,17 @@
       ],
       "text": "- Any update operation (even one that does not change any attribute, MUST update this attribute. This then acts like a `touch` type of operation.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The server test submits an empty update and asserts that modifiedat advances to the injected current time.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ExplicitTimestampsArePreservedAndEqualOrNullModifiedAtTouchesNow"
+        ],
         "nativeEvidence": []
       }
     },
@@ -64012,13 +64029,17 @@
       ],
       "text": "- Updates to an existing entity in an xRegistry collection MUST NOT cause an update to its parent entity's `modifiedat` value. However, adding or removing an entity from a nested xRegistry collection MUST update the `modifiedat` value of the parent entity.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The test asserts that Group, Resource, and Resource Meta modifiedat values advance on child creation or removal, while updates to existing children leave the parent's modifiedat unchanged.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ParentModifiedAtTracksCollectionMembershipButNotExistingChildUpdates"
+        ],
         "nativeEvidence": []
       }
     },
@@ -64043,13 +64064,17 @@
       ],
       "text": "- If present in a write operation request, the following applies: - If the request value is `null` or the same as the existing value, then the current date/time MUST be used as its new value. - If the request value is different than the existing value, then the request value MUST be used as its new value.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The server test asserts that distinct supplied values replace modifiedat, while equal and null values reset it to the injected current time.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ExplicitTimestampsArePreservedAndEqualOrNullModifiedAtTouchesNow"
+        ],
         "nativeEvidence": []
       }
     },
@@ -64074,13 +64099,17 @@
       ],
       "text": "- When absent in a write operation request, it MUST be set to the current date/time.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The server test omits modifiedat from an update and asserts that the injected current time is used; the empty update also verifies the touch behavior.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ExplicitTimestampsArePreservedAndEqualOrNullModifiedAtTouchesNow"
+        ],
         "nativeEvidence": []
       }
     },
@@ -64105,13 +64134,17 @@
       ],
       "text": "- During the processing of a single request, all entities that have their `createdat` or `modifiedat` attributes set to the current date/time MUST use the same value in all cases.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A single request creates a Group, Resource, and Version; the test asserts that each createdat and modifiedat value is equal across those entities.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EntitiesCreatedInOneRequestShareTheSameCurrentTimestamp"
+        ],
         "nativeEvidence": []
       }
     },

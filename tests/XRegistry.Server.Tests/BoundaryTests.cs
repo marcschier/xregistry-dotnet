@@ -102,14 +102,106 @@ public class BoundaryTests
             Model = RegistryModel.Compile(RegistryJson.Parse(Model)),
             TimeProvider = clock
         }, new InMemoryRegistryPersistence(), new PermitPolicy());
-        await Send(engine, RegistryAction.Replace, "/teams/g", """{"createdat":"2000-01-01T00:00:00Z"}""");
+        await Send(engine, RegistryAction.Replace, "/teams/g", """{"createdat":"2040-01-01T00:00:00Z"}""");
         var changed = await Send(engine, RegistryAction.Patch, "/teams/g", """{"modifiedat":"2020-01-01T02:00:00+02:00"}""");
         await Assert.That(changed.Metadata!.RootElement.GetProperty("modifiedat").GetString()).IsEqualTo("2020-01-01T00:00:00Z");
-        await Assert.That(changed.Metadata.RootElement.GetProperty("createdat").GetString()).IsEqualTo("2000-01-01T00:00:00Z");
-        var equal = await Send(engine, RegistryAction.Patch, "/teams/g", """{"modifiedat":"2020-01-01T00:00:00Z"}""");
-        await Assert.That(equal.Metadata!.RootElement.GetProperty("modifiedat").GetString()).IsEqualTo("2030-01-01T00:00:00.0000000Z");
+        await Assert.That(changed.Metadata.RootElement.GetProperty("createdat").GetString()).IsEqualTo("2040-01-01T00:00:00Z");
+        clock.Now = new DateTimeOffset(2031, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var explicitCreated = await Send(engine, RegistryAction.Patch, "/teams/g", """{"createdat":"2050-01-01T00:00:00Z"}""");
+        await Assert.That(explicitCreated.Metadata!.RootElement.GetProperty("createdat").GetString()).IsEqualTo("2050-01-01T00:00:00Z");
+        await Assert.That(explicitCreated.Metadata.RootElement.GetProperty("modifiedat").GetString()).IsEqualTo("2031-01-01T00:00:00.0000000Z");
+        clock.Now = new DateTimeOffset(2032, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var equal = await Send(engine, RegistryAction.Patch, "/teams/g", """{"modifiedat":"2031-01-01T00:00:00Z"}""");
+        await Assert.That(equal.Metadata!.RootElement.GetProperty("modifiedat").GetString()).IsEqualTo("2032-01-01T00:00:00.0000000Z");
+        clock.Now = new DateTimeOffset(2033, 1, 1, 0, 0, 0, TimeSpan.Zero);
         var cleared = await Send(engine, RegistryAction.Patch, "/teams/g", """{"createdat":null,"modifiedat":null}""");
-        await Assert.That(cleared.Metadata!.RootElement.GetProperty("createdat").GetString()).IsEqualTo("2030-01-01T00:00:00.0000000Z");
+        await Assert.That(cleared.Metadata!.RootElement.GetProperty("createdat").GetString()).IsEqualTo("2033-01-01T00:00:00.0000000Z");
+        await Assert.That(cleared.Metadata.RootElement.GetProperty("modifiedat").GetString()).IsEqualTo("2033-01-01T00:00:00.0000000Z");
+        clock.Now = new DateTimeOffset(2034, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var omitted = await Send(engine, RegistryAction.Patch, "/teams/g", "{}");
+        await Assert.That(omitted.Metadata!.RootElement.GetProperty("createdat").GetString()).IsEqualTo("2033-01-01T00:00:00.0000000Z");
+        await Assert.That(omitted.Metadata.RootElement.GetProperty("modifiedat").GetString()).IsEqualTo("2034-01-01T00:00:00.0000000Z");
+    }
+
+    [Test]
+    public async Task EntitiesCreatedInOneRequestShareTheSameCurrentTimestamp()
+    {
+        var clock = new AdvancingClock(new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        var engine = new RegistryEngine(new()
+        {
+            RegistryId = "timestamps",
+            PublicRoot = new Uri("https://registry.example"),
+            Model = RegistryModel.Compile(RegistryJson.Parse(Model)),
+            TimeProvider = clock
+        }, new InMemoryRegistryPersistence(), new PermitPolicy());
+
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n", """{"name":"created"}""");
+        var group = (await Send(engine, RegistryAction.Read, "/teams/g")).Metadata!.RootElement;
+        var resource = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n/meta")).Metadata!.RootElement;
+        var version = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n/versions/1")).Metadata!.RootElement;
+        var createdAt = group.GetProperty("createdat").GetString();
+        var modifiedAt = group.GetProperty("modifiedat").GetString();
+
+        await Assert.That(createdAt).IsNotNullOrEmpty();
+        await Assert.That(modifiedAt).IsEqualTo(createdAt);
+        await Assert.That(resource.GetProperty("createdat").GetString()).IsEqualTo(createdAt);
+        await Assert.That(resource.GetProperty("modifiedat").GetString()).IsEqualTo(modifiedAt);
+        await Assert.That(version.GetProperty("createdat").GetString()).IsEqualTo(createdAt);
+        await Assert.That(version.GetProperty("modifiedat").GetString()).IsEqualTo(modifiedAt);
+    }
+
+    [Test]
+    public async Task ParentModifiedAtTracksCollectionMembershipButNotExistingChildUpdates()
+    {
+        var clock = new AdvancingClock(new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        var engine = new RegistryEngine(new()
+        {
+            RegistryId = "timestamps",
+            PublicRoot = new Uri("https://registry.example"),
+            Model = RegistryModel.Compile(RegistryJson.Parse(Model)),
+            TimeProvider = clock
+        }, new InMemoryRegistryPersistence(), new PermitPolicy());
+        async Task<RegistryResult> Read(string path) => await Send(engine, RegistryAction.Read, path);
+        static DateTimeOffset ModifiedAt(RegistryResult result) =>
+            result.Metadata!.RootElement.GetProperty("modifiedat").GetDateTimeOffset();
+
+        var rootBefore = await Read("/");
+        await Send(engine, RegistryAction.Replace, "/teams/g", "{}");
+        var rootAfterGroup = await Read("/");
+        var groupAfterCreate = await Read("/teams/g");
+        await Assert.That(ModifiedAt(rootAfterGroup)).IsGreaterThan(ModifiedAt(rootBefore));
+
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n", """{"name":"first"}""");
+        var groupAfterResource = await Read("/teams/g");
+        var resourceAfterCreate = await Read("/teams/g/notes/n/meta");
+        await Assert.That(ModifiedAt(groupAfterResource)).IsGreaterThan(ModifiedAt(groupAfterCreate));
+        await Assert.That(ModifiedAt(await Read("/"))).IsEqualTo(ModifiedAt(rootAfterGroup));
+
+        await Send(engine, RegistryAction.Post, "/teams/g/notes/n", """{"versionid":"v2","name":"second"}""");
+        var resourceAfterVersion = await Read("/teams/g/notes/n/meta");
+        var groupAfterVersion = await Read("/teams/g");
+        await Assert.That(ModifiedAt(resourceAfterVersion)).IsGreaterThan(ModifiedAt(resourceAfterCreate));
+        await Assert.That(ModifiedAt(groupAfterVersion)).IsEqualTo(ModifiedAt(groupAfterResource));
+
+        var versionBeforeUpdate = await Read("/teams/g/notes/n/versions/v2");
+        await Send(engine, RegistryAction.Patch, "/teams/g/notes/n/versions/v2", """{"name":"updated"}""");
+        var versionAfterUpdate = await Read("/teams/g/notes/n/versions/v2");
+        var resourceAfterUpdate = await Read("/teams/g/notes/n/meta");
+        await Assert.That(ModifiedAt(versionAfterUpdate)).IsGreaterThan(ModifiedAt(versionBeforeUpdate));
+        await Assert.That(ModifiedAt(resourceAfterUpdate)).IsEqualTo(ModifiedAt(resourceAfterVersion));
+        await Assert.That(ModifiedAt(await Read("/teams/g"))).IsEqualTo(ModifiedAt(groupAfterVersion));
+
+        await Send(engine, RegistryAction.Delete, "/teams/g/notes/n/versions/1");
+        var resourceAfterVersionRemoval = await Read("/teams/g/notes/n/meta");
+        await Assert.That(ModifiedAt(resourceAfterVersionRemoval)).IsGreaterThan(ModifiedAt(resourceAfterUpdate));
+
+        await Send(engine, RegistryAction.Delete, "/teams/g/notes/n");
+        var groupAfterResourceRemoval = await Read("/teams/g");
+        await Assert.That(ModifiedAt(groupAfterResourceRemoval)).IsGreaterThan(ModifiedAt(groupAfterVersion));
+        await Assert.That(ModifiedAt(await Read("/"))).IsEqualTo(ModifiedAt(rootAfterGroup));
+
+        await Send(engine, RegistryAction.Delete, "/teams/g");
+        await Assert.That(ModifiedAt(await Read("/"))).IsGreaterThan(ModifiedAt(rootAfterGroup));
     }
 
     [Test]
@@ -147,7 +239,14 @@ public class BoundaryTests
 
     private sealed class FixedClock(DateTimeOffset now) : TimeProvider
     {
-        public override DateTimeOffset GetUtcNow() => now;
+        public DateTimeOffset Now { get; set; } = now;
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
+
+    private sealed class AdvancingClock(DateTimeOffset start) : TimeProvider
+    {
+        private int _seconds;
+        public override DateTimeOffset GetUtcNow() => start.AddSeconds(++_seconds);
     }
 
     private sealed class ReadonlyPersistence : IRegistryPersistence

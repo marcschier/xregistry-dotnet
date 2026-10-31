@@ -144,6 +144,28 @@ public class RegistryModelTests
     }
 
     [Test]
+    public async Task CoreTimestampsAreRequiredTimestampAttributesAcrossEntityKinds()
+    {
+        var model = RegistryModel.Compile(RegistryJson.Parse("""
+            {"groups":{"teams":{"singular":"team","resources":{"notes":{"singular":"note","hasdocument":false}}}}}
+            """));
+        var resource = model.Groups["teams"].Resources["notes"];
+        var timestamps = new[]
+        {
+            model.Attributes["createdat"], model.Attributes["modifiedat"],
+            model.Groups["teams"].Attributes["createdat"], model.Groups["teams"].Attributes["modifiedat"],
+            resource.Attributes["createdat"], resource.Attributes["modifiedat"],
+            resource.MetaAttributes["createdat"], resource.MetaAttributes["modifiedat"]
+        };
+
+        foreach (var timestamp in timestamps)
+        {
+            await Assert.That(timestamp.Type).IsEqualTo(RegistryValueType.Timestamp);
+            await Assert.That(timestamp.Required).IsTrue();
+        }
+    }
+
+    [Test]
     public async Task CoreShortSelfAttributesAreImmutableReadonlyUrlsAcrossEntityPlanes()
     {
         var model = RegistryModel.Compile(RegistryJson.Parse("""
