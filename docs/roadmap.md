@@ -162,18 +162,21 @@ vocabulary/source mapping. It does not supply their implementation.
   Cross-syntax checks reject direct Proto2 enum use in Proto3 fields while
   allowing imported messages to retain their own syntax and enum fields.
   Adjacent string literals are combined before supported option, default,
-  import-path and reserved-name checks. Escape decoding remains incomplete;
-  syntax discriminators do not accept concatenated literals.
+  import-path and reserved-name checks. Syntax discriminators do not accept
+  concatenated literals.
   Hexadecimal escapes accept the publisher-defined one/two-digit widths;
-  Unicode escapes retain fixed-width checks. Decoded string/byte semantics
-  remain incomplete.
+  Unicode escapes retain fixed-width checks.
   Named character escapes now decode to ASCII controls before string-value
   use and import acquisition, including adjacent literals. Escaped quotes and
   backslashes retain their decoded values. Unicode escapes now decode scalar
   values before concatenation, reserved-name comparison and import validation;
   surrogate escapes and values above U+10FFFF fail. No Unicode normalization
   occurs, and decoded strings cannot replace native constants or the literal
-  syntax discriminator. Hexadecimal and octal byte-value decoding remains open.
+  syntax discriminator. Hexadecimal and octal escapes now decode octets with
+  maximal two/three-digit widths and byte-range checks. Adjacent literals join
+  bytes before UTF-8 validation for text consumers; arbitrary bytes defaults
+  remain valid. Invalid text and decoded relative-path violations fail before
+  acquisition, and escape scanning consumes the shared work budget.
   Option and default validation checks token kinds before values, so quoted
   strings cannot satisfy boolean, floating-point or enum constant requirements.
   Reserved-number checks reject overlapping intervals and duplicate singletons

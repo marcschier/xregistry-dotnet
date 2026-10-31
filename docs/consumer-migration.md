@@ -87,7 +87,15 @@ text cannot satisfy Boolean or enum constants. The `syntax` discriminator still
 requires literal `proto2` or `proto3` text without escapes. These rules use the
 publisher's string-literal grammar and
 [Unicode interpretation](https://protobuf.dev/reference/protobuf/textformat-spec/#string-literals).
-Hexadecimal and octal byte-value decoding remains incomplete.
+Hexadecimal escapes consume one or two digits and octal escapes consume up to
+three; following digits remain literal content. Each octal value must fit one
+byte. Literal parts retain decoded bytes until concatenation, so a UTF-8 sequence
+can span adjacent literals or combine hexadecimal and octal escapes. Imports,
+reserved names, supported text options and string defaults require valid UTF-8;
+bytes defaults permit arbitrary octets. Invalid text reports `protobuf.string`
+without replacement characters or dependency acquisition. Decoded paths retain
+the relative-path constraints. Parsing and concatenation consume the shared
+work budget; this does not add runtime message serialization or gRPC selection.
 Option and default checks distinguish quoted strings from native constants.
 For example, `"true"` cannot satisfy a boolean option, and `"ZERO"` cannot
 satisfy an enum default. This also applies when adjacent literals produce the

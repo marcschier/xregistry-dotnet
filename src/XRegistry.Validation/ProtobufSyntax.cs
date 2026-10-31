@@ -140,6 +140,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
         if (field.Type is "string" or "bytes")
         {
             Require(value.Kind == TokenKind.String, "protobuf.default", "A string or bytes default requires a string literal.");
+            if (field.Type == "string") { _ = value.Text; }
         }
         else if (field.Type == "bool")
         {
@@ -235,10 +236,12 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             if (value is '"' or '\'')
             {
                 var content = new StringBuilder();
+                var bytes = new List<byte>();
                 var closed = false;
                 var hasEscapes = false;
                 while (index < text.Length)
                 {
+                    context.Work();
                     var character = text[index++];
                     if (character == value)
                     {
@@ -272,8 +275,28 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                                     "protobuf.string", "A Unicode escape must identify a Unicode scalar value.");
                                 content.Append(char.ConvertFromUtf32((int)scalar));
                             }
-                            else { content.Append('\\').Append(character).Append(text.AsSpan(index, digits)); }
+                            else
+                            {
+                                FlushText();
+                                bytes.Add(byte.Parse(text.AsSpan(index, digits), NumberStyles.AllowHexSpecifier,
+                                    CultureInfo.InvariantCulture));
+                            }
                             index += digits;
+                            continue;
+                        }
+
+                        if (character is >= '0' and <= '7')
+                        {
+                            var octet = character - '0';
+                            for (var digits = 1; digits < 3 && index < text.Length &&
+                                text[index] is >= '0' and <= '7'; digits++)
+                            {
+                                context.Work();
+                                octet = octet * 8 + text[index++] - '0';
+                            }
+                            Require(octet <= byte.MaxValue, "protobuf.string", "An octal escape must fit one byte.");
+                            FlushText();
+                            bytes.Add((byte)octet);
                             continue;
                         }
 
@@ -294,7 +317,16 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                 }
 
                 Require(closed, "protobuf.string", "The string literal is unterminated.");
-                token = new(TokenKind.String, content.ToString(), hasEscapes);
+                FlushText();
+                token = new(TokenKind.String, "", hasEscapes, bytes.ToArray());
+
+                void FlushText()
+                {
+                    if (content.Length == 0) { return; }
+                    context.Work(content.Length);
+                    bytes.AddRange(Encoding.UTF8.GetBytes(content.ToString()));
+                    content.Clear();
+                }
             }
             else if (char.IsAsciiLetter(value) || value == '_')
             {
@@ -380,7 +412,23 @@ internal sealed class ProtobufSyntax(ValidationContext context)
 
     private enum TokenKind { Identifier, Number, String, Symbol, End }
     private enum OptionTarget { File, Message, Oneof, Service, Method }
-    private sealed record Token(TokenKind Kind, string Text, bool HasEscapes = false);
+    private sealed record Token(TokenKind Kind, string SourceText, bool HasEscapes = false,
+        ReadOnlyMemory<byte> StringBytes = default)
+    {
+        internal string Text
+        {
+            get
+            {
+                if (Kind != TokenKind.String) { return SourceText; }
+                try { return new UTF8Encoding(false, true).GetString(StringBytes.Span); }
+                catch (DecoderFallbackException)
+                {
+                    throw new ValidationFailure(DocumentValidationStatus.Invalid,
+                        new("$", "protobuf.string", "A string value must contain valid UTF-8."));
+                }
+            }
+        }
+    }
     private sealed record Field(string Name, int Number, string Type, string Scope, string Label, bool HasPackedOption, Token? Default);
     private sealed class Definition(bool isEnum, bool isRoot, string document, int syntax)
     {
@@ -592,6 +640,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                             break;
                         case "json_name":
                             Require(value.Kind == TokenKind.String, "protobuf.option", "json_name must be a string.");
+                            _ = value.Text;
                             break;
                         case "deprecated":
                         case "lazy":
@@ -763,6 +812,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             {
                 Require(target == OptionTarget.File, "protobuf.option_scope", "This option is only valid at file scope.");
                 Require(value.Kind == TokenKind.String, "protobuf.option", "The language namespace option requires a string.");
+                _ = value.Text;
             }
             else if (option is "deprecated" or "java_multiple_files" or "cc_generic_services" or
                 "java_generic_services" or "py_generic_services" or "cc_enable_arenas")
@@ -821,16 +871,16 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             Require(Current.Kind == TokenKind.String, "protobuf.string", "A quoted string literal is required.");
             var first = tokens[_index++];
             if (!concatenate || Current.Kind != TokenKind.String) { return first; }
-            var content = new StringBuilder(first.Text);
+            var content = new List<byte>(first.StringBytes.ToArray());
             var hasEscapes = first.HasEscapes;
             while (Current.Kind == TokenKind.String)
             {
-                owner.Context.Work(Current.Text.Length + 1);
+                owner.Context.Work(Current.StringBytes.Length + 1);
                 hasEscapes |= Current.HasEscapes;
-                content.Append(tokens[_index++].Text);
+                content.AddRange(tokens[_index++].StringBytes.ToArray());
             }
 
-            return first with { Text = content.ToString(), HasEscapes = hasEscapes };
+            return first with { StringBytes = content.ToArray(), HasEscapes = hasEscapes };
         }
 
         private Token Constant()
@@ -845,7 +895,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             }
 
             var token = tokens[_index++];
-            return sign.Length == 0 ? token : token with { Text = sign + token.Text };
+            return sign.Length == 0 ? token : token with { SourceText = sign + token.Text };
         }
 
         private bool Take(string value)
