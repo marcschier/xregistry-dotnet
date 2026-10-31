@@ -186,6 +186,10 @@ vocabulary/source mapping. It does not supply their implementation.
   Supported option scopes now use one check across all declaration targets,
   including fields and enum values. Known misplaced options consistently
   report `protobuf.option_scope`; unknown/custom policies remain unsupported.
+  Descriptor-defined PHP/Swift prefix hints, Java UTF-8 and deprecated equality
+  hints, and the message descriptor-accessor hint now validate their native
+  values, declaration scope and singular assignments. This adds no code
+  generation or runtime wire-decoding behavior.
   Floating defaults accept leading-decimal/exponent forms without allowing
   decimal fractions in integer-only contexts.
   Floating defaults distinguish integer radix syntax from decimal floating

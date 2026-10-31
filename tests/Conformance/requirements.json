@@ -43907,6 +43907,9 @@
           "NativeMapSyntaxDoesNotRequireAnAuthoredMapEntryOption",
           "MapEntryOptionsRejectNonMessageDeclarationPlacement",
           "SupportedOptionsUseConsistentScopeChecksAtEveryTarget",
+          "GeneratorHintsRejectIncorrectValueKinds",
+          "GeneratorHintsRemainSingular",
+          "GeneratorHintsPreserveLiteralValuesAndIndependentScopes",
           "EnumAndEnumValueUnknownOptionPoliciesRemainUnsupported",
           "EnumOptionPoliciesPreserveKnownBooleansAliasesAndInvalidSyntax"
         ],

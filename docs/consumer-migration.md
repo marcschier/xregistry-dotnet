@@ -119,6 +119,13 @@ generated message `map_entry` also report `protobuf.option_scope` on every
 other declaration kind. A misplaced supported option therefore reports
 `Invalid`, not an unsupported policy; unknown and custom options retain their
 existing outcome.
+File options `php_class_prefix` and `swift_prefix` accept quoted strings;
+`java_string_check_utf8` and the deprecated, no-effect
+`java_generate_equals_and_hash` option accept native booleans.
+Message option `no_standard_descriptor_accessor` also accepts a native boolean.
+These descriptor-defined hints retain scope and singular-assignment checks,
+including in imported files. Validation does not generate language-specific
+classes, remove accessors or change runtime wire-format UTF-8 checking.
 Proto2 floating defaults accept leading-decimal forms such as `.5` and
 `-.5e+2`, as specified by the
 [floating-point grammar](https://protobuf.dev/reference/protobuf/proto2-spec/#floating-point-literals).

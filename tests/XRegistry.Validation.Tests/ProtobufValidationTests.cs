@@ -1134,6 +1134,11 @@ public class ProtobufValidationTests
     [Arguments("php_metadata_namespace='Example'", "file")]
     [Arguments("ruby_package='Example'", "file")]
     [Arguments("java_multiple_files=true", "file")]
+    [Arguments("php_class_prefix='EX'", "file")]
+    [Arguments("swift_prefix='EX'", "file")]
+    [Arguments("java_string_check_utf8=true", "file")]
+    [Arguments("java_generate_equals_and_hash=false", "file")]
+    [Arguments("no_standard_descriptor_accessor=true", "message")]
     [Arguments("cc_generic_services=false", "file")]
     [Arguments("java_generic_services=false", "file")]
     [Arguments("py_generic_services=false", "file")]
@@ -1176,6 +1181,66 @@ public class ProtobufValidationTests
                 if (permitted) { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
                 else { await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.option_scope"); }
             }
+        }
+    }
+
+    [Test]
+    [Arguments("php_class_prefix", "true", false)]
+    [Arguments("swift_prefix", "0", false)]
+    [Arguments("java_string_check_utf8", "'true'", false)]
+    [Arguments("java_generate_equals_and_hash", "1", false)]
+    [Arguments("no_standard_descriptor_accessor", "+true", true)]
+    public async Task GeneratorHintsRejectIncorrectValueKinds(string name, string value, bool message)
+    {
+        var statement = $"option {name}={value};";
+        var body = message ? $"message Root {{ {statement} }}" : $"{statement} message Root {{}}";
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            Encoding.UTF8.GetBytes($"syntax='proto3'; {body}"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.option");
+    }
+
+    [Test]
+    [Arguments("php_class_prefix", "'EX'", "'OTHER'", false)]
+    [Arguments("swift_prefix", "'EX'", "'EX'", false)]
+    [Arguments("java_string_check_utf8", "true", "false", false)]
+    [Arguments("java_generate_equals_and_hash", "false", "false", false)]
+    [Arguments("no_standard_descriptor_accessor", "false", "true", true)]
+    public async Task GeneratorHintsRemainSingular(string name, string first, string second, bool message)
+    {
+        var statements = $"option {name}={first}; option deprecated=false; option {name}={second};";
+        var body = message ? $"message Root {{ {statements} }}" : $"{statements} message Root {{}}";
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            Encoding.UTF8.GetBytes($"syntax='proto3'; {body}"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.option");
+    }
+
+    [Test]
+    public async Task GeneratorHintsPreserveLiteralValuesAndIndependentScopes()
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var requests = 0;
+            var options = "option php_class_prefix='P' 'refix'; option swift_prefix=''; " +
+                "option java_string_check_utf8=false; option java_generate_equals_and_hash=true;";
+            var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                Encoding.UTF8.GetBytes($"syntax='proto{syntax}'; {options} import 'dep.proto'; " +
+                    "message Root { option no_standard_descriptor_accessor=false; " +
+                    "message Child { option no_standard_descriptor_accessor=true; } } " +
+                    "message Other { option no_standard_descriptor_accessor=true; }"), new()
+                {
+                    ResolveReference = (_, _) =>
+                    {
+                        requests++;
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes(
+                            $"syntax='proto{syntax}'; package dep; {options} " +
+                            "message Root { option no_standard_descriptor_accessor=true; }"));
+                    }
+                });
+            await Assert.That(requests).IsEqualTo(1);
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+            await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
         }
     }
 

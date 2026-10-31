@@ -426,7 +426,9 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             "java_package" or "java_outer_classname" or "go_package" or "csharp_namespace" or
             "objc_class_prefix" or "php_namespace" or "php_metadata_namespace" or "ruby_package" or
             "java_multiple_files" or "cc_generic_services" or "java_generic_services" or
-            "py_generic_services" or "cc_enable_arenas" or "optimize_for" => target == OptionTarget.File,
+            "py_generic_services" or "cc_enable_arenas" or "optimize_for" or "php_class_prefix" or
+            "swift_prefix" or "java_string_check_utf8" or "java_generate_equals_and_hash" => target == OptionTarget.File,
+            "no_standard_descriptor_accessor" => target == OptionTarget.Message,
             "packed" or "lazy" or "jstype" or "json_name" or "weak" or "default" => target == OptionTarget.Field,
             "allow_alias" => target == OptionTarget.Enum,
             "idempotency_level" => target == OptionTarget.Method,
@@ -846,13 +848,15 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                     "map_entry cannot be authored in a schema; use map syntax.");
             }
             if (option is "java_package" or "java_outer_classname" or "go_package" or "csharp_namespace" or
-                "objc_class_prefix" or "php_namespace" or "php_metadata_namespace" or "ruby_package")
+                "objc_class_prefix" or "php_namespace" or "php_metadata_namespace" or "ruby_package" or
+                "php_class_prefix" or "swift_prefix")
             {
                 Require(value.Kind == TokenKind.String, "protobuf.option", "The language namespace option requires a string.");
                 _ = value.Text;
             }
             else if (option is "deprecated" or "java_multiple_files" or "cc_generic_services" or
-                "java_generic_services" or "py_generic_services" or "cc_enable_arenas")
+                "java_generic_services" or "py_generic_services" or "cc_enable_arenas" or
+                "java_string_check_utf8" or "java_generate_equals_and_hash" or "no_standard_descriptor_accessor")
             {
                 Require(IsBoolean(value), "protobuf.option", "The option requires a boolean.");
             }
