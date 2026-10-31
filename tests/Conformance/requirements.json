@@ -27871,14 +27871,17 @@
       "text": "- `/<GROUPS>` - a plural Group type name. An entity attribute of this type/target MUST reference an instance of this Group type.",
       "review": {
         "status": "reviewed",
-        "note": "A Group-only target resolves to the Group plural and a null Resource type; CheckTarget rejects a Resource or Version below it. Direct positive Group-target and wrong-depth assertions were not found, so source inspection alone is not promoted to implemented evidence.",
+        "note": "CheckTarget resolves `/gs` to Group plural `gs` and rejects Resources or Versions below it. DeclaredTargetsAcceptDanglingEntityIdsWithoutExistenceChecks accepts a dangling Group ID; TargetsRejectTheWrongEntityKindOrDeclaredModelType rejects both a Resource path and a Group ID under another plural.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DeclaredTargetsAcceptDanglingEntityIdsWithoutExistenceChecks",
+          "TargetsRejectTheWrongEntityKindOrDeclaredModelType"
+        ],
         "nativeEvidence": []
       }
     },
@@ -27968,14 +27971,17 @@
       "text": "- `/GROUPS/<RESOURCES>/versions` - a Version of a Resource type. An entity attribute of this type/target MUST reference an instance of a Version of this Resource type, not the Resource itself.",
       "review": {
         "status": "reviewed",
-        "note": "The /versions form sets Versions=required and CheckTarget demands Kind.Version, unlike the Resource-only branch. The printed /GROUPS spelling is read with the surrounding plural-name template rules, not as a literal uppercase collection. Direct required-Version acceptance/Resource-rejection cases are missing.",
+        "note": "The `/versions` target requires a Version of the declared Resource type. DeclaredTargetsAcceptDanglingEntityIdsWithoutExistenceChecks accepts a dangling Version ID; TargetsRejectTheWrongEntityKindOrDeclaredModelType rejects a Resource and a Meta path.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DeclaredTargetsAcceptDanglingEntityIdsWithoutExistenceChecks",
+          "TargetsRejectTheWrongEntityKindOrDeclaredModelType"
+        ],
         "nativeEvidence": []
       }
     },

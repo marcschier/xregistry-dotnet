@@ -43,6 +43,7 @@ public class RegistryXidTargetKindTests
     [Arguments("/gs/rs/versions", "/gs/g/rs/r")]
     [Arguments("/gs/rs/versions", "/gs/g/rs/r/meta")]
     [Arguments("/gs", "/gs/g/rs/r")]
+    [Arguments("/gs", "/other/g")]
     [Arguments("/gs/rs", "/other/g/rs/r")]
     [Arguments("/gs/rs", "/gs/g/others/r")]
     public async Task TargetsRejectTheWrongEntityKindOrDeclaredModelType(string target, string xid)
