@@ -170,10 +170,13 @@ public class LifecycleTests
         var engine = Create();
         await Send(engine, RegistryAction.Replace, "/teams/g", """{"name":"name","description":"keep"}""");
         var result = await Send(engine, RegistryAction.Patch, "/teams/g", """
-            {"name":null,"self":{"invalid":"ignored"},"notescount":"ignored"}
+            {"name":null,"self":{"invalid":"ignored"},"notesurl":"ignored","notescount":"ignored"}
             """);
         await Assert.That(result.Metadata!.RootElement.TryGetProperty("name", out _)).IsFalse();
         await Assert.That(result.Metadata.RootElement.GetProperty("description").GetString()).IsEqualTo("keep");
+        await Assert.That(result.Metadata.RootElement.GetProperty("notesurl").GetString())
+            .IsEqualTo("https://registry.example/catalog/teams/g/notes");
+        await Assert.That(result.Metadata.RootElement.GetProperty("notescount").GetInt32()).IsEqualTo(0);
     }
 
     [Test]

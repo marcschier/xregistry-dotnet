@@ -11,6 +11,26 @@ namespace XRegistry.Server.Tests;
 public class RegistryRepresentationTests
 {
     [Test]
+    public async Task IncludedEmptyCollectionsAreSerializedAsEmptyMaps()
+    {
+        var engine = Create();
+        var root = (await Send(engine, RegistryAction.Read, "/", null, new KeyValuePair<string, string?>("inline", "*"))).Metadata!.RootElement;
+        await Assert.That(root.GetProperty("teams").EnumerateObject().Any()).IsFalse();
+        await Assert.That(root.GetProperty("teamscount").GetInt32()).IsEqualTo(0);
+        await Assert.That(root.GetProperty("teamsurl").GetString()).IsEqualTo("https://registry.example/catalog/teams");
+
+        await Send(engine, RegistryAction.Replace, "/teams/g", "{}");
+        var group = (await Send(engine, RegistryAction.Read, "/teams/g", null, new KeyValuePair<string, string?>("inline", "*"))).Metadata!.RootElement;
+        foreach (var collection in new[] { "notes", "files" })
+        {
+            await Assert.That(group.GetProperty(collection).EnumerateObject().Any()).IsFalse();
+            await Assert.That(group.GetProperty(collection + "count").GetInt32()).IsEqualTo(0);
+            await Assert.That(group.GetProperty(collection + "url").GetString())
+                .IsEqualTo("https://registry.example/catalog/teams/g/" + collection);
+        }
+    }
+
+    [Test]
     public async Task CollectionsOnlyRootDoesNotExposeItsShortSelf()
     {
         var engine = MutableEngine();

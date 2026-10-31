@@ -4468,7 +4468,7 @@
       "text": "Registry collections (`<GROUPS>`, `<RESOURCES>` and `versions`) that are defined by the [Registry Model](./model.md#registry-model) MUST be serialized according to the rules defined in this section.",
       "review": {
         "status": "reviewed",
-        "note": "Full collection form read with API/Doc, inline, filtered, empty and readonly-helper rules. Representative output assertions exist, but complete three-attribute forms for every collection/representation and source role are not promoted wholesale.",
+        "note": "API and document-view tests exercise Group, Resource and Version collections, including filtered and empty responses. This umbrella clause remains pending because it covers the full collection contract, whose individual requirements are tracked below.",
         "roles": [
           "server",
           "producer"
@@ -4504,7 +4504,7 @@
       "text": "The serialization of a collection is done as 3 attributes and they MUST adhere to their respective forms as follows:",
       "review": {
         "status": "reviewed",
-        "note": "Full collection form read with API/Doc, inline, filtered, empty and readonly-helper rules. Representative output assertions exist, but complete three-attribute forms for every collection/representation and source role are not promoted wholesale.",
+        "note": "API and document-view tests exercise collection maps, URLs and counts for Group, Resource and Version collections. This umbrella clause remains pending until every individual form and view requirement below is closed.",
         "roles": [
           "server",
           "producer"
@@ -4577,22 +4577,25 @@
       "text": "- The `<COLLECTION>url` attribute MUST be a URL that can be used to retrieve the `<COLLECTION>` map via a protocol-specific query mechanism. This URL MAY include any necessary [filtering](#filter-flag) and MUST be a read-only attribute. This attribute MUST be an absolute URL except in document view when the collection is inlined, in which case it MUST be a relative URL.",
       "review": {
         "status": "reviewed",
-        "note": "Generated links/counts use authorized selected membership, and Doc rewrites inlined links. Full compound evidence is still missing for helper readonly input, direct follow of every filtered link, absolute non-inlined variants and all collection kinds; a count assertion alone is insufficient.",
+        "note": "API tests assert absolute URLs at Registry, Group and Resource levels and follow a returned Version-collection URL. Document-view tests assert response-local relative pointers for inlined collections. Filtered URL generation and ignored read-only URL input are also covered.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "FiltersDoNotInlineAndEmptyCollectionLinksUseExcludeAll",
+          "FilteredInlineCollectionsKeepEmptyMapsAndMatchingCounts",
           "FilterCommasAreAndAndRepeatedParametersAreOrWithoutNumericStringComparison",
           "NestedAndIntersectsMatchingLeavesRatherThanDifferentSiblingWitnesses",
           "OrMatchingParentIncludesItsChildrenWhileAndRestrictsTheChildCollection",
           "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
+          "DocumentViewIncludesSelectedEmptyCollectionsAsRelativeMaps",
           "EveryEntityAndCollectionUsesItsActualResponseRoot",
           "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks",
+          "IncludedEmptyCollectionsAreSerializedAsEmptyMaps",
           "PatchNullDeletesWhileMissingPreservesAndReadonlyInputIsIgnored"
         ],
         "nativeEvidence": []
@@ -4614,22 +4617,25 @@
       "text": "- The `<COLLECTION>count` attribute MUST contain the number of entities in the `<COLLECTION>` map (after any necessary [filtering](#filter-flag)) and MUST be a read-only attribute.",
       "review": {
         "status": "reviewed",
-        "note": "Generated links/counts use authorized selected membership, and Doc rewrites inlined links. Full compound evidence is still missing for helper readonly input, direct follow of every filtered link, absolute non-inlined variants and all collection kinds; a count assertion alone is insufficient.",
+        "note": "Counts match filtered maps for empty and nonempty selections, and API/document-view tests assert counts at Group, Resource and Version collections. An attempted request overwrite is ignored and the computed count is returned.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "FiltersDoNotInlineAndEmptyCollectionLinksUseExcludeAll",
+          "FilteredInlineCollectionsKeepEmptyMapsAndMatchingCounts",
           "FilterCommasAreAndAndRepeatedParametersAreOrWithoutNumericStringComparison",
           "NestedAndIntersectsMatchingLeavesRatherThanDifferentSiblingWitnesses",
           "OrMatchingParentIncludesItsChildrenWhileAndRestrictsTheChildCollection",
           "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
+          "DocumentViewIncludesSelectedEmptyCollectionsAsRelativeMaps",
           "EveryEntityAndCollectionUsesItsActualResponseRoot",
           "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks",
+          "IncludedEmptyCollectionsAreSerializedAsEmptyMaps",
           "PatchNullDeletesWhileMissingPreservesAndReadonlyInputIsIgnored"
         ],
         "nativeEvidence": []
@@ -4747,16 +4753,19 @@
       "text": "When the `<COLLECTION>` attribute is expected to be present in the serialization, but the number of entities in the collection is zero, it MUST still be included as an empty map (e.g. `{}`) in the serialization.",
       "review": {
         "status": "reviewed",
-        "note": "Renderer creates empty JsonObject collection maps and includes only requested inline paths; producer does likewise. Existing assertions cover empty direct collections and selected nested output but not the full inline empty/nonempty, include/exclude and every-level required URL matrix.",
+        "note": "API tests assert empty maps and zero counts at Registry and Group levels; a filtered inline collection is also empty but present. Document-view tests cover both selected empty maps with relative URLs and omission when not selected.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "FiltersDoNotInlineAndEmptyCollectionLinksUseExcludeAll",
+          "FilteredInlineCollectionsKeepEmptyMapsAndMatchingCounts",
+          "IncludedEmptyCollectionsAreSerializedAsEmptyMaps",
+          "DocumentViewIncludesSelectedEmptyCollectionsAsRelativeMaps",
           "CollectionsViewOmitsOnlyTheTopEntityAndKeepsNestedMetadataAndPointers",
           "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
           "EveryEntityAndCollectionUsesItsActualResponseRoot",
@@ -4810,16 +4819,19 @@
       "text": "- `<COLLECTION>` is conditional in responses based on the values in the [Inline Flag](#inline-flag). If a collection is part of the flag's value then `<COLLECTION>` MUST be present in the response even if it is empty (e.g. `{}`). If the collection is not part of the flag value then `<COLLECTION>` MUST NOT be included in the response.",
       "review": {
         "status": "reviewed",
-        "note": "Renderer creates empty JsonObject collection maps and includes only requested inline paths; producer does likewise. Existing assertions cover empty direct collections and selected nested output but not the full inline empty/nonempty, include/exclude and every-level required URL matrix.",
+        "note": "Document-view tests verify selected collections appear, including empty maps, while unselected collections are omitted. API-view tests cover the same inline selection rule and preserve URLs/counts when a map is omitted.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "FiltersDoNotInlineAndEmptyCollectionLinksUseExcludeAll",
+          "FilteredInlineCollectionsKeepEmptyMapsAndMatchingCounts",
+          "IncludedEmptyCollectionsAreSerializedAsEmptyMaps",
+          "DocumentViewIncludesSelectedEmptyCollectionsAsRelativeMaps",
           "CollectionsViewOmitsOnlyTheTopEntityAndKeepsNestedMetadataAndPointers",
           "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
           "EveryEntityAndCollectionUsesItsActualResponseRoot",
@@ -4844,20 +4856,23 @@
       "text": "- `<COLLECTION>url` is REQUIRED for responses even if there are no entities in the collection.",
       "review": {
         "status": "reviewed",
-        "note": "Renderer creates empty JsonObject collection maps and includes only requested inline paths; producer does likewise. Existing assertions cover empty direct collections and selected nested output but not the full inline empty/nonempty, include/exclude and every-level required URL matrix.",
+        "note": "API-view assertions verify absolute collection URLs at Registry, Group and Resource levels, including empty collections and responses where the map is not inlined.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "FiltersDoNotInlineAndEmptyCollectionLinksUseExcludeAll",
+          "IncludedEmptyCollectionsAreSerializedAsEmptyMaps",
           "CollectionsViewOmitsOnlyTheTopEntityAndKeepsNestedMetadataAndPointers",
           "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
+          "DocumentViewIncludesSelectedEmptyCollectionsAsRelativeMaps",
           "EveryEntityAndCollectionUsesItsActualResponseRoot",
-          "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks"
+          "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks",
+          "FilteredInlineCollectionsKeepEmptyMapsAndMatchingCounts"
         ],
         "nativeEvidence": []
       }
@@ -4947,16 +4962,18 @@
       "text": "- `<COLLECTION>` is conditional in responses based on the values in the [Inline Flag](#inline-flag). If a collection is part of the flag's value then `<COLLECTION>` MUST be present in the response even if it is empty (e.g. `{}`). If the collection is not part of the flag value then `<COLLECTION>` MUST NOT be included in the response.",
       "review": {
         "status": "reviewed",
-        "note": "Renderer creates empty JsonObject collection maps and includes only requested inline paths; producer does likewise. Existing assertions cover empty direct collections and selected nested output but not the full inline empty/nonempty, include/exclude and every-level required URL matrix.",
+        "note": "API-view tests verify that inline-selected maps are present, including empty maps, and that nonselected maps are omitted while their required URL/count metadata remains.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "FiltersDoNotInlineAndEmptyCollectionLinksUseExcludeAll",
+          "FilteredInlineCollectionsKeepEmptyMapsAndMatchingCounts",
+          "IncludedEmptyCollectionsAreSerializedAsEmptyMaps",
           "CollectionsViewOmitsOnlyTheTopEntityAndKeepsNestedMetadataAndPointers",
           "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
           "EveryEntityAndCollectionUsesItsActualResponseRoot",
@@ -64614,9 +64631,11 @@
       ],
       "text": "Registry collections (`<GROUPS>`, `<RESOURCES>` and `versions`) that are defined by the [Registry Model](./model.md#registry-model) MUST be serialized according to the rules defined in this section.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "API and document-view tests exercise Group, Resource and Version collections, including filtered and empty responses. This umbrella clause remains pending because it covers the full collection contract, whose individual requirements are tracked below.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -64645,9 +64664,11 @@
       ],
       "text": "The serialization of a collection is done as 3 attributes and they MUST adhere to their respective forms as follows:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "API and document-view tests exercise collection maps, URLs and counts for Group, Resource and Version collections. This umbrella clause remains pending until every individual form and view requirement below is closed.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -64676,13 +64697,20 @@
       ],
       "text": "- The term `<COLLECTION>` MUST be the plural name of the collection (e.g. `endpoints`, `versions`).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "API and document-view assertions verify plural collection names at Registry, Group and Resource levels, including the versions collection.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
+          "DocumentViewIncludesSelectedEmptyCollectionsAsRelativeMaps",
+          "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks",
+          "IncludedEmptyCollectionsAreSerializedAsEmptyMaps"
+        ],
         "nativeEvidence": []
       }
     },
@@ -64708,13 +64736,22 @@
       ],
       "text": "- The `<COLLECTION>url` attribute MUST be a URL that can be used to retrieve the `<COLLECTION>` map via a protocol-specific query mechanism. This URL MAY include any necessary [filtering](#filter-flag) and MUST be a read-only attribute. This attribute MUST be an absolute URL except in document view when the collection is inlined, in which case it MUST be a relative URL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "API tests assert absolute URLs at Registry, Group and Resource levels and follow a returned Version-collection URL. Document-view tests assert response-local relative pointers for inlined collections. Filtered URL generation and ignored read-only URL input are also covered.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FiltersDoNotInlineAndEmptyCollectionLinksUseExcludeAll",
+          "FilteredInlineCollectionsKeepEmptyMapsAndMatchingCounts",
+          "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
+          "DocumentViewIncludesSelectedEmptyCollectionsAsRelativeMaps",
+          "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks",
+          "PatchNullDeletesWhileMissingPreservesAndReadonlyInputIsIgnored"
+        ],
         "nativeEvidence": []
       }
     },
@@ -64739,13 +64776,22 @@
       ],
       "text": "- The `<COLLECTION>count` attribute MUST contain the number of entities in the `<COLLECTION>` map (after any necessary [filtering](#filter-flag)) and MUST be a read-only attribute.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Counts match filtered maps for empty and nonempty selections, and API/document-view tests assert counts at Group, Resource and Version collections. An attempted request overwrite is ignored and the computed count is returned.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FiltersDoNotInlineAndEmptyCollectionLinksUseExcludeAll",
+          "FilteredInlineCollectionsKeepEmptyMapsAndMatchingCounts",
+          "OrMatchingParentIncludesItsChildrenWhileAndRestrictsTheChildCollection",
+          "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
+          "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks",
+          "PatchNullDeletesWhileMissingPreservesAndReadonlyInputIsIgnored"
+        ],
         "nativeEvidence": []
       }
     },
@@ -64864,13 +64910,19 @@
       ],
       "text": "When the `<COLLECTION>` attribute is expected to be present in the serialization, but the number of entities in the collection is zero, it MUST still be included as an empty map (e.g. `{}`) in the serialization.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "API and document-view tests assert empty maps when inline selection includes an empty collection, and query tests cover an empty filtered collection.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "IncludedEmptyCollectionsAreSerializedAsEmptyMaps",
+          "FilteredInlineCollectionsKeepEmptyMapsAndMatchingCounts",
+          "DocumentViewIncludesSelectedEmptyCollectionsAsRelativeMaps"
+        ],
         "nativeEvidence": []
       }
     },
@@ -64895,9 +64947,11 @@
       ],
       "text": "- `<COLLECTION>url` and `<COLLECTION>count` are OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Optional marker only. The operative API and document-view presence rules are tracked in their own requirements.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -64927,13 +64981,24 @@
       ],
       "text": "- `<COLLECTION>` is conditional in responses based on the values in the [Inline Flag](#inline-flag). If a collection is part of the flag's value then `<COLLECTION>` MUST be present in the response even if it is empty (e.g. `{}`). If the collection is not part of the flag value then `<COLLECTION>` MUST NOT be included in the response.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Document-view tests verify selected collections appear, including empty maps, while unselected collections are omitted. API-view tests cover the same inline selection rule and preserve URLs/counts when a map is omitted.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FiltersDoNotInlineAndEmptyCollectionLinksUseExcludeAll",
+          "FilteredInlineCollectionsKeepEmptyMapsAndMatchingCounts",
+          "IncludedEmptyCollectionsAreSerializedAsEmptyMaps",
+          "DocumentViewIncludesSelectedEmptyCollectionsAsRelativeMaps",
+          "CollectionsViewOmitsOnlyTheTopEntityAndKeepsNestedMetadataAndPointers",
+          "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
+          "EveryEntityAndCollectionUsesItsActualResponseRoot",
+          "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks"
+        ],
         "nativeEvidence": []
       }
     },
@@ -64958,13 +65023,20 @@
       ],
       "text": "- `<COLLECTION>url` is REQUIRED for responses even if there are no entities in the collection.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "API-view assertions verify absolute collection URLs at Registry, Group and Resource levels, including empty collections and responses where the map is not inlined.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FiltersDoNotInlineAndEmptyCollectionLinksUseExcludeAll",
+          "IncludedEmptyCollectionsAreSerializedAsEmptyMaps",
+          "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks",
+          "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication"
+        ],
         "nativeEvidence": []
       }
     },
@@ -64989,13 +65061,21 @@
       ],
       "text": "- `<COLLECTION>count` is STRONGLY RECOMMENDED for responses even if there are no entities in the collection. This requirement is not mandated to allow for cases where calculating the exact count is too costly.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The implementation emits counts for empty and nonempty collections; tests assert exact counts for filtered, Registry, Group, Resource and Version views.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "IncludedEmptyCollectionsAreSerializedAsEmptyMaps",
+          "FilteredInlineCollectionsKeepEmptyMapsAndMatchingCounts",
+          "OrMatchingParentIncludesItsChildrenWhileAndRestrictsTheChildCollection",
+          "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
+          "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks"
+        ],
         "nativeEvidence": []
       }
     },
@@ -65021,13 +65101,17 @@
       ],
       "text": "- `<COLLECTION>url` and `<COLLECTION>count` are OPTIONAL in requests and MUST be silently ignored by the server if present.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A Group PATCH supplies invalid collection URL/count values; the request succeeds and returns the server-computed collection link and count.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "PatchNullDeletesWhileMissingPreservesAndReadonlyInputIsIgnored"
+        ],
         "nativeEvidence": []
       }
     },
@@ -65053,13 +65137,21 @@
       ],
       "text": "- `<COLLECTION>` is conditional in responses based on the values in the [Inline Flag](#inline-flag). If a collection is part of the flag's value then `<COLLECTION>` MUST be present in the response even if it is empty (e.g. `{}`). If the collection is not part of the flag value then `<COLLECTION>` MUST NOT be included in the response.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "API-view tests verify that inline-selected maps are present, including empty maps, and that nonselected maps are omitted while their required URL/count metadata remains.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FiltersDoNotInlineAndEmptyCollectionLinksUseExcludeAll",
+          "FilteredInlineCollectionsKeepEmptyMapsAndMatchingCounts",
+          "IncludedEmptyCollectionsAreSerializedAsEmptyMaps",
+          "CollectionsViewOmitsOnlyTheTopEntityAndKeepsNestedMetadataAndPointers",
+          "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks"
+        ],
         "nativeEvidence": []
       }
     },
@@ -65084,9 +65176,11 @@
       ],
       "text": "- `<COLLECTION>` is OPTIONAL for requests. See [Updating Nested Registry Collections](#updating-nested-registry-collections) for more details.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Optional marker only. The operative collection update behavior is tracked in the nested-collection requirements.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",

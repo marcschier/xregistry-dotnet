@@ -24,7 +24,14 @@ public class BridgeViewTests
         var root = await BridgeFixture.Json(response);
         await Assert.That(root.GetProperty("self").GetString()).IsEqualTo("#/");
         await Assert.That(root.GetProperty("dirsurl").GetString()).IsEqualTo("#/dirs");
+        await Assert.That(root.GetProperty("dirscount").GetInt32()).IsEqualTo(1);
         var resource = root.GetProperty("dirs").GetProperty("g").GetProperty("files").GetProperty("shared");
+        var group = root.GetProperty("dirs").GetProperty("g");
+        await Assert.That(group.GetProperty("filesurl").GetString()).IsEqualTo("#/dirs/g/files");
+        await Assert.That(group.GetProperty("filescount").GetInt32()).IsEqualTo(2);
+        await Assert.That(group.TryGetProperty("notes", out _)).IsFalse();
+        await Assert.That(resource.GetProperty("versionsurl").GetString()).IsEqualTo("#/dirs/g/files/shared/versions");
+        await Assert.That(resource.GetProperty("versionscount").GetInt32()).IsEqualTo(1);
         await Assert.That(resource.GetProperty("self").GetString()).IsEqualTo("#/dirs/g/files/shared");
         await Assert.That(resource.TryGetProperty("versionid", out _)).IsFalse();
         await Assert.That(resource.TryGetProperty("epoch", out _)).IsFalse();
@@ -37,6 +44,21 @@ public class BridgeViewTests
         await Assert.That(version.GetProperty("domain").GetProperty("self").GetString()).IsEqualTo("https://local.example/opaque");
         await Assert.That(root.TryGetProperty("model", out _)).IsFalse();
         await Assert.That(root.TryGetProperty("modelsource", out _)).IsFalse();
+    }
+
+    [Test]
+    public async Task DocumentViewIncludesSelectedEmptyCollectionsAsRelativeMaps()
+    {
+        var source = new ControlledSource("local", "v1", ["shared"]);
+        await using var app = await BridgeFixture.StartAsync([source.Registration()]);
+        using var client = BridgeFixture.Client(app);
+        using var response = await client.GetAsync("/registry?doc&inline=dirs.notes");
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        var root = await BridgeFixture.Json(response);
+        var group = root.GetProperty("dirs").GetProperty("g");
+        await Assert.That(group.GetProperty("notes").EnumerateObject().Any()).IsFalse();
+        await Assert.That(group.GetProperty("notescount").GetInt32()).IsEqualTo(0);
+        await Assert.That(group.GetProperty("notesurl").GetString()).IsEqualTo("#/dirs/g/notes");
     }
 
     [Test]
@@ -112,10 +134,39 @@ public class BridgeViewTests
         var value = await BridgeFixture.Json(response);
         await Assert.That(value.GetProperty("versionid").GetString()).IsEqualTo("v1");
         await Assert.That(value.GetProperty("self").GetString()).IsEqualTo("https://bridge.example/registry/dirs/g/files/shared$details");
+        await Assert.That(value.GetProperty("versionsurl").GetString())
+            .IsEqualTo("https://bridge.example/registry/dirs/g/files/shared/versions");
+        await Assert.That(value.GetProperty("versionscount").GetInt32()).IsEqualTo(1);
+        await Assert.That(string.Join(",", value.GetProperty("versions").EnumerateObject().Select(property => property.Name))).IsEqualTo("v1");
         await Assert.That(value.GetProperty("meta").GetProperty("defaultversionurl").GetString())
             .IsEqualTo("https://bridge.example/registry/dirs/g/files/shared/versions/v1$details");
         await Assert.That(value.GetProperty("versions").GetProperty("v1").GetProperty("self").GetString())
             .IsEqualTo("https://bridge.example/registry/dirs/g/files/shared/versions/v1$details");
+
+        using var rootResponse = await client.GetAsync("/registry?inline=*");
+        var root = await BridgeFixture.Json(rootResponse);
+        await Assert.That(root.GetProperty("dirsurl").GetString()).IsEqualTo("https://bridge.example/registry/dirs");
+        await Assert.That(root.GetProperty("dirscount").GetInt32()).IsEqualTo(1);
+        var group = root.GetProperty("dirs").GetProperty("g");
+        await Assert.That(group.GetProperty("filesurl").GetString()).IsEqualTo("https://bridge.example/registry/dirs/g/files");
+        await Assert.That(group.GetProperty("filescount").GetInt32()).IsEqualTo(1);
+        var resource = group.GetProperty("files").GetProperty("shared");
+        await Assert.That(resource.GetProperty("versionsurl").GetString())
+            .IsEqualTo("https://bridge.example/registry/dirs/g/files/shared/versions");
+        await Assert.That(resource.GetProperty("versionscount").GetInt32()).IsEqualTo(1);
+        await Assert.That(string.Join(",", resource.GetProperty("versions").EnumerateObject().Select(property => property.Name)))
+            .IsEqualTo("v1");
+
+        using var unexpandedResponse = await client.GetAsync("/registry/dirs/g/files/shared$details");
+        var unexpanded = await BridgeFixture.Json(unexpandedResponse);
+        await Assert.That(unexpanded.TryGetProperty("versions", out _)).IsFalse();
+        await Assert.That(unexpanded.GetProperty("versionsurl").GetString())
+            .IsEqualTo("https://bridge.example/registry/dirs/g/files/shared/versions");
+        await Assert.That(unexpanded.GetProperty("versionscount").GetInt32()).IsEqualTo(1);
+        var collectionUrl = new Uri(unexpanded.GetProperty("versionsurl").GetString()!);
+        using var collectionResponse = await client.GetAsync(collectionUrl.PathAndQuery);
+        var collection = await BridgeFixture.Json(collectionResponse);
+        await Assert.That(string.Join(",", collection.EnumerateObject().Select(property => property.Name))).IsEqualTo("v1");
     }
 
     [Test]

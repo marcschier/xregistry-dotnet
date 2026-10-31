@@ -114,6 +114,19 @@ public class RegistryQueryTests
     }
 
     [Test]
+    public async Task FilteredInlineCollectionsKeepEmptyMapsAndMatchingCounts()
+    {
+        var engine = await Seed();
+        var result = await Send(engine, RegistryAction.Read, "/", null,
+            new("filter", "fleets.name=missing"), new("inline", "*"));
+        var root = result.Metadata!.RootElement;
+        await Assert.That(root.GetProperty("fleets").EnumerateObject().Any()).IsFalse();
+        await Assert.That(root.GetProperty("fleetscount").GetInt32()).IsEqualTo(0);
+        await Assert.That(root.GetProperty("fleetsurl").GetString())
+            .IsEqualTo("https://registry.example/catalog/fleets?filter=excludeall");
+    }
+
+    [Test]
     [Arguments("info.owner=JOE")]
     [Arguments("info.reviewers[*]=steve")]
     [Arguments("info.reviewers[1]=Steve")]
