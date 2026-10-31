@@ -1487,6 +1487,32 @@ public class ModelAndVersionTests
     }
 
     [Test]
+    public async Task ModifiedAtOrderingUsesCaseInsensitiveVersionIdsForTimestampTies()
+    {
+        const string model = """
+            {"groups":{"teams":{"singular":"team","resources":{"notes":{
+              "singular":"note","hasdocument":false,"versionmode":"modifiedat","singleversionroot":true
+            }}}}}
+            """;
+        var engine = new RegistryEngine(new()
+        {
+            RegistryId = "ordering",
+            PublicRoot = new Uri("https://registry.example"),
+            TimeProvider = new OrderingClock(),
+            Model = RegistryModel.Compile(RegistryJson.Parse(model))
+        }, new InMemoryRegistryPersistence(), new PermitPolicy());
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n/versions/z",
+            """{"modifiedat":"2040-01-01T00:00:00Z"}""");
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n/versions/a",
+            """{"modifiedat":"2040-01-01T00:00:00Z"}""");
+        var versions = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n/versions")).Metadata!.RootElement;
+        await Assert.That(versions.GetProperty("a").GetProperty("ancestorid").GetString()).IsEqualTo("a");
+        await Assert.That(versions.GetProperty("z").GetProperty("ancestorid").GetString()).IsEqualTo("a");
+        var meta = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n/meta")).Metadata!.RootElement;
+        await Assert.That(meta.GetProperty("defaultversionid").GetString()).IsEqualTo("z");
+    }
+
+    [Test]
     public async Task ModelNullResetAndReadonlyCapabilitiesInputFollowRootProcessing()
     {
         var engine = Create();
