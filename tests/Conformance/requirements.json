@@ -15170,21 +15170,27 @@
       "text": "The `doc` flag MAY be used to indicate that the response MUST use \"document view\" when serializing entities and MUST be modified to do the following:",
       "review": {
         "status": "reviewed",
-        "note": "Document-view Version output omits both validation states and reason attributes. MappedDocVersionsOmitReasonsWithoutChangingApiValidation asserts their absence for Version, Version collection, Resource inline Versions, and export responses while confirming API details retain them. Broader entity and field combinations remain unproven.",
+        "note": "Server and Bridge tests cover document serialization across Resource, Meta, Version, collection, export and alias views. They assert removal of default-Version projections, validation fields and shortself; exclusion of target-owned xref metadata; metadata-view serialization of Documents; and response-root pointers only for included targets. API views and stored metadata remain unchanged.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "ExportUsesRelativePointersAndNoDefaultProjection",
           "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
           "EveryEntityAndCollectionUsesItsActualResponseRoot",
           "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks",
           "DocumentAliasStaysUnresolvedAndAliasVersionViewsHaveSpecificCoreError",
-          "MappedDocVersionsOmitReasonsWithoutChangingApiValidation"
+          "MappedDocVersionsOmitReasonsWithoutChangingApiValidation",
+          "DocVersionOmitsValidationReasonsButApiRetainsThem",
+          "DocProjectionRemovesValidationReasonsAtEveryVersionDepth",
+          "CollectionsProjectionKeepsOnlyNestedEntityShortSelf",
+          "MappedCollectionsOnlyResponseKeepsNestedShortSelf",
+          "DocumentLinksAreRelativeOnlyWhenTheirTargetsAreIncluded",
+          "DocumentViewIncludesSelectedEmptyCollectionsAsRelativeMaps"
         ],
         "nativeEvidence": []
       }
