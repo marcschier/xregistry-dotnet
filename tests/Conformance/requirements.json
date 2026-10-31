@@ -1133,7 +1133,7 @@
       "text": "- Their names MUST be between 1 and 63 characters in length.",
       "review": {
         "status": "reviewed",
-        "note": "Core checks declared/wildcard attribute names using RegistryNames and rejects an uppercase wildcard name. Exact ordinary attribute-name boundary and punctuation/leading-digit assertions were not established in this review; the separate model review is not imported as automatic Core coverage.",
+        "note": "Core model compilation and wildcard metadata validation accept attribute names of 1 and 63 characters and reject empty and 64-character names.",
         "roles": [
           "server",
           "producer"
@@ -1142,6 +1142,7 @@
       "implementation": {
         "status": "pending",
         "testIds": [
+          "AttributeNamesFollowCoreCharacterAndLengthRules",
           "WildcardsDoNotPermitInvalidNamesOrBypassDeclaredTypes"
         ],
         "nativeEvidence": []
@@ -1164,7 +1165,7 @@
       "text": "- Their names MUST only contain lowercase alphanumeric characters or an underscore (`[a-z0-9_]`) and MUST NOT start with a digit (`[0-9]`).",
       "review": {
         "status": "reviewed",
-        "note": "Core checks declared/wildcard attribute names using RegistryNames and rejects an uppercase wildcard name. Exact ordinary attribute-name boundary and punctuation/leading-digit assertions were not established in this review; the separate model review is not imported as automatic Core coverage.",
+        "note": "Core model compilation and wildcard metadata validation accept lowercase letters, an initial underscore and digits after the first character. They reject leading digits, uppercase, non-ASCII letters and punctuation.",
         "roles": [
           "server",
           "producer"
@@ -1173,6 +1174,7 @@
       "implementation": {
         "status": "pending",
         "testIds": [
+          "AttributeNamesFollowCoreCharacterAndLengthRules",
           "WildcardsDoNotPermitInvalidNamesOrBypassDeclaredTypes"
         ],
         "nativeEvidence": []

@@ -15,6 +15,26 @@ public class RegistryModelCompilerRegressionTests
         """;
 
     [Test]
+    public async Task AttributeNamesFollowCoreCharacterAndLengthRules()
+    {
+        var acceptedNames = new[] { "a", "_", "a9_b", new string('a', 63) };
+        foreach (var name in acceptedNames)
+        {
+            var source = new JsonObject { ["attributes"] = new JsonObject { [name] = "string" } };
+            var model = RegistryModel.Compile(RegistryJson.Parse(source.ToJsonString()));
+            await Assert.That(model.Attributes.ContainsKey(name)).IsTrue();
+        }
+
+        var rejectedNames = new[] { "", "1leading", "Upper", "a-b", "a:b", "a.b", new string('a', 64) };
+        foreach (var name in rejectedNames)
+        {
+            var source = new JsonObject { ["attributes"] = new JsonObject { [name] = "string" } };
+            var error = TestErrors.Capture(() => RegistryModel.Compile(RegistryJson.Parse(source.ToJsonString())));
+            await Assert.That(error.Code).IsEqualTo("model_error");
+        }
+    }
+
+    [Test]
     [Arguments("meta", false)]
     [Arguments("metaurl", false)]
     [Arguments("versions", false)]

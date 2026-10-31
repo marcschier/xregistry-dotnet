@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using TUnit.Assertions;
 using TUnit.Core;
 
@@ -211,10 +212,26 @@ public class RegistryMetadataTests
     public async Task WildcardsDoNotPermitInvalidNamesOrBypassDeclaredTypes()
     {
         var definitions = Shape("""{"known":"integer","*":{"type":"string"}}""");
-        var valid = RegistryMetadataValidator.Validate(RegistryJson.Parse("""{"known":3,"other":"value"}"""), definitions);
-        await Assert.That(valid.Metadata.RootElement.GetProperty("other").GetString()).IsEqualTo("value");
-        await Assert.That(TestErrors.Capture(() => RegistryMetadataValidator.Validate(
-            RegistryJson.Parse("""{"Bad":"value"}"""), definitions)).Code).IsEqualTo("unknown_attribute");
+        var acceptedNames = new[] { "a", "_", "a9_b", new string('a', 63) };
+        var input = new JsonObject { ["known"] = 3 };
+        foreach (var name in acceptedNames)
+        {
+            input[name] = "value";
+        }
+
+        var valid = RegistryMetadataValidator.Validate(RegistryJson.Parse(input.ToJsonString()), definitions);
+        foreach (var name in acceptedNames)
+        {
+            await Assert.That(valid.Metadata.RootElement.GetProperty(name).GetString()).IsEqualTo("value");
+        }
+
+        foreach (var name in new[] { "", "1leading", "Upper", "upperA", "a-b", "a:b", "a.b", "é", new string('a', 64) })
+        {
+            var invalid = new JsonObject { [name] = "value" };
+            await Assert.That(TestErrors.Capture(() => RegistryMetadataValidator.Validate(
+                RegistryJson.Parse(invalid.ToJsonString()), definitions)).Code).IsEqualTo("unknown_attribute");
+        }
+
         await Assert.That(TestErrors.Capture(() => RegistryMetadataValidator.Validate(
             RegistryJson.Parse("""{"other":3}"""), definitions)).Code).IsEqualTo("invalid_attribute");
     }
