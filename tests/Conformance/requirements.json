@@ -2614,14 +2614,16 @@
       "text": "- MUST be a read-only attribute.",
       "review": {
         "status": "reviewed",
-        "note": "Readonly shortself is declared and response values come only from persisted mappings; no direct assertion here submits an invalid shortself override and proves the original token is retained.",
+        "note": "Core declares `shortself` read-only and immutable across Registry, Group, Resource, Meta and Version. A test submits a forged URL to Resource and Meta updates and verifies the generated values remain unchanged; the Meta-only update also leaves the Resource epoch unchanged.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
+          "CoreShortSelfAttributesAreImmutableReadonlyUrlsAcrossEntityPlanes",
+          "ReadonlyShortSelfCannotBeOverriddenByResourceOrMetaUpdates",
           "ShortSelfIsStableAcrossDisableEnableAndFrozenRestart"
         ],
         "nativeEvidence": []

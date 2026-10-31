@@ -13,6 +13,31 @@ namespace XRegistry.Server.Tests;
 public class RegistryShortSelfTests
 {
     [Test]
+    public async Task ReadonlyShortSelfCannotBeOverriddenByResourceOrMetaUpdates()
+    {
+        var engine = MutableEngine();
+        await Send(engine, RegistryAction.Patch, "/capabilities", """{"shortself":true}""");
+        var created = await Send(engine, RegistryAction.Replace, "/teams/g/notes/n", """{"name":"before"}""");
+        var shortSelf = created.Metadata!.RootElement.GetProperty("shortself").GetString();
+        var metadata = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n/meta")).Metadata!.RootElement;
+        var metaShortSelf = metadata.GetProperty("shortself").GetString();
+
+        await Send(engine, RegistryAction.Patch, "/teams/g/notes/n",
+            """{"shortself":"https://attacker.example/forged","name":"updated"}""");
+        var afterResourceUpdate = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n")).Metadata!.RootElement;
+        var epoch = afterResourceUpdate.GetProperty("epoch").GetUInt64();
+        await Send(engine, RegistryAction.Patch, "/teams/g/notes/n/meta",
+            """{"shortself":"https://attacker.example/forged"}""");
+
+        var resource = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n")).Metadata!.RootElement;
+        var updatedMeta = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n/meta")).Metadata!.RootElement;
+        await Assert.That(resource.GetProperty("shortself").GetString()).IsEqualTo(shortSelf);
+        await Assert.That(updatedMeta.GetProperty("shortself").GetString()).IsEqualTo(metaShortSelf);
+        await Assert.That(resource.GetProperty("name").GetString()).IsEqualTo("updated");
+        await Assert.That(resource.GetProperty("epoch").GetUInt64()).IsEqualTo(epoch);
+    }
+
+    [Test]
     public async Task ShortSelfIsStableAcrossDisableEnableAndFrozenRestart()
     {
         var store = new InMemoryRegistryPersistence();
