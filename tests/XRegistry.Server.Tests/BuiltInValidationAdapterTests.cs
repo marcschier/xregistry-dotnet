@@ -19,16 +19,25 @@ public class BuiltInValidationAdapterTests
         """;
 
     [Test]
-    [Arguments(false, false)]
-    [Arguments(false, true)]
-    [Arguments(true, false)]
-    [Arguments(true, true)]
+    [Arguments(false, false, false)]
+    [Arguments(false, true, false)]
+    [Arguments(true, false, false)]
+    [Arguments(true, true, false)]
+    [Arguments(false, false, true)]
+    [Arguments(false, true, true)]
     public async Task DisabledCompatibilityAvoidsDependencyRechecksWhileFormatValidationRemainsEnabled(
-        bool validateCompatibility, bool strict)
+        bool validateCompatibility, bool strict, bool omitted)
     {
         const string reference = "https://schemas.example/item";
         var calls = 0;
-        var engine = ValidatingEngine(strict: strict, validateCompatibility: validateCompatibility, validationOptions: new()
+        var model = omitted
+            ? ValidatedModel.Replace("\"validatecompatibility\":true,", "", StringComparison.Ordinal)
+            : ValidatedModel.Replace("\"validatecompatibility\":true", "\"validatecompatibility\":" +
+                (validateCompatibility ? "true" : "false"), StringComparison.Ordinal);
+        var compiled = RegistryModel.Compile(RegistryJson.Parse(model));
+        await Assert.That(compiled.Groups["sets"].Resources["schemas"].ValidateFormat).IsTrue();
+        await Assert.That(compiled.Groups["sets"].Resources["schemas"].ValidateCompatibility).IsEqualTo(validateCompatibility);
+        var engine = ValidatingEngine(strict: strict, validateCompatibility: omitted ? null : validateCompatibility, validationOptions: new()
         {
             ResolveReference = (uri, _) =>
             {
@@ -544,10 +553,14 @@ public class BuiltInValidationAdapterTests
 
     internal static RegistryEngine ValidatingEngine(bool strict = false, RegistryLimits? limits = null,
         DocumentValidationOptions? validationOptions = null, IRegistryPersistence? persistence = null,
-        bool hasDocument = true, int maxVersions = 0, bool validateCompatibility = true)
+        bool hasDocument = true, int maxVersions = 0, bool? validateCompatibility = true)
     {
         var model = strict ? ValidatedModel.Replace("\"strictvalidation\":false", "\"strictvalidation\":true", StringComparison.Ordinal) : ValidatedModel;
-        if (!validateCompatibility)
+        if (validateCompatibility is null)
+        {
+            model = model.Replace("\"validatecompatibility\":true,", "", StringComparison.Ordinal);
+        }
+        else if (!validateCompatibility.Value)
         {
             model = model.Replace("\"validatecompatibility\":true", "\"validatecompatibility\":false", StringComparison.Ordinal);
         }

@@ -18,19 +18,27 @@ public class ValidationIntegrationTests
         """;
 
     [Test]
-    [Arguments(false)]
-    [Arguments(true)]
-    public async Task DisabledFormatValidationSkipsRecognizedFormatsAndOmitsResultFlags(bool strict)
+    [Arguments(false, false)]
+    [Arguments(false, true)]
+    [Arguments(true, false)]
+    [Arguments(true, true)]
+    public async Task DisabledFormatValidationSkipsRecognizedFormatsAndOmitsResultFlags(bool strict, bool omitted)
     {
         var validator = new ExactValidator();
         var model = ValidatingModel.Replace("\"validateformat\":true", "\"validateformat\":false,\"strictvalidation\":" +
             (strict ? "true" : "false"), StringComparison.Ordinal)
             .Replace("\"validatecompatibility\":true", "\"validatecompatibility\":false", StringComparison.Ordinal);
+        if (omitted)
+        {
+            model = model.Replace("\"validateformat\":false,", "", StringComparison.Ordinal);
+        }
+        var compiled = RegistryModel.Compile(RegistryJson.Parse(model));
+        await Assert.That(compiled.Groups["teams"].Resources["files"].ValidateFormat).IsFalse();
         var engine = new RegistryEngine(new()
         {
             RegistryId = "disabled-format",
             PublicRoot = new Uri("https://registry.example"),
-            Model = RegistryModel.Compile(RegistryJson.Parse(model)),
+            Model = compiled,
             ResourceValidator = validator
         }, new InMemoryRegistryPersistence(), new PermitPolicy());
         await Send(engine, RegistryAction.Replace, "/teams/g/files/f$details", """

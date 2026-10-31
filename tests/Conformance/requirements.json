@@ -32443,15 +32443,17 @@
       "text": "- When not specified, the default value MUST be `false`.",
       "review": {
         "status": "reviewed",
-        "note": "ValidateFormat defaults false in both the record and Boolean fallback. No direct compiler assertion or counting-validator engine case isolates the omitted flag, so the implementation is source-supported but direct evidence is absent.",
+        "note": "Omitted and explicit false cases directly assert the compiled Resource flag and zero validator calls with a recognized format. Both strictness modes publish and replace exact bytes, create another Version and omit validation results.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DisabledFormatValidationSkipsRecognizedFormatsAndOmitsResultFlags"
+        ],
         "nativeEvidence": []
       }
     },
@@ -32529,16 +32531,17 @@
       "text": "- A value of `true` indicates that the server MUST generate an error ([format_violation](spec.md#format_violation)) if any Version of a Resource instance of this Resource type does not adhere to the `format` value of that Version. An absent `format` value on a Version MUST be treated as a request to disable both \"format\" and \"compatibility\" verification logic for that Version.",
       "review": {
         "status": "reviewed",
-        "note": "Actual invalid formats yield format_violation and roll back. Absent format disables both checks in the engine and in DocumentValidationPolicy; the separate policy test asserts null flags even with strict mode. A direct engine missing-format/strict-mode response assertion is still missing for the compound rule.",
+        "note": "Invalid syntax rejects publication and document replacement with format_violation while retaining prior state. Direct engine tests with a present compatibility mode and absent format prove zero validator calls, no validation flags and exact bytes across publication, replacement and new Versions, including strict mode.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "InvalidSyntaxRejectsPublicationInsteadOfBecomingAValidationFlag",
-          "MissingFormatAndMissingModeDoNotInventValidationResults"
+          "MissingFormatAndMissingModeDoNotInventValidationResults",
+          "VersionsWithoutFormatSkipValidatorCallsAndValidationFlags"
         ],
         "nativeEvidence": []
       }
@@ -32559,14 +32562,16 @@
       "text": "- A value of `false` indicates that the server MUST NOT perform any `format` checking for Versions of Resources of this Resource type.",
       "review": {
         "status": "reviewed",
-        "note": "ValidateResourcesAsync gates validator invocation on definition.ValidateFormat, and ApplyValidation removes flags for an unrequested check. No direct engine test with a counting/throwing validator proves zero format calls when the flag is false; compilation of false alone is insufficient.",
+        "note": "A counting validator receives no calls for recognized formats when model format validation is false. Both strictness modes retain exact bytes through publication, replacement and a new Version without format or compatibility result flags.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DisabledFormatValidationSkipsRecognizedFormatsAndOmitsResultFlags"
+        ],
         "nativeEvidence": []
       }
     },
@@ -32650,15 +32655,17 @@
       "text": "- When not specified, the default value MUST be `false`.",
       "review": {
         "status": "reviewed",
-        "note": "CompileResources uses false for omitted validatecompatibility, and the runtime respects the compiled flag. There is no direct assertion of the omitted compiled value paired with a configured validator that must not run compatibility checks.",
+        "note": "Omitted and explicit false cases directly assert the compiled compatibility flag while format validation remains enabled. Real dependency counts prove syntax-only passes through publication, a new Version and document replacement; enabled controls perform extra compatibility passes. Both strictness modes preserve the declared mode and exact bytes without compatibility results.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DisabledCompatibilityAvoidsDependencyRechecksWhileFormatValidationRemainsEnabled"
+        ],
         "nativeEvidence": []
       }
     },
