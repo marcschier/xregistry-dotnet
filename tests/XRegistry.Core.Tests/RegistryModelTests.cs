@@ -392,6 +392,7 @@ public class RegistryModelTests
     }
 
     [Test]
+    [Arguments("""{"attributes":{"a":{}}}""", "/attributes/a/type", "model_error")]
     [Arguments("""{"attributes":{"a":{"type":"array"}}}""", "/attributes/a/item", "model_error")]
     [Arguments("""{"attributes":{"a":{"type":"map","item":{"type":"string","required":true}}}}""", "/attributes/a/item/required", "model_error")]
     [Arguments("""{"attributes":{"a":{"type":"string","item":{"type":"string"}}}}""", "/attributes/a/item", "model_error")]

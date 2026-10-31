@@ -27730,15 +27730,17 @@
       "text": "- REQUIRED.",
       "review": {
         "status": "reviewed",
-        "note": "New attribute/item definitions require a type; a system override may inherit its existing type, and the supported source string shorthand names a type explicitly. Missing types are rejected in CompileAttribute, but the inspected aspect table lacks a direct missing-new-type assertion.",
+        "note": "RejectsInvalidModelAspectsWithExactPointers verifies that a new attribute without type fails with model_error at its type member.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "RejectsInvalidModelAspectsWithExactPointers"
+        ],
         "nativeEvidence": []
       }
     },
