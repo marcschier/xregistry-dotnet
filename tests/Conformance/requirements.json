@@ -60384,13 +60384,20 @@
       ],
       "text": "xRegistry defines a set of events that SHOULD be generated when changes are made to the entities within a Registry. See the [xRegistry Events](./events.md) specification for more information.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The server emits change events for created, updated and deleted entities and persists each interaction in the atomic outbox. The listed tests cover attribute changes and default-Version projections, descendant deletion and parent membership changes, exact committed CloudEvent identity/time, and outbox publication. This does not re-review or promote the separate Events requirements.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AttributeEventsMatchTheChangedEntityAndItsDefaultProjection",
+          "DeletionEventsCoverDescendantsAndOnlyTheImmediateParentCollection",
+          "CommittedEventsUseCoreStructuredIdsAndOneCanonicalInteractionTime",
+          "OutboxEventsAreAtomicDeduplicatedAndCorrelated"
+        ],
         "nativeEvidence": []
       }
     },
