@@ -30652,15 +30652,17 @@
       "text": "This map key MUST reference the Resource attribute that is to be constrained. It MUST reference a scalar attribute (top-level, or nested within objects) but MUST NOT reference items in arrays or maps. It MUST only reference statically-defined attributes, not ones that are dynamically added via an `ifvalues` clause or via a `*` extension definition.",
       "review": {
         "status": "reviewed",
-        "note": "ModelPaths.ResolveAttribute walks only static dictionaries and requires object intermediates plus a final scalar; maps, arrays, wildcard names and ifvalues-only names are not resolvable. Current constraint tests do not directly exercise this complete forbidden-path matrix.",
+        "note": "ConstraintsRejectArrayMapWildcardAndConditionalAttributes verifies that array/map values, wildcard-only names and ifvalues-only names are rejected at the constraint key.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ConstraintsRejectArrayMapWildcardAndConditionalAttributes"
+        ],
         "nativeEvidence": []
       }
     },

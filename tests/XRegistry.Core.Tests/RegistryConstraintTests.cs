@@ -9,6 +9,18 @@ namespace XRegistry.Core.Tests;
 public class RegistryConstraintTests
 {
     [Test]
+    [Arguments("""{"groups":{"gs":{"singular":"g","constraints":{"rs.values":{}},"resources":{"rs":{"singular":"r","attributes":{"values":{"type":"array","item":{"type":"string"}}}}}}}}""", "/groups/gs/constraints/rs.values")]
+    [Arguments("""{"groups":{"gs":{"singular":"g","constraints":{"rs.values.key":{}},"resources":{"rs":{"singular":"r","attributes":{"values":{"type":"map","item":{"type":"string"}}}}}}}}""", "/groups/gs/constraints/rs.values.key")]
+    [Arguments("""{"groups":{"gs":{"singular":"g","constraints":{"rs.extra":{}},"resources":{"rs":{"singular":"r","attributes":{"*":"string"}}}}}}""", "/groups/gs/constraints/rs.extra")]
+    [Arguments("""{"groups":{"gs":{"singular":"g","constraints":{"rs.dynamic":{}},"resources":{"rs":{"singular":"r","attributes":{"mode":{"type":"string","ifvalues":{"on":{"siblingattributes":{"dynamic":"string"}}}}}}}}}}""", "/groups/gs/constraints/rs.dynamic")]
+    public async Task ConstraintsRejectArrayMapWildcardAndConditionalAttributes(string json, string expectedPath)
+    {
+        var error = TestErrors.Capture(() => RegistryModel.Compile(RegistryJson.Parse(json)));
+        await Assert.That(error.Code).IsEqualTo("model_error");
+        await Assert.That(error.Path).IsEqualTo(expectedPath);
+    }
+
+    [Test]
     public async Task EnforcesConstraintSubsetsAndDefaults()
     {
         var model = RegistryModel.Compile(RegistryJson.Parse("""
