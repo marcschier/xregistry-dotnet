@@ -334,6 +334,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
     private static void Unsupported(string detail) => ValidationContext.Fail(DocumentValidationStatus.Unsupported, "$", "protobuf.unsupported", detail);
 
     private enum TokenKind { Identifier, Number, String, Symbol, End }
+    private enum OptionTarget { File, Message, Oneof, Service, Method }
     private sealed record Token(TokenKind Kind, string Text);
     private sealed record Field(string Name, int Number, string Type, string Scope, string Label, bool Packed, Token? Default);
     private sealed class Definition(bool isEnum, bool isRoot, string document, int syntax)
@@ -391,7 +392,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                 else if (Take("message")) { Message(_package); }
                 else if (Take("enum")) { Enumeration(_package); }
                 else if (Take("service")) { Service(); }
-                else if (Take("option")) { Option(); }
+                else if (Take("option")) { Option(OptionTarget.File); }
                 else if (Take("extend")) { Unsupported("Custom extensions are not yet supported by this validator."); }
                 else { Fail("Unexpected top-level declaration."); }
             }
@@ -415,7 +416,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                 if (Take(";")) { continue; }
                 if (Take("message")) { Message(full); }
                 else if (Take("enum")) { Enumeration(full); }
-                else if (Take("option")) { Option(); }
+                else if (Take("option")) { Option(OptionTarget.Message); }
                 else if (Take("extensions") || Take("extend") || Take("group"))
                 {
                     Unsupported("Protobuf extensions and groups require a separate declared validator policy.");
@@ -428,7 +429,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                     Expect("{");
                     while (!Take("}"))
                     {
-                        if (Take("option")) { Option(); }
+                        if (Take("option")) { Option(OptionTarget.Oneof); }
                         else if (!Take(";")) { AddField(Field(full, true)); }
                     }
                 }
@@ -629,7 +630,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             while (!Take("}"))
             {
                 if (Take(";")) { continue; }
-                if (Take("option")) { Option(); continue; }
+                if (Take("option")) { Option(OptionTarget.Service); continue; }
                 Expect("rpc");
                 Require(methods.Add(Identifier()), "protobuf.duplicate", "RPC names must be unique.");
                 Expect("("); Take("stream");
@@ -639,13 +640,13 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                 Expect(")");
                 if (Take("{"))
                 {
-                    while (!Take("}")) { Expect("option"); Option(); }
+                    while (!Take("}")) { Expect("option"); Option(OptionTarget.Method); }
                 }
                 else { Expect(";"); }
             }
         }
 
-        private void Option()
+        private void Option(OptionTarget target)
         {
             if (Current.Text == "(") { Unsupported("Custom options require an explicit extension policy."); }
             var option = TypeName();
@@ -655,15 +656,19 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             if (option is "java_package" or "java_outer_classname" or "go_package" or "csharp_namespace" or
                 "objc_class_prefix" or "php_namespace" or "php_metadata_namespace" or "ruby_package")
             {
+                Require(target == OptionTarget.File, "protobuf.option_scope", "This option is only valid at file scope.");
                 Require(value.Kind == TokenKind.String, "protobuf.option", "The language namespace option requires a string.");
             }
             else if (option is "deprecated" or "java_multiple_files" or "cc_generic_services" or
                 "java_generic_services" or "py_generic_services" or "cc_enable_arenas")
             {
+                Require(option == "deprecated" ? target != OptionTarget.Oneof : target == OptionTarget.File,
+                    "protobuf.option_scope", "The option is not defined for this declaration kind.");
                 Require(IsBoolean(value), "protobuf.option", "The option requires a boolean.");
             }
             else if (option == "optimize_for")
             {
+                Require(target == OptionTarget.File, "protobuf.option_scope", "This option is only valid at file scope.");
                 Require(value.Kind == TokenKind.Identifier && value.Text is "SPEED" or "CODE_SIZE" or "LITE_RUNTIME",
                     "protobuf.option", "Invalid optimization mode.");
             }

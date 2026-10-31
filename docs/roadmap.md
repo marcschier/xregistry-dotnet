@@ -168,6 +168,8 @@ vocabulary/source mapping. It does not supply their implementation.
   strings cannot satisfy boolean, floating-point or enum constant requirements.
   Reserved-number checks reject overlapping intervals and duplicate singletons
   across statements while accepting adjacent nonoverlapping ranges.
+  Supported file options reject message, oneof, service and method placement;
+  `deprecated` is rejected on oneofs. Unknown/custom options remain unsupported.
   Editions and custom extensions remain unsupported. This does not add gRPC
   API operation selection.
 - Add full API format validators and the remaining language resolvers. The

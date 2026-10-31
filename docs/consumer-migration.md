@@ -79,6 +79,11 @@ the distinct message-tag and signed enum-number bounds and charge each interval
 comparison to the validation work budget. The publisher's
 [descriptor schema](https://github.com/protocolbuffers/protobuf/blob/v33.0/src/google/protobuf/descriptor.proto)
 defines these range constraints.
+Supported file-only options, such as `java_package` and `optimize_for`, cannot
+appear inside messages, oneofs, services or RPC methods. Misplacement reports
+`Invalid` with `protobuf.option_scope`. The `deprecated` option remains valid
+on its supported declarations but not on a oneof. Unknown and custom options
+still report `Unsupported`; placement checks do not assign them a policy.
 Editions, custom extensions, complete weak-import semantics and gRPC API
 selection remain unsupported.
 

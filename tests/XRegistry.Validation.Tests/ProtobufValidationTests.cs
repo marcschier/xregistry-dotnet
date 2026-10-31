@@ -625,6 +625,98 @@ public class ProtobufValidationTests
     }
 
     [Test]
+    [Arguments("java_package=\"example\"")]
+    [Arguments("java_outer_classname=\"Root\"")]
+    [Arguments("go_package=\"example\"")]
+    [Arguments("csharp_namespace=\"Example\"")]
+    [Arguments("objc_class_prefix=\"ABC\"")]
+    [Arguments("php_namespace=\"Example\"")]
+    [Arguments("php_metadata_namespace=\"Example\"")]
+    [Arguments("ruby_package=\"Example\"")]
+    [Arguments("java_multiple_files=true")]
+    [Arguments("cc_generic_services=false")]
+    [Arguments("java_generic_services=false")]
+    [Arguments("py_generic_services=false")]
+    [Arguments("cc_enable_arenas=true")]
+    [Arguments("optimize_for=SPEED")]
+    public async Task FileOptionsRejectNonFilePlacement(string assignment)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var statement = $"option {assignment};";
+            var valid = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                Encoding.UTF8.GetBytes($"syntax=\"proto{syntax}\"; {statement} message Root {{}}"));
+            await Assert.That(valid.Status).IsEqualTo(DocumentValidationStatus.Valid);
+            await Assert.That(valid.Diagnostics.Count).IsEqualTo(0);
+            foreach (var declaration in new[]
+            {
+                $"message Root {{ {statement} }}",
+                $"message Root {{ oneof choice {{ {statement} string value=1; }} }}",
+                $"message Root {{}} service S {{ {statement} rpc Get(Root) returns (Root); }}",
+                $"message Root {{}} service S {{ rpc Get(Root) returns (Root) {{ {statement} }} }}"
+            })
+            {
+                var invalid = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                    Encoding.UTF8.GetBytes($"syntax=\"proto{syntax}\"; {declaration}"));
+                await Assert.That(invalid.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+                await Assert.That(invalid.Diagnostics[0].Code).IsEqualTo("protobuf.option_scope");
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("true")]
+    [Arguments("false")]
+    public async Task DeprecatedOptionUsesOnlyItsDeclaredTargets(string value)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var statement = $"option deprecated={value};";
+            foreach (var declaration in new[]
+            {
+                $"{statement} message Root {{}}",
+                $"message Root {{ {statement} }}",
+                $"message Root {{}} service S {{ {statement} rpc Get(Root) returns (Root); }}",
+                $"message Root {{}} service S {{ rpc Get(Root) returns (Root) {{ {statement} }} }}"
+            })
+            {
+                var valid = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                    Encoding.UTF8.GetBytes($"syntax=\"proto{syntax}\"; {declaration}"));
+                await Assert.That(valid.Status).IsEqualTo(DocumentValidationStatus.Valid);
+                await Assert.That(valid.Diagnostics.Count).IsEqualTo(0);
+            }
+
+            var invalid = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                Encoding.UTF8.GetBytes($"syntax=\"proto{syntax}\"; message Root {{ oneof choice {{ " +
+                    $"{statement} string value=1; }} }}"));
+            await Assert.That(invalid.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+            await Assert.That(invalid.Diagnostics[0].Code).IsEqualTo("protobuf.option_scope");
+        }
+    }
+
+    [Test]
+    [Arguments("future_option=true")]
+    [Arguments("(custom.flag)=true")]
+    public async Task UnknownAndCustomOptionsKeepTheirUnsupportedPolicyAtEveryTarget(string assignment)
+    {
+        var statement = $"option {assignment};";
+        foreach (var declaration in new[]
+        {
+            $"{statement} message Root {{}}",
+            $"message Root {{ {statement} }}",
+            $"message Root {{ oneof choice {{ {statement} string value=1; }} }}",
+            $"message Root {{}} service S {{ {statement} rpc Get(Root) returns (Root); }}",
+            $"message Root {{}} service S {{ rpc Get(Root) returns (Root) {{ {statement} }} }}"
+        })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+                Encoding.UTF8.GetBytes($"syntax=\"proto3\"; {declaration}"));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Unsupported);
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.unsupported");
+        }
+    }
+
+    [Test]
     public async Task SuppliedImportBindsTheDeclaredMessageNotArbitraryText()
     {
         var source = Encoding.UTF8.GetBytes("""syntax="proto3"; import "child.proto"; message Parent { Child child=1; }""");

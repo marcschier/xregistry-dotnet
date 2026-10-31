@@ -43826,7 +43826,10 @@
           "TypedDefaultsRetainValidNativeConstants",
           "ReservedRangesRejectOverlapWithoutRejectingAdjacentIntervals",
           "EnumReservedRangesCheckBothSignedBoundaries",
-          "ReservedRangeComparisonsRespectTheCumulativeWorkBudget"
+          "ReservedRangeComparisonsRespectTheCumulativeWorkBudget",
+          "FileOptionsRejectNonFilePlacement",
+          "DeprecatedOptionUsesOnlyItsDeclaredTargets",
+          "UnknownAndCustomOptionsKeepTheirUnsupportedPolicyAtEveryTarget"
         ],
         "nativeEvidence": []
       }
