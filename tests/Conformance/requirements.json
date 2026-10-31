@@ -60422,13 +60422,19 @@
       ],
       "text": "Unless otherwise stated in a protocol binding specification, if the processing of a request fails (even during the generation of the response) then an error MUST be generated and the entire request MUST be undone. See the [Error Processing](#error-processing) section for more information.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The engine renders the result and runs response preparation before publishing state, events and allocation mutations as one persistence commit. Tests verify rollback on cancellation and response-preparation failure, including no event publication and reuse of a failed WoT allocation.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CancellationDuringResponsePreparationLeavesNoChangesOrEvents",
+          "ResponsePreparationFailureDoesNotCommit",
+          "FailedResponsePreparationLeavesTheAllocationAvailableForRetry"
+        ],
         "nativeEvidence": []
       }
     },
