@@ -12829,14 +12829,17 @@
       "text": "- When not present, `format` validation MUST NOT be performed for that Version irrespective of the [`validateformat`](model.md#groupsstringresourcesstringvalidateformat) attribute's value.",
       "review": {
         "status": "reviewed",
-        "note": "Source skips format validation when format is absent, independent of validateformat. Reviewed syntax vectors include a format; no direct no-format validating-model assertion proves both absence of validation calls and missing output flags.",
+        "note": "Versions without format skip validator calls and omit validation flags across enabled/disabled format validation and strictness settings. Direct publication, document replacement, a second Version and removal of a previously checked format preserve exact document bytes without additional validation calls.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "VersionsWithoutFormatSkipValidatorCallsAndValidationFlags",
+          "RemovingFormatClearsPriorValidationFlagsWithoutAnotherValidatorCall"
+        ],
         "nativeEvidence": []
       }
     },

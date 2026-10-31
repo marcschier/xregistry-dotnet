@@ -18,6 +18,89 @@ public class ValidationIntegrationTests
         """;
 
     [Test]
+    [Arguments(false, false)]
+    [Arguments(false, true)]
+    [Arguments(true, false)]
+    [Arguments(true, true)]
+    public async Task VersionsWithoutFormatSkipValidatorCallsAndValidationFlags(bool validateFormat, bool strict)
+    {
+        var validator = new ExactValidator();
+        var model = ValidatingModel.Replace("\"validateformat\":true",
+            "\"validateformat\":" + (validateFormat ? "true" : "false") +
+            ",\"strictvalidation\":" + (strict ? "true" : "false"), StringComparison.Ordinal)
+            .Replace("\"validatecompatibility\":true", "\"validatecompatibility\":" +
+                (validateFormat ? "true" : "false"), StringComparison.Ordinal);
+        var engine = new RegistryEngine(new()
+        {
+            RegistryId = "no-format",
+            PublicRoot = new Uri("https://registry.example"),
+            Model = RegistryModel.Compile(RegistryJson.Parse(model)),
+            ResourceValidator = validator
+        }, new InMemoryRegistryPersistence(), new PermitPolicy());
+        await Send(engine, RegistryAction.Replace, "/teams/g/files/f$details", """
+            {"versionid":"v1","filebase64":"AA=="}
+            """);
+        await Send(engine, RegistryAction.Patch, "/teams/g/files/f/versions/v1$details", """
+            {"filebase64":"/wA="}
+            """);
+        await Send(engine, RegistryAction.Post, "/teams/g/files/f$details", """
+            {"versionid":"v2","filebase64":"AA=="}
+            """);
+        foreach (var version in new[] { "v1", "v2" })
+        {
+            var result = await Send(engine, RegistryAction.Read, "/teams/g/files/f/versions/" + version + "$details");
+            foreach (var field in new[] { "formatvalidated", "formatvalidatedreason", "compatibilityvalidated", "compatibilityvalidatedreason" })
+            {
+                await Assert.That(result.Metadata!.RootElement.TryGetProperty(field, out _)).IsFalse();
+            }
+        }
+        await Assert.That(validator.Calls).IsEqualTo(0);
+        var first = await Send(engine, RegistryAction.Read, "/teams/g/files/f/versions/v1");
+        using var firstBytes = first.Document!.OpenRead();
+        await Assert.That(firstBytes.ReadByte()).IsEqualTo(255);
+        await Assert.That(firstBytes.ReadByte()).IsEqualTo(0);
+        await Assert.That(firstBytes.ReadByte()).IsEqualTo(-1);
+        var second = await Send(engine, RegistryAction.Read, "/teams/g/files/f/versions/v2");
+        using var secondBytes = second.Document!.OpenRead();
+        await Assert.That(secondBytes.ReadByte()).IsEqualTo(0);
+        await Assert.That(secondBytes.ReadByte()).IsEqualTo(-1);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task RemovingFormatClearsPriorValidationFlagsWithoutAnotherValidatorCall(bool strict)
+    {
+        var validator = new ExactValidator();
+        var model = ValidatingModel.Replace("\"validateformat\":true", "\"validateformat\":true,\"strictvalidation\":" +
+            (strict ? "true" : "false"), StringComparison.Ordinal);
+        var engine = new RegistryEngine(new()
+        {
+            RegistryId = "remove-format",
+            PublicRoot = new Uri("https://registry.example"),
+            Model = RegistryModel.Compile(RegistryJson.Parse(model)),
+            ResourceValidator = validator
+        }, new InMemoryRegistryPersistence(), new PermitPolicy());
+        var valid = await Send(engine, RegistryAction.Replace, "/teams/g/files/f$details", """
+            {"versionid":"v1","format":"test/v1","filebase64":"/wA="}
+            """);
+        await Assert.That(valid.Metadata!.RootElement.GetProperty("formatvalidated").GetBoolean()).IsTrue();
+        await Assert.That(validator.Calls).IsEqualTo(1);
+        var cleared = await Send(engine, RegistryAction.Patch, "/teams/g/files/f/versions/v1$details", """
+            {"format":null,"filebase64":"AA=="}
+            """);
+        foreach (var field in new[] { "format", "formatvalidated", "formatvalidatedreason", "compatibilityvalidated", "compatibilityvalidatedreason" })
+        {
+            await Assert.That(cleared.Metadata!.RootElement.TryGetProperty(field, out _)).IsFalse();
+        }
+        await Assert.That(validator.Calls).IsEqualTo(1);
+        var stored = await Send(engine, RegistryAction.Read, "/teams/g/files/f/versions/v1");
+        using var bytes = stored.Document!.OpenRead();
+        await Assert.That(bytes.ReadByte()).IsEqualTo(0);
+        await Assert.That(bytes.ReadByte()).IsEqualTo(-1);
+    }
+
+    [Test]
     public async Task UriTargetObligationsRequireAnExplicitValidatorAndFailuresRollBack()
     {
         const string model = """
