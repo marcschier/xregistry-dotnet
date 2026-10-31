@@ -270,6 +270,29 @@ public class RegistryModelTests
     }
 
     [Test]
+    public async Task ItemNameCharsetAppliesOnlyToObjectItems()
+    {
+        var model = RegistryModel.Compile(RegistryJson.Parse("""
+            {"attributes":{"properties":{"type":"array","item":{"type":"object","namecharset":"EXTENDED",
+              "attributes":{"*":"string"}}}}}
+            """));
+        var item = model.Attributes["properties"].Item!;
+        var accepted = RegistryMetadataValidator.Validate(
+            RegistryJson.Parse("""{"properties":[{"extra-name":"value"}]}"""), model.Attributes,
+            new() { Mode = RegistryMetadataMode.ClientInput });
+
+        await Assert.That(item.NameCharset).IsEqualTo("extended");
+        await Assert.That(accepted.Metadata.RootElement.GetProperty("properties")[0]!.GetProperty("extra-name")
+            .GetString()).IsEqualTo("value");
+
+        var diagnostic = TestErrors.Capture(() => RegistryModel.Compile(RegistryJson.Parse("""
+            {"attributes":{"properties":{"type":"array","item":{"type":"string","namecharset":"extended"}}}}
+            """)));
+        await Assert.That(diagnostic.Code).IsEqualTo("model_error");
+        await Assert.That(diagnostic.Path).IsEqualTo("/attributes/properties/item/namecharset");
+    }
+
+    [Test]
     [Arguments("""{"attributes":{"a":{"type":"array"}}}""", "/attributes/a/item", "model_error")]
     [Arguments("""{"attributes":{"a":{"type":"map","item":{"type":"string","required":true}}}}""", "/attributes/a/item/required", "model_error")]
     [Arguments("""{"attributes":{"a":{"type":"string","item":{"type":"string"}}}}""", "/attributes/a/item", "model_error")]

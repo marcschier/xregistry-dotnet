@@ -29474,15 +29474,17 @@
       "text": "- OPTIONAL, and MUST only be used when `item.type` is `object`.",
       "review": {
         "status": "reviewed",
-        "note": "The item path shares object-only namecharset validation and strict/extended normalization. The nested item test has an object item but no explicit namecharset; direct allowed/forbidden item.namecharset cases are missing.",
+        "note": "A direct test accepts an extended dashed name on an object item and rejects namecharset on a scalar item.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ItemNameCharsetAppliesOnlyToObjectItems"
+        ],
         "nativeEvidence": []
       }
     },
