@@ -4286,18 +4286,22 @@
       "text": "These restrictions are designed to only allow subsetting of the definitions specified by the Resource type model and any Group type model [`constraints`](model.md#groupsstringconstraints) defined. They MUST NOT be used to extend the allowable values of the attributes being constrained.",
       "review": {
         "status": "reviewed",
-        "note": "Current runtime enforces instance subsetting and retains inherited empty/null enum/equals restrictions; dependent and xref changes validate atomically without leaking unreadable referrers. Complete independent default/enum/equals merge and all widening combinations are not established by these cases, so the compound rows stay pending.",
+        "note": "Tests verify Group-instance enum and default restrictions against both Group-type and Resource-type constraints, plus matching or newly introduced equals expressions. Widening enum/default values and replacing an inherited equals expression are rejected.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "ConstraintsAndMatchVersionsAreEnforcedAcrossAllVersions",
           "GroupInstanceConstraintsApplyDefaultsAndCannotWidenTheModel",
           "EmptyOrAbsentInstanceEnumsRetainTheInheritedModelRestriction",
           "EmptyOrAbsentInstanceEqualsRetainsTheInheritedGroupComparison",
+          "GroupInstanceEnumsMustBeSubsetsOfTypeAndResourceEnums",
+          "GroupInstanceDefaultsRetainOrNarrowTheInheritedConstraint",
+          "GroupInstanceEqualsMustMatchTheTypeExpression",
+          "GroupInstanceMayIntroduceEqualsForATypeConstraintWithoutEquals",
           "UnrelatedGroupMetadataDoesNotTouchVersionsButNestedEqualsChangesRevalidateUntouchedResources",
           "ChangedGroupConstraintDefaultsStillAuthorizeEveryIndirectVersionMutation",
           "ChangedGroupConstraintDefaultsCannotMutateReadonlyResources",
@@ -4326,18 +4330,22 @@
       "text": "The two layers of definitions of the constraints are merged such that any individual constraint aspect defined at the Group instance level MUST only further restrict any constraint aspect mentioned at the Group type level. Absence of (or `null` value for) an aspect at the Group instance level MUST NOT impact any constraints defined at the Group type level.",
       "review": {
         "status": "reviewed",
-        "note": "Current runtime enforces instance subsetting and retains inherited empty/null enum/equals restrictions; dependent and xref changes validate atomically without leaking unreadable referrers. Complete independent default/enum/equals merge and all widening combinations are not established by these cases, so the compound rows stay pending.",
+        "note": "Tests verify instance enum/default narrowing, inheritance for absent or null aspects, exact equals matching, and the permitted introduction of equals when absent at the Group-type level. Invalid widening and changed equals expressions are rejected.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "ConstraintsAndMatchVersionsAreEnforcedAcrossAllVersions",
           "GroupInstanceConstraintsApplyDefaultsAndCannotWidenTheModel",
           "EmptyOrAbsentInstanceEnumsRetainTheInheritedModelRestriction",
           "EmptyOrAbsentInstanceEqualsRetainsTheInheritedGroupComparison",
+          "GroupInstanceEnumsMustBeSubsetsOfTypeAndResourceEnums",
+          "GroupInstanceDefaultsRetainOrNarrowTheInheritedConstraint",
+          "GroupInstanceEqualsMustMatchTheTypeExpression",
+          "GroupInstanceMayIntroduceEqualsForATypeConstraintWithoutEquals",
           "UnrelatedGroupMetadataDoesNotTouchVersionsButNestedEqualsChangesRevalidateUntouchedResources",
           "ChangedGroupConstraintDefaultsStillAuthorizeEveryIndirectVersionMutation",
           "ChangedGroupConstraintDefaultsCannotMutateReadonlyResources",
@@ -4365,18 +4373,19 @@
       "text": "- If `enum` is specified at both levels, then the Group instance `enum` set MUST be a subset of the `enum` defined at the Group type level.",
       "review": {
         "status": "reviewed",
-        "note": "Code rejects a non-subset of a nonempty inherited enum, and current tests retain that restriction for absent/null/empty instance enums. Missing direct positive proper-subset and negative overlapping/widening instance-versus-Group-type enum cases; Resource-model enum rejection is not an exact substitute.",
+        "note": "Tests cover a proper subset, the unchanged set, an overlapping non-subset, and a superset against the Group-type enum while the Resource-type enum is wider. Accepted sets govern Resource values; invalid sets are rejected.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "ConstraintsAndMatchVersionsAreEnforcedAcrossAllVersions",
           "GroupInstanceConstraintsApplyDefaultsAndCannotWidenTheModel",
           "EmptyOrAbsentInstanceEnumsRetainTheInheritedModelRestriction",
-          "EmptyOrAbsentInstanceEqualsRetainsTheInheritedGroupComparison"
+          "EmptyOrAbsentInstanceEqualsRetainsTheInheritedGroupComparison",
+          "GroupInstanceEnumsMustBeSubsetsOfTypeAndResourceEnums"
         ],
         "nativeEvidence": []
       }
@@ -4398,16 +4407,18 @@
       "text": "- If the `equals` aspect is defined in both levels then they MUST be the exact same value. And in that situation, specifying it at the Group instance level is redundant. For clarity, a Group instance MAY introduce an `equals` aspect for a constraint key defined at the model Group type level that has no `equals` aspect.",
       "review": {
         "status": "reviewed",
-        "note": "Current merge preserves the inherited equals expression and permits adding one where absent. Direct assertions here establish inherited retention and enforcement, not all exact-equality/redundant/changed-expression/new-expression admission cases.",
+        "note": "Tests accept an identical instance expression, reject a changed expression, and accept an instance-added equals aspect when the Group-type constraint has none. Absent, null, and empty values preserve the inherited comparison.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "EmptyOrAbsentInstanceEnumsRetainTheInheritedModelRestriction",
-          "EmptyOrAbsentInstanceEqualsRetainsTheInheritedGroupComparison"
+          "EmptyOrAbsentInstanceEqualsRetainsTheInheritedGroupComparison",
+          "GroupInstanceEqualsMustMatchTheTypeExpression",
+          "GroupInstanceMayIntroduceEqualsForATypeConstraintWithoutEquals"
         ],
         "nativeEvidence": []
       }
@@ -4427,15 +4438,17 @@
       ],
       "text": "- OPTIONAL",
       "review": {
-        "status": "informative",
-        "note": "Optional-presence/index row only. Its linked definition and subordinate constraints were read; this row is not used as implementation or test evidence.",
+        "status": "reviewed",
+        "note": "The minimal-model test confirms Group.constraints is a Map and is not required when omitted from a Group type.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CompilesIndependentMinimalSpecModel"
+        ],
         "nativeEvidence": []
       }
     },
@@ -64389,13 +64402,31 @@
       ],
       "text": "These restrictions are designed to only allow subsetting of the definitions specified by the Resource type model and any Group type model [`constraints`](model.md#groupsstringconstraints) defined. They MUST NOT be used to extend the allowable values of the attributes being constrained.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Tests verify Group-instance enum and default restrictions against both Group-type and Resource-type constraints, plus matching or newly introduced equals expressions. Widening enum/default values and replacing an inherited equals expression are rejected.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ConstraintsAndMatchVersionsAreEnforcedAcrossAllVersions",
+          "GroupInstanceConstraintsApplyDefaultsAndCannotWidenTheModel",
+          "EmptyOrAbsentInstanceEnumsRetainTheInheritedModelRestriction",
+          "EmptyOrAbsentInstanceEqualsRetainsTheInheritedGroupComparison",
+          "GroupInstanceEnumsMustBeSubsetsOfTypeAndResourceEnums",
+          "GroupInstanceDefaultsRetainOrNarrowTheInheritedConstraint",
+          "GroupInstanceEqualsMustMatchTheTypeExpression",
+          "GroupInstanceMayIntroduceEqualsForATypeConstraintWithoutEquals",
+          "UnrelatedGroupMetadataDoesNotTouchVersionsButNestedEqualsChangesRevalidateUntouchedResources",
+          "ChangedGroupConstraintDefaultsStillAuthorizeEveryIndirectVersionMutation",
+          "ChangedGroupConstraintDefaultsCannotMutateReadonlyResources",
+          "AliasesMustSatisfyTheReferringGroupsEnumAndEqualsConstraints",
+          "TargetMutationsCannotInvalidateAReferringGroupsConstraints",
+          "ReferringGroupDefaultsNeverMutateTheReferencedVersions",
+          "ReverseConstraintFailuresDoNotDiscloseUnreadableReferringGroupIdentity"
+        ],
         "nativeEvidence": []
       }
     },
@@ -64421,13 +64452,31 @@
       ],
       "text": "The two layers of definitions of the constraints are merged such that any individual constraint aspect defined at the Group instance level MUST only further restrict any constraint aspect mentioned at the Group type level. Absence of (or `null` value for) an aspect at the Group instance level MUST NOT impact any constraints defined at the Group type level.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Tests verify instance enum/default narrowing, inheritance for absent or null aspects, exact equals matching, and the permitted introduction of equals when absent at the Group-type level. Invalid widening and changed equals expressions are rejected.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ConstraintsAndMatchVersionsAreEnforcedAcrossAllVersions",
+          "GroupInstanceConstraintsApplyDefaultsAndCannotWidenTheModel",
+          "EmptyOrAbsentInstanceEnumsRetainTheInheritedModelRestriction",
+          "EmptyOrAbsentInstanceEqualsRetainsTheInheritedGroupComparison",
+          "GroupInstanceEnumsMustBeSubsetsOfTypeAndResourceEnums",
+          "GroupInstanceDefaultsRetainOrNarrowTheInheritedConstraint",
+          "GroupInstanceEqualsMustMatchTheTypeExpression",
+          "GroupInstanceMayIntroduceEqualsForATypeConstraintWithoutEquals",
+          "UnrelatedGroupMetadataDoesNotTouchVersionsButNestedEqualsChangesRevalidateUntouchedResources",
+          "ChangedGroupConstraintDefaultsStillAuthorizeEveryIndirectVersionMutation",
+          "ChangedGroupConstraintDefaultsCannotMutateReadonlyResources",
+          "AliasesMustSatisfyTheReferringGroupsEnumAndEqualsConstraints",
+          "TargetMutationsCannotInvalidateAReferringGroupsConstraints",
+          "ReferringGroupDefaultsNeverMutateTheReferencedVersions",
+          "ReverseConstraintFailuresDoNotDiscloseUnreadableReferringGroupIdentity"
+        ],
         "nativeEvidence": []
       }
     },
@@ -64452,13 +64501,21 @@
       ],
       "text": "- If `enum` is specified at both levels, then the Group instance `enum` set MUST be a subset of the `enum` defined at the Group type level.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Tests cover a proper subset, the unchanged set, an overlapping non-subset, and a superset against the Group-type enum while the Resource-type enum is wider. Accepted sets govern Resource values; invalid sets are rejected.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ConstraintsAndMatchVersionsAreEnforcedAcrossAllVersions",
+          "GroupInstanceConstraintsApplyDefaultsAndCannotWidenTheModel",
+          "EmptyOrAbsentInstanceEnumsRetainTheInheritedModelRestriction",
+          "EmptyOrAbsentInstanceEqualsRetainsTheInheritedGroupComparison",
+          "GroupInstanceEnumsMustBeSubsetsOfTypeAndResourceEnums"
+        ],
         "nativeEvidence": []
       }
     },
@@ -64484,13 +64541,20 @@
       ],
       "text": "- If the `equals` aspect is defined in both levels then they MUST be the exact same value. And in that situation, specifying it at the Group instance level is redundant. For clarity, a Group instance MAY introduce an `equals` aspect for a constraint key defined at the model Group type level that has no `equals` aspect.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Tests accept an identical instance expression, reject a changed expression, and accept an instance-added equals aspect when the Group-type constraint has none. Absent, null, and empty values preserve the inherited comparison.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EmptyOrAbsentInstanceEnumsRetainTheInheritedModelRestriction",
+          "EmptyOrAbsentInstanceEqualsRetainsTheInheritedGroupComparison",
+          "GroupInstanceEqualsMustMatchTheTypeExpression",
+          "GroupInstanceMayIntroduceEqualsForATypeConstraintWithoutEquals"
+        ],
         "nativeEvidence": []
       }
     },
@@ -64515,13 +64579,17 @@
       ],
       "text": "- OPTIONAL",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The minimal-model test confirms Group.constraints is a Map and is not required when omitted from a Group type.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CompilesIndependentMinimalSpecModel"
+        ],
         "nativeEvidence": []
       }
     },

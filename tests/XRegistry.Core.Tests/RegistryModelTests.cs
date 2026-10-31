@@ -33,6 +33,8 @@ public class RegistryModelTests
         await Assert.That(resource.Annotations.Labels.Count).IsEqualTo(0);
         await Assert.That(resource.VersionMode).IsEqualTo("manual");
         await Assert.That(resource.SingleVersionRoot).IsFalse();
+        await Assert.That(group.Attributes["constraints"].Type).IsEqualTo(RegistryValueType.Map);
+        await Assert.That(group.Attributes["constraints"].Required).IsFalse();
         await Assert.That(model.Attributes["specversion"].DefaultValue.GetString()).IsEqualTo("1.0-rc4");
         await Assert.That(model.Source.RootElement.GetProperty("groups").GetProperty("dirs")
             .TryGetProperty("plural", out _)).IsFalse();
