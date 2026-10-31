@@ -26,7 +26,7 @@ complete xRegistry conformance.
 | HTTP serving | `XRegistry.AspNetCore.MapXRegistry` | Maps a concrete `RegistryEngine`; it does not start or secure a host. |
 | Transactional persistence | Application-owned `IRegistryPersistence`, or `LocalRegistryPersistence` over `LocalFileStore` | Storage generations are not entity epochs or remote Registry revisions. |
 | Schema-source validation | `XRegistry.Validation` | Supported schema formats and policies, not OPC UA NodeSets/sessions/projection. |
-| API Registry and operation references | `XRegistry.Models` (`RegistryModelKind.Api`) and `XRegistry.Validation` (`ApiOperationReference`, `ApiOperationDocumentResolver`) | The model describes versioned API definitions. The parser accepts operation, service, interface, GraphQL and JSON Pointer selectors. Document resolution supports OpenAPI 3.0/3.1 and Swagger 2.0 JSON operations by `operationId` or JSON Pointer, OpenRPC 1.4 JSON methods by exact `name`, Avro Protocol 1.12.0 JSON messages by exact member name, and assembled Smithy 2 JSON AST operations by absolute shape ID. These selectors do not validate the full API document; other language resolvers remain unsupported. |
+| API Registry and operation references | `XRegistry.Models` (`RegistryModelKind.Api`) and `XRegistry.Validation` (`ApiOperationReference`, `ApiOperationDocumentResolver`) | The model describes versioned API definitions. The parser accepts operation, service, interface, GraphQL and JSON Pointer selectors. Document resolution supports OpenAPI 3.0/3.1 and Swagger 2.0 JSON operations by `operationId` or JSON Pointer, OpenRPC 1.4 JSON methods by exact `name`, Avro Protocol 1.12.0 JSON messages by exact member name, assembled Smithy 2 JSON AST operations by absolute shape ID, and gRPC Proto3 source methods by exact package-qualified service and RPC name. JSON selectors do not validate the full API document; other language resolvers remain unsupported. |
 | Federation read acquisition | `IFederationReadSource` / `HttpFederationReadSource` | A read-source seam, not a write dispatcher or immutable live snapshot. |
 | OPC UA access and federation reads | `XRegistry.Bindings.OpcUa` | Uses OPC UA Client Stack 2.0.1 to discover endpoints, apply caller policy, open a Session, remap the portable root through `NamespaceArray`, and verify Registry type and Core version. `OpcUaRegistryReadSource` maps Registry, Group, Resource, Meta, Version and collection views, and reads local FileType Documents or returns external-reference descriptors. `OpcUaRegistryWriter` updates Properties and calls Methods, including Resource Document replacement. Callers supply Group, Resource and ResourceVersions ObjectType mappings. Fake-Session tests cover reader, source and writer behavior; in-process server tests cover Session establishment, XREG-Events subscription management, writes, methods and document transfer. Two-server tests cover trusted external Resource and Version resolution. Core API views and NodeSet projection remain unimplemented. Endpoint security policy is caller-selected. Generic packages remain free of OPC UA types. |
 
@@ -260,8 +260,7 @@ options and enum-value `deprecated` and `debug_redact` still require native
 boolean constants.
 Duplicate enum-value options report `Invalid` with `protobuf.option`; quoted
 parentheses cannot stand in for custom-option syntax.
-Editions, custom extensions, complete weak-import semantics and gRPC API
-selection remain unsupported.
+Editions, custom extensions and complete weak-import semantics remain unsupported.
 
 `BuiltInDocumentValidator` accepts `gRPC/proto3` source under the same bounded
 Proto3 declaration policy, with an additional requirement for at least one
@@ -270,17 +269,31 @@ satisfy that requirement; imported message types remain available according to
 normal import visibility, including types declared in Proto2 dependencies.
 The root must explicitly declare Proto3 syntax. Missing dependencies remain
 `Indeterminate`, while unsupported constructs remain `Unsupported`.
-This profile does not add binary descriptor validation, operation selection
-or a gRPC transport.
+This document-validation profile does not add binary descriptor validation or
+a gRPC transport.
 The opt-in `BuiltInRegistryResourceValidator` also advertises this profile.
 Successful source checks produce `formatvalidated: true`; invalid source
 rejects publication without adding a Version or event. Compatibility retains
 the conservative exact-byte identity policy: changed source is unchecked in
 non-strict mode and rejected in strict mode, even when only whitespace changes.
 
+`ApiOperationDocumentResolver` accepts `gRPC/proto3` as UTF-8 `text/plain`.
+Its service locator selects an RPC declared in the entry source by exact
+package-qualified service and method name, without a leading dot on the service.
+The resolver validates all supplied dependencies before selecting the method.
+Dependency cycles produce `Indeterminate`; shared acyclic imports are fetched
+only once.
+`GrpcOperation` returns immutable method information: resolved request and response
+message names and both streaming flags. `Operation` remains undefined and
+`DocumentPath` remains null; no JSON operation or JSON Pointer is fabricated.
+Relative imports require an absolute `documentUri`; only the caller's resolver
+can retrieve dependencies. Imported services are not selectable through the
+entry source's locator. Descriptor-set selection remains unsupported.
+
 `ApiOperationDocumentResolver.Capabilities` advertises finite parser and retrieval
-budgets: 1 MiB per document, 4 MiB total, 100,000 parsed JSON values, JSON nesting
-and reference-chain limits of 64, at most 32 external documents, and a 30-second
+budgets: 1 MiB per document, 4 MiB total, 100,000 parsed JSON values or source
+tokens, document nesting and reference-chain limits of 64, at most 32 external
+documents, and a 30-second
 operation deadline. Dependencies are acquired only through the caller's callback;
 the callback owns authorization, redirects and credential policy. Returning null
 reports an unavailable dependency; throwing `UnauthorizedAccessException`

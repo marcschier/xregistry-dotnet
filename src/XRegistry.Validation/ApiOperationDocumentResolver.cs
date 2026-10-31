@@ -21,9 +21,10 @@ public sealed class ApiOperationResolverCapabilities
     internal ApiOperationResolverCapabilities()
     {
         Formats = Array.AsReadOnly(["OpenAPI/3.0", "OpenAPI/3.1", "Swagger/2.0", "OpenRPC/1.4",
-            "AvroProtocol/1.12.0", "Smithy/2.0"]);
-        ContentTypes = Array.AsReadOnly(["application/json"]);
-        Selectors = Array.AsReadOnly([ApiOperationSelectorKind.Operation, ApiOperationSelectorKind.JsonPointer]);
+            "AvroProtocol/1.12.0", "Smithy/2.0", "gRPC/proto3"]);
+        ContentTypes = Array.AsReadOnly(["application/json", "text/plain"]);
+        Selectors = Array.AsReadOnly([ApiOperationSelectorKind.Operation, ApiOperationSelectorKind.JsonPointer,
+            ApiOperationSelectorKind.ServiceOperation]);
         SupportsCallerProvidedPathItemReferences = true;
         SupportsCallerProvidedOperationReferences = true;
         MaxReferencedDocuments = 32;
@@ -60,10 +61,10 @@ public sealed class ApiOperationResolverCapabilities
     /// <summary>Gets the inclusive reference-chain depth limit.</summary>
     public int MaxReferenceDepth { get; } = 64;
 
-    /// <summary>Gets the inclusive JSON nesting depth limit.</summary>
+    /// <summary>Gets the inclusive document nesting depth limit.</summary>
     public int MaxDocumentDepth { get; } = 64;
 
-    /// <summary>Gets the inclusive operation-wide parsed JSON node limit.</summary>
+    /// <summary>Gets the inclusive operation-wide parsed JSON node or source token limit.</summary>
     public int MaxDocumentNodes { get; } = 100_000;
 
     /// <summary>Gets the operation deadline, including caller-provided dependency retrieval.</summary>
@@ -76,15 +77,52 @@ public sealed class ApiOperationResolverCapabilities
     public bool SupportsOperationResolution { get; }
 }
 
+/// <summary>A selected gRPC source method with resolved native Protobuf message types.</summary>
+public sealed class GrpcOperationSelection
+{
+    internal GrpcOperationSelection(string serviceName, string methodName, string requestType,
+        string responseType, bool clientStreaming, bool serverStreaming)
+    {
+        ServiceName = serviceName;
+        MethodName = methodName;
+        RequestType = requestType;
+        ResponseType = responseType;
+        ClientStreaming = clientStreaming;
+        ServerStreaming = serverStreaming;
+    }
+
+    /// <summary>Gets the package-qualified service name without a leading dot.</summary>
+    public string ServiceName { get; }
+
+    /// <summary>Gets the case-sensitive RPC method name.</summary>
+    public string MethodName { get; }
+
+    /// <summary>Gets the resolved package-qualified request message name without a leading dot.</summary>
+    public string RequestType { get; }
+
+    /// <summary>Gets the resolved package-qualified response message name without a leading dot.</summary>
+    public string ResponseType { get; }
+
+    /// <summary>Gets whether the method permits client streaming.</summary>
+    public bool ClientStreaming { get; }
+
+    /// <summary>Gets whether the method permits server streaming.</summary>
+    public bool ServerStreaming { get; }
+}
+
 /// <summary>An API operation selection or an explicit resolution outcome.</summary>
 public sealed class ApiOperationResolutionResult
 {
     internal ApiOperationResolutionResult(ApiOperationResolutionStatus status, DocumentDiagnostic? diagnostic = null,
-        JsonElement operation = default, string? documentPath = null, Uri? documentUri = null)
+        JsonElement operation = default, string? documentPath = null, Uri? documentUri = null,
+        GrpcOperationSelection? grpcOperation = null)
     {
-        if (status == ApiOperationResolutionStatus.Selected &&
-            (operation.ValueKind != JsonValueKind.Object || string.IsNullOrEmpty(documentPath)) ||
-            status != ApiOperationResolutionStatus.Selected && diagnostic is null)
+        var jsonSelection = operation.ValueKind == JsonValueKind.Object &&
+            !string.IsNullOrEmpty(documentPath) && grpcOperation is null;
+        var grpcSelection = grpcOperation is not null && operation.ValueKind == JsonValueKind.Undefined &&
+            documentPath is null;
+        if (status == ApiOperationResolutionStatus.Selected && !(jsonSelection || grpcSelection) ||
+            status != ApiOperationResolutionStatus.Selected && (diagnostic is null || grpcOperation is not null))
         {
             throw new ArgumentException("A selected operation or a diagnostic is required.");
         }
@@ -94,19 +132,23 @@ public sealed class ApiOperationResolutionResult
         Operation = operation.ValueKind == JsonValueKind.Undefined ? default : operation.Clone();
         DocumentPath = documentPath;
         DocumentUri = documentUri;
+        GrpcOperation = grpcOperation;
     }
 
     /// <summary>Gets the resolution outcome.</summary>
     public ApiOperationResolutionStatus Status { get; }
 
-    /// <summary>Gets the selected native JSON operation, method or protocol message object.</summary>
+    /// <summary>Gets the native JSON operation, method or protocol message; undefined for gRPC source.</summary>
     public JsonElement Operation { get; }
 
-    /// <summary>Gets the document-local JSON Pointer to the selected operation, method or message.</summary>
+    /// <summary>Gets the document-local JSON Pointer for a JSON selection; null for gRPC source.</summary>
     public string? DocumentPath { get; }
 
-    /// <summary>Gets the source document URI when the selected operation came from a referenced document.</summary>
+    /// <summary>Gets the source document URI when known.</summary>
     public Uri? DocumentUri { get; }
+
+    /// <summary>Gets the selected gRPC source method, or null for other outcomes and JSON selections.</summary>
+    public GrpcOperationSelection? GrpcOperation { get; }
 
     /// <summary>Gets the diagnostic for a non-selection outcome.</summary>
     public DocumentDiagnostic? Diagnostic { get; }
@@ -137,7 +179,7 @@ public enum ApiOperationResolutionStatus
     Denied,
 }
 
-/// <summary>Selects OpenAPI, Swagger, OpenRPC, Avro Protocol and assembled Smithy operations from acquired JSON.</summary>
+/// <summary>Selects operations from acquired JSON API documents and gRPC Proto3 source.</summary>
 public static partial class ApiOperationDocumentResolver
 {
     private static readonly string[] s_methods =
@@ -205,15 +247,19 @@ public static partial class ApiOperationDocumentResolver
             return Failure(ApiOperationResolutionStatus.Unsupported, "format.unsupported",
                 $"The API format '{format}' is not supported.");
         }
-        if (!string.Equals(contentType.Split(';', 2)[0].Trim(), "application/json",
+        var grpc = format == "gRPC/proto3";
+        if (!string.Equals(contentType.Split(';', 2)[0].Trim(), grpc ? "text/plain" : "application/json",
             StringComparison.OrdinalIgnoreCase))
         {
             return Failure(ApiOperationResolutionStatus.Unsupported, "contenttype.unsupported",
-                "The API operation resolver accepts JSON documents only.");
+                grpc ? "The gRPC source resolver accepts text/plain documents only." :
+                    "The selected API format requires a JSON document.");
         }
-        if (reference.Selector.Kind is not (ApiOperationSelectorKind.Operation or ApiOperationSelectorKind.JsonPointer) ||
-            format is "OpenRPC/1.4" or "AvroProtocol/1.12.0" or "Smithy/2.0" &&
-            reference.Selector.Kind != ApiOperationSelectorKind.Operation)
+        var selectorSupported = grpc ? reference.Selector.Kind == ApiOperationSelectorKind.ServiceOperation :
+            reference.Selector.Kind is ApiOperationSelectorKind.Operation or ApiOperationSelectorKind.JsonPointer &&
+            (format is not ("OpenRPC/1.4" or "AvroProtocol/1.12.0" or "Smithy/2.0") ||
+                reference.Selector.Kind == ApiOperationSelectorKind.Operation);
+        if (!selectorSupported)
         {
             return Failure(ApiOperationResolutionStatus.Unsupported, "selector.unsupported",
                 "The API operation selector is not supported for the selected format.");
@@ -226,7 +272,44 @@ public static partial class ApiOperationDocumentResolver
             MaxDepth = Capabilities.MaxDocumentDepth,
             MaxNodes = Capabilities.MaxDocumentNodes,
             MaxWork = 8_388_608,
+            MaxReferences = Capabilities.MaxReferencedDocuments,
+            DocumentUri = grpc ? documentUri : null,
+            ResolveReference = grpc ? ResolveGrpcDependencyAsync : null
         }, cancellationToken);
+        if (grpc)
+        {
+            try
+            {
+                var parser = new ProtobufSyntax(budget);
+                await parser.ValidateAsync(document, 3, rootReference: "root.proto",
+                    requireRootService: true).ConfigureAwait(false);
+                parser.RequireAcyclicImports();
+                var method = parser.SelectRootRpc(reference.Selector.Tokens[1], reference.Selector.Tokens[3]);
+                return method is null
+                    ? Failure(ApiOperationResolutionStatus.NotFound, "selection.not_found",
+                        "No root service method matches the exact gRPC locator.")
+                    : new(ApiOperationResolutionStatus.Selected, documentUri: documentUri, grpcOperation: method);
+            }
+            catch (ValidationFailure failure)
+            {
+                return new(failure.Status switch
+                {
+                    DocumentValidationStatus.Unsupported => ApiOperationResolutionStatus.Unsupported,
+                    DocumentValidationStatus.Indeterminate => ApiOperationResolutionStatus.Indeterminate,
+                    _ => ApiOperationResolutionStatus.Invalid
+                }, failure.Diagnostic);
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                return Failure(ApiOperationResolutionStatus.Denied, "dependency.denied",
+                    $"Caller policy denied a gRPC dependency: {exception.Message}");
+            }
+            catch (UriFormatException exception)
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid, "dependency.uri",
+                    $"The gRPC dependency URI is invalid: {exception.Message}");
+            }
+        }
         JsonDocument parsed;
         try
         {
@@ -301,6 +384,17 @@ public static partial class ApiOperationDocumentResolver
             {
                 return ParseFailure(failure, "document.operation", failure.Diagnostic.Path);
             }
+        }
+
+        async ValueTask<ReadOnlyMemory<byte>?> ResolveGrpcDependencyAsync(string uri, CancellationToken token)
+        {
+            if (!Uri.TryCreate(uri, UriKind.Absolute, out _))
+            {
+                ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$/import", "dependency.base_uri",
+                    "Relative Protobuf imports require an absolute source document URI.");
+            }
+            return resolveReference is null ? null :
+                await resolveReference(uri, token).AsTask().WaitAsync(token).ConfigureAwait(false);
         }
     }
 

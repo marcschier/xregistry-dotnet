@@ -20,11 +20,52 @@ internal sealed class ProtobufSyntax(ValidationContext context)
     private readonly HashSet<string> _packages = new(StringComparer.Ordinal);
     private readonly List<(string Type, string Scope, bool MessageOnly, string Document, int Syntax)> _references = [];
     private readonly List<Field> _fields = [];
+    private readonly Dictionary<(string Service, string Method), RpcMethod> _rootMethods = [];
     private bool _hasRootService;
     private readonly HashSet<string> _documents = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<(string Document, bool IsPublic)>> _imports = new(StringComparer.Ordinal);
     internal IEnumerable<(string Name, bool Selectable)> RootDeclarations
         => _definitions.Where(p => p.Value.IsRoot).Select(p => (p.Key, !p.Value.IsEnum));
+
+    internal GrpcOperationSelection? SelectRootRpc(string service, string method)
+    {
+        context.Work((long)service.Length + method.Length + 1);
+        if (!_rootMethods.TryGetValue((service, method), out var rpc)) { return null; }
+        var request = Resolve(rpc.Request, rpc.Scope)
+            ?? throw new InvalidOperationException("A validated RPC request type was not retained.");
+        var response = Resolve(rpc.Response, rpc.Scope)
+            ?? throw new InvalidOperationException("A validated RPC response type was not retained.");
+        return new(service, method, request.FullName, response.FullName, rpc.ClientStreaming, rpc.ServerStreaming);
+    }
+
+    internal void RequireAcyclicImports()
+    {
+        var complete = new HashSet<string>(StringComparer.Ordinal);
+        var active = new HashSet<string>(StringComparer.Ordinal);
+        var pending = new Stack<(string Document, bool Complete)>();
+        foreach (var document in _imports.Keys)
+        {
+            pending.Push((document, false));
+            while (pending.TryPop(out var item))
+            {
+                context.Work();
+                if (item.Complete)
+                {
+                    active.Remove(item.Document);
+                    complete.Add(item.Document);
+                    continue;
+                }
+                if (complete.Contains(item.Document)) { continue; }
+                if (!active.Add(item.Document))
+                {
+                    ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$/import", "dependency.cycle",
+                        "The gRPC source import graph contains a dependency cycle.");
+                }
+                pending.Push((item.Document, true));
+                foreach (var import in _imports[item.Document]) { pending.Push((import.Document, false)); }
+            }
+        }
+    }
 
     internal async ValueTask ValidateAsync(ReadOnlyMemory<byte> document, int syntax, string? rootReference = null,
         bool requireRootService = false)
@@ -475,8 +516,10 @@ internal sealed class ProtobufSyntax(ValidationContext context)
     }
     private sealed record Field(string Name, int Number, string Type, string Scope, string Label,
         bool HasPackedOption, bool HasLazyOption, Token? Default, string? JsonName);
-    private sealed class Definition(bool isEnum, bool isRoot, string document, int syntax)
+    private sealed record RpcMethod(string Request, string Response, string Scope, bool ClientStreaming, bool ServerStreaming);
+    private sealed class Definition(string fullName, bool isEnum, bool isRoot, string document, int syntax)
     {
+        internal string FullName { get; } = fullName;
         internal bool IsEnum { get; } = isEnum;
         internal bool IsRoot { get; } = isRoot;
         internal string Document { get; } = document;
@@ -585,7 +628,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             var name = Identifier();
             owner.RegisterSymbol(name, scope);
             var full = scope.Length == 0 ? name : scope + "." + name;
-            Require(owner._definitions.TryAdd(full, new(false, isRoot, document, _syntax)), "protobuf.duplicate", "The type name is duplicated.");
+            Require(owner._definitions.TryAdd(full, new(full, false, isRoot, document, _syntax)), "protobuf.duplicate", "The type name is duplicated.");
             Expect("{");
             var fields = new List<Field>();
             var numbers = new HashSet<int>();
@@ -739,8 +782,9 @@ internal sealed class ProtobufSyntax(ValidationContext context)
         {
             var name = Identifier();
             owner.RegisterSymbol(name, scope);
-            var definition = new Definition(true, isRoot, document, _syntax);
-            Require(owner._definitions.TryAdd(scope.Length == 0 ? name : scope + "." + name, definition),
+            var full = scope.Length == 0 ? name : scope + "." + name;
+            var definition = new Definition(full, true, isRoot, document, _syntax);
+            Require(owner._definitions.TryAdd(full, definition),
                 "protobuf.duplicate", "An enum type name is duplicated.");
             Expect("{");
             var values = new List<(string Name, int Number)>();
@@ -841,7 +885,9 @@ internal sealed class ProtobufSyntax(ValidationContext context)
 
         private void Service()
         {
-            owner.RegisterSymbol(Identifier(), _package);
+            var name = Identifier();
+            owner.RegisterSymbol(name, _package);
+            var service = _package.Length == 0 ? name : _package + "." + name;
             if (isRoot) { owner._hasRootService = true; }
             Expect("{");
             var methods = new HashSet<string>(StringComparer.Ordinal);
@@ -851,11 +897,16 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                 if (Take(";")) { continue; }
                 if (Take("option")) { Option(OptionTarget.Service, options); continue; }
                 Expect("rpc");
-                Require(methods.Add(Identifier()), "protobuf.duplicate", "RPC names must be unique.");
-                Expect("("); Take("stream");
-                Reference(TypeName(), _package, true);
-                Expect(")"); Expect("returns"); Expect("("); Take("stream");
-                Reference(TypeName(), _package, true);
+                var method = Identifier();
+                Require(methods.Add(method), "protobuf.duplicate", "RPC names must be unique.");
+                Expect("(");
+                var clientStreaming = Take("stream");
+                var request = TypeName();
+                Reference(request, _package, true);
+                Expect(")"); Expect("returns"); Expect("(");
+                var serverStreaming = Take("stream");
+                var response = TypeName();
+                Reference(response, _package, true);
                 Expect(")");
                 if (Take("{"))
                 {
@@ -868,6 +919,10 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                     }
                 }
                 else { Expect(";"); }
+                if (isRoot)
+                {
+                    owner._rootMethods.Add((service, method), new(request, response, _package, clientStreaming, serverStreaming));
+                }
             }
         }
 

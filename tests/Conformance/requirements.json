@@ -112948,7 +112948,17 @@
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "GrpcSelectsTheExactRootServiceMethodAndItsStreamingModes",
+          "GrpcSelectsAnUnpackagedServiceAndNestedQualifiedMessageTypes",
+          "GrpcDoesNotFallBackFromAnInexactServiceOrMethod",
+          "GrpcValidatesTheWholeSourceBeforeReturningASelection",
+          "GrpcResolvesImportedMessageTypesOnlyThroughAuthorizedDocumentUris",
+          "GrpcCannotSelectAServiceDeclaredOnlyInAnImportedDocument",
+          "GrpcRequiresPublicImportVisibilityForRequestAndResponseTypes",
+          "GrpcDetectsDirectAndTransitiveImportCyclesWithoutRefetchingTheRoot",
+          "GrpcSharesRepeatedImportsWithoutReportingAnAcyclicGraphAsACycle"
+        ],
         "nativeEvidence": []
       }
     },

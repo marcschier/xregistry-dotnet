@@ -32,9 +32,9 @@ public class ApiOperationReferenceTests
         ["apigroups", "users", "apis", "Profile", "versions", "2"];
     private static readonly string[] s_singleDecodeTokens = ["operations", "a~1b%2F"];
     private static readonly string[] s_supportedFormats =
-        ["OpenAPI/3.0", "OpenAPI/3.1", "Swagger/2.0", "OpenRPC/1.4", "AvroProtocol/1.12.0", "Smithy/2.0"];
+        ["OpenAPI/3.0", "OpenAPI/3.1", "Swagger/2.0", "OpenRPC/1.4", "AvroProtocol/1.12.0", "Smithy/2.0", "gRPC/proto3"];
     private static readonly ApiOperationSelectorKind[] s_supportedSelectors =
-        [ApiOperationSelectorKind.Operation, ApiOperationSelectorKind.JsonPointer];
+        [ApiOperationSelectorKind.Operation, ApiOperationSelectorKind.JsonPointer, ApiOperationSelectorKind.ServiceOperation];
 
     [Test]
     public async Task ParsesAnOperationIdReference()
@@ -124,7 +124,8 @@ public class ApiOperationReferenceTests
             .Order(StringComparer.Ordinal)
             .SequenceEqual(s_supportedFormats.Order(StringComparer.Ordinal))).IsTrue();
         await Assert.That(ApiOperationDocumentResolver.Capabilities.ContentTypes
-            .SequenceEqual(["application/json"])).IsTrue();
+            .SequenceEqual(["application/json", "text/plain"])).IsTrue();
+        await Assert.That(result.GrpcOperation).IsNull();
         await Assert.That(ApiOperationDocumentResolver.Capabilities.Selectors.Order()
             .SequenceEqual(s_supportedSelectors.Order())).IsTrue();
         await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsCallerProvidedPathItemReferences)

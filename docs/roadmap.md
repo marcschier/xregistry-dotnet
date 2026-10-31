@@ -259,15 +259,19 @@ vocabulary/source mapping. It does not supply their implementation.
   The document validator now accepts `gRPC/proto3` under the same bounded
   declaration policy and requires at least one root service. Imported services
   cannot satisfy the root requirement; imported types retain syntax and
-  visibility checks. Descriptor-set validation and gRPC operation selection
-  remain unsupported.
+  visibility checks. Descriptor-set validation remains unsupported.
   The opt-in server adapter advertises the source profile and validates
   publication through the same parser. Its compatibility evaluator proves only
   exact-byte identity; changed source remains unchecked or rejected according
   to strictness.
+  The optional API resolver selects entry-source RPC methods by exact
+  package-qualified service and method name, validates the bounded dependency
+  graph through caller-authorized retrieval, and returns immutable resolved
+  message types and streaming flags. It does not convert source methods into
+  JSON. Descriptor-set and imported-service selection remain unsupported.
 - Add full API format validators and the remaining language resolvers. The
   OpenAPI/Swagger, OpenRPC, Avro Protocol and assembled Smithy JSON selectors
-  do not establish full format validation, YAML support, or gRPC, Thrift,
+  do not establish full format validation, YAML support, or gRPC descriptor-set, Thrift,
   Avro IDL, GraphQL, WSDL or Smithy IDL/model-assembly support. Shared API
   dependency resolution rejects raw whitespace/control characters and malformed
   document URI spellings before acquisition. Network-path and absolute-path
