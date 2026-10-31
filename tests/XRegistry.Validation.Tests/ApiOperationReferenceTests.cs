@@ -1530,6 +1530,56 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
+    [Arguments("record", "fullname")]
+    [Arguments("error", "fullname")]
+    [Arguments("enum", "fullname")]
+    [Arguments("fixed", "fullname")]
+    [Arguments("record", "declared")]
+    [Arguments("error", "declared")]
+    [Arguments("enum", "declared")]
+    [Arguments("fixed", "declared")]
+    [Arguments("record", "inherited")]
+    [Arguments("error", "inherited")]
+    [Arguments("enum", "inherited")]
+    [Arguments("fixed", "inherited")]
+    public async Task AvroProtocolAliasesCompareResolvedFullnames(string kind, string qualification)
+    {
+        var type = new JsonObject
+        {
+            ["type"] = kind, ["name"] = qualification == "fullname" ? "example.Current" : "Current",
+            ["aliases"] = new JsonArray("Old", "example.Old")
+        };
+        if (qualification != "inherited")
+        {
+            type["namespace"] = qualification == "fullname" ? "ignored" : "example";
+        }
+        if (kind is "record" or "error") { type["fields"] = new JsonArray(); }
+        if (kind == "enum") { type["symbols"] = new JsonArray("VALUE"); }
+        if (kind == "fixed") { type["size"] = 1; }
+        var document = new JsonObject
+        {
+            ["protocol"] = qualification == "inherited" ? "example.Protocol" : "other.Protocol",
+            ["types"] = new JsonArray((JsonNode)type),
+            ["messages"] = JsonNode.Parse("""{"GetUser":{"request":[],"response":"null"}}""")
+        };
+        var reference = ApiOperationReference.Parse("/apigroups/g/apis/a#operations/GetUser");
+        var result = ApiOperationDocumentResolver.Resolve("AvroProtocol/1.12.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()), reference);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("avro.alias");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/types/0/aliases");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+
+        type["aliases"] = new JsonArray("Old", "example.old", "other.Old", "old-name");
+        var valid = await ApiOperationDocumentResolver.ResolveAsync("AvroProtocol/1.12.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()), reference,
+            resolveReference: (_, _) => throw new InvalidOperationException("Aliases do not acquire schemas."));
+        await Assert.That(valid.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(valid.Diagnostic).IsNull();
+        await Assert.That(valid.Operation.GetRawText()).IsEqualTo(document["messages"]!["GetUser"]!.ToJsonString());
+    }
+
+    [Test]
     public async Task AvroProtocolSelectionPreservesTheDeclaredMessageWithoutResolvingMetadataReferences()
     {
         const string document = """

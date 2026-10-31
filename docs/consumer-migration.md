@@ -211,6 +211,12 @@ name supplies its own namespace. A `types` array contains named record, error,
 enum or fixed declarations with unique effective fullnames. Qualified type names
 likewise override a supplied namespace; unqualified names inherit it. Names that
 differ only in case remain distinct.
+Within each named type, aliases are compared after resolving relative spellings
+against its effective namespace. `Old` and `example.Old` therefore collide on
+`example.Current`; `old` and `other.Old` remain distinct. Alias text is retained,
+including strings that are not valid names, as permitted by Avro 1.12.
+Cross-declaration alias conflicts and alias-based protocol evolution remain
+outside these selection checks.
 Request parameters follow the anonymous-record field form: each is an object
 with a valid, unique field name and a type schema value. Optional documentation
 is a string, `order` is `ascending`, `descending` or `ignore`, and aliases are

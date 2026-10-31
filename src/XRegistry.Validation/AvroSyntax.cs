@@ -141,6 +141,17 @@ internal sealed class AvroSyntax(string format, ValidationContext context)
             if (schema.TryGetProperty("aliases", out var aliases))
             {
                 type.Aliases.AddRange(SchemaJson.Strings(aliases, path + "/aliases"));
+                if (_protocol)
+                {
+                    var fullNames = new HashSet<string>(StringComparer.Ordinal);
+                    foreach (var alias in type.Aliases)
+                    {
+                        context.Work(alias.Length + ns.Length, path + "/aliases");
+                        var fullName = alias.Contains('.') || ns.Length == 0 ? alias : ns + "." + alias;
+                        ValidationContext.Require(fullNames.Add(fullName), path + "/aliases", "avro.alias",
+                            "An Avro type cannot repeat an alias fullname.");
+                    }
+                }
             }
         }
 

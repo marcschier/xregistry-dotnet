@@ -158,7 +158,10 @@ vocabulary/source mapping. It does not supply their implementation.
   declaration names, effective namespace collisions and request fields, then
   binds named request/response/error schemas and checks defaults in native
   declaration order across the complete protocol. Avro 1.12 union defaults
-  use the first matching branch. Protocol logical-type annotations retain their
+  use the first matching branch. Each named type rejects aliases that resolve
+  to the same fullname, without rewriting the authored aliases or restricting
+  them to valid names. Cross-declaration alias conflicts and alias-based
+  protocol evolution remain open. Protocol logical-type annotations retain their
   authored representation while selection checks the underlying wire schema
   and defaults, including unknown or invalid logical annotations. No logical
   value conversion or comparison is performed; data-schema validation and
