@@ -74,6 +74,13 @@ only leaves and oldest selection considers only roots; a nonleaf does not become
 the default merely because it has a newer `createdat` timestamp. Timestamp ties
 use case-insensitive Version IDs: highest for newest, lowest for oldest.
 
+When a batch creates manual Versions without `ancestorid`, the Server processes
+their IDs in case-insensitive ascending order. Each new Version points to the
+current newest leaf; the first Version points to itself if none exists. Newest
+selection is repeated after each creation, so a backdated Version does not
+necessarily become the next Version's ancestor. Explicit ancestors remain
+authoritative, and deleting an ancestor makes each direct child a self-root.
+
 For a `maxversions` above one, the Server prunes the oldest root according to
 the Resource's `versionmode`. If that Version is the current default, the
 Server recalculates eligible roots as if the default had been removed. That

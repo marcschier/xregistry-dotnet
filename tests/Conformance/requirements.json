@@ -84087,13 +84087,18 @@
       ],
       "text": "- `manual` - Ancestor Processing: typically provided by clients. During a \"create\" operation, all new Versions that do not have an `ancestorid` value provided MUST be sorted/processed by `versionid` (in case-insensitive ascending order) and the `ancestorid` value of each MUST be set to the current \"newest Version\" per the above semantics. Note that as each new Version is processed, it will likely become the \"newest\" but it might not if its `createdat` timestamp is in the past. If there is no existing Version then the new Version becomes a root and its `ancestorid` value MUST be its own `versionid` attribute value. - Deleted Ancestor: if a Version's ancestor is deleted, then it MUST become a root, and its `ancestorid` MUST be set to its own `versionid` value. - The name of this versionmode is a bit of a misnomer in that it is not 100% \"manual\". As stated above, as a convenience, by default new Versions will point to the \"newest\" Version as their ancestor. If this behavior is not desired, then during the \"create\" operation, the `ancestorid` can be set to point to itself (or any other Version).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Both collection PATCH and Resource replacement sort a reverse-authored implicit batch by case-insensitive Version ID and self-root the first Version. The branched batch test creates a newer leaf, then a backdated child that makes its parent a nonleaf; the next implicit Version correctly chooses the other branch's newest leaf rather than the last-created Version. Explicit self-root input is preserved. A missing ancestor rejects the complete batch without changing export or events; deleting the successful batch's parent reroots only its direct child. Exact ancestry, selected default and event counts survive restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ManualImplicitBatchSortsIdsAndInitializesSelfRoot",
+          "ManualImplicitBatchReevaluatesNewestAfterBackdatedLeafAndRerootsDeletedParent"
+        ],
         "nativeEvidence": []
       }
     },
