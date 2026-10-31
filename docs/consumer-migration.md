@@ -41,12 +41,22 @@ scope. Package-level types, services and enum values are also checked across
 caller-supplied imports. Collisions report `Invalid` with `protobuf.duplicate`,
 regardless of declaration order. Names remain case-sensitive, and reuse in
 different containing messages or packages is valid. Registering a service name
-does not make it a message type. These checks do not implement Editions,
-custom extensions, complete import-visibility rules or gRPC API selection.
+does not make it a message type.
 The [Proto2](https://protobuf.dev/reference/protobuf/proto2-spec/#message-definition)
 and [Proto3](https://protobuf.dev/reference/protobuf/proto3-spec/#message-definition)
 specifications define the message-name rules; the publisher also explains
 [enum-value scoping](https://protobuf.dev/programming-guides/style/#enum-value-prefixing).
+
+Each Protobuf document can use its own types, directly imported types and types
+forwarded through an unbroken chain of `import public` declarations. Loading a
+private transitive dependency does not expose its types to the root, and sibling
+imports do not grant each other visibility. An inaccessible field or RPC type
+reports `Invalid` with `protobuf.type`, including during message selection.
+Dependencies are still acquired only through the caller's resolver; URI-backed
+selection applies visibility after resolving import document identities.
+See the publisher's [import rules](https://protobuf.dev/programming-guides/proto3/#importing-definitions).
+Editions, custom extensions, complete weak-import semantics and gRPC API
+selection remain unsupported.
 
 `ApiOperationDocumentResolver.Capabilities` advertises finite parser and retrieval
 budgets: 1 MiB per document, 4 MiB total, 100,000 parsed JSON values, JSON nesting

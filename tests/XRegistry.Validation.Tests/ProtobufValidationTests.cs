@@ -157,6 +157,158 @@ public class ProtobufValidationTests
     }
 
     [Test]
+    [Arguments(false, false, DocumentValidationStatus.Invalid)]
+    [Arguments(false, true, DocumentValidationStatus.Valid)]
+    [Arguments(true, false, DocumentValidationStatus.Valid)]
+    [Arguments(true, true, DocumentValidationStatus.Valid)]
+    public async Task ImportVisibilityRequiresDirectImportsOrPublicForwarding(
+        bool publicImport, bool directImport, DocumentValidationStatus expected)
+    {
+        foreach (var declaration in new[]
+        {
+            "message Root { .leaf.Child child=1; }",
+            "message Root { .leaf.State state=1; }",
+            "message Root { map<string,.leaf.Child> values=1; }",
+            "message Root { oneof value { .leaf.Child child=1; } }",
+            "message Root {} service S { rpc Get(.leaf.Child) returns (Root); }",
+            "message Root {} service S { rpc Get(Root) returns (.leaf.Child); }"
+        })
+        {
+            var requests = new List<string>();
+            var schema = "syntax=\"proto3\"; import \"bridge.proto\"; " +
+                (directImport ? "import \"leaf.proto\"; " : "") + declaration;
+            var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3", Encoding.UTF8.GetBytes(schema),
+                new DocumentValidationOptions
+                {
+                    ResolveReference = (name, _) =>
+                    {
+                        requests.Add(name);
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes(name switch
+                        {
+                            "bridge.proto" => "syntax=\"proto3\"; import " +
+                                (publicImport ? "public " : "") +
+                                "\"leaf.proto\"; message Bridge { .leaf.Child child=1; }",
+                            "leaf.proto" => "syntax=\"proto3\"; package leaf; message Child {} enum State { ZERO=0; }",
+                            _ => throw new InvalidOperationException("Unexpected import: " + name)
+                        }));
+                    }
+                });
+            await Assert.That(result.Status).IsEqualTo(expected);
+            await Assert.That(requests.Count).IsEqualTo(2);
+            await Assert.That(requests.Count(name => name == "bridge.proto")).IsEqualTo(1);
+            await Assert.That(requests.Count(name => name == "leaf.proto")).IsEqualTo(1);
+            if (expected == DocumentValidationStatus.Invalid)
+            {
+                await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.type");
+            }
+            else { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+        }
+    }
+
+    [Test]
+    [Arguments(false, false, DocumentValidationStatus.Invalid)]
+    [Arguments(false, true, DocumentValidationStatus.Invalid)]
+    [Arguments(true, false, DocumentValidationStatus.Invalid)]
+    [Arguments(true, true, DocumentValidationStatus.Valid)]
+    public async Task PublicImportVisibilityStopsAtPrivateEdges(
+        bool firstPublic, bool secondPublic, DocumentValidationStatus expected)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            """syntax="proto3"; import "bridge.proto"; message Root { Leaf value=1; }"""u8.ToArray(),
+            new DocumentValidationOptions
+            {
+                ResolveReference = (name, _) => ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+                    Encoding.UTF8.GetBytes(name switch
+                    {
+                        "bridge.proto" => $"syntax=\"proto3\"; import {(firstPublic ? "public " : "")}\"middle.proto\";",
+                        "middle.proto" => $"syntax=\"proto3\"; import {(secondPublic ? "public " : "")}\"leaf.proto\";",
+                        "leaf.proto" => "syntax=\"proto3\"; message Leaf {}",
+                        _ => throw new InvalidOperationException("Unexpected import: " + name)
+                    }))
+            });
+        await Assert.That(result.Status).IsEqualTo(expected);
+        if (expected == DocumentValidationStatus.Invalid)
+        {
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.type");
+        }
+        else { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+    }
+
+    [Test]
+    [Arguments(false, DocumentValidationStatus.Invalid)]
+    [Arguments(true, DocumentValidationStatus.Valid)]
+    public async Task SiblingImportsDoNotGrantEachOtherVisibility(bool importsSibling, DocumentValidationStatus expected)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            """syntax="proto3"; import "left.proto"; import "right.proto"; message Root { Left value=1; }"""u8.ToArray(),
+            new DocumentValidationOptions
+            {
+                ResolveReference = (name, _) => ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+                    Encoding.UTF8.GetBytes(name switch
+                    {
+                        "left.proto" => "syntax=\"proto3\"; " +
+                            (importsSibling ? "import \"right.proto\"; " : "") + "message Left { Right value=1; }",
+                        "right.proto" => "syntax=\"proto3\"; message Right {}",
+                        _ => throw new InvalidOperationException("Unexpected import: " + name)
+                    }))
+            });
+        await Assert.That(result.Status).IsEqualTo(expected);
+        if (expected == DocumentValidationStatus.Invalid)
+        {
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.type");
+        }
+        else { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+    }
+
+    [Test]
+    [Arguments(false, SchemaObjectSelectionStatus.Invalid)]
+    [Arguments(true, SchemaObjectSelectionStatus.Selected)]
+    public async Task SelectionAppliesImportVisibilityAfterResolvingDependencyDocumentUris(
+        bool publicImport, SchemaObjectSelectionStatus expected)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var requests = new List<string>();
+            var result = await SchemaObjectSelector.SelectAsync($"Protobuf/{syntax}",
+                Encoding.UTF8.GetBytes($"syntax=\"proto{syntax}\"; import \"nested/bridge.proto\"; " +
+                    "message Root { optional Leaf value=1; }"), "https://schemas.test/root.proto#Root",
+                new()
+                {
+                    Validation = new()
+                    {
+                        DocumentUri = new("https://schemas.test/root.proto"),
+                        ResolveReference = (name, _) =>
+                        {
+                            requests.Add(name);
+                            return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes(name switch
+                            {
+                                "https://schemas.test/nested/bridge.proto" =>
+                                    $"syntax=\"proto{syntax}\"; import {(publicImport ? "public " : "")}\"leaf.proto\";",
+                                "https://schemas.test/nested/leaf.proto" => $"syntax=\"proto{syntax}\"; message Leaf {{}}",
+                                _ => throw new InvalidOperationException("Unexpected import: " + name)
+                            }));
+                        }
+                    }
+                });
+            await Assert.That(result.Status).IsEqualTo(expected);
+            await Assert.That(requests.Count).IsEqualTo(2);
+            await Assert.That(requests[0]).IsEqualTo("https://schemas.test/nested/bridge.proto");
+            await Assert.That(requests[1]).IsEqualTo("https://schemas.test/nested/leaf.proto");
+            if (expected == SchemaObjectSelectionStatus.Selected)
+            {
+                await Assert.That(result.Selection!.TypeName).IsEqualTo("Root");
+                await Assert.That(result.Selection.References.Count).IsEqualTo(2);
+                await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+            }
+            else
+            {
+                await Assert.That(result.Selection).IsNull();
+                await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.type");
+            }
+        }
+    }
+
+    [Test]
     public async Task SuppliedImportBindsTheDeclaredMessageNotArbitraryText()
     {
         var source = Encoding.UTF8.GetBytes("""syntax="proto3"; import "child.proto"; message Parent { Child child=1; }""");

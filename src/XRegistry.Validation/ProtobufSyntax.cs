@@ -17,9 +17,10 @@ internal sealed class ProtobufSyntax(ValidationContext context)
     };
     private readonly Dictionary<string, Definition> _definitions = new(StringComparer.Ordinal);
     private readonly HashSet<string> _symbols = new(StringComparer.Ordinal);
-    private readonly List<(string Type, string Scope, bool MessageOnly)> _references = [];
+    private readonly List<(string Type, string Scope, bool MessageOnly, string Document)> _references = [];
     private readonly List<Field> _fields = [];
     private readonly HashSet<string> _documents = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<(string Document, bool IsPublic)>> _imports = new(StringComparer.Ordinal);
     internal IEnumerable<(string Name, bool Selectable)> RootDeclarations
         => _definitions.Where(p => p.Value.IsRoot).Select(p => (p.Key, !p.Value.IsEnum));
 
@@ -32,12 +33,15 @@ internal sealed class ProtobufSyntax(ValidationContext context)
         pending.Enqueue((rootName, document, syntax));
         while (pending.TryDequeue(out var item))
         {
-            var parser = new Parser(this, Lex(item.Bytes), item.Syntax, item.Name == rootName);
+            var parser = new Parser(this, Lex(item.Bytes), item.Syntax, item.Name == rootName, item.Name);
             var imports = parser.Parse();
+            var dependencies = new List<(string Document, bool IsPublic)>();
+            _imports.Add(item.Name, dependencies);
             foreach (var import in imports)
             {
                 context.Work();
-                var key = resolveUris ? new Uri(new Uri(item.Name, UriKind.Absolute), import).AbsoluteUri : import;
+                var key = resolveUris ? new Uri(new Uri(item.Name, UriKind.Absolute), import.Name).AbsoluteUri : import.Name;
+                dependencies.Add((key, import.IsPublic));
                 if (_documents.Add(key))
                 {
                     pending.Enqueue((key, await context.ResolveAsync(key, "$/import").ConfigureAwait(false), null));
@@ -45,11 +49,18 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             }
         }
 
+        var visibility = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
         foreach (var reference in _references)
         {
+            if (!visibility.TryGetValue(reference.Document, out var visible))
+            {
+                visible = VisibleDocuments(reference.Document);
+                visibility.Add(reference.Document, visible);
+            }
+
             var resolved = Resolve(reference.Type, reference.Scope);
-            Require(resolved is not null && (!reference.MessageOnly || !resolved.IsEnum),
-                "protobuf.type", "An undeclared or wrong-kind Protobuf type is referenced.");
+            Require(resolved is not null && visible.Contains(resolved.Document) && (!reference.MessageOnly || !resolved.IsEnum),
+                "protobuf.type", "An undeclared, inaccessible or wrong-kind Protobuf type is referenced.");
         }
 
         foreach (var field in _fields)
@@ -67,6 +78,28 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                 ValidateDefault(field, value, resolved);
             }
         }
+    }
+
+    private HashSet<string> VisibleDocuments(string document)
+    {
+        var visible = new HashSet<string>(StringComparer.Ordinal) { document };
+        var pending = new Stack<string>();
+        foreach (var import in _imports[document])
+        {
+            context.Work();
+            if (visible.Add(import.Document)) { pending.Push(import.Document); }
+        }
+
+        while (pending.TryPop(out var dependency))
+        {
+            foreach (var import in _imports[dependency])
+            {
+                context.Work();
+                if (import.IsPublic && visible.Add(import.Document)) { pending.Push(import.Document); }
+            }
+        }
+
+        return visible;
     }
 
     private void RegisterSymbol(string name, string scope)
@@ -299,22 +332,23 @@ internal sealed class ProtobufSyntax(ValidationContext context)
     private enum TokenKind { Identifier, Number, String, Symbol, End }
     private sealed record Token(TokenKind Kind, string Text);
     private sealed record Field(string Name, int Number, string Type, string Scope, string Label, bool Packed, Token? Default);
-    private sealed class Definition(bool isEnum, bool isRoot)
+    private sealed class Definition(bool isEnum, bool isRoot, string document)
     {
         internal bool IsEnum { get; } = isEnum;
         internal bool IsRoot { get; } = isRoot;
+        internal string Document { get; } = document;
         internal HashSet<string> EnumNames { get; } = new(StringComparer.Ordinal);
     }
 
-    private sealed class Parser(ProtobufSyntax owner, List<Token> tokens, int? expectedSyntax, bool isRoot)
+    private sealed class Parser(ProtobufSyntax owner, List<Token> tokens, int? expectedSyntax, bool isRoot, string document)
     {
         private int _index;
         private int _syntax = 2;
         private string _package = "";
-        private readonly List<string> _imports = [];
+        private readonly List<(string Name, bool IsPublic)> _imports = [];
         private Token Current => tokens[_index];
 
-        internal List<string> Parse()
+        internal List<(string Name, bool IsPublic)> Parse()
         {
             if (Take("syntax"))
             {
@@ -340,12 +374,13 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                 }
                 else if (Take("import"))
                 {
-                    if (!Take("public")) { Take("weak"); }
+                    var isPublic = Take("public");
+                    if (!isPublic) { Take("weak"); }
                     var reference = Literal().Text;
                     Require(reference.Length > 0 && !reference.Contains('\\', StringComparison.Ordinal) &&
                         !reference.StartsWith('/') && !reference.Split('/').Any(static part => part is "" or "." or ".."),
                         "protobuf.import", "The import name must be an explicit relative schema path.");
-                    _imports.Add(reference);
+                    _imports.Add((reference, isPublic));
                     Expect(";");
                 }
                 else if (Take("message")) { Message(_package); }
@@ -364,7 +399,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             var name = Identifier();
             owner.RegisterSymbol(name, scope);
             var full = scope.Length == 0 ? name : scope + "." + name;
-            Require(owner._definitions.TryAdd(full, new(false, isRoot)), "protobuf.duplicate", "The type name is duplicated.");
+            Require(owner._definitions.TryAdd(full, new(false, isRoot, document)), "protobuf.duplicate", "The type name is duplicated.");
             Expect("{");
             var fields = new List<Field>();
             var numbers = new HashSet<int>();
@@ -493,7 +528,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
         {
             var name = Identifier();
             owner.RegisterSymbol(name, scope);
-            var definition = new Definition(true, isRoot);
+            var definition = new Definition(true, isRoot, document);
             Require(owner._definitions.TryAdd(scope.Length == 0 ? name : scope + "." + name, definition),
                 "protobuf.duplicate", "An enum type name is duplicated.");
             Expect("{");
@@ -628,7 +663,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             {
                 Require(!messageOnly, "protobuf.type", "RPC arguments require message types.");
             }
-            else { owner._references.Add((type, scope, messageOnly)); }
+            else { owner._references.Add((type, scope, messageOnly, document)); }
         }
 
         private int Tag()

@@ -150,11 +150,15 @@ vocabulary/source mapping. It does not supply their implementation.
   structured host logging after successful commit, without adding wire metadata.
   Other adapters need their own advisory delivery. WoT publication closure needs
   the four contracts above; do not substitute live targets for captured closure.
-- Complete Protobuf schema language coverage and import-visibility rules.
+- Complete Protobuf schema language coverage, including weak-import semantics.
   Proto2/Proto3 validation now checks exact-case name collisions across fields,
   oneofs, nested types, enum values and services in their containing scopes,
   including caller-supplied imports. Enum values occupy their enum's containing
   scope; declarations in different messages or packages can reuse names.
+  Type lookup now requires the declaring file to be the referring file, a
+  direct import or a dependency forwarded by public imports. Private transitive
+  dependencies and sibling imports no longer leak types. Visibility is checked
+  separately for each referring document, including during message selection.
   Editions and custom extensions remain unsupported. This does not add gRPC
   API operation selection.
 - Add full API format validators and the remaining language resolvers. The
