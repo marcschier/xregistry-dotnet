@@ -22,6 +22,15 @@ regardless of declaration order. The reservation does not affect other message
 scopes. This follows the [published map rules](https://protobuf.dev/programming-guides/proto3/#maps)
 and applies to the shared gRPC source parser as well.
 
+Proto3 checks the uniqueness of effective JSON field names, including names
+derived from underscore-separated field identifiers and explicit `json_name`
+overrides. Proto2 retains its best-effort mapping policy: collisions are rejected
+when both fields specify `json_name`, but not when either name is derived.
+These syntax-specific rules follow the
+[published JSON-handling design](https://github.com/protocolbuffers/protobuf/blob/v33.0/docs/design/editions/edition-zero-json-handling.md).
+The `deprecated_legacy_json_field_conflicts` option remains unsupported; it
+cannot silently disable these checks.
+
 The gRPC source profile checks import cycles in both document validation and
 operation selection. A cycle reports `Indeterminate` with `dependency.cycle`,
 never successful validation. The server adapter leaves such a document unchecked

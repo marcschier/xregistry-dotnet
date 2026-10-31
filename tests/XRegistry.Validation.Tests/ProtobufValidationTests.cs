@@ -10,6 +10,89 @@ namespace XRegistry.Validation.Tests;
 public class ProtobufValidationTests
 {
     [Test]
+    [Arguments("string foo_bar=1; string fooBar=2;")]
+    [Arguments("string first=1 [json_name='fooBar']; string foo_bar=2;")]
+    [Arguments("string foo_bar=1; oneof choice {string fooBar=2;}")]
+    [Arguments("map<string,int32> foo_bar=1; string fooBar=2;")]
+    public async Task Proto3DerivedJsonNamesMustBeUnique(string fields)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            Encoding.UTF8.GetBytes("syntax='proto3'; message Root{" + fields + "}"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.json_name");
+    }
+
+    [Test]
+    public async Task JsonNameOverridesDisambiguateDerivedNamesWithoutChangingOtherScopes()
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            Encoding.UTF8.GetBytes("""
+                syntax='proto3';
+                message Root{
+                  string foo_bar=1 [json_name='first'];
+                  string fooBar=2;
+                  message Child{string foo_bar=1;}
+                }
+                message Other{string foo_bar=1;}
+                """));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+    }
+
+    [Test]
+    [Arguments("optional string foo_bar=1; optional string fooBar=2;")]
+    [Arguments("optional string first=1 [json_name='fooBar']; optional string foo_bar=2;")]
+    public async Task Proto2DerivedJsonNameConflictsRetainBestEffortPolicy(string fields)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/2",
+            Encoding.UTF8.GetBytes("syntax='proto2'; message Root{" + fields + "}"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+    }
+
+    [Test]
+    public async Task GrpcImportedProto3RetainsDerivedJsonNameChecks()
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("gRPC/proto3",
+            Encoding.UTF8.GetBytes("syntax='proto3'; import 'child.proto'; message Row{} service S{rpc Get(Row)returns(Row);}"),
+            new()
+            {
+                ResolveReference = (reference, _) =>
+                {
+                    if (reference != "child.proto") { throw new InvalidOperationException("An unexpected dependency was requested."); }
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes(
+                        "syntax='proto3'; message Child{string foo_bar=1;string fooBar=2;}"));
+                }
+            });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.json_name");
+    }
+
+    [Test]
+    [Arguments("a_b_c", "aBC")]
+    [Arguments("foo__bar", "fooBar")]
+    [Arguments("_foo_bar", "FooBar")]
+    [Arguments("foo_bar_", "fooBar")]
+    public async Task Proto3DerivedJsonNamesHandleUnderscoreBoundaries(string fieldName, string jsonName)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            Encoding.UTF8.GetBytes("syntax='proto3'; message Root{string " + fieldName +
+                "=1; string second=2 [json_name='" + jsonName + "'];}"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.json_name");
+    }
+
+    [Test]
+    [Arguments(2)]
+    [Arguments(3)]
+    public async Task LegacyJsonConflictOptionDoesNotSilentlyDisableValidation(int syntax)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/" + syntax,
+            Encoding.UTF8.GetBytes("syntax='proto" + syntax + "'; message Root{" +
+                "option deprecated_legacy_json_field_conflicts=true; optional string foo_bar=1; optional string fooBar=2;}"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Unsupported);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.unsupported");
+    }
+
+    [Test]
     [Arguments("foo", "FooEntry")]
     [Arguments("map_field", "MapFieldEntry")]
     public async Task MapEntryNamesReserveSymbolsInTheirMessageScope(string mapName, string entryName)

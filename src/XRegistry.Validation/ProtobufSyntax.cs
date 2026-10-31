@@ -696,11 +696,25 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                     owner.RegisterSymbol(entryName.ToString(), full);
                 }
                 Require(numbers.Add(field.Number), "protobuf.duplicate", "Message field numbers must be unique.");
-                if (field.JsonName is { } jsonName)
+                if (field.JsonName is not null || _syntax == 3)
                 {
+                    var jsonName = field.JsonName;
+                    if (jsonName is null)
+                    {
+                        owner.Context.Work(field.Name.Length + 1);
+                        var derived = new StringBuilder(field.Name.Length);
+                        var capitalize = false;
+                        foreach (var character in field.Name)
+                        {
+                            if (character == '_') { capitalize = true; continue; }
+                            derived.Append(capitalize ? char.ToUpperInvariant(character) : character);
+                            capitalize = false;
+                        }
+                        jsonName = derived.ToString();
+                    }
                     owner.Context.Work(jsonName.Length + 1);
                     Require(jsonNames.Add(jsonName), "protobuf.json_name",
-                        "Explicit JSON field names must be unique within a message.");
+                        "JSON field names must be unique within the declared message policy.");
                 }
                 fields.Add(field);
                 owner._fields.Add(field);

@@ -256,6 +256,21 @@ public class BuiltInValidationAdapterTests
     }
 
     [Test]
+    [Arguments("Protobuf/3")]
+    [Arguments("gRPC/proto3")]
+    public async Task DerivedJsonNameCollisionsRejectPublicationAtomically(string format)
+    {
+        var engine = ValidatingEngine();
+        var source = "syntax='proto3'; message Row{string foo_bar=1;string fooBar=2;} " +
+            "service S{rpc Get(Row)returns(Row);}";
+        await ExpectCode(() => Send(engine, RegistryAction.Replace, "/sets/g/schemas/s$details",
+            "{\"format\":\"" + format + "\",\"schemabase64\":\"" + Convert.ToBase64String(Encoding.UTF8.GetBytes(source)) + "\"}"),
+            "format_violation");
+        await Assert.That((await Send(engine, RegistryAction.Read, "/")).Metadata!.RootElement.GetProperty("setscount").GetInt32()).IsEqualTo(0);
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(0);
+    }
+
+    [Test]
     public async Task InvalidSyntaxRejectsPublicationInsteadOfBecomingAValidationFlag()
     {
         var engine = ValidatingEngine();
