@@ -12,6 +12,68 @@ namespace XRegistry.Server.Tests;
 public class ModelAndVersionTests
 {
     [Test]
+    [Arguments("manual", 0)]
+    [Arguments("manual", 1)]
+    [Arguments("manual", 2)]
+    [Arguments("createdat", 0)]
+    [Arguments("createdat", 1)]
+    [Arguments("createdat", 2)]
+    [Arguments("modifiedat", 0)]
+    [Arguments("modifiedat", 1)]
+    [Arguments("modifiedat", 2)]
+    [Arguments("semver", 0)]
+    [Arguments("semver", 1)]
+    [Arguments("semver", 2)]
+    public async Task RetentionBoundariesPreserveExactNewestChainAcrossVersionModes(string mode, int limit)
+    {
+        var model = """
+            {"groups":{"teams":{"singular":"team","resources":{"notes":{
+              "singular":"note","hasdocument":false,"maxversions":LIMIT,"versionmode":"MODE"
+            }}}}}
+            """.Replace("LIMIT", limit.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal)
+                .Replace("MODE", mode, StringComparison.Ordinal);
+        var store = new InMemoryRegistryPersistence();
+        var options = new RegistryEngineOptions
+        {
+            RegistryId = "retention",
+            PublicRoot = new Uri("https://registry.example"),
+            TimeProvider = new OrderingClock(),
+            Model = RegistryModel.Compile(RegistryJson.Parse(model))
+        };
+        var engine = new RegistryEngine(options, store, new PermitPolicy());
+        for (var published = 1; published <= 3; published++)
+        {
+            var id = published + ".0.0";
+            await Send(engine, RegistryAction.Replace, "/teams/g/notes/n/versions/" + id,
+                "{\"name\":\"" + id + "\",\"createdat\":\"2040-01-0" + published +
+                "T00:00:00Z\",\"modifiedat\":\"2040-01-0" + published + "T00:00:00Z\"}");
+            var first = limit == 0 ? 1 : Math.Max(1, published - limit + 1);
+            var exported = (await Send(engine, RegistryAction.Read, "/export")).Metadata!.RootElement.GetRawText();
+            foreach (var current in new[] { engine, new RegistryEngine(options, store, new PermitPolicy()) })
+            {
+                var versions = (await Send(current, RegistryAction.Read, "/teams/g/notes/n/versions")).Metadata!.RootElement;
+                await Assert.That(versions.EnumerateObject().Count()).IsEqualTo(published - first + 1);
+                for (var index = 1; index <= published; index++)
+                {
+                    var retainedId = index + ".0.0";
+                    await Assert.That(versions.TryGetProperty(retainedId, out var version)).IsEqualTo(index >= first);
+                    if (index >= first)
+                    {
+                        await Assert.That(version.GetProperty("name").GetString()).IsEqualTo(retainedId);
+                        await Assert.That(version.GetProperty("ancestorid").GetString()).IsEqualTo(Math.Max(first, index - 1) + ".0.0");
+                        await Assert.That(version.GetProperty("isdefault").GetBoolean()).IsEqualTo(index == published);
+                    }
+                }
+                var meta = (await Send(current, RegistryAction.Read, "/teams/g/notes/n/meta")).Metadata!.RootElement;
+                await Assert.That(meta.GetProperty("defaultversionid").GetString()).IsEqualTo(id);
+                await Assert.That(meta.GetProperty("defaultversionsticky").GetBoolean()).IsFalse();
+                await Assert.That((await Send(current, RegistryAction.Read, "/export")).Metadata!.RootElement.GetRawText()).IsEqualTo(exported);
+                await Assert.That((await current.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(published);
+            }
+        }
+    }
+
+    [Test]
     [Arguments(false)]
     [Arguments(true)]
     public async Task ManualSingleRootDefaultsAllowIndependentRootsAndRejectInvalidModelTightening(bool explicitFalse)

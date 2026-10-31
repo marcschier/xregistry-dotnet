@@ -83389,13 +83389,17 @@
       ],
       "text": "- A value of zero (`0`) indicates there is no stated limit, and implementations MAY prune non-default Versions at any time. This means it is valid for an implementation to only support one (`1`) Version when `maxversions` is set to `0`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Zero states no retention limit and permits, rather than requires, discretionary pruning. This engine chooses no automatic count pruning at zero. RetentionBoundariesPreserveExactNewestChainAcrossVersionModes explicitly retains all three published Versions and their exact chain/default membership through restart for every supported mode. No infinite resource-budget claim or mandatory history guarantee is inferred.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "RetentionBoundariesPreserveExactNewestChainAcrossVersionModes"
+        ],
         "nativeEvidence": []
       }
     },
@@ -83421,15 +83425,21 @@
       "text": "- When the limit is exceeded, implementations MUST prune Versions by deleting the oldest root Version first (see the [`versionmode`](#groupsstringresourcesstringversionmode) section for how oldest is determined). If the chosen Version is the current default Version, then for the purposes of determining which to delete, the default Version is removed from the collection of Versions, the list of \"root\" ancestors is recalculated and the \"oldest root Version\" algorithm is reapplied.",
       "review": {
         "status": "reviewed",
-        "note": "The successor requires root recalculation, not skipping the default in an already ordered list. A sole sticky root with child Z and descendant B reproduced incorrect pruning of B on both frameworks. FinalizeResource now excludes the selected default only while recalculating order; manual children of that default are eligible roots without metadata mutation. RetentionRecalculatesRootsWhenOldestVersionIsStickyDefault proves sole-root and independent older-root selection, repeated multi-Version pruning, actual deletion repair, unchanged default metadata, atomic event batches and restart. The full mode-specific pruning and tie matrix remains pending.",
+        "note": "The successor requires root recalculation, not skipping the default in an ordered list. The sole sticky-root regression reproduced incorrect descendant pruning and is fixed by temporary selection-only exclusion. Manual tests prove sole/independent recalculated roots, oldest timestamps, case-insensitive ties and repeated deletion. All-mode boundary tests prove no pruning before a positive limit is crossed, exact oldest deletion at two and repaired retained chains; uppercase/mixed-case lifecycle cases preserve a sticky oldest default in every mode. SemVer, createdat and modifiedat lifecycle tests add modeled limit reductions and repeated pruning; modifiedat repair reaches a stable final order. Exact default metadata, ancestry, event counts and restart are asserted.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "RetentionRecalculatesRootsWhenOldestVersionIsStickyDefault"
+          "CreatedAtAncestryReordersTiesUpdatesDeletionAndRetentionAtomically",
+          "ManualRetentionUsesRootTimestampsThenCaseInsensitiveIds",
+          "ModifiedAtAncestryUsesTimestampTiesAndPersistsRepairedOrdering",
+          "RetentionBoundariesPreserveExactNewestChainAcrossVersionModes",
+          "RetentionRecalculatesRootsWhenOldestVersionIsStickyDefault",
+          "SemverAncestryUsesPrecedenceThroughBatchDeletionRetentionAndRestart",
+          "VersionModeCaseVariantsPreservePublicationRetentionAndRestart"
         ],
         "nativeEvidence": []
       }
