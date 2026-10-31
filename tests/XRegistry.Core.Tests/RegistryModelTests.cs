@@ -34,8 +34,13 @@ public class RegistryModelTests
         await Assert.That(model.Attributes["specversion"].DefaultValue.GetString()).IsEqualTo("1.0-rc4");
         await Assert.That(model.Source.RootElement.GetProperty("groups").GetProperty("dirs")
             .TryGetProperty("plural", out _)).IsFalse();
-        await Assert.That(model.EffectiveModel.RootElement.GetProperty("groups").GetProperty("dirs")
-            .GetProperty("plural").GetString()).IsEqualTo("dirs");
+        var effective = model.EffectiveModel.RootElement;
+        var effectiveGroup = effective.GetProperty("groups").GetProperty("dirs");
+        var effectiveResource = effectiveGroup.GetProperty("resources").GetProperty("files");
+        await Assert.That(effective.TryGetProperty("attributes", out _)).IsTrue();
+        await Assert.That(effectiveGroup.TryGetProperty("attributes", out _)).IsTrue();
+        await Assert.That(effectiveResource.TryGetProperty("attributes", out _)).IsTrue();
+        await Assert.That(effectiveGroup.GetProperty("plural").GetString()).IsEqualTo("dirs");
         await Assert.That(resource.Attributes["versionid"].Required).IsTrue();
         await Assert.That(resource.MetaAttributes["defaultversionsticky"].DefaultValue.GetBoolean()).IsFalse();
     }

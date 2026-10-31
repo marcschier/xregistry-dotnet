@@ -27504,17 +27504,18 @@
       "text": "- REQUIRED at specification-defined locations, otherwise OPTIONAL for extensions Objects.",
       "review": {
         "status": "reviewed",
-        "note": "SystemAttributes plus ModelWriter create attributes maps at Registry, Group and Resource planes; nested objects may have an empty map. The source omission is intentional, as in the complete specification example. Tests check representative baselines, not every mandatory full-model location.",
+        "note": "Effective-model assertions verify attributes maps at Registry, Group and Resource locations. ObjectAttributeDefinitionsCanBeAbsentOrEmpty verifies an extension object may omit its attributes map or supply an empty one.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "CompilesIndependentMinimalSpecModel",
-          "CompilesNestedItemsAndStaticVersionMatchObligations"
+          "CompilesNestedItemsAndStaticVersionMatchObligations",
+          "ObjectAttributeDefinitionsCanBeAbsentOrEmpty"
         ],
         "nativeEvidence": []
       }
