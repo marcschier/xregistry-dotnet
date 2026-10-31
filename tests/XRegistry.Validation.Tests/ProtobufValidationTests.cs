@@ -875,6 +875,45 @@ public class ProtobufValidationTests
     }
 
     [Test]
+    [Arguments("unknown.member", DocumentValidationStatus.Unsupported, "protobuf.unsupported")]
+    [Arguments("deprecated.member", DocumentValidationStatus.Unsupported, "protobuf.unsupported")]
+    [Arguments("features.(custom.flag)", DocumentValidationStatus.Unsupported, "protobuf.unsupported")]
+    [Arguments("features.(.custom.flag).member", DocumentValidationStatus.Unsupported, "protobuf.unsupported")]
+    [Arguments("(custom.flag).member", DocumentValidationStatus.Unsupported, "protobuf.unsupported")]
+    [Arguments("(.custom.flag).member", DocumentValidationStatus.Unsupported, "protobuf.unsupported")]
+    [Arguments(".deprecated", DocumentValidationStatus.Invalid, "protobuf.identifier")]
+    [Arguments(".unknown.member", DocumentValidationStatus.Invalid, "protobuf.identifier")]
+    [Arguments("deprecated.", DocumentValidationStatus.Invalid, "protobuf.identifier")]
+    [Arguments("deprecated..member", DocumentValidationStatus.Invalid, "protobuf.identifier")]
+    [Arguments("deprecated.\"member\"", DocumentValidationStatus.Invalid, "protobuf.identifier")]
+    public async Task OptionNamesUseOneGrammarAtEveryDeclarationTarget(
+        string name, DocumentValidationStatus status, string code)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var option = $"option {name}=true;";
+            var label = syntax == 2 ? "optional " : "";
+            foreach (var body in new[]
+            {
+                $"{option} message Root {{}}",
+                $"message Root {{ {option} }}",
+                $"message Root {{ oneof Choice {{ {option} int32 value=1; }} }}",
+                $"message Root {{ {label}int32 value=1 [{name}=true]; }}",
+                $"enum E {{ {option} ZERO=0; }}",
+                $"enum E {{ ZERO=0 [{name}=true]; }}",
+                $"message Root {{}} service S {{ {option} }}",
+                $"message Root {{}} service S {{ rpc Get(Root) returns (Root) {{ {option} }} }}"
+            })
+            {
+                var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                    Encoding.UTF8.GetBytes($"syntax='proto{syntax}'; {body}"));
+                await Assert.That(result.Status).IsEqualTo(status);
+                await Assert.That(result.Diagnostics[0].Code).IsEqualTo(code);
+            }
+        }
+    }
+
+    [Test]
     [Arguments("option deprecated=true; ZERO=0 [deprecated=false];", DocumentValidationStatus.Valid, "")]
     [Arguments("option deprecated=false; ZERO=0 [deprecated=true];", DocumentValidationStatus.Valid, "")]
     [Arguments("option allow_alias=true; ZERO=0; OTHER=0;", DocumentValidationStatus.Valid, "")]

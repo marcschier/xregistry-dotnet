@@ -631,11 +631,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                 var seen = new HashSet<string>(StringComparer.Ordinal);
                 do
                 {
-                    if (Current.Kind == TokenKind.Symbol && Current.Text == "(")
-                    {
-                        Unsupported("Custom field options require an explicit extension policy.");
-                    }
-                    var option = Identifier();
+                    var option = OptionName();
                     Require(seen.Add(option), "protobuf.option", "Field options must be unique.");
                     Expect("=");
                     var value = Constant();
@@ -699,11 +695,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                 if (Take(";")) { continue; }
                 if (Take("option"))
                 {
-                    if (Current.Kind == TokenKind.Symbol && Current.Text == "(")
-                    {
-                        Unsupported("Custom enum options require an explicit extension policy.");
-                    }
-                    var option = FullIdentifier();
+                    var option = OptionName();
                     Expect("=");
                     var value = Constant();
                     Expect(";");
@@ -727,11 +719,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                         var seen = new HashSet<string>(StringComparer.Ordinal);
                         do
                         {
-                            if (Current.Kind == TokenKind.Symbol && Current.Text == "(")
-                            {
-                                Unsupported("Custom enum value options require an explicit extension policy.");
-                            }
-                            var option = FullIdentifier();
+                            var option = OptionName();
                             Require(seen.Add(option), "protobuf.option", "Enum value options must be unique.");
                             Expect("=");
                             var value = Constant();
@@ -824,11 +812,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
 
         private void Option(OptionTarget target, HashSet<string> seen)
         {
-            if (Current.Kind == TokenKind.Symbol && Current.Text == "(")
-            {
-                Unsupported("Custom options require an explicit extension policy.");
-            }
-            var option = TypeName();
+            var option = OptionName();
             Expect("=");
             var value = Constant();
             Expect(";");
@@ -877,6 +861,22 @@ internal sealed class ProtobufSyntax(ValidationContext context)
         {
             var prefix = Take(".") ? "." : "";
             return prefix + FullIdentifier();
+        }
+
+        private string OptionName()
+        {
+            var name = "";
+            do
+            {
+                if (Current.Kind == TokenKind.Symbol && Current.Text == "(")
+                {
+                    Unsupported("Custom options require an explicit extension policy.");
+                }
+
+                name += (name.Length == 0 ? "" : ".") + Identifier();
+            }
+            while (Take("."));
+            return name;
         }
 
         private string FullIdentifier()

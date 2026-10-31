@@ -212,6 +212,10 @@ vocabulary/source mapping. It does not supply their implementation.
   values also fail, and `allow_alias` cannot be overwritten. Independent
   declarations/files retain separate sets; unknown/custom policies remain
   unsupported.
+  Option names now use one grammar at all declaration targets, including
+  fields and enum values. Unbraced leading dots and empty/quoted segments
+  fail; dotted native names and braced custom sub-options retain the unsupported
+  policy boundary. Custom extension interpretation remains unimplemented.
   Enum and enum-value unknown/custom options now report the same unsupported
   policy outcome as other declarations; supported boolean and alias rules,
   enum-value duplicate checks and token-kind checks remain enforced.

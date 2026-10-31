@@ -43887,6 +43887,7 @@
           "SingularEnumAliasOptionCannotBeOverwritten",
           "SingularOptionsHaveIndependentContainingDeclarationsAndFiles",
           "NestedDeclarationsDoNotResetTheirParentOptionSet",
+          "OptionNamesUseOneGrammarAtEveryDeclarationTarget",
           "EnumAndEnumValueUnknownOptionPoliciesRemainUnsupported",
           "EnumOptionPoliciesPreserveKnownBooleansAliasesAndInvalidSyntax"
         ],

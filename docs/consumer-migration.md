@@ -175,6 +175,17 @@ independent option sets; entering a nested declaration does not reset its parent
 The publisher's descriptor schema declares these options as singular fields.
 Unknown and custom option policies remain unsupported.
 
+Option names use the publisher's
+[Proto2](https://protobuf.dev/reference/protobuf/proto2-spec/#option) and
+[Proto3](https://protobuf.dev/reference/protobuf/proto3-spec/#option) grammar at
+every declaration target, including fields and enum values. Unbraced names
+cannot begin with a dot or contain empty or quoted segments; these report
+`Invalid` with `protobuf.identifier`. Dotted names such as `unknown.member`
+remain syntactically valid but report `Unsupported` when no policy is implemented.
+A braced custom-option segment, including in `features.(custom.flag)`, reports
+`Unsupported`; this does not add extension lookup or complete custom-option
+validation.
+
 Enum and enum-value options use the same explicit policy boundary as other
 declarations. Unknown option names or actual custom-option syntax report
 `Unsupported`, rather than treating an unimplemented option as malformed solely
