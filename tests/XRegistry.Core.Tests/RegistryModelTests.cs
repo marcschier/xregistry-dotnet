@@ -205,6 +205,15 @@ public class RegistryModelTests
         await Assert.That(TestErrors.Capture(() => RegistryModel.Compile(RegistryJson.Parse(
             $$$$"""{"groups":{"g":{"singular":"{{{{new string('s', 62)}}}}"}}}"""))).Path)
             .IsEqualTo("/groups/g/singular");
+        var resourcePlural = new string('r', 57);
+        var resourceType = RegistryModel.Compile(RegistryJson.Parse(
+            "{\"groups\":{\"dirs\":{\"singular\":\"dir\",\"resources\":{\"" + resourcePlural +
+            "\":{\"singular\":\"resource\"}}}}}"));
+        await Assert.That(resourceType.Groups["dirs"].Resources[resourcePlural].Plural).IsEqualTo(resourcePlural);
+        await Assert.That(TestErrors.Capture(() => RegistryModel.Compile(RegistryJson.Parse(
+            "{\"groups\":{\"dirs\":{\"singular\":\"dir\",\"resources\":{\"" + new string('r', 58) +
+            "\":{\"singular\":\"resource\"}}}}}"))).Path)
+            .IsEqualTo("/groups/dirs/resources/" + new string('r', 58) + "/plural");
         var resourceSingular = new string('s', 57);
         var resource = CompileResource($$""""{"singular":"{{resourceSingular}}"}"""");
         await Assert.That(resource.Singular).IsEqualTo(resourceSingular);

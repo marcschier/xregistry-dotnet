@@ -31262,14 +31262,14 @@
       "text": "- MUST be non-empty and MUST be a valid attribute name with the exception that it MUST NOT exceed 57 characters (not 63).",
       "review": {
         "status": "reviewed",
-        "note": "Resource plural uses CheckNames' nonempty strict grammar and 57-character ceiling. The named length test directly covers Group plural and Resource singular, not Resource plural; shared code is inspected but no direct Resource-plural boundary assertion exists.",
+        "note": "UsesNormativeNameLengthsRatherThanDerivedSchemaLengths accepts a 57-character Resource plural and rejects 58 characters at its plural path.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "UsesNormativeNameLengthsRatherThanDerivedSchemaLengths"
         ],
