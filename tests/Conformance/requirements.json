@@ -5127,15 +5127,16 @@
       "text": "An absent `<COLLECTION>` attribute, or empty map, MUST be interpreted as a request to not modify the collection at all.",
       "review": {
         "status": "reviewed",
-        "note": "ApplyContainer only visits submitted collection maps and an empty map has no member operations. Direct assertions cover preserving siblings on upsert and untouched resources when a collection is omitted, but an explicit empty nested update map with populated children is not directly asserted here.",
+        "note": "Tests update a nested child, then verify both an omitted collection and an explicit empty map preserve it. A later invalid child also leaves the parent and collection unchanged.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "PostCollectionsReturnsOnlyProcessedChildrenAndDeleteGuardsAreAtomic",
+          "NestedCollectionUpdatesPreserveAbsentAndEmptyMapsAndRejectInvalidEntitiesAtomically",
           "UnrelatedGroupMetadataDoesNotTouchVersionsButNestedEqualsChangesRevalidateUntouchedResources",
           "ChangedGroupConstraintDefaultsStillAuthorizeEveryIndirectVersionMutation",
           "ChangedGroupConstraintDefaultsCannotMutateReadonlyResources"
@@ -65210,13 +65211,17 @@
       ],
       "text": "When updating an entity that can contain xRegistry collections, the request MAY contain the 3 collection attributes. The `<COLLECTION>url` and `<COLLECTION>count` attributes MUST be silently ignored by the server.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A Group PATCH supplies invalid collection URL/count values; the request succeeds and returns the server-computed collection link and count.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "PatchNullDeletesWhileMissingPreservesAndReadonlyInputIsIgnored"
+        ],
         "nativeEvidence": []
       }
     },
@@ -65241,13 +65246,18 @@
       ],
       "text": "If the `<COLLECTION>` attribute is present, the server MUST process each entity in the collection map as a request to create or update that entity according to the semantics of the operation method used. An entry in the map that isn't a valid entity (e.g. is `null`) MUST generate an error ([bad_request](#bad_request)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Tests exercise POST nested Group creation, PATCH nested Resource updates, and rejection of a null nested entity with bad_request.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "PostCollectionsReturnsOnlyProcessedChildrenAndDeleteGuardsAreAtomic",
+          "NestedCollectionUpdatesPreserveAbsentAndEmptyMapsAndRejectInvalidEntitiesAtomically"
+        ],
         "nativeEvidence": []
       }
     },
@@ -65272,13 +65282,18 @@
       ],
       "text": "Any error while processing a nested collection entity MUST result in the entire request being rejected.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A nested null-entity failure rejects the parent PATCH; assertions verify the parent name, epoch and existing child collection remain unchanged.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "NestedCollectionUpdatesPreserveAbsentAndEmptyMapsAndRejectInvalidEntitiesAtomically",
+          "DefaultLimitsSupportThousandResourceBatchesAtomicNestedWritesAndIdentityRollback"
+        ],
         "nativeEvidence": []
       }
     },
@@ -65303,13 +65318,17 @@
       ],
       "text": "An absent `<COLLECTION>` attribute, or empty map, MUST be interpreted as a request to not modify the collection at all.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Tests update a nested child, then verify both an omitted collection and an explicit empty map preserve it.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "NestedCollectionUpdatesPreserveAbsentAndEmptyMapsAndRejectInvalidEntitiesAtomically"
+        ],
         "nativeEvidence": []
       }
     },
@@ -65334,13 +65353,18 @@
       ],
       "text": "If a client wishes to delete an entity from the collection, or replace the entire collection, the client MUST use a \"delete\" type of operations on the collection. This means that delete operations on these entities would need to be handled in dedicated operations, separate from update operations.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The collection tests show PATCH with absent/empty nested maps preserves existing members, while collection DELETE requests remove selected or all entities.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "PostCollectionsReturnsOnlyProcessedChildrenAndDeleteGuardsAreAtomic",
+          "NestedCollectionUpdatesPreserveAbsentAndEmptyMapsAndRejectInvalidEntitiesAtomically"
+        ],
         "nativeEvidence": []
       }
     },
@@ -65365,13 +65389,17 @@
       ],
       "text": "In cases where a Resource update operation includes attributes meant to be applied to the \"default\" Version of a Resource, and the incoming inlined `versions` collections includes that \"default\" Version, the Resource's default Version attributes MUST be silently ignored. This is to avoid any possible conflicting data between the two sets of data for that Version. In other words, the Version attributes in the incoming `versions` collection wins. See [Resource Processing Algorithm](#resource-processing-algorithm) for more details.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A Resource update supplies an invalid top-level default-Version value and a valid value for that same Version in the nested versions map; the nested Version value is returned.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "NestedVersionsOverrideResourceAttributes"
+        ],
         "nativeEvidence": []
       }
     },

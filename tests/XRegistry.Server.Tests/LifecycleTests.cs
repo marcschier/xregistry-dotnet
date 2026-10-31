@@ -32,6 +32,36 @@ public class LifecycleTests
     }
 
     [Test]
+    public async Task NestedCollectionUpdatesPreserveAbsentAndEmptyMapsAndRejectInvalidEntitiesAtomically()
+    {
+        var engine = Create();
+        await Send(engine, RegistryAction.Replace, "/teams/a", """{"name":"original"}""");
+        await Send(engine, RegistryAction.Replace, "/teams/a/notes/n", """{"name":"original child"}""");
+
+        await Send(engine, RegistryAction.Patch, "/teams/a", """
+            {"name":"patched","notes":{"n":{"description":"nested update"}}}
+            """);
+        var child = await Send(engine, RegistryAction.Read, "/teams/a/notes/n");
+        await Assert.That(child.Metadata!.RootElement.GetProperty("name").GetString()).IsEqualTo("original child");
+        await Assert.That(child.Metadata.RootElement.GetProperty("description").GetString()).IsEqualTo("nested update");
+
+        await Send(engine, RegistryAction.Patch, "/teams/a", """{"name":"absent preserves"}""");
+        await Send(engine, RegistryAction.Patch, "/teams/a", """{"name":"empty preserves","notes":{}}""");
+        var beforeFailure = await Send(engine, RegistryAction.Read, "/teams/a");
+        await Assert.That(beforeFailure.Metadata!.RootElement.GetProperty("name").GetString()).IsEqualTo("empty preserves");
+        await Assert.That(beforeFailure.Metadata.RootElement.GetProperty("notescount").GetInt32()).IsEqualTo(1);
+        var beforeEpoch = beforeFailure.Metadata.RootElement.GetProperty("epoch").GetInt32();
+
+        await ExpectCode(() => Send(engine, RegistryAction.Patch, "/teams/a", """
+            {"name":"must roll back","notes":{"invalid":null}}
+            """), "bad_request");
+        var afterFailure = await Send(engine, RegistryAction.Read, "/teams/a");
+        await Assert.That(afterFailure.Metadata!.RootElement.GetProperty("name").GetString()).IsEqualTo("empty preserves");
+        await Assert.That(afterFailure.Metadata.RootElement.GetProperty("notescount").GetInt32()).IsEqualTo(1);
+        await Assert.That(afterFailure.Metadata.RootElement.GetProperty("epoch").GetInt32()).IsEqualTo(beforeEpoch);
+    }
+
+    [Test]
     public async Task ChangingDefaultVersionDoesNotTouchEitherVersionAndDeletingLastRemovesResource()
     {
         var engine = Create();
