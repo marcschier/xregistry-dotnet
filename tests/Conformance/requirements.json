@@ -16731,15 +16731,16 @@
       "text": "This value indicates that any `defaultversionid` attribute included in the request MUST be ignored.",
       "review": {
         "status": "reviewed",
-        "note": "Strip implements Meta defaultversionid/defaultversionsticky omission and strips both Resource ID and versionid only on a direct Version request. No reviewed direct assertions cover these exact flag cases, including a nested new-model path; root ID/epoch tests are not replacements.",
+        "note": "Changing defaultversionid to another existing version with ignore=defaultversionid leaves the selected default and URL unchanged.",
         "roles": [
-          "server"
+          "server",
+          "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "IgnoreFlagsPermitEntityImportWithoutSuppressingNestedIdentityGuards"
+          "IgnoreDefaultVersionFieldsPreservesSelectionAndStickiness"
         ],
         "nativeEvidence": []
       }
@@ -16760,15 +16761,16 @@
       "text": "This value indicates that any `defaultversionsticky` attribute included in the request MUST be ignored.",
       "review": {
         "status": "reviewed",
-        "note": "Strip implements Meta defaultversionid/defaultversionsticky omission and strips both Resource ID and versionid only on a direct Version request. No reviewed direct assertions cover these exact flag cases, including a nested new-model path; root ID/epoch tests are not replacements.",
+        "note": "Clearing defaultversionsticky with ignore=defaultversionsticky leaves the sticky default-selection state true.",
         "roles": [
-          "server"
+          "server",
+          "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "IgnoreFlagsPermitEntityImportWithoutSuppressingNestedIdentityGuards"
+          "IgnoreDefaultVersionFieldsPreservesSelectionAndStickiness"
         ],
         "nativeEvidence": []
       }
@@ -16926,15 +16928,16 @@
       "text": "In cases where the target entity is a Version, then the flag MUST apply to both the Resource's `<SINGULAR>id` and the `versionid`.",
       "review": {
         "status": "reviewed",
-        "note": "Strip implements Meta defaultversionid/defaultversionsticky omission and strips both Resource ID and versionid only on a direct Version request. No reviewed direct assertions cover these exact flag cases, including a nested new-model path; root ID/epoch tests are not replacements.",
+        "note": "A direct Version PATCH with mismatching Resource and Version IDs and ignore=id updates the target while preserving its path-bound IDs.",
         "roles": [
-          "server"
+          "server",
+          "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "IgnoreFlagsPermitEntityImportWithoutSuppressingNestedIdentityGuards"
+          "IgnoreIdOnTargetedVersionStripsResourceAndVersionIdentifiers"
         ],
         "nativeEvidence": []
       }
@@ -77373,15 +77376,16 @@
       "text": "This value indicates that any `defaultversionid` attribute included in the request MUST be ignored.",
       "review": {
         "status": "reviewed",
-        "note": "Strip implements Meta defaultversionid/defaultversionsticky omission and strips both Resource ID and versionid only on a direct Version request. No reviewed direct assertions cover these exact flag cases, including a nested new-model path; root ID/epoch tests are not replacements.",
+        "note": "Changing defaultversionid to another existing version with ignore=defaultversionid leaves the selected default and URL unchanged.",
         "roles": [
-          "server"
+          "server",
+          "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "IgnoreFlagsPermitEntityImportWithoutSuppressingNestedIdentityGuards"
+          "IgnoreDefaultVersionFieldsPreservesSelectionAndStickiness"
         ],
         "nativeEvidence": []
       }
@@ -77408,15 +77412,16 @@
       "text": "This value indicates that any `defaultversionsticky` attribute included in the request MUST be ignored.",
       "review": {
         "status": "reviewed",
-        "note": "Strip implements Meta defaultversionid/defaultversionsticky omission and strips both Resource ID and versionid only on a direct Version request. No reviewed direct assertions cover these exact flag cases, including a nested new-model path; root ID/epoch tests are not replacements.",
+        "note": "Clearing defaultversionsticky with ignore=defaultversionsticky leaves the sticky default-selection state true.",
         "roles": [
-          "server"
+          "server",
+          "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "IgnoreFlagsPermitEntityImportWithoutSuppressingNestedIdentityGuards"
+          "IgnoreDefaultVersionFieldsPreservesSelectionAndStickiness"
         ],
         "nativeEvidence": []
       }
@@ -77604,15 +77609,16 @@
       "text": "In cases where the target entity is a Version, then the flag MUST apply to both the Resource's `<SINGULAR>id` and the `versionid`.",
       "review": {
         "status": "reviewed",
-        "note": "Strip implements Meta defaultversionid/defaultversionsticky omission and strips both Resource ID and versionid only on a direct Version request. No reviewed direct assertions cover these exact flag cases, including a nested new-model path; root ID/epoch tests are not replacements.",
+        "note": "A direct Version PATCH with mismatching Resource and Version IDs and ignore=id updates the target while preserving its path-bound IDs.",
         "roles": [
-          "server"
+          "server",
+          "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "IgnoreFlagsPermitEntityImportWithoutSuppressingNestedIdentityGuards"
+          "IgnoreIdOnTargetedVersionStripsResourceAndVersionIdentifiers"
         ],
         "nativeEvidence": []
       }

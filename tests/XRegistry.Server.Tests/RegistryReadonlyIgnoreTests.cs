@@ -73,6 +73,41 @@ public class RegistryReadonlyIgnoreTests
     }
 
     [Test]
+    public async Task IgnoreDefaultVersionFieldsPreservesSelectionAndStickiness()
+    {
+        var engine = Create();
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n", """{"versionid":"v1","name":"first"}""");
+        await Send(engine, RegistryAction.Post, "/teams/g/notes/n", """{"versionid":"v2","name":"second"}""");
+        await Send(engine, RegistryAction.Patch, "/teams/g/notes/n/meta", """{"defaultversionid":"v1","defaultversionsticky":true}""");
+
+        await Send(engine, RegistryAction.Patch, "/teams/g/notes/n/meta", """{"defaultversionid":"v2"}""",
+            new KeyValuePair<string, string?>("ignore", "defaultversionid"));
+        await Send(engine, RegistryAction.Patch, "/teams/g/notes/n/meta", """{"defaultversionsticky":false}""",
+            new KeyValuePair<string, string?>("ignore", "defaultversionsticky"));
+
+        var meta = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n/meta")).Metadata!.RootElement;
+        await Assert.That(meta.GetProperty("defaultversionid").GetString()).IsEqualTo("v1");
+        await Assert.That(meta.GetProperty("defaultversionsticky").GetBoolean()).IsTrue();
+        await Assert.That(meta.GetProperty("defaultversionurl").GetString())
+            .IsEqualTo("https://registry.example/catalog/teams/g/notes/n/versions/v1");
+    }
+
+    [Test]
+    public async Task IgnoreIdOnTargetedVersionStripsResourceAndVersionIdentifiers()
+    {
+        var engine = Create();
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n", """{"versionid":"v1","name":"before"}""");
+
+        var result = await Send(engine, RegistryAction.Patch, "/teams/g/notes/n/versions/v1",
+            """{"noteid":"different","versionid":"different","name":"updated"}""",
+            new KeyValuePair<string, string?>("ignore", "id"));
+
+        await Assert.That(result.Metadata!.RootElement.GetProperty("noteid").GetString()).IsEqualTo("n");
+        await Assert.That(result.Metadata.RootElement.GetProperty("versionid").GetString()).IsEqualTo("v1");
+        await Assert.That(result.Metadata.RootElement.GetProperty("name").GetString()).IsEqualTo("updated");
+    }
+
+    [Test]
     public async Task UnsupportedReadonlyIgnoreAndMalformedCollectionEntriesReject()
     {
         var engine = await SeedReadonly();
