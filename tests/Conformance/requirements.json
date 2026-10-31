@@ -43845,7 +43845,12 @@
           "LateImportedPackageControlsTypeBindingAndCrossFileSymbols",
           "PackageDeclarationsRetainFullIdentifierAndUniquenessRules",
           "PackageDiscoveryIgnoresNestedNamesAndStringContents",
-          "PackageDiscoveryUsesTheFullDottedNameAndFiniteWorkBudget"
+          "PackageDiscoveryUsesTheFullDottedNameAndFiniteWorkBudget",
+          "ExplicitPackedOptionsAcceptRepeatedPackableTypes",
+          "ExplicitPackedOptionsRejectNonPackableFieldsEvenWhenFalse",
+          "ExplicitPackedOptionsRejectOneofFieldsEvenWhenFalse",
+          "ExplicitPackedOptionsRetainImportedEnumAndMessageTypeChecks",
+          "ExplicitPackedOptionsKeepBooleanKindsAndDuplicateChecks"
         ],
         "nativeEvidence": []
       }

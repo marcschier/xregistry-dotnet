@@ -409,6 +409,139 @@ public class ProtobufValidationTests
     }
 
     [Test]
+    [Arguments("double")]
+    [Arguments("float")]
+    [Arguments("int32")]
+    [Arguments("int64")]
+    [Arguments("uint32")]
+    [Arguments("uint64")]
+    [Arguments("sint32")]
+    [Arguments("sint64")]
+    [Arguments("fixed32")]
+    [Arguments("fixed64")]
+    [Arguments("sfixed32")]
+    [Arguments("sfixed64")]
+    [Arguments("bool")]
+    [Arguments("State")]
+    public async Task ExplicitPackedOptionsAcceptRepeatedPackableTypes(string type)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            foreach (var option in new[] { "", " [packed=true]", " [packed=false]" })
+            {
+                var schema = $"syntax=\"proto{syntax}\"; enum State {{ ZERO=0; }} " +
+                    $"message M {{ repeated {type} values=1{option}; }}";
+                var result = await new BuiltInDocumentValidator().ValidateAsync(
+                    $"Protobuf/{syntax}", Encoding.UTF8.GetBytes(schema));
+                await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+                await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("optional int32 value=1")]
+    [Arguments("optional bool value=1")]
+    [Arguments("optional State value=1")]
+    [Arguments("optional string value=1")]
+    [Arguments("optional bytes value=1")]
+    [Arguments("optional Child value=1")]
+    [Arguments("repeated string value=1")]
+    [Arguments("repeated bytes value=1")]
+    [Arguments("repeated Child value=1")]
+    [Arguments("map<int32,int32> value=1")]
+    [Arguments("map<string,State> value=1")]
+    [Arguments("map<string,Child> value=1")]
+    public async Task ExplicitPackedOptionsRejectNonPackableFieldsEvenWhenFalse(string field)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            foreach (var option in new[] { "", " [packed=true]", " [packed=false]" })
+            {
+                var schema = $"syntax=\"proto{syntax}\"; enum State {{ ZERO=0; }} message Child {{}} " +
+                    $"message M {{ {field}{option}; }}";
+                var result = await new BuiltInDocumentValidator().ValidateAsync(
+                    $"Protobuf/{syntax}", Encoding.UTF8.GetBytes(schema));
+                await Assert.That(result.Status).IsEqualTo(option.Length == 0
+                    ? DocumentValidationStatus.Valid : DocumentValidationStatus.Invalid);
+                if (option.Length == 0) { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+                else { await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.packed"); }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("int32")]
+    [Arguments("State")]
+    [Arguments("string")]
+    [Arguments("Child")]
+    public async Task ExplicitPackedOptionsRejectOneofFieldsEvenWhenFalse(string type)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            foreach (var option in new[] { "", " [packed=true]", " [packed=false]" })
+            {
+                var schema = $"syntax=\"proto{syntax}\"; enum State {{ ZERO=0; }} message Child {{}} " +
+                    $"message M {{ oneof choice {{ {type} value=1{option}; }} }}";
+                var result = await new BuiltInDocumentValidator().ValidateAsync(
+                    $"Protobuf/{syntax}", Encoding.UTF8.GetBytes(schema));
+                await Assert.That(result.Status).IsEqualTo(option.Length == 0
+                    ? DocumentValidationStatus.Valid : DocumentValidationStatus.Invalid);
+                if (option.Length == 0) { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+                else { await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.packed"); }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("true")]
+    [Arguments("false")]
+    public async Task ExplicitPackedOptionsRetainImportedEnumAndMessageTypeChecks(string value)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            foreach (var type in new[] { "dep.State", "dep.Child" })
+            {
+                var calls = 0;
+                var schema = $"syntax=\"proto{syntax}\"; import \"types.proto\"; " +
+                    $"message Root {{ repeated {type} values=1 [packed={value}]; }}";
+                var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                    Encoding.UTF8.GetBytes(schema), new DocumentValidationOptions
+                    {
+                        ResolveReference = (name, _) =>
+                        {
+                            calls++;
+                            return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes(
+                                $"syntax=\"proto{syntax}\"; package dep; enum State {{ ZERO=0; }} message Child {{}}"));
+                        }
+                    });
+                await Assert.That(calls).IsEqualTo(1);
+                await Assert.That(result.Status).IsEqualTo(type == "dep.State"
+                    ? DocumentValidationStatus.Valid : DocumentValidationStatus.Invalid);
+                if (type == "dep.State") { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+                else { await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.packed"); }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("packed=\"false\"")]
+    [Arguments("packed=\"fa\" 'lse'")]
+    [Arguments("packed=false, packed=true")]
+    [Arguments("packed=true, packed=false")]
+    [Arguments("packed=false, packed=false")]
+    public async Task ExplicitPackedOptionsKeepBooleanKindsAndDuplicateChecks(string options)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                Encoding.UTF8.GetBytes($"syntax=\"proto{syntax}\"; message M {{ repeated int32 values=1 [{options}]; }}"));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.option");
+        }
+    }
+
+    [Test]
     [Arguments("optional string foo=1; message foo {}")]
     [Arguments("message foo {} optional string foo=1;")]
     [Arguments("optional string foo=1; enum foo { ZERO=0; }")]

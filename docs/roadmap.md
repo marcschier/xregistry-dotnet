@@ -180,6 +180,9 @@ vocabulary/source mapping. It does not supply their implementation.
   File-wide package scope no longer depends on statement position, including
   for imported declarations and root message selection. Dotted package names
   use the full-identifier grammar; package discovery is work-budgeted.
+  Explicit `packed` options require repeated packable scalar or enum fields,
+  including when set to `false`; omission remains distinct from an explicit
+  setting.
   Editions and custom extensions remain unsupported. This does not add gRPC
   API operation selection.
 - Add full API format validators and the remaining language resolvers. The

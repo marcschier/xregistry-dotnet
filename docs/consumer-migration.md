@@ -112,6 +112,12 @@ invalid. These rules follow the
 and [Proto3](https://protobuf.dev/reference/protobuf/proto3-spec/#proto-file)
 file grammars and their package declarations. Package discovery consumes the
 same finite work budget as declaration validation.
+An explicit `packed` option requires a repeated numeric, boolean or enum field
+whether its value is `true` or `false`. Setting `packed=false` on a singular,
+string, bytes, message, map or oneof field therefore reports `Invalid` with
+`protobuf.packed`; omitting the option does not impose that restriction.
+The [publisher's option guidance](https://protobuf.dev/programming-guides/proto3/#options)
+defines packed and unpacked encoding for repeated basic numeric fields.
 Editions, custom extensions, complete weak-import semantics and gRPC API
 selection remain unsupported.
 

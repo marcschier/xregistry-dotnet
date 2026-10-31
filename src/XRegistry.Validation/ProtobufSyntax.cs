@@ -68,11 +68,11 @@ internal sealed class ProtobufSyntax(ValidationContext context)
         foreach (var field in _fields)
         {
             var resolved = Scalars.Contains(field.Type) ? null : Resolve(field.Type, field.Scope);
-            if (field.Packed)
+            if (field.HasPackedOption)
             {
                 Require(field.Label == "repeated" && field.Type is not ("string" or "bytes" or "map") &&
                     (Scalars.Contains(field.Type) || resolved is { IsEnum: true }),
-                    "protobuf.packed", "Only repeated packable scalars or enums may be packed.");
+                    "protobuf.packed", "The packed option is only valid on repeated packable scalars or enums.");
             }
 
             if (field.Default is { } value)
@@ -337,7 +337,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
     private enum TokenKind { Identifier, Number, String, Symbol, End }
     private enum OptionTarget { File, Message, Oneof, Service, Method }
     private sealed record Token(TokenKind Kind, string Text);
-    private sealed record Field(string Name, int Number, string Type, string Scope, string Label, bool Packed, Token? Default);
+    private sealed record Field(string Name, int Number, string Type, string Scope, string Label, bool HasPackedOption, Token? Default);
     private sealed class Definition(bool isEnum, bool isRoot, string document, int syntax)
     {
         internal bool IsEnum { get; } = isEnum;
@@ -521,7 +521,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             Expect("=");
             var number = Tag();
             Token? defaultValue = null;
-            var packed = false;
+            var hasPackedOption = false;
             if (Take("["))
             {
                 var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -543,7 +543,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                             break;
                         case "packed":
                             Require(IsBoolean(value), "protobuf.option", "packed must be boolean.");
-                            packed = value.Text == "true";
+                            hasPackedOption = true;
                             break;
                         case "json_name":
                             Require(value.Kind == TokenKind.String, "protobuf.option", "json_name must be a string.");
@@ -563,7 +563,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             }
 
             Expect(";");
-            return new(name, number, type, scope, label, packed, defaultValue);
+            return new(name, number, type, scope, label, hasPackedOption, defaultValue);
         }
 
         private void Enumeration(string scope)
