@@ -17,7 +17,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
     };
     private readonly Dictionary<string, Definition> _definitions = new(StringComparer.Ordinal);
     private readonly HashSet<string> _symbols = new(StringComparer.Ordinal);
-    private readonly List<(string Type, string Scope, bool MessageOnly, string Document)> _references = [];
+    private readonly List<(string Type, string Scope, bool MessageOnly, string Document, int Syntax)> _references = [];
     private readonly List<Field> _fields = [];
     private readonly HashSet<string> _documents = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<(string Document, bool IsPublic)>> _imports = new(StringComparer.Ordinal);
@@ -61,6 +61,8 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             var resolved = Resolve(reference.Type, reference.Scope);
             Require(resolved is not null && visible.Contains(resolved.Document) && (!reference.MessageOnly || !resolved.IsEnum),
                 "protobuf.type", "An undeclared, inaccessible or wrong-kind Protobuf type is referenced.");
+            Require(reference.Syntax != 3 || resolved is not { IsEnum: true, Syntax: 2 },
+                "protobuf.enum_syntax", "Proto3 fields cannot directly use a Proto2 enum.");
         }
 
         foreach (var field in _fields)
@@ -332,11 +334,12 @@ internal sealed class ProtobufSyntax(ValidationContext context)
     private enum TokenKind { Identifier, Number, String, Symbol, End }
     private sealed record Token(TokenKind Kind, string Text);
     private sealed record Field(string Name, int Number, string Type, string Scope, string Label, bool Packed, Token? Default);
-    private sealed class Definition(bool isEnum, bool isRoot, string document)
+    private sealed class Definition(bool isEnum, bool isRoot, string document, int syntax)
     {
         internal bool IsEnum { get; } = isEnum;
         internal bool IsRoot { get; } = isRoot;
         internal string Document { get; } = document;
+        internal int Syntax { get; } = syntax;
         internal HashSet<string> EnumNames { get; } = new(StringComparer.Ordinal);
     }
 
@@ -399,7 +402,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             var name = Identifier();
             owner.RegisterSymbol(name, scope);
             var full = scope.Length == 0 ? name : scope + "." + name;
-            Require(owner._definitions.TryAdd(full, new(false, isRoot, document)), "protobuf.duplicate", "The type name is duplicated.");
+            Require(owner._definitions.TryAdd(full, new(false, isRoot, document, _syntax)), "protobuf.duplicate", "The type name is duplicated.");
             Expect("{");
             var fields = new List<Field>();
             var numbers = new HashSet<int>();
@@ -528,7 +531,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
         {
             var name = Identifier();
             owner.RegisterSymbol(name, scope);
-            var definition = new Definition(true, isRoot, document);
+            var definition = new Definition(true, isRoot, document, _syntax);
             Require(owner._definitions.TryAdd(scope.Length == 0 ? name : scope + "." + name, definition),
                 "protobuf.duplicate", "An enum type name is duplicated.");
             Expect("{");
@@ -663,7 +666,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             {
                 Require(!messageOnly, "protobuf.type", "RPC arguments require message types.");
             }
-            else { owner._references.Add((type, scope, messageOnly, document)); }
+            else { owner._references.Add((type, scope, messageOnly, document, _syntax)); }
         }
 
         private int Tag()

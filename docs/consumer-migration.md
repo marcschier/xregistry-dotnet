@@ -55,6 +55,12 @@ reports `Invalid` with `protobuf.type`, including during message selection.
 Dependencies are still acquired only through the caller's resolver; URI-backed
 selection applies visibility after resolving import document identities.
 See the publisher's [import rules](https://protobuf.dev/programming-guides/proto3/#importing-definitions).
+Type checks retain each file's syntax. A Proto3 field cannot directly use a
+Proto2 enum, including through a public import; this reports `Invalid` with
+`protobuf.enum_syntax`. A missing syntax declaration identifies Proto2.
+Messages can cross either syntax boundary and retain their own enum fields.
+These checks follow the publisher's
+[cross-syntax rules](https://protobuf.dev/programming-guides/proto3/#using-proto2-message-types).
 Editions, custom extensions, complete weak-import semantics and gRPC API
 selection remain unsupported.
 

@@ -309,6 +309,94 @@ public class ProtobufValidationTests
     }
 
     [Test]
+    [Arguments(2, 2, DocumentValidationStatus.Valid)]
+    [Arguments(2, 3, DocumentValidationStatus.Valid)]
+    [Arguments(3, 2, DocumentValidationStatus.Invalid)]
+    [Arguments(3, 3, DocumentValidationStatus.Valid)]
+    public async Task ImportedEnumSyntaxIsCheckedForEveryFieldForm(
+        int referringSyntax, int declaringSyntax, DocumentValidationStatus expected)
+    {
+        foreach (var field in new[]
+        {
+            "optional .dep.State state=1;",
+            "repeated .dep.State states=1 [packed=true];",
+            "map<string,.dep.State> states=1;",
+            "oneof choice { .dep.State state=1; }"
+        })
+        {
+            var requests = 0;
+            var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{referringSyntax}",
+                Encoding.UTF8.GetBytes($"syntax=\"proto{referringSyntax}\"; import \"dep.proto\"; message Root {{ {field} }}"),
+                new DocumentValidationOptions
+                {
+                    ResolveReference = (name, _) =>
+                    {
+                        requests++;
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(name == "dep.proto"
+                            ? Encoding.UTF8.GetBytes($"syntax=\"proto{declaringSyntax}\"; package dep; enum State {{ ZERO=0; }}")
+                            : null);
+                    }
+                });
+            await Assert.That(result.Status).IsEqualTo(expected);
+            await Assert.That(requests).IsEqualTo(1);
+            if (expected == DocumentValidationStatus.Invalid)
+            {
+                await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.enum_syntax");
+            }
+            else { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+        }
+    }
+
+    [Test]
+    [Arguments(2, 3)]
+    [Arguments(3, 2)]
+    public async Task ImportedMessagesMayContainEnumsFromTheirOwnSyntax(int referringSyntax, int declaringSyntax)
+    {
+        var result = await SchemaObjectSelector.SelectAsync($"Protobuf/{referringSyntax}",
+            Encoding.UTF8.GetBytes($"syntax=\"proto{referringSyntax}\"; import \"dep.proto\"; " +
+                "message Root { optional .dep.Child child=1; } service S { rpc Get(.dep.Child) returns (Root); }"),
+            "root.proto#Root", new()
+            {
+                Validation = new()
+                {
+                    ResolveReference = (name, _) => ValueTask.FromResult<ReadOnlyMemory<byte>?>(name == "dep.proto"
+                        ? Encoding.UTF8.GetBytes($"syntax=\"proto{declaringSyntax}\"; package dep; " +
+                            "enum State { ZERO=0; } message Child { optional State state=1; }") : null)
+                }
+            });
+        await Assert.That(result.Status).IsEqualTo(SchemaObjectSelectionStatus.Selected);
+        await Assert.That(result.Selection!.TypeName).IsEqualTo("Root");
+        await Assert.That(result.Selection.References.Count).IsEqualTo(1);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task PubliclyForwardedEnumsRetainExplicitOrImplicitProtoTwoSyntax(bool explicitSyntax)
+    {
+        var result = await SchemaObjectSelector.SelectAsync("Protobuf/3",
+            """syntax="proto3"; import "bridge.proto"; message Root { .dep.State state=1; }"""u8.ToArray(),
+            "root.proto#Root", new()
+            {
+                Validation = new()
+                {
+                    ResolveReference = (name, _) => ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+                        Encoding.UTF8.GetBytes(name switch
+                        {
+                            "bridge.proto" => "syntax=\"proto3\"; import public \"dep.proto\";",
+                            "dep.proto" => (explicitSyntax ? "syntax=\"proto2\"; " : "") +
+                                "package dep; enum State { ZERO=0; }",
+                            _ => throw new InvalidOperationException("Unexpected import: " + name)
+                        }))
+                }
+            });
+        await Assert.That(result.Status).IsEqualTo(SchemaObjectSelectionStatus.Invalid);
+        await Assert.That(result.Selection).IsNull();
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.enum_syntax");
+    }
+
+    [Test]
     public async Task SuppliedImportBindsTheDeclaredMessageNotArbitraryText()
     {
         var source = Encoding.UTF8.GetBytes("""syntax="proto3"; import "child.proto"; message Parent { Child child=1; }""");

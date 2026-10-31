@@ -43811,7 +43811,10 @@
           "ImportVisibilityRequiresDirectImportsOrPublicForwarding",
           "PublicImportVisibilityStopsAtPrivateEdges",
           "SiblingImportsDoNotGrantEachOtherVisibility",
-          "SelectionAppliesImportVisibilityAfterResolvingDependencyDocumentUris"
+          "SelectionAppliesImportVisibilityAfterResolvingDependencyDocumentUris",
+          "ImportedEnumSyntaxIsCheckedForEveryFieldForm",
+          "ImportedMessagesMayContainEnumsFromTheirOwnSyntax",
+          "PubliclyForwardedEnumsRetainExplicitOrImplicitProtoTwoSyntax"
         ],
         "nativeEvidence": []
       }
