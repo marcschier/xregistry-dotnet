@@ -258,6 +258,20 @@ public class BridgeViewTests
     }
 
     [Test]
+    public async Task UnknownInlineAttributeUsesBadInlineError()
+    {
+        var source = new ControlledSource("local", "v1", ["shared"]);
+        await using var app = await BridgeFixture.StartAsync([source.Registration()]);
+        using var client = BridgeFixture.Client(app);
+
+        using var response = await client.GetAsync("/registry?inline=unknownattribute");
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.BadRequest);
+        await Assert.That((await BridgeFixture.Json(response)).GetProperty("code").GetString()).IsEqualTo("bad_inline");
+        await Assert.That(source.Opens).IsEqualTo(0);
+    }
+
+    [Test]
     public async Task ExternalInlineDescriptorRemainsAUrlRatherThanEmptyOrFetchedBytes()
     {
         var source = new ControlledSource("local", "v1", ["shared"]);

@@ -38,7 +38,7 @@ it does not transfer historical qualification to a successor.
 | api | 53 | 6 | 0 |
 | catalog | 141 | 141 | 0 |
 | cloudevents | 8 | 4 | 0 |
-| core | 1209 | 855 | 10 |
+| core | 1209 | 856 | 13 |
 | endpoint | 189 | 95 | 0 |
 | events | 144 | 59 | 0 |
 | federation | 120 | 56 | 0 |

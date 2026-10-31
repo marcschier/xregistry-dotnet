@@ -17157,14 +17157,13 @@
       "text": "Specifying the name of a non-inlineable attribute MUST generate an error ([inline_noninlineable](#inline_noninlineable)).",
       "review": {
         "status": "reviewed",
-        "note": "The source separately prescribes inline_noninlineable for known non-inlineable names and bad_inline for unknown or non-inlineable names; current engine distinguishes known versus unknown, producer uses bad_inline. Error Processing permits more appropriate errors. This overlap is recorded as wording ambiguity rather than reopening HTTP catalog fixes.",
+        "note": "The HTTP contract returns inline_noninlineable for the known non-inlineable name `name`. The separate bad_inline clause also names non-inlineable values, so this evidence is qualified to the specific server error requirement; producer behavior is not established.",
         "roles": [
-          "server",
-          "producer"
+          "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "qualified",
         "testIds": [
           "RouteBodyAndFlagErrorsUseIndependentFrozenWireVectors",
           "InvalidInlineAndCollectionsInputsFailBeforeAnySourceAcquisition"
@@ -17412,17 +17411,17 @@
       "text": "A request to inline an unknown, or non-inlineable, attribute MUST generate an error ([bad_inline](#bad_inline)).",
       "review": {
         "status": "reviewed",
-        "note": "The source separately prescribes inline_noninlineable for known non-inlineable names and bad_inline for unknown or non-inlineable names; current engine distinguishes known versus unknown, producer uses bad_inline. Error Processing permits more appropriate errors. This overlap is recorded as wording ambiguity rather than reopening HTTP catalog fixes.",
+        "note": "The HTTP contract returns bad_inline for an unknown inline path and inline_noninlineable for the known non-inlineable name `name`. The source clauses overlap by assigning both errors to non-inlineable values, so this evidence qualifies the server's distinct error handling; producer behavior is not established.",
         "roles": [
-          "server",
-          "producer"
+          "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "qualified",
         "testIds": [
           "RouteBodyAndFlagErrorsUseIndependentFrozenWireVectors",
-          "InvalidInlineAndCollectionsInputsFailBeforeAnySourceAcquisition"
+          "InvalidInlineAndCollectionsInputsFailBeforeAnySourceAcquisition",
+          "UnknownInlineAttributeUsesBadInlineError"
         ],
         "nativeEvidence": []
       }
@@ -78113,13 +78112,18 @@
       ],
       "text": "A request to inline an unknown, or non-inlineable, attribute MUST generate an error ([bad_inline](#bad_inline)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The HTTP server returns bad_inline for an unknown inline path; the separate known non-inlineable error clause requires inline_noninlineable. Because the source assigns overlapping errors to non-inlineable values, this qualifies only the unknown server path; producer behavior is not established.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "qualified",
+        "testIds": [
+          "UnknownInlineAttributeUsesBadInlineError",
+          "InlineCollectionNamesRequireExactPluralCase"
+        ],
         "nativeEvidence": []
       }
     },
