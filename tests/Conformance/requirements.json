@@ -60755,13 +60755,20 @@
       ],
       "text": "- `timestamp` - an [RFC3339](https://tools.ietf.org/html/rfc3339) timestamp. Use of a `time-zone` notation is RECOMMENDED. All timestamps returned by a server MUST be normalized to UTC to allow for easy (and consistent) comparisons.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The validator accepts RFC3339 timestamps with a zone and normalizes values to UTC. `ScalarValuesPreserveTypePrecisionAndNormalizeTimestamps` verifies offset conversion; `TimestampScalarBoundaryPreservesAllFractionalDigits` verifies precision preservation.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ScalarValuesPreserveTypePrecisionAndNormalizeTimestamps",
+          "TimestampScalarBoundaryPreservesAllFractionalDigits"
+        ],
         "nativeEvidence": []
       }
     },
