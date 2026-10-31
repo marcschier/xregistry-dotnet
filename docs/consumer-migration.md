@@ -431,8 +431,13 @@ Within each named type, aliases are compared after resolving relative spellings
 against its effective namespace. `Old` and `example.Old` therefore collide on
 `example.Current`; `old` and `other.Old` remain distinct. Alias text is retained,
 including strings that are not valid names, as permitted by Avro 1.12.
-Cross-declaration alias conflicts and alias-based protocol evolution remain
-outside these selection checks.
+Resolved aliases and canonical names cannot belong to different named types,
+regardless of declaration order. These ownership checks cover all protocol
+types and named schemas embedded in messages, including unselected messages;
+conflicts report `avro.alias` at the conflicting declaration. Namespace and
+case distinctions remain significant, and aliases still do not resolve authored
+type references. Alias-based protocol evolution and field-alias ownership
+checks remain outside this implementation.
 Request parameters follow the anonymous-record field form: each is an object
 with a valid, unique field name and a type schema value. Optional documentation
 is a string, `order` is `ascending`, `descending` or `ignore`, and aliases are

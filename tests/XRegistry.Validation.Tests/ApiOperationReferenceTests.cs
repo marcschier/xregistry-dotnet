@@ -1727,6 +1727,126 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
+    [Arguments("record")]
+    [Arguments("error")]
+    [Arguments("enum")]
+    [Arguments("fixed")]
+    public async Task AvroProtocolAliasesHaveUniqueOwnersAcrossDeclarations(string kind)
+    {
+        var attributes = kind switch
+        {
+            "enum" => "\"symbols\":[\"VALUE\"]",
+            "fixed" => "\"size\":1",
+            _ => "\"fields\":[]"
+        };
+        foreach (var aliasAgainstName in new[] { false, true })
+        {
+            foreach (var reversed in new[] { false, true })
+            {
+                var first = $$"""{"type":"{{kind}}","name":"First","aliases":["Old"],{{attributes}}}""";
+                var second = aliasAgainstName
+                    ? """{"type":"record","name":"Old","fields":[]}"""
+                    : """{"type":"record","name":"Second","aliases":["example.Old"],"fields":[]}""";
+                var types = reversed ? $"{second},{first}" : $"{first},{second}";
+                var document = $$$$"""
+                    {"protocol":"example.Protocol","types":[{{{{types}}}}],
+                     "messages":{"GetUser":{"request":[],"response":"null"}}}
+                    """;
+                var result = ApiOperationDocumentResolver.Resolve("AvroProtocol/1.12.0", "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#operations/GetUser"));
+                await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("avro.alias");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo(aliasAgainstName && !reversed
+                    ? "$/types/1/name" : "$/types/1/aliases");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("old-name")]
+    [Arguments("example.old-name")]
+    public async Task AvroProtocolIllegalAliasSpellingsStillParticipateInUniqueness(string alias)
+    {
+        var document = $$$$"""
+            {"protocol":"example.Protocol","types":[
+              {"type":"record","name":"First","aliases":["old-name"],"fields":[]},
+              {"type":"fixed","name":"Second","aliases":["{{{{alias}}}}"],"size":1}],
+             "messages":{"GetUser":{"request":[],"response":"null"}}}
+            """;
+        var result = ApiOperationDocumentResolver.Resolve("AvroProtocol/1.12.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/GetUser"));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("avro.alias");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/types/1/aliases");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("other.Old")]
+    [Arguments("example.old")]
+    [Arguments("other.old-name")]
+    public async Task AvroProtocolAliasOwnershipPreservesNamespaceCaseAndAuthoredMessage(string secondAlias)
+    {
+        var document = $$$$"""
+            {"protocol":"example.Protocol","types":[
+              {"type":"record","name":"First","aliases":["Old","old-name"],"fields":[]},
+              {"type":"record","name":"Second","aliases":["{{{{secondAlias}}}}"],"fields":[]}],
+             "messages":{"GetUser":{"request":[],"response":"First"}}}
+            """;
+        using var parsed = JsonDocument.Parse(document);
+        var result = await ApiOperationDocumentResolver.ResolveAsync("AvroProtocol/1.12.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/GetUser"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Aliases must not acquire schemas."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.Diagnostic).IsNull();
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(parsed.RootElement.GetProperty("messages").GetProperty("GetUser").GetRawText());
+    }
+
+    [Test]
+    [Arguments("request", "$/messages/Other/request/0/type/aliases")]
+    [Arguments("response", "$/messages/Other/response/aliases")]
+    public async Task AvroProtocolAliasOwnershipIncludesUnselectedMessageTypes(string location, string path)
+    {
+        var nested = """{"type":"record","name":"Second","aliases":["Old"],"fields":[]}""";
+        var request = location == "request" ? $$"""[{"name":"value","type":{{nested}}}]""" : "[]";
+        var response = location == "response" ? nested : "\"null\"";
+        var document = $$$$"""
+            {"protocol":"example.Protocol","types":[{"type":"record","name":"First","aliases":["Old"],"fields":[]}],
+             "messages":{"GetUser":{"request":[],"response":"null"},
+               "Other":{"request":{{{{request}}}},"response":{{{{response}}}}}}}
+            """;
+        var result = ApiOperationDocumentResolver.Resolve("AvroProtocol/1.12.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/GetUser"));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("avro.alias");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo(path);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("Old")]
+    [Arguments("example.Old")]
+    public async Task AvroProtocolAliasOwnershipDoesNotEnableAliasTypeReferences(string reference)
+    {
+        var document = $$$$"""
+            {"protocol":"example.Protocol","types":[{"type":"record","name":"First","aliases":["Old"],"fields":[]}],
+             "messages":{"GetUser":{"request":[],"response":"{{{{reference}}}}"}}}
+            """;
+        var result = ApiOperationDocumentResolver.Resolve("AvroProtocol/1.12.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/GetUser"));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("avro.unknown_name");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/messages/GetUser/response");
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
     public async Task AvroProtocolSelectionPreservesTheDeclaredMessageWithoutResolvingMetadataReferences()
     {
         const string document = """

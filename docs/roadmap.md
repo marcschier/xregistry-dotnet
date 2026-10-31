@@ -257,8 +257,11 @@ vocabulary/source mapping. It does not supply their implementation.
   declaration order across the complete protocol. Avro 1.12 union defaults
   use the first matching branch. Each named type rejects aliases that resolve
   to the same fullname, without rewriting the authored aliases or restricting
-  them to valid names. Cross-declaration alias conflicts and alias-based
-  protocol evolution remain open. Protocol logical-type annotations retain their
+  them to valid names. Resolved aliases and canonical names now require unique
+  ownership across distinct named types in the whole protocol, including
+  embedded schemas in unselected messages and either declaration order.
+  Alias-based protocol evolution and field-alias ownership remain open.
+  Protocol logical-type annotations retain their
   authored representation while selection checks the underlying wire schema
   and defaults, including unknown or invalid logical annotations. No logical
   value conversion or comparison is performed; data-schema validation and

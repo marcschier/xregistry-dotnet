@@ -9,6 +9,7 @@ namespace XRegistry.Validation;
 internal sealed class AvroSyntax(string format, ValidationContext context)
 {
     private readonly Dictionary<string, AvroType> _names = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, AvroType> _protocolNameOwners = new(StringComparer.Ordinal);
     private readonly Dictionary<AvroField, (JsonElement Value, string Path)> _defaults = [];
     private readonly bool _enumDefaults = format.Equals("Avro/1.11.0", StringComparison.OrdinalIgnoreCase);
     private readonly bool _protocol = format == "AvroProtocol/1.12.0";
@@ -65,6 +66,14 @@ internal sealed class AvroSyntax(string format, ValidationContext context)
             }
         }
         ValidateDefaults();
+    }
+
+    private void RegisterProtocolName(string name, AvroType type, string path)
+    {
+        context.Work(name.Length + 1, path);
+        ValidationContext.Require(!_protocolNameOwners.TryGetValue(name, out var owner) || ReferenceEquals(owner, type),
+            path, "avro.alias", "An Avro fullname or alias cannot belong to different named types.");
+        _protocolNameOwners.TryAdd(name, type);
     }
 
     private void ValidateDefaults()
@@ -138,6 +147,7 @@ internal sealed class AvroSyntax(string format, ValidationContext context)
             var lastDot = name.LastIndexOf('.');
             ns = lastDot < 0 ? "" : name[..lastDot];
             ValidationContext.Require(_names.TryAdd(name, type), path + "/name", "avro.duplicate_name", "An Avro fullname is already defined.");
+            if (_protocol) { RegisterProtocolName(name, type, path + "/name"); }
             if (schema.TryGetProperty("aliases", out var aliases))
             {
                 type.Aliases.AddRange(SchemaJson.Strings(aliases, path + "/aliases"));
@@ -150,6 +160,7 @@ internal sealed class AvroSyntax(string format, ValidationContext context)
                         var fullName = alias.Contains('.') || ns.Length == 0 ? alias : ns + "." + alias;
                         ValidationContext.Require(fullNames.Add(fullName), path + "/aliases", "avro.alias",
                             "An Avro type cannot repeat an alias fullname.");
+                        RegisterProtocolName(fullName, type, path + "/aliases");
                     }
                 }
             }
