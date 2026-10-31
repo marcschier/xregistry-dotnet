@@ -134,6 +134,35 @@ public class BuiltInValidationAdapterTests
     }
 
     [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task GrpcImportCyclesRemainUncheckedOrRejectStrictPublication(bool strict)
+    {
+        var engine = ValidatingEngine(strict: strict, validationOptions: new()
+        {
+            ResolveReference = (_, _) => ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+                Encoding.UTF8.GetBytes("syntax='proto3'; import 'root.proto';"))
+        });
+        var metadata = "{\"format\":\"gRPC/proto3\",\"schemabase64\":\"" +
+            Convert.ToBase64String(Encoding.UTF8.GetBytes("syntax='proto3'; import 'child.proto'; service S {}")) + "\"}";
+        if (strict)
+        {
+            await ExpectCode(() => Send(engine, RegistryAction.Replace, "/sets/g/schemas/s$details", metadata),
+                "format_unknown");
+            await Assert.That((await Send(engine, RegistryAction.Read, "/")).Metadata!.RootElement
+                .GetProperty("setscount").GetInt32()).IsEqualTo(0);
+            await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(0);
+        }
+        else
+        {
+            var result = await Send(engine, RegistryAction.Replace, "/sets/g/schemas/s$details", metadata);
+            await Assert.That(result.Metadata!.RootElement.GetProperty("formatvalidated").GetBoolean()).IsFalse();
+            await Assert.That(result.Metadata.RootElement.GetProperty("formatvalidatedreason").GetString()!)
+                .Contains("dependency.cycle");
+        }
+    }
+
+    [Test]
     [Arguments("""syntax='proto3'; message Row {}""")]
     [Arguments("""syntax='proto2'; service S {}""")]
     [Arguments("""syntax='proto3'; service S { rpc Get(Missing) returns(Missing); }""")]

@@ -283,7 +283,6 @@ public static partial class ApiOperationDocumentResolver
                 var parser = new ProtobufSyntax(budget);
                 await parser.ValidateAsync(document, 3, rootReference: "root.proto",
                     requireRootService: true, validateImport: ValidateGrpcImport).ConfigureAwait(false);
-                parser.RequireAcyclicImports();
                 var method = parser.SelectRootRpc(reference.Selector.Tokens[1], reference.Selector.Tokens[3]);
                 return method is null
                     ? Failure(ApiOperationResolutionStatus.NotFound, "selection.not_found",

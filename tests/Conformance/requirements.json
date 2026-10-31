@@ -114074,7 +114074,12 @@
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "GrpcDocumentValidationDetectsDirectAndTransitiveImportCycles",
+          "GrpcDocumentValidationAllowsSharedAcyclicDependencies",
+          "GrpcImportCyclesRemainUncheckedOrRejectStrictPublication",
+          "GrpcDetectsDirectAndTransitiveImportCyclesWithoutRefetchingTheRoot"
+        ],
         "nativeEvidence": []
       }
     },

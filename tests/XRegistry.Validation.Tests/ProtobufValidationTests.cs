@@ -10,6 +10,52 @@ namespace XRegistry.Validation.Tests;
 public class ProtobufValidationTests
 {
     [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task GrpcDocumentValidationDetectsDirectAndTransitiveImportCycles(bool transitive)
+    {
+        var calls = new List<string>();
+        var root = Encoding.UTF8.GetBytes("syntax='proto3'; import '" +
+            (transitive ? "child.proto" : "root.proto") + "'; service S {}");
+        var result = await new BuiltInDocumentValidator().ValidateAsync("gRPC/proto3", root,
+            new DocumentValidationOptions
+            {
+                ResolveReference = (name, _) =>
+                {
+                    calls.Add(name);
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(name == "root.proto" ? root :
+                        Encoding.UTF8.GetBytes("syntax='proto3'; import 'root.proto';"));
+                }
+            });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Indeterminate);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("dependency.cycle");
+        await Assert.That(result.Diagnostics[0].Path).IsEqualTo("$/import");
+        await Assert.That(calls.SequenceEqual(transitive ? ["child.proto"] : Array.Empty<string>())).IsTrue();
+    }
+
+    [Test]
+    public async Task GrpcDocumentValidationAllowsSharedAcyclicDependencies()
+    {
+        var calls = new List<string>();
+        var result = await new BuiltInDocumentValidator().ValidateAsync("gRPC/proto3",
+            Encoding.UTF8.GetBytes("""
+                syntax='proto3'; import 'bridge.proto'; import 'types.proto'; service S {}
+                """), new DocumentValidationOptions
+            {
+                ResolveReference = (name, _) =>
+                {
+                    calls.Add(name);
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes(
+                        name == "bridge.proto" ? "syntax='proto3'; import 'types.proto';" :
+                        "syntax='proto3'; message Row {}"));
+                }
+            });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+        await Assert.That(calls.SequenceEqual(["bridge.proto", "types.proto"])).IsTrue();
+    }
+
+    [Test]
     [Arguments("optional string first=1 [json_name='key']; optional string second=2 [json_name='key'];")]
     [Arguments("optional string first=1 [json_name='k' 'ey']; oneof choice { string second=2 [json_name='key']; }")]
     [Arguments("oneof first { string a=1 [json_name='key']; } oneof second { string b=2 [json_name='key']; }")]

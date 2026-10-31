@@ -15,6 +15,12 @@ successful validation.
 | gRPC | `gRPC/proto3` uses the Proto3 policy and requires at least one service declared in the supplied root document. Imported source uses its declared syntax. Descriptor sets are unsupported. Source-method selection is available separately through `ApiOperationDocumentResolver`. |
 | JSON Structure | Draft-04 Core document/type/namespace/reference/union/compound grammar and bounded primitive restrictions. Required extensions, inheritance and unqualified extended primitive const/enum rules are unsupported. |
 
+The gRPC source profile checks import cycles in both document validation and
+operation selection. A cycle reports `Indeterminate` with `dependency.cycle`,
+never successful validation. The server adapter leaves such a document unchecked
+in non-strict mode and rejects it in strict mode. Shared acyclic dependencies
+remain valid and are retrieved once per distinct document.
+
 These are declared policies, not claims of universal equivalence to every
 upstream schema tool or version. All parsers share finite document, aggregate
 byte, depth, node, reference and work budgets. JSON ingestion shares the core's

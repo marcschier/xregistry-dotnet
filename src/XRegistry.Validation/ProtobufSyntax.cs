@@ -38,7 +38,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
         return new(service, method, request.FullName, response.FullName, rpc.ClientStreaming, rpc.ServerStreaming);
     }
 
-    internal void RequireAcyclicImports()
+    private void RequireAcyclicImports()
     {
         var complete = new HashSet<string>(StringComparer.Ordinal);
         var active = new HashSet<string>(StringComparer.Ordinal);
@@ -96,6 +96,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
 
         Require(!requireRootService || _hasRootService, "grpc.service",
             "A gRPC source document must declare at least one service in the root document.");
+        if (requireRootService) { RequireAcyclicImports(); }
 
         var visibility = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
         foreach (var reference in _references)
