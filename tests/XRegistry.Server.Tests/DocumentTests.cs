@@ -58,6 +58,47 @@ public class DocumentTests
     }
 
     [Test]
+    public async Task BinaryFlagChangesOnlyInlineResourceAndVersionDocumentEncoding()
+    {
+        var engine = Create();
+        var bytes = Encoding.UTF8.GetBytes("""{"looks":"json"}""");
+        var base64 = Convert.ToBase64String(bytes);
+        using var document = new MemoryStream(bytes);
+        await engine.ExecuteAsync(new(RegistryAction.Replace, RegistryPath.Parse("/teams/g/files/f"))
+        {
+            Document = document,
+            ContentType = "application/json"
+        }, Writer());
+
+        var group = await Send(engine, RegistryAction.Read, "/teams/g");
+        var groupWithBinary = await Send(engine, RegistryAction.Read, "/teams/g", null,
+            new KeyValuePair<string, string?>("binary", null));
+        await Assert.That(groupWithBinary.Metadata!.RootElement.GetRawText()).IsEqualTo(group.Metadata!.RootElement.GetRawText());
+
+        var resource = await Send(engine, RegistryAction.Read, "/teams/g/files/f$details", null,
+            new KeyValuePair<string, string?>("inline", "file"));
+        await Assert.That(resource.Metadata!.RootElement.GetProperty("file").GetProperty("looks").GetString()).IsEqualTo("json");
+        var binaryResource = await Send(engine, RegistryAction.Read, "/teams/g/files/f$details", null,
+            new KeyValuePair<string, string?>("inline", "file"), new KeyValuePair<string, string?>("binary", null));
+        await Assert.That(binaryResource.Metadata!.RootElement.GetProperty("filebase64").GetString()).IsEqualTo(base64);
+        await Assert.That(binaryResource.Metadata.RootElement.TryGetProperty("file", out _)).IsFalse();
+
+        var versionPath = "/teams/g/files/f/versions/1$details";
+        var version = await Send(engine, RegistryAction.Read, versionPath, null,
+            new KeyValuePair<string, string?>("inline", "file"));
+        await Assert.That(version.Metadata!.RootElement.GetProperty("file").GetProperty("looks").GetString()).IsEqualTo("json");
+        var binaryVersion = await Send(engine, RegistryAction.Read, versionPath, null,
+            new KeyValuePair<string, string?>("inline", "file"), new KeyValuePair<string, string?>("binary", null));
+        await Assert.That(binaryVersion.Metadata!.RootElement.GetProperty("filebase64").GetString()).IsEqualTo(base64);
+        await Assert.That(binaryVersion.Metadata.RootElement.TryGetProperty("file", out _)).IsFalse();
+
+        var notInlined = await Send(engine, RegistryAction.Read, "/teams/g/files/f$details", null,
+            new KeyValuePair<string, string?>("binary", null));
+        await Assert.That(notInlined.Metadata!.RootElement.TryGetProperty("file", out _)).IsFalse();
+        await Assert.That(notInlined.Metadata.RootElement.TryGetProperty("filebase64", out _)).IsFalse();
+    }
+
+    [Test]
     public async Task ExportUsesRelativePointersAndNoDefaultProjection()
     {
         var engine = Create();

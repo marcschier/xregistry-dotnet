@@ -15070,15 +15070,16 @@
       "text": "This flag MAY be used on any request but will only influence the serialization of Resource and Version entities that have a domain-specific document.",
       "review": {
         "status": "reviewed",
-        "note": "Document/non-Document and no-inline output cases support the intended binary behavior. No direct assertion set establishes acceptance on every request kind and no influence on every metadata-only plane; optional use does not justify a whole-request matrix promotion.",
+        "note": "Direct server tests show the flag is accepted without changing Group or non-inlined Resource output, and selects base64 for inlined Resource and Version documents.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
+          "BinaryFlagChangesOnlyInlineResourceAndVersionDocumentEncoding",
           "BinaryChangesOnlyRequestedDocumentEncodingAndJsonDomainValuesRemainUntouched",
           "EmptyAndInvalidJsonDocumentsUseExactBase64Fallback",
           "ExternalInlineDescriptorRemainsAUrlRatherThanEmptyOrFetchedBytes",
@@ -75596,13 +75597,17 @@
       ],
       "text": "The `binary` flag MAY be used on requests to indicate that the server MUST use the `<RESOURCE>base64` attribute instead of the `<RESOURCE>` attribute when serializing any Resource's domain-specific document in the response message. Note, the presence of this flag does not change when the document is inlined, just how it is serialized if it is inlined.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The server emits the document as base64 rather than the domain-specific JSON attribute for both Resource and Version document views while preserving inlining.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "BinaryFlagChangesOnlyInlineResourceAndVersionDocumentEncoding"
+        ],
         "nativeEvidence": []
       }
     },
@@ -75627,13 +75632,17 @@
       ],
       "text": "This flag MAY be used on any request but will only influence the serialization of Resource and Version entities that have a domain-specific document.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The flag is accepted on a Group read without changing its representation and changes document encoding only for inlined Resource and Version entities.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "BinaryFlagChangesOnlyInlineResourceAndVersionDocumentEncoding"
+        ],
         "nativeEvidence": []
       }
     },
