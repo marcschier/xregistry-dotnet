@@ -216,6 +216,10 @@ vocabulary/source mapping. It does not supply their implementation.
   fields and enum values. Unbraced leading dots and empty/quoted segments
   fail; dotted native names and braced custom sub-options retain the unsupported
   policy boundary. Custom extension interpretation remains unimplemented.
+  Explicit `json_name` values now reject NUL after escape decoding and
+  concatenation, including in imported schemas. String/bytes defaults and
+  other string options retain NUL values; this does not add ProtoJSON encoding
+  or message parsing.
   Enum and enum-value unknown/custom options now report the same unsupported
   policy outcome as other declarations; supported boolean and alias rules,
   enum-value duplicate checks and token-kind checks remain enforced.

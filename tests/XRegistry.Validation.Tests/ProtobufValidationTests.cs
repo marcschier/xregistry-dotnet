@@ -1600,11 +1600,10 @@ public class ProtobufValidationTests
     }
 
     [Test]
-    [Arguments("\\x0")]
     [Arguments("\\x1")]
     [Arguments("\\xf")]
     [Arguments("\\XA")]
-    [Arguments("\\x0g")]
+    [Arguments("\\x1g")]
     [Arguments("\\x12")]
     [Arguments("\\X7F")]
     [Arguments("\\x123")]
@@ -1625,6 +1624,94 @@ public class ProtobufValidationTests
                 await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
             }
         }
+    }
+
+    [Test]
+    [Arguments("'\\0'")]
+    [Arguments("'\\00'")]
+    [Arguments("'\\000'")]
+    [Arguments("'\\x0'")]
+    [Arguments("'\\x0g'")]
+    [Arguments("'\\X00'")]
+    [Arguments("'\\u0000'")]
+    [Arguments("'\\U00000000'")]
+    [Arguments("'prefix' \"\\x00\" 'suffix'")]
+    [Arguments("'\\u0000' 'suffix'")]
+    [Arguments("'prefix' '\\000'")]
+    public async Task JsonNamesRejectDecodedNulInEveryFieldKind(string literal)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var label = syntax == 2 ? "optional " : "";
+            foreach (var field in new[]
+            {
+                $"{label}string value=1 [json_name={literal}];",
+                $"repeated int32 value=1 [json_name={literal}];",
+                $"oneof choice {{ string value=1 [json_name={literal}]; }}",
+                $"map<string,int32> value=1 [json_name={literal}];"
+            })
+            {
+                var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                    Encoding.UTF8.GetBytes($"syntax='proto{syntax}'; message Root {{ {field} }}"));
+                await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+                await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.json_name");
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("''")]
+    [Arguments("'\\x01'")]
+    [Arguments("'\\n'")]
+    [Arguments("'\\uFFFF'")]
+    [Arguments("'\\U0010FFFF'")]
+    [Arguments("'literal\\\\0'")]
+    [Arguments("'literal\\\\u0000'")]
+    public async Task JsonNameNulCheckDoesNotRestrictOtherDecodedValues(string literal)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                Encoding.UTF8.GetBytes($"syntax='proto{syntax}'; message Root {{ optional string value=1 [json_name={literal}]; }}"));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+            await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+        }
+    }
+
+    [Test]
+    [Arguments("'\\0'")]
+    [Arguments("'\\x0'")]
+    [Arguments("'\\x0g'")]
+    [Arguments("'\\u0000'")]
+    [Arguments("'a' '\\000' 'b'")]
+    public async Task NulRemainsLegalInStringOptionsAndStringOrBytesDefaults(string literal)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/2",
+            Encoding.UTF8.GetBytes($"syntax='proto2'; option java_package={literal}; message Root {{ " +
+                $"optional string text=1 [default={literal}]; optional bytes data=2 [default={literal}]; }}"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task ImportedJsonNamesRetainDecodedNulValidation()
+    {
+        var requests = 0;
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            Encoding.UTF8.GetBytes("syntax='proto3'; import 'dep.proto'; message Root {}"), new()
+            {
+                ResolveReference = (name, _) =>
+                {
+                    requests++;
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+                        name == "dep.proto" ? Encoding.UTF8.GetBytes(
+                            "syntax='proto2'; message Imported { optional string text=1 [json_name='a' '\\u0000']; }")
+                            : (ReadOnlyMemory<byte>?)null);
+                }
+            });
+        await Assert.That(requests).IsEqualTo(1);
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.json_name");
     }
 
     [Test]

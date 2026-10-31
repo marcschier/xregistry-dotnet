@@ -43888,6 +43888,10 @@
           "SingularOptionsHaveIndependentContainingDeclarationsAndFiles",
           "NestedDeclarationsDoNotResetTheirParentOptionSet",
           "OptionNamesUseOneGrammarAtEveryDeclarationTarget",
+          "JsonNamesRejectDecodedNulInEveryFieldKind",
+          "JsonNameNulCheckDoesNotRestrictOtherDecodedValues",
+          "NulRemainsLegalInStringOptionsAndStringOrBytesDefaults",
+          "ImportedJsonNamesRetainDecodedNulValidation",
           "EnumAndEnumValueUnknownOptionPoliciesRemainUnsupported",
           "EnumOptionPoliciesPreserveKnownBooleansAliasesAndInvalidSyntax"
         ],

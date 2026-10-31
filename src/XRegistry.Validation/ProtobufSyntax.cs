@@ -647,7 +647,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                             break;
                         case "json_name":
                             Require(value.Kind == TokenKind.String, "protobuf.option", "json_name must be a string.");
-                            _ = value.Text;
+                            Require(!value.Text.Contains('\0'), "protobuf.json_name", "json_name cannot contain NUL.");
                             break;
                         case "deprecated":
                         case "weak":

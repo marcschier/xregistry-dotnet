@@ -186,6 +186,14 @@ A braced custom-option segment, including in `features.(custom.flag)`, reports
 `Unsupported`; this does not add extension lookup or complete custom-option
 validation.
 
+Explicit `json_name` values cannot contain U+0000, as required by the publisher's
+[ProtoJSON field-name rules](https://protobuf.dev/programming-guides/json/#field-names).
+The check runs after escape decoding and adjacent-literal concatenation;
+violations report `Invalid` with `protobuf.json_name`, including in imported
+schemas. Other decoded characters and literal backslash spellings remain valid.
+NUL remains permitted in string and bytes defaults and other string-valued
+options. This does not implement ProtoJSON serialization or message parsing.
+
 Enum and enum-value options use the same explicit policy boundary as other
 declarations. Unknown option names or actual custom-option syntax report
 `Unsupported`, rather than treating an unimplemented option as malformed solely
