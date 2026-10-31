@@ -30099,16 +30099,17 @@
       "text": "- REQUIRED.",
       "review": {
         "status": "reviewed",
-        "note": "Singular is not inferred by English inflection: CheckNames requires a supplied valid string. Positive singular identity is directly asserted, but missing/null/non-string singular cases are not directly exercised in the inspected model tests.",
+        "note": "RejectsInvalidModelAspectsWithExactPointers verifies that a Group without singular fails at /groups/dirs/singular. CompilesIndependentMinimalSpecModel verifies the supplied singular identity.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "CompilesIndependentMinimalSpecModel"
+          "CompilesIndependentMinimalSpecModel",
+          "RejectsInvalidModelAspectsWithExactPointers"
         ],
         "nativeEvidence": []
       }
