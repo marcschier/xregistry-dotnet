@@ -128,6 +128,163 @@ public class ProtobufValidationTests
     }
 
     [Test]
+    [Arguments("$ M {}", "message")]
+    [Arguments("$ E { ZERO=0; }", "enum")]
+    [Arguments("$ S {}", "service")]
+    [Arguments("$ example; message M {}", "package")]
+    [Arguments("$ deprecated=true; message M {}", "option")]
+    [Arguments("message M { $ int32 value=1; }", "optional")]
+    [Arguments("message M { $ int32 value=1; }", "repeated")]
+    [Arguments("message M { optional int32 value $ 1; }", "=")]
+    [Arguments("message M { optional int32 value=1 $ }", ";")]
+    [Arguments("message M { optional int32 value=1 $ deprecated=true]; }", "[")]
+    [Arguments("message M { optional int32 value=1 [deprecated=true $ ; }", "]")]
+    [Arguments("message M { optional int32 value=1 [deprecated $ true]; }", "=")]
+    [Arguments("message M { optional int32 value=1 [deprecated=true $ lazy=false]; }", ",")]
+    [Arguments("message M { $ Choice { ZERO=0; } }", "enum")]
+    [Arguments("message M { $ Nested {} }", "message")]
+    [Arguments("message M { $ choice { string value=1; } }", "oneof")]
+    [Arguments("message M { $ <string,string> values=1; }", "map")]
+    [Arguments("message M { map $ string,string> values=1; }", "<")]
+    [Arguments("message M { map<string $ string> values=1; }", ",")]
+    [Arguments("message M { map<string,string $ values=1; }", ">")]
+    [Arguments("message M { $ 1; }", "reserved")]
+    [Arguments("message M { reserved 1 $ 3; }", "to")]
+    [Arguments("message M { reserved 1 to $ ; }", "max")]
+    [Arguments("message M { reserved 1 $ 3; }", ",")]
+    [Arguments("enum E { ZERO $ 0; }", "=")]
+    [Arguments("enum E { ZERO=0 $ }", ";")]
+    [Arguments("enum E { ZERO=0; $ deprecated=true; }", "option")]
+    [Arguments("enum E { ZERO=0; ONE= $ 1; }", "-")]
+    [Arguments("enum E { ZERO=0; ONE= $ 1; }", "+")]
+    [Arguments("message M {} service S { $ Get(M) returns (M); }", "rpc")]
+    [Arguments("message M {} service S { rpc Get $ M) returns (M); }", "(")]
+    [Arguments("message M {} service S { rpc Get(M $ returns (M); }", ")")]
+    [Arguments("message M {} service S { rpc Get(M) $ (M); }", "returns")]
+    [Arguments("message M {} service S { rpc Get($ M) returns (M); }", "stream")]
+    [Arguments("message M {} service S { rpc Get(M) returns ($ M); }", "stream")]
+    [Arguments("message M {} service S { rpc Get(M) returns (M) $ }", ";")]
+    [Arguments("message M {} service S { rpc Get($ M) returns (M); }", ".")]
+    [Arguments("message M {} service S { $ deprecated=true; }", "option")]
+    [Arguments("message M {} service S { rpc Get(M) returns (M) { $ deprecated=true; } }", "option")]
+    [Arguments("message M {} $", ";")]
+    public async Task QuotedGrammarTokensNeverActAsKeywordsOrSeparators(string template, string token)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var prefix = $"syntax=\"proto{syntax}\"; ";
+            var validator = new BuiltInDocumentValidator();
+            var valid = await validator.ValidateAsync($"Protobuf/{syntax}",
+                Encoding.UTF8.GetBytes(prefix + template.Replace("$", token, StringComparison.Ordinal)));
+            await Assert.That(valid.Status).IsEqualTo(DocumentValidationStatus.Valid);
+            await Assert.That(valid.Diagnostics.Count).IsEqualTo(0);
+            foreach (var quote in new[] { '"', '\'' })
+            {
+                var invalid = await validator.ValidateAsync($"Protobuf/{syntax}",
+                    Encoding.UTF8.GetBytes(prefix + template.Replace("$", $"{quote}{token}{quote}", StringComparison.Ordinal)));
+                await Assert.That(invalid.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("\"syntax\"=\"proto3\"; message M {}")]
+    [Arguments("syntax \"=\" \"proto3\"; message M {}")]
+    [Arguments("syntax=\"proto3\" \";\" message M {}")]
+    [Arguments("syntax=\"proto3\"; message M \"{\" \"}\"")]
+    [Arguments("syntax=\"proto3\"; message M {} service S \"{\" \"}\"")]
+    [Arguments("syntax=\"proto3\"; enum E \"{\" ZERO=0; \"}\"")]
+    [Arguments("syntax=\"proto3\"; message M {} service S { rpc Get(M) returns (M) \"{\" \"}\" }")]
+    [Arguments("syntax=\"proto3\"; message M { oneof choice \"{\" string value=1; \"}\" }")]
+    [Arguments("syntax=\"proto3\"; option \"(\" custom.flag)=true; message M {}")]
+    [Arguments("syntax=\"proto3\"; message M { string value=1 [\"(\" custom.flag)=true]; }")]
+    public async Task QuotedSyntaxDelimitersAndCustomOptionMarkersAreInvalid(string schema)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3", Encoding.UTF8.GetBytes(schema));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+    }
+
+    [Test]
+    public async Task QuotedRequiredLabelNeverActsAsAProtoTwoFieldLabel()
+    {
+        var validator = new BuiltInDocumentValidator();
+        var valid = await validator.ValidateAsync("Protobuf/2",
+            """syntax="proto2"; message M { required int32 value=1; }"""u8.ToArray());
+        await Assert.That(valid.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        foreach (var quote in new[] { '"', '\'' })
+        {
+            var invalid = await validator.ValidateAsync("Protobuf/2", Encoding.UTF8.GetBytes(
+                $"syntax=\"proto2\"; message M {{ {quote}required{quote} int32 value=1; }}"));
+            await Assert.That(invalid.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+            await Assert.That(invalid.Diagnostics[0].Code).IsEqualTo("protobuf.label");
+        }
+    }
+
+    [Test]
+    [Arguments("import")]
+    [Arguments("public")]
+    [Arguments("weak")]
+    public async Task ImportKeywordTokenKindsPreserveLiteralAcquisitionPaths(string keyword)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var calls = 0;
+            string? acquired = null;
+            var options = new DocumentValidationOptions
+            {
+                ResolveReference = (name, _) =>
+                {
+                    calls++;
+                    acquired = name;
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes(
+                        $"syntax=\"proto{syntax}\"; message Imported {{}}"));
+                }
+            };
+            var import = keyword == "import" ? "import \"other.proto\";" : $"import {keyword} \"other.proto\";";
+            var validator = new BuiltInDocumentValidator();
+            var valid = await validator.ValidateAsync($"Protobuf/{syntax}",
+                Encoding.UTF8.GetBytes($"syntax=\"proto{syntax}\"; {import} message M {{}}"), options);
+            await Assert.That(valid.Status).IsEqualTo(DocumentValidationStatus.Valid);
+            await Assert.That(calls).IsEqualTo(1);
+            await Assert.That(acquired).IsEqualTo("other.proto");
+            calls = 0;
+            acquired = null;
+            var quoted = await validator.ValidateAsync($"Protobuf/{syntax}",
+                Encoding.UTF8.GetBytes($"syntax=\"proto{syntax}\"; {import.Replace(keyword, $"\"{keyword}\"", StringComparison.Ordinal)} message M {{}}"),
+                options);
+            await Assert.That(quoted.Status).IsEqualTo(keyword == "import"
+                ? DocumentValidationStatus.Invalid : DocumentValidationStatus.Valid);
+            await Assert.That(calls).IsEqualTo(keyword == "import" ? 0 : 1);
+            await Assert.That(acquired).IsEqualTo(keyword == "import" ? null : keyword + "other.proto");
+        }
+    }
+
+    [Test]
+    [Arguments(";")]
+    [Arguments("{}")]
+    [Arguments("[]")]
+    [Arguments("(")]
+    [Arguments(".")]
+    [Arguments("-")]
+    [Arguments("message")]
+    [Arguments("optional")]
+    [Arguments("stream")]
+    [Arguments("option")]
+    public async Task GrammarSpellingsRemainValidInsideStringValues(string value)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var defaultOption = syntax == 2 ? $", default=\"{value}\"" : "";
+            var schema = $"syntax=\"proto{syntax}\"; option java_package=\"{value}\"; " +
+                $"message M {{ optional string value=1 [json_name=\"{value}\"{defaultOption}]; }}";
+            var result = await new BuiltInDocumentValidator().ValidateAsync(
+                $"Protobuf/{syntax}", Encoding.UTF8.GetBytes(schema));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+            await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+        }
+    }
+
+    [Test]
     [Arguments("optional string foo=1; message foo {}")]
     [Arguments("message foo {} optional string foo=1;")]
     [Arguments("optional string foo=1; enum foo { ZERO=0; }")]

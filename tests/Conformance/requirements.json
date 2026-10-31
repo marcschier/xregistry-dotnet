@@ -43835,7 +43835,12 @@
           "LeadingDecimalTokensNeverSatisfyIntegerContexts",
           "RpcMethodBodiesAcceptEmptyStatements",
           "RpcEmptyStatementsPreserveContentTypeAndOptionChecks",
-          "RpcEmptyStatementsRespectTheCumulativeWorkBudget"
+          "RpcEmptyStatementsRespectTheCumulativeWorkBudget",
+          "QuotedGrammarTokensNeverActAsKeywordsOrSeparators",
+          "QuotedSyntaxDelimitersAndCustomOptionMarkersAreInvalid",
+          "QuotedRequiredLabelNeverActsAsAProtoTwoFieldLabel",
+          "ImportKeywordTokenKindsPreserveLiteralAcquisitionPaths",
+          "GrammarSpellingsRemainValidInsideStringValues"
         ],
         "nativeEvidence": []
       }

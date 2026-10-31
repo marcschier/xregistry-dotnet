@@ -96,6 +96,12 @@ and [Proto3](https://protobuf.dev/reference/protobuf/proto3-spec/#service-defini
 service grammars. This applies to unary and streaming declarations without
 relaxing method-name, message-type or option-policy checks; each empty statement
 consumes validation work.
+Quoted strings cannot substitute for grammar keywords, field labels, signs or
+separators. For example, `"optional"` is not a field label, and `"="` cannot
+separate a field name from its number. Such documents report `Invalid`; real
+custom-option syntax still reports `Unsupported`. Strings retain their value
+semantics: `import "public" "other.proto";` acquires `publicother.proto` through
+the caller's resolver rather than treating `"public"` as an import modifier.
 Editions, custom extensions, complete weak-import semantics and gRPC API
 selection remain unsupported.
 

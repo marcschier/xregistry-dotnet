@@ -174,6 +174,9 @@ vocabulary/source mapping. It does not supply their implementation.
   decimal fractions in integer-only contexts.
   RPC method bodies accept empty semicolon statements mixed with supported
   options, including streaming declarations, within the validation work budget.
+  Grammar matching retains token kinds: quoted keywords, labels and separators
+  cannot act as syntax, while adjacent import literals retain their combined
+  path and supported string-valued options/defaults remain valid.
   Editions and custom extensions remain unsupported. This does not add gRPC
   API operation selection.
 - Add full API format validators and the remaining language resolvers. The

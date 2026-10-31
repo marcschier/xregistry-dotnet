@@ -456,7 +456,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
         private Field Field(string scope, bool oneof)
         {
             var label = oneof ? "oneof" : "";
-            if (Current.Text is "optional" or "required" or "repeated")
+            if (Current.Kind == TokenKind.Identifier && Current.Text is "optional" or "required" or "repeated")
             {
                 Require(!oneof, "protobuf.oneof", "Oneof fields cannot have labels.");
                 label = Current.Text;
@@ -495,7 +495,10 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                 var seen = new HashSet<string>(StringComparer.Ordinal);
                 do
                 {
-                    if (Current.Text == "(") { Unsupported("Custom field options require an explicit extension policy."); }
+                    if (Current.Kind == TokenKind.Symbol && Current.Text == "(")
+                    {
+                        Unsupported("Custom field options require an explicit extension policy.");
+                    }
                     var option = Identifier();
                     Require(seen.Add(option), "protobuf.option", "Field options must be unique.");
                     Expect("=");
@@ -643,7 +646,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                 {
                     while (!Take("}"))
                     {
-                        if (Current.Kind == TokenKind.Symbol && Take(";")) { continue; }
+                        if (Take(";")) { continue; }
                         Expect("option");
                         Option(OptionTarget.Method);
                     }
@@ -654,7 +657,10 @@ internal sealed class ProtobufSyntax(ValidationContext context)
 
         private void Option(OptionTarget target)
         {
-            if (Current.Text == "(") { Unsupported("Custom options require an explicit extension policy."); }
+            if (Current.Kind == TokenKind.Symbol && Current.Text == "(")
+            {
+                Unsupported("Custom options require an explicit extension policy.");
+            }
             var option = TypeName();
             Expect("=");
             var value = Constant();
@@ -745,7 +751,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
         private bool Take(string value)
         {
             owner.Context.Work();
-            if (Current.Text != value) { return false; }
+            if (Current.Kind is not (TokenKind.Identifier or TokenKind.Symbol) || Current.Text != value) { return false; }
             _index++;
             return true;
         }
