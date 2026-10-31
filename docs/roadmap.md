@@ -246,8 +246,10 @@ vocabulary/source mapping. It does not supply their implementation.
   API operation selection.
   Relative compound type names now respect a nearer declaration that owns
   their first component. Missing nested types cannot fall back to an outer
-  owner; leading-dot references still start at the outermost scope. Complete
-  package shadowing rules remain under review. Fields, oneofs and enum values
+  owner; leading-dot references still start at the outermost scope. Package
+  prefixes from supplied documents also prevent outer fallback when the
+  requested child is missing. Package/declaration collision rules remain under
+  review. Fields, oneofs and enum values
   also prevent relative fallback, independently of declaration order.
   The document validator now accepts `gRPC/proto3` under the same bounded
   declaration policy and requires at least one root service. Imported services

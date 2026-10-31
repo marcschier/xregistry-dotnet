@@ -17,6 +17,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
     };
     private readonly Dictionary<string, Definition> _definitions = new(StringComparer.Ordinal);
     private readonly HashSet<string> _symbols = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _packages = new(StringComparer.Ordinal);
     private readonly List<(string Type, string Scope, bool MessageOnly, string Document, int Syntax)> _references = [];
     private readonly List<Field> _fields = [];
     private bool _hasRootService;
@@ -141,7 +142,8 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                 return result;
             }
 
-            if (separator >= 0 && _symbols.Contains(prefix.Length == 0 ? first : prefix + "." + first))
+            var owner = prefix.Length == 0 ? first : prefix + "." + first;
+            if (separator >= 0 && (_symbols.Contains(owner) || _packages.Contains(owner)))
             {
                 return null;
             }
@@ -504,6 +506,12 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             Require(expectedSyntax is null || expectedSyntax == _syntax,
                 "protobuf.syntax", "The document syntax disagrees with the declared format.");
             _package = FindFilePackage();
+            for (var package = _package; package.Length > 0;
+                package = package.Contains('.') ? package[..package.LastIndexOf('.')] : "")
+            {
+                owner.Context.Work(package.Length + 1);
+                owner._packages.Add(package);
+            }
             var packageSeen = false;
             var options = new HashSet<string>(StringComparer.Ordinal);
             while (Current.Kind != TokenKind.End)

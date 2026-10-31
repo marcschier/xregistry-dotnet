@@ -10,6 +10,67 @@ namespace XRegistry.Validation.Tests;
 public class ProtobufValidationTests
 {
     [Test]
+    [Arguments("Name.Child", false, DocumentValidationStatus.Invalid)]
+    [Arguments("Name.Child", true, DocumentValidationStatus.Valid)]
+    [Arguments(".example.Name.Child", false, DocumentValidationStatus.Valid)]
+    [Arguments(".example.Name.Child", true, DocumentValidationStatus.Valid)]
+    public async Task CompoundTypeNamesRespectNearerImportedPackagePrefixes(
+        string type, bool hasChild, DocumentValidationStatus expected)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var calls = new List<string>();
+            var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                Encoding.UTF8.GetBytes($"syntax='proto{syntax}'; package example.inner; " +
+                    $"import 'outer.proto'; import 'near.proto'; message Root {{ optional {type} value=1 [lazy=true]; }}"),
+                new()
+                {
+                    ResolveReference = (name, _) =>
+                    {
+                        calls.Add(name);
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+                            Encoding.UTF8.GetBytes(name switch
+                            {
+                                "outer.proto" => $"syntax='proto{syntax}'; package example; message Name {{ message Child {{}} }}",
+                                "near.proto" => $"syntax='proto{syntax}'; package example.inner.Name; " +
+                                    (hasChild ? "message Child {}" : "message Other {}"),
+                                _ => throw new InvalidOperationException("Unexpected import: " + name)
+                            }));
+                    }
+                });
+            await Assert.That(calls.Count).IsEqualTo(2);
+            await Assert.That(calls[0]).IsEqualTo("outer.proto");
+            await Assert.That(calls[1]).IsEqualTo("near.proto");
+            await Assert.That(result.Status).IsEqualTo(expected);
+            if (expected == DocumentValidationStatus.Valid) { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+            else { await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.type"); }
+        }
+    }
+
+    [Test]
+    [Arguments("Name.Child.Grand", DocumentValidationStatus.Invalid)]
+    [Arguments(".example.Name.Child.Grand", DocumentValidationStatus.Valid)]
+    public async Task CompoundPackagePrefixesStopFallbackAtMissingIntermediateTypes(
+        string type, DocumentValidationStatus expected)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            Encoding.UTF8.GetBytes("syntax='proto3'; package example.inner; import 'outer.proto'; import 'near.proto'; " +
+                $"message Root {{ {type} value=1; }}"), new()
+            {
+                ResolveReference = (name, _) => ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+                    Encoding.UTF8.GetBytes(name switch
+                    {
+                        "outer.proto" => "syntax='proto3'; package example; message Name { message Child { message Grand {} } }",
+                        "near.proto" => "syntax='proto3'; package example.inner.Name.Child; message Other {}",
+                        _ => throw new InvalidOperationException("Unexpected import: " + name)
+                    }))
+            });
+        await Assert.That(result.Status).IsEqualTo(expected);
+        if (expected == DocumentValidationStatus.Valid) { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+        else { await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.type"); }
+    }
+
+    [Test]
     [Arguments("message Name {}")]
     [Arguments("enum Name { ZERO=0; }")]
     [Arguments("message Name { message Other {} }")]

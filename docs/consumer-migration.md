@@ -51,6 +51,10 @@ remains required. This follows the publisher's
 Fields, oneofs and enum values can also own that first component; they cannot
 provide a nested type or be bypassed by an outer relative declaration.
 These checks do not depend on declaration order.
+Package prefixes from supplied documents participate in the same lookup. A
+nearer package with no requested child prevents outer fallback, including when
+only a deeper package prefix was declared. A complete match still requires a
+visible type; package registration does not expose private imported types.
 The [Proto2](https://protobuf.dev/reference/protobuf/proto2-spec/#message-definition)
 and [Proto3](https://protobuf.dev/reference/protobuf/proto3-spec/#message-definition)
 specifications define the message-name rules; the publisher also explains
