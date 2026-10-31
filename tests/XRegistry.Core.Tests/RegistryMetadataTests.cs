@@ -164,8 +164,12 @@ public class RegistryMetadataTests
         var definitions = Shape("""{"labels":{"type":"map","item":{"type":"string"}}}""");
         var boundaryKey = new string('a', 63);
         var accepted = RegistryMetadataValidator.Validate(RegistryJson.Parse(
-            "{\"labels\":{\"a:b_0.c\":\"value\",\"" + boundaryKey + "\":\"boundary\"}}"), definitions);
+            "{\"labels\":{\"a\":\"single\",\"0-leading\":\"digit\",\"a-b\":\"hyphen\",\"a:b_0.c\":\"value\",\"" +
+            boundaryKey + "\":\"boundary\"}}"), definitions);
 
+        await Assert.That(accepted.Metadata.RootElement.GetProperty("labels").GetProperty("a").GetString()).IsEqualTo("single");
+        await Assert.That(accepted.Metadata.RootElement.GetProperty("labels").GetProperty("0-leading").GetString()).IsEqualTo("digit");
+        await Assert.That(accepted.Metadata.RootElement.GetProperty("labels").GetProperty("a-b").GetString()).IsEqualTo("hyphen");
         await Assert.That(accepted.Metadata.RootElement.GetProperty("labels").GetProperty("a:b_0.c").GetString())
             .IsEqualTo("value");
         await Assert.That(accepted.Metadata.RootElement.GetProperty("labels").GetProperty(boundaryKey).GetString())

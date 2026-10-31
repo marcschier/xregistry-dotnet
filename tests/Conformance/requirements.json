@@ -909,19 +909,17 @@
       "text": "- Each key MUST: - Be a non-empty string consisting of only lowercase alphanumeric characters (`[a-z0-9]`), `:`, `-`, `_` or a `.`. - Be no longer than 63 characters. - Start with an alphanumeric character. - Be unique within the scope of this map.",
       "review": {
         "status": "reviewed",
-        "note": "RegistryNames enforces the lower-case extended map-key grammar and parser duplicate detection is ordinal. Assertions cover invalid upper-case keys and duplicate members, but no reviewed direct map-key test establishes every 1/63/64 boundary, allowed punctuation and initial-character case together.",
+        "note": "Map validation accepts keys of 1 through 63 characters. The first character must be a lowercase ASCII letter or digit; later characters may also be `:`, `-`, `_`, or `.`. It rejects uppercase or other punctuation, invalid initial characters, and 64-character keys. JSON parsing rejects duplicate map members.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "CollectionAndNestedErrorsRetainPrecisePointers",
-          "RejectsDuplicateMembersAtEveryDepth",
-          "RejectsInvalidJsonAndUnicodeEscapes",
-          "RejectsInvalidUtf8WithoutReplacement"
+          "MapKeysFollowCoreCharacterAndLengthRules",
+          "DuplicateMapKeysAreRejectedDuringJsonParsing"
         ],
         "nativeEvidence": []
       }
