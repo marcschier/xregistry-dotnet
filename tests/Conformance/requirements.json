@@ -71133,13 +71133,17 @@
       ],
       "text": "If a Resource type definition wishes to turn off the ability for clients to select the \"default\" Version (or to set the `defaultversionsticky` attribute to `true`), this MAY be done by modifying the definition of this attribute in the Resource type's model. For example, in the `metaattributes` section use the following definition:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The declared false-only enum/default keeps newest semver selection and rejects explicit true through PATCH and Meta replacement, including implicit true from pointer PATCH. Exact Meta/Version collection and event count remain unchanged through rejection and restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ModeledStickyPolicyControlsSelectionAndRejectsOppositeValues"
+        ],
         "nativeEvidence": []
       }
     },
@@ -71164,13 +71168,17 @@
       ],
       "text": "Likewise, forcing all Resource instances to have \"sticky\" Versions MAY be achieved via the same mechanism by using `true` instead of `false` in the `enum` and `default` aspects.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Resource creation and Meta completion honor the declared true default instead of injecting false. Later publication preserves the selected Version; opposite Boolean input rejects atomically. PATCH preserves the pointer, while Meta replacement without a pointer freezes the newest Version. Both states survive restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ModeledStickyPolicyControlsSelectionAndRejectsOppositeValues"
+        ],
         "nativeEvidence": []
       }
     },

@@ -470,7 +470,7 @@ public sealed partial class RegistryEngine
                     }
 
                     attributes["readonly"] ??= false;
-                    attributes["defaultversionsticky"] ??= false;
+                    attributes["defaultversionsticky"] ??= DefaultVersionSticky(resource);
                     attributes["defaultversionurl"] = _engine.Url(entity.Key + "/versions/" +
                         Uri.EscapeDataString(ServerJson.Text(attributes, "defaultversionid")!), resource.HasDocument);
                     break;

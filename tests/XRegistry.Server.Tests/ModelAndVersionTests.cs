@@ -12,6 +12,72 @@ namespace XRegistry.Server.Tests;
 public class ModelAndVersionTests
 {
     [Test]
+    [Arguments(false, RegistryAction.Patch)]
+    [Arguments(false, RegistryAction.Replace)]
+    [Arguments(true, RegistryAction.Patch)]
+    [Arguments(true, RegistryAction.Replace)]
+    public async Task ModeledStickyPolicyControlsSelectionAndRejectsOppositeValues(
+        bool requiredSticky, RegistryAction action)
+    {
+        var store = new InMemoryRegistryPersistence();
+        var value = requiredSticky ? "true" : "false";
+        var model = """
+            {"groups":{"teams":{"singular":"team","resources":{"notes":{
+              "singular":"note","hasdocument":false,"maxversions":0,"versionmode":"semver",
+              "metaattributes":{"defaultversionsticky":{
+                "enum":[STICKY],"required":true,"default":STICKY
+              }}
+            }}}}}
+            """.Replace("STICKY", value, StringComparison.Ordinal);
+        var engine = Create(model, persistence: store);
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n/versions/1.0.0", """{"name":"first"}""");
+        await AssertSelectionAsync(engine, "1.0.0");
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n/versions/2.0.0", """{"name":"second"}""");
+        var selected = requiredSticky ? "1.0.0" : "2.0.0";
+        await AssertSelectionAsync(engine, selected);
+        var before = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n/meta")).Metadata!.RootElement.GetRawText();
+        var versions = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n/versions")).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        await ExpectCode(() => Send(engine, action, "/teams/g/notes/n/meta",
+            "{\"defaultversionsticky\":" + (requiredSticky ? "false" : "true") + "}"), "invalid_attribute");
+        if (!requiredSticky && action == RegistryAction.Patch)
+        {
+            await ExpectCode(() => Send(engine, action, "/teams/g/notes/n/meta",
+                """{"defaultversionid":"1.0.0"}"""), "invalid_attribute");
+        }
+        await AssertUnchangedAsync(engine);
+        engine = Create(model, persistence: store);
+        await AssertUnchangedAsync(engine);
+        await Send(engine, action, "/teams/g/notes/n/meta", "{\"defaultversionsticky\":" + value + "}");
+        if (requiredSticky && action == RegistryAction.Replace)
+        {
+            selected = "2.0.0";
+        }
+        await AssertSelectionAsync(engine, selected);
+        await Send(engine, action, "/teams/g/notes/n/meta", "{}");
+        await AssertSelectionAsync(engine, selected);
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n/versions/3.0.0", """{"name":"third"}""");
+        await AssertSelectionAsync(engine, requiredSticky ? selected : "3.0.0");
+        await AssertSelectionAsync(Create(model, persistence: store), requiredSticky ? selected : "3.0.0");
+
+        async Task AssertSelectionAsync(RegistryEngine current, string expectedId)
+        {
+            var meta = (await Send(current, RegistryAction.Read, "/teams/g/notes/n/meta")).Metadata!.RootElement;
+            await Assert.That(meta.GetProperty("defaultversionsticky").GetBoolean()).IsEqualTo(requiredSticky);
+            await Assert.That(meta.GetProperty("defaultversionid").GetString()).IsEqualTo(expectedId);
+        }
+
+        async Task AssertUnchangedAsync(RegistryEngine current)
+        {
+            await Assert.That((await Send(current, RegistryAction.Read, "/teams/g/notes/n/meta")).Metadata!.RootElement.GetRawText())
+                .IsEqualTo(before);
+            await Assert.That((await Send(current, RegistryAction.Read, "/teams/g/notes/n/versions")).Metadata!.RootElement.GetRawText())
+                .IsEqualTo(versions);
+            await Assert.That((await current.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        }
+    }
+
+    [Test]
     [Arguments(false)]
     [Arguments(true)]
     public async Task DefaultVersionUrlsUseAuthoritativeMetadataAndDocumentPointers(bool hasDocument)

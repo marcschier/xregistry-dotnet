@@ -55,6 +55,18 @@ authentication, URI authorization, and returned JSON.
 Resource imports and includes are structural composition mechanisms; they do
 not authorize a network request or import existing Registry data.
 
+## Control default Version selection
+
+A Resource's `metaattributes` can restrict `defaultversionsticky` to
+`"enum": [false]` with `"default": false` to keep automatic newest-Version
+selection. Using `true` for both aspects makes new Resources sticky; publishing
+later Versions does not change their selected default. Client values outside
+the declared enum are rejected without changing stored Versions or Meta.
+
+The Server uses the compiled model default during Resource creation and Meta
+completion. A Resource with `"maxversions": 1` still rejects sticky `true`,
+because only one Version can remain.
+
 ## Run the FileServer with the model
 
 From the repository root:

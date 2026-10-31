@@ -4,6 +4,7 @@
 using System.Globalization;
 using System.Numerics;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace XRegistry.Server;
@@ -159,12 +160,16 @@ public sealed partial class RegistryEngine
             }
 
             var entity = New(key);
-            entity.Attributes[ResourceDefinition(path).Singular + "id"] = path.ResourceId!.Value;
+            var definition = ResourceDefinition(path);
+            entity.Attributes[definition.Singular + "id"] = path.ResourceId!.Value;
             entity.Attributes["readonly"] = false;
-            entity.Attributes["defaultversionsticky"] = false;
+            entity.Attributes["defaultversionsticky"] = DefaultVersionSticky(definition);
             Touch(Require(ServerJson.Key(RegistryPath.ForGroup(path.GroupType!, path.GroupId!))));
             return entity;
         }
+
+        private static bool DefaultVersionSticky(RegistryResourceDefinition definition) =>
+            definition.MetaAttributes["defaultversionsticky"].DefaultValue.ValueKind == JsonValueKind.True;
 
         private async ValueTask ApplyContainerAsync(Entity entity, JsonObject body, bool patch, bool collectionsOnly)
         {
@@ -361,7 +366,7 @@ public sealed partial class RegistryEngine
 
             Merge(resource, input, definition.MetaAttributes, patch, definition.Singular + "id", path.ResourceId!.Value);
             resource.Attributes["readonly"] ??= false;
-            resource.Attributes["defaultversionsticky"] ??= false;
+            resource.Attributes["defaultversionsticky"] ??= DefaultVersionSticky(definition);
             _resources.Add(resource.Key);
         }
 
