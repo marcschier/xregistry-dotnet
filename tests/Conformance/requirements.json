@@ -32502,15 +32502,16 @@
       "text": "- When `hasdocument` is `true`, and a Version uses the `<RESOURCE>url` attribute to reference the document in an external datastore, the resulting [`formatvalidated`](spec.md#format-attribute) attribute on the Version MUST be `\"false\"`.",
       "review": {
         "status": "reviewed",
-        "note": "External Document candidates are not fetched automatically; the adapter marks them unsupported and nonstrict engine policy emits false validation flags. The external-reference test proves authorization/no Document fetch, but does not combine an external URL with enabled validation and assert formatvalidated:false.",
+        "note": "Configured built-in validation with an authorized external Document produces false format and compatibility flags with reasons in relaxed mode, without fetching the Document. Fresh publication and replacement of a validated local Document are covered; restoring local bytes restores successful results. Strict mode rejects with format_external and retains prior local bytes and results.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "ExternalReferencesRequireExplicitPolicyAndNeverFetchAutomatically"
+          "ExternalReferencesRequireExplicitPolicyAndNeverFetchAutomatically",
+          "ExternalDocumentsRemainUncheckedAndStrictFailuresPreserveLocalValidation"
         ],
         "nativeEvidence": []
       }

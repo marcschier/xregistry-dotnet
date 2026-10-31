@@ -239,6 +239,91 @@ public class ValidationIntegrationTests
     }
 
     [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task ExternalDocumentsRemainUncheckedAndStrictFailuresPreserveLocalValidation(bool strict)
+    {
+        var fetches = 0;
+        var policy = new ReferencePolicy();
+        var model = ValidatingModel.Replace("\"validateformat\":true", "\"validateformat\":true,\"strictvalidation\":" +
+            (strict ? "true" : "false"), StringComparison.Ordinal);
+        var engine = new RegistryEngine(new()
+        {
+            RegistryId = "external-validation",
+            PublicRoot = new Uri("https://registry.example"),
+            Model = RegistryModel.Compile(RegistryJson.Parse(model)),
+            ResourceValidator = new BuiltInRegistryResourceValidator(new()
+            {
+                ResolveReference = (_, _) =>
+                {
+                    fetches++;
+                    throw new InvalidOperationException("An external Document must not be fetched by schema validation.");
+                }
+            }),
+            DocumentReferencePolicy = policy
+        }, new InMemoryRegistryPersistence(), new PermitPolicy());
+        const string external = """
+            {"versionid":"v1","format":"JsonSchema/draft-07","fileurl":"https://documents.example/schema",
+             "meta":{"compatibility":"full"}}
+            """;
+        if (strict)
+        {
+            await ExpectCode(() => Send(engine, RegistryAction.Replace, "/teams/g/files/external$details", external), "format_external");
+            await Assert.That((await Send(engine, RegistryAction.Read, "/")).Metadata!.RootElement.GetProperty("teamscount").GetInt32()).IsEqualTo(0);
+        }
+        else
+        {
+            await Send(engine, RegistryAction.Replace, "/teams/g/files/external$details", external);
+            await AssertExternalAsync("/teams/g/files/external");
+        }
+        await Send(engine, RegistryAction.Replace, "/teams/g/files/local$details", """
+            {"versionid":"v1","format":"JsonSchema/draft-07","file":{"type":"string"},"meta":{"compatibility":"full"}}
+            """);
+        var local = await Send(engine, RegistryAction.Read, "/teams/g/files/local$details");
+        await Assert.That(local.Metadata!.RootElement.GetProperty("formatvalidated").GetBoolean()).IsTrue();
+        await Assert.That(local.Metadata.RootElement.GetProperty("compatibilityvalidated").GetBoolean()).IsTrue();
+        if (strict)
+        {
+            await ExpectCode(() => Send(engine, RegistryAction.Patch, "/teams/g/files/local$details",
+                """{"fileurl":"https://documents.example/schema"}"""), "format_external");
+        }
+        else
+        {
+            await Send(engine, RegistryAction.Patch, "/teams/g/files/local$details", """{"fileurl":"https://documents.example/schema"}""");
+            await AssertExternalAsync("/teams/g/files/local");
+            await Send(engine, RegistryAction.Patch, "/teams/g/files/local$details", """{"file":{"type":"string"}}""");
+        }
+        var retained = await Send(engine, RegistryAction.Read, "/teams/g/files/local$details");
+        await Assert.That(retained.Metadata!.RootElement.GetProperty("formatvalidated").GetBoolean()).IsTrue();
+        await Assert.That(retained.Metadata.RootElement.GetProperty("compatibilityvalidated").GetBoolean()).IsTrue();
+        foreach (var field in new[] { "fileurl", "formatvalidatedreason", "compatibilityvalidatedreason" })
+        {
+            await Assert.That(retained.Metadata.RootElement.TryGetProperty(field, out _)).IsFalse();
+        }
+        var stored = await Send(engine, RegistryAction.Read, "/teams/g/files/local");
+        using var bytes = stored.Document!.OpenRead();
+        using var reader = new StreamReader(bytes);
+        await Assert.That(await reader.ReadToEndAsync()).IsEqualTo("""{"type":"string"}""");
+        await Assert.That(fetches).IsEqualTo(0);
+
+        async Task AssertExternalAsync(string path)
+        {
+            var details = await Send(engine, RegistryAction.Read, path + "$details");
+            await Assert.That(details.Metadata!.RootElement.GetProperty("fileurl").GetString()).IsEqualTo("https://documents.example/schema");
+            await Assert.That(details.Metadata.RootElement.GetProperty("format").GetString()).IsEqualTo("JsonSchema/draft-07");
+            foreach (var aspect in new[] { "format", "compatibility" })
+            {
+                await Assert.That(details.Metadata.RootElement.GetProperty(aspect + "validated").GetBoolean()).IsFalse();
+                await Assert.That(details.Metadata.RootElement.GetProperty(aspect + "validatedreason").GetString()).IsNotNullOrEmpty();
+            }
+            var redirect = await Send(engine, RegistryAction.Read, path);
+            await Assert.That(redirect.Kind).IsEqualTo(RegistryResultKind.SeeOther);
+            await Assert.That(redirect.Location!.AbsoluteUri).IsEqualTo("https://documents.example/schema");
+            await Assert.That(redirect.Document).IsNull();
+        }
+    }
+
+    [Test]
     public async Task ExternalReferencesRequireExplicitPolicyAndNeverFetchAutomatically()
     {
         var closed = Create();
