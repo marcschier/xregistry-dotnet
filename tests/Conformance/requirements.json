@@ -15438,14 +15438,14 @@
       "text": "For clarity, the serialization of a Resource (when using `?inline=meta`) in document view MUST adhere to the following:",
       "review": {
         "status": "reviewed",
-        "note": "DocumentViewMetaInlineKeepsResourceShapeWithoutDuplicatingTargetMetadataForAliases asserts Resource Meta identity and default-Version fields, preserves alias identity, and excludes target-owned fields. It does not yet assert every optional Meta field in the specified shape.",
+        "note": "DocumentViewMetaInlineKeepsResourceShapeWithoutDuplicatingTargetMetadataForAliases asserts the complete Resource Meta shape for a normal Resource, including identity, lifecycle, default-Version and optional metadata fields. Its alias case retains local identity and xref while excluding target-owned Meta fields.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "ExportUsesRelativePointersAndNoDefaultProjection",
           "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",

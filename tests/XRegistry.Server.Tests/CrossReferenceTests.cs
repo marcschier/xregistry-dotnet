@@ -60,6 +60,10 @@ public class CrossReferenceTests
     {
         var engine = Create();
         await Send(engine, RegistryAction.Replace, "/teams/target/notes/original", """{"name":"target name"}""");
+        await Send(engine, RegistryAction.Patch, "/teams/target/notes/original/meta", """
+            {"labels":{"source":"local"},"compatibility":"backward",
+             "deprecated":{"effective":"2030-01-02T00:00:00Z","reason":"retired"}}
+            """);
         await Send(engine, RegistryAction.Replace, "/teams/source/notes/alias",
             """{"meta":{"xref":"/teams/target/notes/original"}}""");
 
@@ -68,15 +72,26 @@ public class CrossReferenceTests
         var targetMeta = target.GetProperty("meta");
         await Assert.That(target.GetProperty("noteid").GetString()).IsEqualTo("original");
         await Assert.That(target.GetProperty("self").GetString()).IsEqualTo("#");
+        await Assert.That(target.GetProperty("xid").GetString()).IsEqualTo("/teams/target/notes/original");
         await Assert.That(target.GetProperty("metaurl").GetString()).IsEqualTo("#/meta");
         await Assert.That(target.TryGetProperty("name", out _)).IsFalse();
         await Assert.That(targetMeta.GetProperty("noteid").GetString()).IsEqualTo("original");
         await Assert.That(targetMeta.GetProperty("self").GetString()).IsEqualTo("#/meta");
         await Assert.That(targetMeta.GetProperty("xid").GetString()).IsEqualTo("/teams/target/notes/original/meta");
+        await Assert.That(targetMeta.TryGetProperty("xref", out _)).IsFalse();
         await Assert.That(targetMeta.GetProperty("defaultversionid").GetString()).IsEqualTo("1");
         await Assert.That(targetMeta.GetProperty("defaultversionsticky").GetBoolean()).IsFalse();
         await Assert.That(targetMeta.GetProperty("defaultversionurl").GetString())
             .IsEqualTo("https://registry.example/catalog/teams/target/notes/original/versions/1");
+        await Assert.That(targetMeta.GetProperty("epoch").GetInt32()).IsGreaterThan(0);
+        await Assert.That(targetMeta.GetProperty("labels").GetProperty("source").GetString()).IsEqualTo("local");
+        await Assert.That(targetMeta.GetProperty("createdat").GetString()).IsNotNullOrEmpty();
+        await Assert.That(targetMeta.GetProperty("modifiedat").GetString()).IsNotNullOrEmpty();
+        await Assert.That(targetMeta.GetProperty("readonly").GetBoolean()).IsFalse();
+        await Assert.That(targetMeta.GetProperty("compatibility").GetString()).IsEqualTo("backward");
+        await Assert.That(targetMeta.GetProperty("deprecated").GetProperty("effective").GetString())
+            .IsEqualTo("2030-01-02T00:00:00Z");
+        await Assert.That(targetMeta.GetProperty("deprecated").GetProperty("reason").GetString()).IsEqualTo("retired");
         await Assert.That(targetMeta.TryGetProperty("name", out _)).IsFalse();
 
         var alias = (await Send(engine, RegistryAction.Read, "/teams/source/notes/alias", null,
