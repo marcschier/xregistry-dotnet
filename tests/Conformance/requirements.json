@@ -43883,6 +43883,8 @@
           "CompoundTypeShadowingIsIndependentOfDeclarationOrder",
           "CompoundTypeNamesRespectNearerImportedPackagePrefixes",
           "CompoundPackagePrefixesStopFallbackAtMissingIntermediateTypes",
+          "PackagePrefixesCannotShareQualifiedNamesWithDeclarations",
+          "PackagePrefixesMayBeSharedByFilesAndRemainCaseSensitive",
           "RelativeCompoundTypeNamesStillBindTheNearestDeclaredChild",
           "RelativeCompoundTypeOwnersDoNotFallbackAfterAMissingIntermediateType",
           "RelativeCompoundTypeOwnershipIncludesImportedOuterDeclarations",

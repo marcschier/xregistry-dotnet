@@ -55,6 +55,10 @@ Package prefixes from supplied documents participate in the same lookup. A
 nearer package with no requested child prevents outer fallback, including when
 only a deeper package prefix was declared. A complete match still requires a
 visible type; package registration does not expose private imported types.
+Package prefixes cannot reuse a declaration's qualified name, and declarations
+cannot reuse an existing package prefix. Either import order reports
+`protobuf.duplicate`. Multiple files can contribute distinct declarations to
+the same package; package and declaration names remain case-sensitive.
 The [Proto2](https://protobuf.dev/reference/protobuf/proto2-spec/#message-definition)
 and [Proto3](https://protobuf.dev/reference/protobuf/proto3-spec/#message-definition)
 specifications define the message-name rules; the publisher also explains

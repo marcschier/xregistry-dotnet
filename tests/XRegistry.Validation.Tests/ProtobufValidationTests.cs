@@ -10,6 +10,62 @@ namespace XRegistry.Validation.Tests;
 public class ProtobufValidationTests
 {
     [Test]
+    [Arguments("message Name {}")]
+    [Arguments("enum Name { ZERO=0; }")]
+    [Arguments("service Name {}")]
+    [Arguments("enum E { Name=0; }")]
+    public async Task PackagePrefixesCannotShareQualifiedNamesWithDeclarations(string declaration)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            foreach (var packageFirst in new[] { false, true })
+            {
+                var imports = packageFirst ? "import 'package.proto'; import 'type.proto';"
+                    : "import 'type.proto'; import 'package.proto';";
+                var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                    Encoding.UTF8.GetBytes($"syntax='proto{syntax}'; {imports} message Root {{}}"),
+                    new()
+                    {
+                        ResolveReference = (name, _) => ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+                            Encoding.UTF8.GetBytes(name switch
+                            {
+                                "package.proto" => $"syntax='proto{syntax}'; package example.Name.child; message Other {{}}",
+                                "type.proto" => $"syntax='proto{syntax}'; package example; {declaration}",
+                                _ => throw new InvalidOperationException("Unexpected import: " + name)
+                            }))
+                    });
+                await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+                await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.duplicate");
+                await Assert.That(result.Diagnostics[0].Path).IsEqualTo("$");
+            }
+        }
+    }
+
+    [Test]
+    public async Task PackagePrefixesMayBeSharedByFilesAndRemainCaseSensitive()
+    {
+        var calls = new List<string>();
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            "syntax='proto3'; package example; import 'first.proto'; import 'second.proto'; message Name {} message Root { name.First first=1; name.Second second=2; }"u8.ToArray(),
+            new()
+            {
+                ResolveReference = (name, _) =>
+                {
+                    calls.Add(name);
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes(name switch
+                    {
+                        "first.proto" => "syntax='proto3'; package example.name; message First {}",
+                        "second.proto" => "syntax='proto3'; package example.name; message Second {}",
+                        _ => throw new InvalidOperationException("Unexpected import: " + name)
+                    }));
+                }
+            });
+        await Assert.That(calls.Count).IsEqualTo(2);
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
     [Arguments("Name.Child", false, DocumentValidationStatus.Invalid)]
     [Arguments("Name.Child", true, DocumentValidationStatus.Valid)]
     [Arguments(".example.Name.Child", false, DocumentValidationStatus.Valid)]

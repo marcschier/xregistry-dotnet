@@ -119,7 +119,8 @@ internal sealed class ProtobufSyntax(ValidationContext context)
     private void RegisterSymbol(string name, string scope)
     {
         context.Work(name.Length + scope.Length + 1);
-        Require(_symbols.Add(scope.Length == 0 ? name : scope + "." + name),
+        var fullName = scope.Length == 0 ? name : scope + "." + name;
+        Require(!_packages.Contains(fullName) && _symbols.Add(fullName),
             "protobuf.duplicate", "Declaration names must be unique in their containing scope.");
     }
 
@@ -510,6 +511,8 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                 package = package.Contains('.') ? package[..package.LastIndexOf('.')] : "")
             {
                 owner.Context.Work(package.Length + 1);
+                Require(!owner._symbols.Contains(package), "protobuf.duplicate",
+                    "A package prefix cannot reuse a declaration name.");
                 owner._packages.Add(package);
             }
             var packageSeen = false;
