@@ -673,8 +673,9 @@ internal sealed class ProtobufSyntax(ValidationContext context)
 
             foreach (var field in fields)
             {
+                owner.Context.Work(field.Name.Length + 1);
                 Require(!reservedNames.Contains(field.Name) &&
-                    !reservedNumbers.Any(range => field.Number >= range.First && field.Number <= range.Last),
+                    !IsReservedNumber(field.Number, reservedNumbers),
                     "protobuf.reserved", "A field reuses a reserved name or number.");
             }
 
@@ -880,9 +881,22 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                 "protobuf.enum", "An enum needs a first value, which must be zero in proto3.");
             Require(allowAlias || values.Select(static value => value.Number).Distinct().Count() == values.Count,
                 "protobuf.enum", "Duplicate enum numbers require allow_alias.");
-            Require(values.All(value => !reservedNames.Contains(value.Name) &&
-                !reservedNumbers.Any(range => value.Number >= range.First && value.Number <= range.Last)),
-                "protobuf.reserved", "An enum value uses a reserved name or number.");
+            foreach (var value in values)
+            {
+                owner.Context.Work(value.Name.Length + 1);
+                Require(!reservedNames.Contains(value.Name) && !IsReservedNumber(value.Number, reservedNumbers),
+                    "protobuf.reserved", "An enum value uses a reserved name or number.");
+            }
+        }
+
+        private bool IsReservedNumber(int number, List<(int First, int Last)> ranges)
+        {
+            foreach (var range in ranges)
+            {
+                owner.Context.Work();
+                if (number >= range.First && number <= range.Last) { return true; }
+            }
+            return false;
         }
 
         private void Reserved(HashSet<string> names, List<(int First, int Last)> ranges, bool enumeration = false)

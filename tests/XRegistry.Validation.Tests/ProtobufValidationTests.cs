@@ -10,6 +10,41 @@ namespace XRegistry.Validation.Tests;
 public class ProtobufValidationTests
 {
     [Test]
+    [Arguments("Protobuf/2", false, 150000, DocumentValidationStatus.Indeterminate)]
+    [Arguments("Protobuf/2", false, 1000000, DocumentValidationStatus.Valid)]
+    [Arguments("Protobuf/2", true, 150000, DocumentValidationStatus.Indeterminate)]
+    [Arguments("Protobuf/2", true, 1000000, DocumentValidationStatus.Valid)]
+    [Arguments("Protobuf/3", false, 150000, DocumentValidationStatus.Indeterminate)]
+    [Arguments("Protobuf/3", false, 1000000, DocumentValidationStatus.Valid)]
+    [Arguments("Protobuf/3", true, 150000, DocumentValidationStatus.Indeterminate)]
+    [Arguments("Protobuf/3", true, 1000000, DocumentValidationStatus.Valid)]
+    [Arguments("gRPC/proto3", false, 150000, DocumentValidationStatus.Indeterminate)]
+    [Arguments("gRPC/proto3", false, 1000000, DocumentValidationStatus.Valid)]
+    [Arguments("gRPC/proto3", true, 150000, DocumentValidationStatus.Indeterminate)]
+    [Arguments("gRPC/proto3", true, 1000000, DocumentValidationStatus.Valid)]
+    public async Task ReservedMembershipChecksRespectCumulativeWorkBudget(
+        string format, bool enumeration, long workLimit, DocumentValidationStatus expected)
+    {
+        var syntax = format == "Protobuf/2" ? 2 : 3;
+        var reservations = string.Join(",", Enumerable.Range(10000, 256)
+            .Select(static value => value.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        var declarations = string.Join("", Enumerable.Range(0, 512).Select(value =>
+            enumeration ? "V" + value + "=" + value + ";" :
+                (syntax == 2 ? "optional " : "") + "int32 f" + value + "=" + (value + 1) + ";"));
+        var source = "syntax='proto" + syntax + "'; " + (enumeration ? "enum E{" : "message M{") +
+            "reserved " + reservations + ";" + declarations + "}";
+        if (format == "gRPC/proto3") { source += "message Row{} service S{rpc Get(Row)returns(Row);}"; }
+        var result = await new BuiltInDocumentValidator().ValidateAsync(format, Encoding.UTF8.GetBytes(source),
+            new() { MaxWork = workLimit });
+        await Assert.That(result.Status).IsEqualTo(expected);
+        if (expected == DocumentValidationStatus.Indeterminate)
+        {
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("limit.work");
+        }
+        else { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+    }
+
+    [Test]
     [Arguments("string foo_bar=1; string fooBar=2;")]
     [Arguments("string first=1 [json_name='fooBar']; string foo_bar=2;")]
     [Arguments("string foo_bar=1; oneof choice {string fooBar=2;}")]

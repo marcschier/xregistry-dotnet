@@ -47,6 +47,10 @@ These are declared policies, not claims of universal equivalence to every
 upstream schema tool or version. All parsers share finite document, aggregate
 byte, depth, node, reference and work budgets. JSON ingestion shares the core's
 strict UTF-8, Unicode escape, duplicate-member and number checks.
+Protobuf charges each field/value comparison against a reserved-number range to
+the cumulative work budget. Exhausting that budget reports `Indeterminate` with
+`limit.work`, rather than accepting a declaration whose reservation checks were
+not completed.
 
 ## Compatibility
 
