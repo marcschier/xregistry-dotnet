@@ -12,6 +12,100 @@ namespace XRegistry.Server.Tests;
 public class ModelAndVersionTests
 {
     [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task DefaultAndExplicitSetVersionIdModelsAllowClientChosenVersionCreation(bool explicitPolicy)
+    {
+        var policy = explicitPolicy ? ",\"setversionid\":true" : "";
+        var model = """
+            {"groups":{"teams":{"singular":"team","resources":{"notes":{
+              "singular":"note","hasdocument":false,"maxversions":0 POLICY
+            }}}}}
+            """.Replace("POLICY", policy, StringComparison.Ordinal);
+        var source = RegistryJson.Parse(model);
+        await Assert.That(RegistryModel.Compile(source).Groups["teams"].Resources["notes"].SetVersionId).IsTrue();
+        var store = new InMemoryRegistryPersistence();
+        var engine = Create(model, persistence: store);
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n/versions/Client", """{"name":"route"}""");
+        await Send(engine, RegistryAction.Post, "/teams/g/notes/n", """{"versionid":"Second","name":"post"}""");
+        await Send(engine, RegistryAction.Patch, "/teams/g/notes/n/versions", """{"Third":{"name":"collection"}}""");
+        var restarted = Create(model, persistence: store);
+        var versions = (await Send(restarted, RegistryAction.Read, "/teams/g/notes/n/versions")).Metadata!.RootElement;
+        await Assert.That(versions.EnumerateObject().Count()).IsEqualTo(3);
+        foreach (var (id, name) in new[] { ("Client", "route"), ("Second", "post"), ("Third", "collection") })
+        {
+            var version = versions.GetProperty(id);
+            await Assert.That(version.GetProperty("versionid").GetString()).IsEqualTo(id);
+            await Assert.That(version.GetProperty("name").GetString()).IsEqualTo(name);
+        }
+    }
+
+    [Test]
+    [Arguments("manual")]
+    [Arguments("semver")]
+    public async Task ServerAssignedVersionIdsSurviveRestartDeletionAndRejectedPublication(string mode)
+    {
+        var store = new InMemoryRegistryPersistence();
+        var model = """
+            {"groups":{"teams":{"singular":"team","resources":{"notes":{
+              "singular":"note","hasdocument":false,"setversionid":false,"maxversions":0,"versionmode":"MODE"
+            }}}}}
+            """.Replace("MODE", mode, StringComparison.Ordinal);
+        var engine = Create(model, persistence: store);
+        var first = await Send(engine, RegistryAction.Replace, "/teams/g/notes/n", """{"name":"first"}""");
+        var firstId = mode == "semver" ? "1.0.0" : "1";
+        var secondId = mode == "semver" ? "2.0.0" : "2";
+        var thirdId = mode == "semver" ? "3.0.0" : "3";
+        await Assert.That(first.Metadata!.RootElement.GetProperty("versionid").GetString()).IsEqualTo(firstId);
+        var before = (await Send(engine, RegistryAction.Read, "/export")).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        foreach (var (action, path, body) in new[]
+        {
+            (RegistryAction.Replace, "/teams/g/notes/n/versions/" + secondId, """{"name":"client supplied"}"""),
+            (RegistryAction.Post, "/teams/g/notes/n", "{\"versionid\":\"" + secondId + "\",\"name\":\"client supplied\"}"),
+            (RegistryAction.Patch, "/teams/g/notes/n/versions", "{\"" + secondId + "\":{\"name\":\"client supplied\"}}"),
+            (RegistryAction.Replace, "/teams/g/notes/new", "{\"versionid\":\"" + secondId + "\"}")
+        })
+        {
+            await ExpectCode(() => Send(engine, action, path, body), "versionid_not_allowed");
+            await AssertUnchangedAsync(engine);
+        }
+        await ExpectCode(() => Send(engine, RegistryAction.Post, "/teams/g/notes/n", """{"name":""}"""),
+            "invalid_attribute");
+        await AssertUnchangedAsync(engine);
+        engine = Create(model, persistence: store);
+        await AssertUnchangedAsync(engine);
+        var second = await Send(engine, RegistryAction.Post, "/teams/g/notes/n", """{"name":"second"}""");
+        await Assert.That(second.Metadata!.RootElement.GetProperty("versionid").GetString()).IsEqualTo(secondId);
+        await Send(engine, RegistryAction.Delete, "/teams/g/notes/n/versions/" + secondId);
+        engine = Create(model, persistence: store);
+        var third = await Send(engine, RegistryAction.Post, "/teams/g/notes/n", """{"name":"third"}""");
+        await Assert.That(third.Metadata!.RootElement.GetProperty("versionid").GetString()).IsEqualTo(thirdId);
+        foreach (var action in new[] { RegistryAction.Patch, RegistryAction.Replace })
+        {
+            await Send(engine, action, "/teams/g/notes/n/versions/" + firstId,
+                "{\"versionid\":\"" + firstId + "\",\"name\":\"updated\"}");
+            var updated = (await Send(Create(model, persistence: store), RegistryAction.Read,
+                "/teams/g/notes/n/versions/" + firstId)).Metadata!.RootElement;
+            await Assert.That(updated.GetProperty("versionid").GetString()).IsEqualTo(firstId);
+            await Assert.That(updated.GetProperty("name").GetString()).IsEqualTo("updated");
+        }
+        var meta = (await Send(Create(model, persistence: store), RegistryAction.Read, "/teams/g/notes/n/meta"))
+            .Metadata!.RootElement;
+        await Assert.That(meta.GetProperty("defaultversionid").GetString()).IsEqualTo(thirdId);
+        var versions = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n/versions")).Metadata!.RootElement;
+        await Assert.That(versions.EnumerateObject().Count()).IsEqualTo(2);
+        await Assert.That(versions.TryGetProperty(secondId, out _)).IsFalse();
+
+        async Task AssertUnchangedAsync(RegistryEngine current)
+        {
+            await Assert.That((await Send(current, RegistryAction.Read, "/export")).Metadata!.RootElement.GetRawText())
+                .IsEqualTo(before);
+            await Assert.That((await current.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        }
+    }
+
+    [Test]
     [Arguments("null")]
     [Arguments("request")]
     public async Task ReservedVersionIdsRejectAcrossPublicationRoutesWithoutChangingState(string id)

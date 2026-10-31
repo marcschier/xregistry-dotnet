@@ -83513,13 +83513,17 @@
       ],
       "text": "- When not specified, the default value MUST be `true`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Compiling a model with setversionid omitted yields true. The default policy admits client IDs across explicit Version, Resource POST and Version collection creation, with exact retained state after restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultAndExplicitSetVersionIdModelsAllowClientChosenVersionCreation"
+        ],
         "nativeEvidence": []
       }
     },
@@ -83544,13 +83548,17 @@
       ],
       "text": "- A value of `true` indicates the client MAY specify the `versionid` of a Version during its creation process.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Explicit true and omitted setversionid models admit exact client-chosen IDs through Version replacement, Resource POST and Version collection PATCH. All three identities and submitted names survive restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultAndExplicitSetVersionIdModelsAllowClientChosenVersionCreation"
+        ],
         "nativeEvidence": []
       }
     },
@@ -83575,13 +83583,17 @@
       ],
       "text": "- A value of `false` indicates that the server MUST choose an appropriate `versionid` value during creation of the Version.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Manual and semver Resources with client ID setting disabled receive valid server-assigned IDs. Rejected publication does not consume the next ID; deletion and restart do not rewind the retained sequence. Updates to an existing explicit Version remain allowed.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ServerAssignedVersionIdsSurviveRestartDeletionAndRejectedPublication"
+        ],
         "nativeEvidence": []
       }
     },
@@ -83606,13 +83618,17 @@
       ],
       "text": "- During the creation of a new Version, if `setversionid` is `false` and a `versionid` is provided then the server MUST generate an error ([versionid_not_allowed](./spec.md#versionid_not_allowed)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Explicit Version replacement, Resource POST, Version collection PATCH and new Resource replacement reject supplied new IDs with versionid_not_allowed. Exact export and event count remain unchanged through restart for manual and semver models.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ServerAssignedVersionIdsSurviveRestartDeletionAndRejectedPublication"
+        ],
         "nativeEvidence": []
       }
     },
