@@ -10,6 +10,92 @@ namespace XRegistry.Validation.Tests;
 public class ProtobufValidationTests
 {
     [Test]
+    [Arguments("foo", "FooEntry")]
+    [Arguments("map_field", "MapFieldEntry")]
+    public async Task MapEntryNamesReserveSymbolsInTheirMessageScope(string mapName, string entryName)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var prefix = "syntax='proto" + syntax + "'; ";
+            var label = syntax == 2 ? "optional " : "";
+            var map = "map<string,int32> " + mapName + "=1;";
+            foreach (var collision in new[]
+            {
+                "message " + entryName + "{}",
+                "enum " + entryName + "{ ZERO=0; }",
+                label + "string " + entryName + "=2;",
+                "oneof " + entryName + "{ string value=2; }"
+            })
+            {
+                foreach (var before in new[] { false, true })
+                {
+                    var body = before ? collision + map : map + collision;
+                    var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/" + syntax,
+                        Encoding.UTF8.GetBytes(prefix + "message Root{" + body + "}"));
+                    await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+                    await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.duplicate");
+                }
+            }
+        }
+    }
+
+    [Test]
+    public async Task MapEntryNamesDoNotReserveSymbolsInOtherScopes()
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/" + syntax,
+                Encoding.UTF8.GetBytes("syntax='proto" + syntax + "'; message FooEntry{} " +
+                    "message Root{ map<string,int32> foo=1; message Child{message FooEntry{} } } " +
+                    "message Other{map<string,int32> foo=1;}"));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        }
+    }
+
+    [Test]
+    [Arguments("foo", "Foo")]
+    [Arguments("map_field", "MapField")]
+    public async Task MapsCannotShareTheSameSyntheticEntryName(string first, string second)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/" + syntax,
+                Encoding.UTF8.GetBytes("syntax='proto" + syntax + "'; message Root{" +
+                    "map<string,int32> " + first + "=1; map<string,int32> " + second + "=2;}"));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.duplicate");
+        }
+    }
+
+    [Test]
+    public async Task GrpcSourceRejectsMapEntrySymbolCollisions()
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("gRPC/proto3",
+            Encoding.UTF8.GetBytes("syntax='proto3'; message Row{map<string,int32> foo=1;message FooEntry{}} " +
+                "service S{rpc Get(Row)returns(Row);}"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.duplicate");
+    }
+
+    [Test]
+    public async Task MapEntryCollisionInImportedSourceCannotBeHiddenByValidRootTypes()
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("gRPC/proto3",
+            Encoding.UTF8.GetBytes("syntax='proto3'; import 'child.proto'; message Row{} service S{rpc Get(Row)returns(Row);}"),
+            new()
+            {
+                ResolveReference = (reference, _) =>
+                {
+                    if (reference != "child.proto") { throw new InvalidOperationException("An unexpected dependency was requested."); }
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes(
+                        "syntax='proto3'; message Child{map<string,int32> foo=1;message FooEntry{}}"));
+                }
+            });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.duplicate");
+    }
+
+    [Test]
     [Arguments(false, false)]
     [Arguments(false, true)]
     [Arguments(true, false)]

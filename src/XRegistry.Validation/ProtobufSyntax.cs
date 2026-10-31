@@ -681,6 +681,20 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             void AddField(Field field)
             {
                 owner.RegisterSymbol(field.Name, full);
+                if (field.Type == "map")
+                {
+                    owner.Context.Work(field.Name.Length + 1);
+                    var entryName = new StringBuilder(field.Name.Length + 5);
+                    var capitalize = true;
+                    foreach (var character in field.Name)
+                    {
+                        if (character == '_') { capitalize = true; continue; }
+                        entryName.Append(capitalize ? char.ToUpperInvariant(character) : character);
+                        capitalize = char.IsAsciiDigit(character);
+                    }
+                    entryName.Append("Entry");
+                    owner.RegisterSymbol(entryName.ToString(), full);
+                }
                 Require(numbers.Add(field.Number), "protobuf.duplicate", "Message field numbers must be unique.");
                 if (field.JsonName is { } jsonName)
                 {

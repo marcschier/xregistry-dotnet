@@ -15,6 +15,13 @@ successful validation.
 | gRPC | `gRPC/proto3` uses the Proto3 policy and requires at least one service declared in the supplied root document. Imported source uses its declared syntax. Descriptor sets are unsupported. Source-method selection is available separately through `ApiOperationDocumentResolver`. |
 | JSON Structure | Draft-04 Core document/type/namespace/reference/union/compound grammar and bounded primitive restrictions. Required extensions, inheritance and unqualified extended primitive const/enum rules are unsupported. |
 
+Protobuf map declarations reserve their synthetic entry symbol in the containing
+message: `foo` reserves `FooEntry`, and `map_field` reserves `MapFieldEntry`.
+An authored message, enum, field, oneof or another map cannot reuse that symbol,
+regardless of declaration order. The reservation does not affect other message
+scopes. This follows the [published map rules](https://protobuf.dev/programming-guides/proto3/#maps)
+and applies to the shared gRPC source parser as well.
+
 The gRPC source profile checks import cycles in both document validation and
 operation selection. A cycle reports `Indeterminate` with `dependency.cycle`,
 never successful validation. The server adapter leaves such a document unchecked
