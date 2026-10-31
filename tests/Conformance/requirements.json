@@ -8125,20 +8125,18 @@
       "text": "- REQUIRED.",
       "review": {
         "status": "reviewed",
-        "note": "Every declared child collection has generated navigation/count fields, even when empty, with inlining controlled independently. Direct assertions cover representative root/Group maps but not all defined empty collection types and both views as a complete clause.",
+        "note": "The Group API test checks every declared Resource collection (notes and files) as an empty map with its URL and count. Bridge document-view tests cover both collections, including an empty collection, and the selected-empty-map case.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "RootCapabilitiesAndDiscoveryUseConfiguredPublicRoot",
+          "IncludedEmptyCollectionsAreSerializedAsEmptyMaps",
           "CollectionsViewOmitsOnlyTheTopEntityAndKeepsNestedMetadataAndPointers",
-          "ResourceShadowOwnsEveryVersionAndDocumentWithoutOpeningLaterSources",
-          "OpaqueDomainValuesArePreservedWhileOnlyModeledNavigationIsRebased",
-          "IncompleteCollectionsAndIncompatibleModelsNeverProducePartialSuccess"
+          "DocumentViewIncludesSelectedEmptyCollectionsAsRelativeMaps"
         ],
         "nativeEvidence": []
       }
@@ -8159,20 +8157,18 @@
       "text": "- It MUST include all nested Resource Collection types of the owning Group, even if some of the collections are empty.",
       "review": {
         "status": "reviewed",
-        "note": "Every declared child collection has generated navigation/count fields, even when empty, with inlining controlled independently. Direct assertions cover representative root/Group maps but not all defined empty collection types and both views as a complete clause.",
+        "note": "The Group API test checks every declared Resource collection (notes and files) as an empty map with its URL and count. Bridge document-view tests cover both collections, including an empty collection, and the selected-empty-map case.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "RootCapabilitiesAndDiscoveryUseConfiguredPublicRoot",
+          "IncludedEmptyCollectionsAreSerializedAsEmptyMaps",
           "CollectionsViewOmitsOnlyTheTopEntityAndKeepsNestedMetadataAndPointers",
-          "ResourceShadowOwnsEveryVersionAndDocumentWithoutOpeningLaterSources",
-          "OpaqueDomainValuesArePreservedWhileOnlyModeledNavigationIsRebased",
-          "IncompleteCollectionsAndIncompatibleModelsNeverProducePartialSuccess"
+          "DocumentViewIncludesSelectedEmptyCollectionsAsRelativeMaps"
         ],
         "nativeEvidence": []
       }
@@ -67984,9 +67980,12 @@
       ],
       "text": "Groups represent entities that typically act as a collection mechanism for related Resources. However, it is worth noting that Groups do not have to have Resources associated with them. It is possible to have Groups be the main (or only) entity of a Registry. Each Group type MAY have any number of Resource types within it. This specification does not define how the Resources within a Group type are related to each other.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Group Resource-type cardinality is a model-design permission, including zero Resource types. It is not a requirement that every deployment offer every possible type count.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -68455,13 +68454,20 @@
       ],
       "text": "- REQUIRED.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The Group API test checks every declared Resource collection (notes and files) as an empty map with its URL and count. Bridge document-view tests cover both collections, including an empty collection, and the selected-empty-map case.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "IncludedEmptyCollectionsAreSerializedAsEmptyMaps",
+          "CollectionsViewOmitsOnlyTheTopEntityAndKeepsNestedMetadataAndPointers",
+          "DocumentViewIncludesSelectedEmptyCollectionsAsRelativeMaps"
+        ],
         "nativeEvidence": []
       }
     },
@@ -68486,13 +68492,20 @@
       ],
       "text": "- It MUST include all nested Resource Collection types of the owning Group, even if some of the collections are empty.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The Group API test checks every declared Resource collection (notes and files) as an empty map with its URL and count. Bridge document-view tests cover both collections, including an empty collection, and the selected-empty-map case.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "IncludedEmptyCollectionsAreSerializedAsEmptyMaps",
+          "CollectionsViewOmitsOnlyTheTopEntityAndKeepsNestedMetadataAndPointers",
+          "DocumentViewIncludesSelectedEmptyCollectionsAsRelativeMaps"
+        ],
         "nativeEvidence": []
       }
     },
