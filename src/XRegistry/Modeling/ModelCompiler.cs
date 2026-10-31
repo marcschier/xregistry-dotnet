@@ -76,6 +76,12 @@ internal static partial class ModelCompiler
                 "attributes", "resourceattributes", "metaattributes"]);
             var singular = CheckNames(entry.Name, value, at, names, group: false);
             var hasDocument = Boolean(value, "hasdocument", true, at);
+            var versionModeValue = Member(value, "versionmode");
+            if (versionModeValue.ValueKind == JsonValueKind.Null)
+            {
+                throw Diagnostics.Error("model_error", at + "/versionmode", "A string is required.");
+            }
+
             var versionMode = (Text(value, "versionmode", at) ?? "manual").ToLowerInvariant();
             if (versionMode is not ("manual" or "createdat" or "modifiedat" or "semver"))
             {

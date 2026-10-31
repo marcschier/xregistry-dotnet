@@ -251,6 +251,8 @@ public class RegistryModelTests
 
     [Test]
     [Arguments("""{"singular":"file","versionmode":"random"}""", "versionmode")]
+    [Arguments("""{"singular":"file","versionmode":null}""", "versionmode")]
+    [Arguments("""{"singular":"file","versionmode":1}""", "versionmode")]
     [Arguments("""{"singular":"file","versionmode":"createdat"}""", "singleversionroot")]
     [Arguments("""{"singular":"file","versionmode":"modifiedat"}""", "singleversionroot")]
     [Arguments("""{"singular":"file","versionmode":"semver"}""", "singleversionroot")]
