@@ -652,6 +652,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                             break;
                         case "deprecated":
                         case "weak":
+                        case "debug_redact":
                             Require(IsBoolean(value), "protobuf.option", "This field option must be boolean.");
                             break;
                         case "lazy":
@@ -701,6 +702,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                     var value = Constant();
                     Expect(";");
                     Require(option != "idempotency_level", "protobuf.option_scope", "idempotency_level is only valid on RPC methods.");
+                    Require(option != "debug_redact", "protobuf.option_scope", "debug_redact is only valid on fields and enum values.");
                     if (option is not ("allow_alias" or "deprecated")) { Unsupported("Unsupported enum option."); }
                     Require(IsBoolean(value), "protobuf.option", "The enum option must be boolean.");
                     Require(options.Add(option), "protobuf.option", "Singular enum options must be assigned only once.");
@@ -726,8 +728,8 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                             Expect("=");
                             var value = Constant();
                             Require(option != "idempotency_level", "protobuf.option_scope", "idempotency_level is only valid on RPC methods.");
-                            if (option != "deprecated") { Unsupported("Unsupported enum value option."); }
-                            Require(IsBoolean(value), "protobuf.option", "deprecated must be boolean.");
+                            if (option is not ("deprecated" or "debug_redact")) { Unsupported("Unsupported enum value option."); }
+                            Require(IsBoolean(value), "protobuf.option", "The enum value option must be boolean.");
                         }
                         while (Take(","));
                         Expect("]");
@@ -819,6 +821,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             Expect("=");
             var value = Constant();
             Expect(";");
+            Require(option != "debug_redact", "protobuf.option_scope", "debug_redact is only valid on fields and enum values.");
             if (option is "java_package" or "java_outer_classname" or "go_package" or "csharp_namespace" or
                 "objc_class_prefix" or "php_namespace" or "php_metadata_namespace" or "ruby_package")
             {

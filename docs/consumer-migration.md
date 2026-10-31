@@ -203,11 +203,18 @@ imported files can declare independent values. Unary and streaming methods use
 the same policy. This validates the declared hint without selecting HTTP verbs,
 implementing transport behavior or adding gRPC operation selection.
 
+The descriptor's `debug_redact` option accepts native `true` or `false` on
+fields and enum values. Other declaration kinds report `protobuf.option_scope`;
+non-boolean values and repeated assignments report `protobuf.option`.
+Imported schemas retain the same checks. This validates the authored hint,
+but does not redact runtime values or implement debug-output formatting.
+
 Enum and enum-value options use the same explicit policy boundary as other
 declarations. Unknown option names or actual custom-option syntax report
 `Unsupported`, rather than treating an unimplemented option as malformed solely
 because its value is not boolean. Supported enum `allow_alias` and `deprecated`
-options and enum-value `deprecated` still require native boolean constants.
+options and enum-value `deprecated` and `debug_redact` still require native
+boolean constants.
 Duplicate enum-value options report `Invalid` with `protobuf.option`; quoted
 parentheses cannot stand in for custom-option syntax.
 Editions, custom extensions, complete weak-import semantics and gRPC API

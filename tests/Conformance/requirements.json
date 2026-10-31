@@ -43897,6 +43897,11 @@
           "RpcIdempotencyOptionsRequireMethodDeclarationScope",
           "RpcIdempotencyOptionsRemainSingular",
           "RpcIdempotencyOptionsHaveIndependentMethodAndFileScopes",
+          "DebugRedactOptionsAcceptNativeBooleansOnFieldsAndEnumValues",
+          "DebugRedactOptionsRejectNonBooleanConstants",
+          "DebugRedactOptionsRemainSingularOnEachFieldOrEnumValue",
+          "DebugRedactOptionsRejectOtherDeclarationScopes",
+          "DebugRedactOptionsRetainImportedFieldAndEnumValueValidation",
           "EnumAndEnumValueUnknownOptionPoliciesRemainUnsupported",
           "EnumOptionPoliciesPreserveKnownBooleansAliasesAndInvalidSyntax"
         ],

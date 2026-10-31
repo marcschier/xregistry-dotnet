@@ -224,6 +224,9 @@ vocabulary/source mapping. It does not supply their implementation.
   constants only on method declarations. Invalid constants, misplaced settings
   and duplicate assignments fail; methods and imported files retain independent
   settings. This adds no HTTP transport behavior or gRPC operation selection.
+  The `debug_redact` hint now accepts native booleans on fields and enum values,
+  including imported declarations. Misplaced, non-boolean and duplicate
+  settings fail. Runtime redaction and debug-output formatting are not added.
   Enum and enum-value unknown/custom options now report the same unsupported
   policy outcome as other declarations; supported boolean and alias rules,
   enum-value duplicate checks and token-kind checks remain enforced.

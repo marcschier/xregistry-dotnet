@@ -946,6 +946,114 @@ public class ProtobufValidationTests
     }
 
     [Test]
+    [Arguments("true")]
+    [Arguments("false")]
+    public async Task DebugRedactOptionsAcceptNativeBooleansOnFieldsAndEnumValues(string value)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var label = syntax == 2 ? "optional " : "";
+            var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                Encoding.UTF8.GetBytes($"syntax='proto{syntax}'; enum E {{ ZERO=0 [debug_redact={value},deprecated=false]; " +
+                    $"OTHER=1 [debug_redact={value}]; }} message Root {{ " +
+                    $"{label}string text=1 [debug_redact={value}]; repeated bytes data=2 [debug_redact={value}]; " +
+                    $"oneof choice {{ E state=3 [debug_redact={value}]; }} " +
+                    $"map<string,int32> values=4 [debug_redact={value}]; }}"));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+            await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+        }
+    }
+
+    [Test]
+    [Arguments("'true'")]
+    [Arguments("'tr' 'ue'")]
+    [Arguments("TRUE")]
+    [Arguments("0")]
+    [Arguments("1")]
+    [Arguments("+true")]
+    [Arguments("-false")]
+    public async Task DebugRedactOptionsRejectNonBooleanConstants(string value)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            foreach (var body in new[]
+            {
+                $"message Root {{ optional string text=1 [debug_redact={value}]; }}",
+                $"enum E {{ ZERO=0 [debug_redact={value}]; }}"
+            })
+            {
+                var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                    Encoding.UTF8.GetBytes($"syntax='proto{syntax}'; {body}"));
+                await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+                await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.option");
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("true", "true")]
+    [Arguments("true", "false")]
+    [Arguments("false", "true")]
+    [Arguments("false", "false")]
+    public async Task DebugRedactOptionsRemainSingularOnEachFieldOrEnumValue(string first, string second)
+    {
+        var options = $"debug_redact={first},deprecated=false,debug_redact={second}";
+        foreach (var body in new[]
+        {
+            $"message Root {{ string text=1 [{options}]; }}",
+            $"enum E {{ ZERO=0 [{options}]; }}"
+        })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+                Encoding.UTF8.GetBytes($"syntax='proto3'; {body}"));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.option");
+        }
+    }
+
+    [Test]
+    [Arguments("option debug_redact=true; message Root {}")]
+    [Arguments("message Root { option debug_redact=true; }")]
+    [Arguments("enum E { option debug_redact=true; ZERO=0; }")]
+    [Arguments("message Root { oneof choice { option debug_redact=true; string text=1; } }")]
+    [Arguments("message Root {} service S { option debug_redact=true; }")]
+    [Arguments("message Root {} service S { rpc Get(Root) returns (Root) { option debug_redact=true; } }")]
+    public async Task DebugRedactOptionsRejectOtherDeclarationScopes(string body)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                Encoding.UTF8.GetBytes($"syntax='proto{syntax}'; {body}"));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.option_scope");
+        }
+    }
+
+    [Test]
+    public async Task DebugRedactOptionsRetainImportedFieldAndEnumValueValidation()
+    {
+        foreach (var value in new[] { "true", "'true'" })
+        {
+            var requests = 0;
+            var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+                Encoding.UTF8.GetBytes("syntax='proto3'; import 'dep.proto'; message Root { string value=1 [debug_redact=false]; }"), new()
+                {
+                    ResolveReference = (_, _) =>
+                    {
+                        requests++;
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+                            Encoding.UTF8.GetBytes($"syntax='proto2'; package dep; enum E {{ ZERO=0 [debug_redact={value}]; }} " +
+                                "message M { optional string value=1 [debug_redact=true]; }"));
+                    }
+                });
+            await Assert.That(requests).IsEqualTo(1);
+            await Assert.That(result.Status).IsEqualTo(value == "true" ? DocumentValidationStatus.Valid : DocumentValidationStatus.Invalid);
+            if (value == "true") { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+            else { await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.option"); }
+        }
+    }
+
+    [Test]
     [Arguments("unknown=true")]
     [Arguments("unknown=17")]
     [Arguments("unknown=\"text\"")]
