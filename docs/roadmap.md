@@ -153,7 +153,11 @@ vocabulary/source mapping. It does not supply their implementation.
 - Add full API format validators and the remaining language resolvers. The
   OpenAPI/Swagger, OpenRPC, Avro Protocol and assembled Smithy JSON selectors
   do not establish full format validation, YAML support, or gRPC, Thrift,
-  Avro IDL, GraphQL, WSDL or Smithy IDL/model-assembly support. Avro message
+  Avro IDL, GraphQL, WSDL or Smithy IDL/model-assembly support. Shared API
+  dependency resolution rejects raw whitespace/control characters and malformed
+  document URI spellings before acquisition. Network-path and absolute-path
+  references use the referring document's base rather than becoming filesystem
+  URLs; caller authorization remains required. Avro message
   selection preserves the declared native message. It checks protocol/type
   declaration names, effective namespace collisions and request fields, then
   binds named request/response/error schemas and checks defaults in native

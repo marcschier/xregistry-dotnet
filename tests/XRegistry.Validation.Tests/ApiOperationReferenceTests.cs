@@ -1347,6 +1347,153 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
+    [Arguments(" https://api.example/shared.json")]
+    [Arguments("https://api.example/shared.json ")]
+    [Arguments("https://api.example/shared.json\n")]
+    [Arguments("https://api.example/shared.json\t")]
+    [Arguments("https://api.example/shared.json\u0001")]
+    [Arguments("https://api.example/shared.json\u007f")]
+    [Arguments("./shared file.json")]
+    [Arguments("./shared\u00a0file.json")]
+    [Arguments("./shared\\file.json")]
+    [Arguments("./shared%GG.json")]
+    [Arguments("./shared%.json")]
+    [Arguments("./shared.json#/bad name")]
+    [Arguments("#/bad\n")]
+    [Arguments("http://[invalid")]
+    public async Task ApiDependencyReferencesRejectMalformedUriTextBeforeBaseLookupOrAcquisition(string dependency)
+    {
+        foreach (var openRpc in new[] { false, true })
+        {
+            foreach (var withBase in new[] { false, true })
+            {
+                var referenceObject = new JsonObject { ["$ref"] = dependency };
+                var document = openRpc
+                    ? new JsonObject
+                    {
+                        ["openrpc"] = "1.4.0", ["info"] = JsonNode.Parse("""{"title":"Users","version":"1"}"""),
+                        ["methods"] = new JsonArray((JsonNode)referenceObject)
+                    }
+                    : new JsonObject
+                    {
+                        ["openapi"] = "3.1.1",
+                        ["paths"] = new JsonObject { ["/users"] = referenceObject }
+                    };
+                var calls = 0;
+                var result = await ApiOperationDocumentResolver.ResolveAsync(
+                    openRpc ? "OpenRPC/1.4" : "OpenAPI/3.1", "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#operations/GetUser"),
+                    withBase ? new Uri("https://api.example/root.json") : null,
+                    (_, _) =>
+                    {
+                        calls++;
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(null);
+                    });
+                await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("dependency.uri");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo(
+                    openRpc ? "$/methods/0/$ref" : "$/paths/~1users/$ref");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                await Assert.That(calls).IsEqualTo(0);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("./shared%20file.json#/path%20%C3%A9", "https://api.example/apis/shared%20file.json")]
+    [Arguments("https://api.example/shared%20file.json#/path%20%C3%A9", "https://api.example/shared%20file.json")]
+    [Arguments("//other.example/shared.json#/path%20%C3%A9", "https://other.example/shared.json")]
+    [Arguments("/shared%20file.json#/path%20%C3%A9", "https://api.example/shared%20file.json")]
+    [Arguments("../schemas/shared.json?view=one%20two#/path%20%C3%A9", "https://api.example/schemas/shared.json?view=one%20two")]
+    public async Task ApiDependencyReferencesRetainValidEncodedPathsQueriesAndPointers(
+        string dependency, string expectedUri)
+    {
+        foreach (var openRpc in new[] { false, true })
+        {
+            var document = openRpc
+                ? JsonNode.Parse("""{"openrpc":"1.4.0","info":{"title":"Users","version":"1"},"methods":[{}]}""")!
+                : JsonNode.Parse("""{"openapi":"3.1.1","paths":{"/users":{}}}""")!;
+            var referenceObject = openRpc ? document["methods"]![0]! : document["paths"]!["/users"]!;
+            referenceObject["$ref"] = dependency;
+            var calls = 0;
+            var result = await ApiOperationDocumentResolver.ResolveAsync(
+                openRpc ? "OpenRPC/1.4" : "OpenAPI/3.1", "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/GetUser"),
+                new Uri("https://api.example/apis/root.json"),
+                (uri, _) =>
+                {
+                    calls++;
+                    if (uri != expectedUri) { throw new InvalidOperationException("The acquired document URI changed."); }
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+                        """{"path \u00e9":{"get":{"operationId":"GetUser"},"name":"GetUser","params":[]}}"""u8.ToArray());
+                });
+            await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+            await Assert.That(result.Diagnostic).IsNull();
+            await Assert.That(result.DocumentUri!.AbsoluteUri).IsEqualTo(expectedUri);
+            await Assert.That(result.DocumentPath).IsEqualTo(openRpc ? "$/path \u00e9" : "$/path \u00e9/get");
+            await Assert.That(result.Operation.GetProperty(openRpc ? "name" : "operationId").GetString()).IsEqualTo("GetUser");
+            await Assert.That(calls).IsEqualTo(1);
+        }
+    }
+
+    [Test]
+    [Arguments("//other.example/shared.json#/path")]
+    [Arguments("/shared.json#/path")]
+    [Arguments("./shared.json#/path")]
+    public async Task ApiDependencyReferencesRequireABaseForNetworkAndAbsolutePaths(string dependency)
+    {
+        foreach (var openRpc in new[] { false, true })
+        {
+            var document = openRpc
+                ? JsonNode.Parse("""{"openrpc":"1.4.0","info":{"title":"Users","version":"1"},"methods":[{}]}""")!
+                : JsonNode.Parse("""{"openapi":"3.1.1","paths":{"/users":{}}}""")!;
+            var referenceObject = openRpc ? document["methods"]![0]! : document["paths"]!["/users"]!;
+            referenceObject["$ref"] = dependency;
+            var result = await ApiOperationDocumentResolver.ResolveAsync(
+                openRpc ? "OpenRPC/1.4" : "OpenAPI/3.1", "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/GetUser"),
+                resolveReference: (_, _) => throw new InvalidOperationException("A missing base cannot authorize acquisition."));
+            await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("dependency.base_uri");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo(
+                openRpc ? "$/methods/0/$ref" : "$/paths/~1users/$ref");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task ApiDependencyReferencesKeepEncodedLocalPointersWithoutAcquisition(bool withBase)
+    {
+        foreach (var openRpc in new[] { false, true })
+        {
+            var document = openRpc
+                ? JsonNode.Parse("""{"openrpc":"1.4.0","info":{"title":"Users","version":"1"},"methods":[{}]}""")!
+                : JsonNode.Parse("""{"openapi":"3.1.1","paths":{"/users":{}}}""")!;
+            var referenceObject = openRpc ? document["methods"]![0]! : document["paths"]!["/users"]!;
+            referenceObject["$ref"] = "#/targets/path%20%C3%A9";
+            document["targets"] = JsonNode.Parse(
+                """{"path \u00e9":{"get":{"operationId":"GetUser"},"name":"GetUser","params":[]}}""");
+            var result = await ApiOperationDocumentResolver.ResolveAsync(
+                openRpc ? "OpenRPC/1.4" : "OpenAPI/3.1", "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/GetUser"),
+                withBase ? new Uri("https://api.example/root.json") : null,
+                (_, _) => throw new InvalidOperationException("A local pointer cannot acquire a document."));
+            await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+            await Assert.That(result.Diagnostic).IsNull();
+            await Assert.That(result.DocumentUri).IsNull();
+            await Assert.That(result.DocumentPath).IsEqualTo(
+                openRpc ? "$/targets/path \u00e9" : "$/targets/path \u00e9/get");
+            await Assert.That(result.Operation.GetProperty(openRpc ? "name" : "operationId").GetString()).IsEqualTo("GetUser");
+        }
+    }
+
+    [Test]
     public async Task MalformedPathItemReferenceUriIsReportedAsInvalid()
     {
         const string document = """{"openapi":"3.1.1","paths":{"/users":{"$ref":"http://[invalid"}}}""";

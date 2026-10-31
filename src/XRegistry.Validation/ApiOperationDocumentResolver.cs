@@ -915,7 +915,16 @@ public static partial class ApiOperationDocumentResolver
             Uri resolved;
             try
             {
+                _budget.Work(reference.Length, path);
                 var fragmentAt = reference.IndexOf('#');
+                var documentReference = fragmentAt < 0 ? reference : reference[..fragmentAt];
+                if (HasRawUriWhitespaceOrControls(reference) ||
+                    documentReference.Length > 0 &&
+                    !Uri.IsWellFormedUriString(documentReference, UriKind.RelativeOrAbsolute))
+                {
+                    return ReferenceTargetResolution.Failed(Failure(ApiOperationResolutionStatus.Invalid,
+                        "dependency.uri", "The API document reference is not a valid URI reference.", path));
+                }
                 if (fragmentAt >= 0)
                 {
                     _ = SchemaJson.DecodeFragment(reference[(fragmentAt + 1)..], path, "dependency.pointer", _budget);
@@ -928,7 +937,8 @@ public static partial class ApiOperationDocumentResolver
                     }
                     resolved = new Uri(source.Uri, reference);
                 }
-                else if (Uri.TryCreate(reference, UriKind.Absolute, out var absolute))
+                // System.Uri treats rooted references as file URLs instead of inheriting the source base.
+                else if (!reference.StartsWith('/') && Uri.TryCreate(reference, UriKind.Absolute, out var absolute))
                 {
                     resolved = absolute;
                 }

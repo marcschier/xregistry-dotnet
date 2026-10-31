@@ -44,6 +44,16 @@ reports `Denied`. A required dependency failure prevents selection even if an
 earlier method matched. Caller cancellation propagates; deadline expiry reports
 `Indeterminate`. Resolution never invokes an API.
 
+API dependency references reject raw whitespace and control characters before
+base-URI lookup or acquisition. The document portion also rejects malformed
+percent escapes and backslashes instead of letting `System.Uri` repair them.
+Valid network-path references such as `//other.example/shared.json` inherit the
+referring document's scheme; absolute paths such as `/shared.json` retain its
+origin. Both require a base URI and are never inferred to be filesystem URLs.
+Percent-encoded paths and UTF-8 JSON Pointer fragments retain their existing
+resolution behavior. The caller still owns acquisition policy; these syntax
+checks do not authorize a scheme or an origin.
+
 For OpenAPI JSON, the root `openapi` value must identify the selected `3.0` or
 `3.1` feature set with a numeric patch component. Patch numbers are not bounded
 to the releases known by this library. A nonempty hyphen suffix is accepted as
