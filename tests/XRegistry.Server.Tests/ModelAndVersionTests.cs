@@ -12,6 +12,69 @@ namespace XRegistry.Server.Tests;
 public class ModelAndVersionTests
 {
     [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task CreatedAtAncestryReordersTiesUpdatesDeletionAndRetentionAtomically(bool explicitSingleRoot)
+    {
+        var model = """
+            {"groups":{"teams":{"singular":"team","resources":{"notes":{
+              "singular":"note","hasdocument":false,"maxversions":0,"versionmode":"createdat" ROOT
+            }}}}}
+            """.Replace("ROOT", explicitSingleRoot ? ",\"singleversionroot\":true" : "", StringComparison.Ordinal);
+        await Assert.That(RegistryModel.Compile(RegistryJson.Parse(model)).Groups["teams"].Resources["notes"].SingleVersionRoot)
+            .IsTrue();
+        var store = new InMemoryRegistryPersistence();
+        var engine = Create(model, persistence: store);
+        await Send(engine, RegistryAction.Patch, "/teams/g/notes/n/versions", """
+            {"Z":{"ancestorid":"request","createdat":"2040-01-03T00:00:00Z"},
+             "b":{"ancestorid":"request","createdat":"2040-01-02T00:00:00Z"},
+             "A":{"ancestorid":"request","createdat":"2040-01-02T00:00:00.0000Z"}}
+            """);
+        await AssertChainAsync(engine, ["A", "b", "Z"]);
+        await AssertChainAsync(Create(model, persistence: store), ["A", "b", "Z"]);
+        var before = (await Send(engine, RegistryAction.Read, "/export")).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        await ExpectCode(() => Send(engine, RegistryAction.Patch, "/teams/g/notes/n/versions", """
+            {"Z":{"createdat":"2040-01-01T00:00:00Z"},"Bad":{"createdat":"not-a-timestamp"}}
+            """), "invalid_attribute");
+        await Assert.That((await Send(Create(model, persistence: store), RegistryAction.Read, "/export")).Metadata!.RootElement.GetRawText())
+            .IsEqualTo(before);
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        await Send(engine, RegistryAction.Patch, "/teams/g/notes/n/versions/Z",
+            """{"createdat":"2040-01-01T00:00:00Z"}""");
+        await AssertChainAsync(engine, ["Z", "A", "b"]);
+        await AssertChainAsync(Create(model, persistence: store), ["Z", "A", "b"]);
+        await Send(engine, RegistryAction.Delete, "/teams/g/notes/n/versions/A");
+        await AssertChainAsync(engine, ["Z", "b"]);
+        await AssertChainAsync(Create(model, persistence: store), ["Z", "b"]);
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n/versions/New",
+            """{"createdat":"2040-01-04T00:00:00Z"}""");
+        await Send(engine, RegistryAction.Patch, "/teams/g/notes/n/meta", """{"defaultversionid":"Z"}""");
+        await Send(engine, RegistryAction.Replace, "/modelsource",
+            model.Replace("\"maxversions\":0", "\"maxversions\":2", StringComparison.Ordinal));
+        foreach (var current in new[] { engine, Create(model, persistence: store) })
+        {
+            await AssertChainAsync(current, ["Z", "New"], "Z");
+            await Assert.That((await current.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events + 5);
+        }
+
+        static async Task AssertChainAsync(RegistryEngine current, string[] ids, string? selected = null)
+        {
+            var versions = (await Send(current, RegistryAction.Read, "/teams/g/notes/n/versions")).Metadata!.RootElement;
+            await Assert.That(versions.EnumerateObject().Count()).IsEqualTo(ids.Length);
+            for (var index = 0; index < ids.Length; index++)
+            {
+                var version = versions.GetProperty(ids[index]);
+                await Assert.That(version.GetProperty("ancestorid").GetString()).IsEqualTo(ids[Math.Max(0, index - 1)]);
+                await Assert.That(version.GetProperty("isdefault").GetBoolean()).IsEqualTo(ids[index] == (selected ?? ids[^1]));
+            }
+            var meta = (await Send(current, RegistryAction.Read, "/teams/g/notes/n/meta")).Metadata!.RootElement;
+            await Assert.That(meta.GetProperty("defaultversionid").GetString()).IsEqualTo(selected ?? ids[^1]);
+            await Assert.That(meta.GetProperty("defaultversionsticky").GetBoolean()).IsEqualTo(selected is not null);
+        }
+    }
+
+    [Test]
     public async Task SemverAncestryUsesPrecedenceThroughBatchDeletionRetentionAndRestart()
     {
         const string model = """

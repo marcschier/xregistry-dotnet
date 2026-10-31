@@ -84124,13 +84124,17 @@
       ],
       "text": "- `createdat` - Ancestor Processing: The `ancestorid` value of each Version MUST be determined via examination of the `createdat` timestamp of each Version and the Versions sorted in ascending order, where the first one will be the \"root\" (oldest) Version and its `ancestorid` value MUST be its `versionid`. If there is more than one Version with the same `createdat` timestamp then those MUST be ordered in ascending case-insensitive order based on their `versionid` values. - When this `versionmode` is used, the `singleversionroot` aspect MUST be set to `true`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "CreatedAtAncestryReordersTiesUpdatesDeletionAndRetentionAtomically proves compiled singleversionroot true with omitted and explicit settings, every predecessor in an out-of-order batch, equivalent timestamp fractions and case-insensitive A/b ties. Moving Z's createdat ahead of the original root rebuilds the full chain and selects b; middle deletion reconnects it. A batch containing a valid reorder and invalid timestamp rolls back export/events. Later publication and retention to two preserve the oldest sticky default and newest Version with repaired ancestry. Exact chain and default membership survive restart at every stage.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CreatedAtAncestryReordersTiesUpdatesDeletionAndRetentionAtomically"
+        ],
         "nativeEvidence": []
       }
     },
