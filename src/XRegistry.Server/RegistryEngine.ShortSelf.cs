@@ -10,6 +10,8 @@ public sealed partial class RegistryEngine
 {
     private const string ShortPrefix = "/~/";
     private const string ShortKeys = "$short/";
+    private const int ShortIdBytes = 9;
+    private const int ShortIdLength = 12;
 
     /// <summary>Resolves an engine-owned short entity path, or parses an ordinary Registry-relative path.</summary>
     /// <remarks>Only the reserved /~/ token namespace is translated. Domain URL strings and Document bytes are never rewritten.</remarks>
@@ -44,7 +46,7 @@ public sealed partial class RegistryEngine
         var path = details ? escapedPath[..^8] : escapedPath;
         var slash = path.IndexOf('/', ShortPrefix.Length);
         var token = slash < 0 ? path[ShortPrefix.Length..] : path[ShortPrefix.Length..slash];
-        if (token != "0" && (token.Length != 16 || token.Any(static character => !char.IsAsciiLetterOrDigit(character) && character is not ('-' or '_'))))
+        if (token != "0" && (token.Length != ShortIdLength || token.Any(static character => !char.IsAsciiLetterOrDigit(character) && character is not ('-' or '_'))))
         {
             throw ServerErrors.Create("not_found", escapedPath, "The short entity identifier is not recognized.");
         }
@@ -114,7 +116,7 @@ public sealed partial class RegistryEngine
                 do
                 {
                     Work();
-                    token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(12)).Replace('+', '-').Replace('/', '_');
+                    token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(ShortIdBytes)).Replace('+', '-').Replace('/', '_');
                 }
                 while (_snapshot.Find(ShortKeys + token) is not null || _shortMutations.ContainsKey(ShortKeys + token));
             }

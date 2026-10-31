@@ -62227,13 +62227,18 @@
       ],
       "text": "- Description: A server-generated unique absolute URL for an entity. This attribute MUST be an alternative URL for the entity's `self` (non-`$details` suffixed) URL. When a client constructs a request based on the `shortself` URL, it MAY append `$details`, or any flags (e.g. query parameters), that are valid for use on the `self` URL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The server emits absolute /~/ URLs that resolve to the same entity, and callers can append a Version path and $details suffix.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ShortSelfIsStableAcrossDisableEnableAndFrozenRestart",
+          "ShortNavigationRetainsLocalAliasIdentityAndDeletedAliasesDoNotRebind"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62259,13 +62264,17 @@
       ],
       "text": "The intention is that `shortself` SHOULD be shorter in length than `self` such that it MAY be used when the length of the URL referencing the entity is important. For example, in cases where the size of a message referencing this entity needs to be as small as possible.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Generated 72-bit tokens make shortself shorter than self for the tested Resource and Version document URLs; the Registry root and shallow paths may remain longer, so this SHOULD is qualified rather than universal.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "qualified",
+        "testIds": [
+          "ShortSelfCoversEntityPlanesWithoutRewritingDomainUrlsOrDocuments"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62290,8 +62299,8 @@
       ],
       "text": "If an entity is deleted and then a new entity is created that results in the same `self` URL, this specification does not mandate that the same `shortself` be generated, but it MAY do so.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
+        "status": "informative",
+        "note": "The specification permits either reusing or changing the shortself after an entity is deleted and recreated with the same self URL.",
         "roles": []
       },
       "implementation": {
@@ -62321,13 +62330,18 @@
       ],
       "text": "This attribute MUST only appear in the serialization if the `shortself` capability is enabled. However, if this capability is enabled, then disabled, and then re-enabled, the `shortself` values MUST retain their original values. In this sense, implementations might create a `shortself` that is known for the lifetime of the entity and the capability controls whether the attribute is serialized or not.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Disabling the capability hides shortself; re-enabling it after restart restores the entity's original URL.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ShortSelfIsStableAcrossDisableEnableAndFrozenRestart",
+          "ShortRepresentationChangesInvalidateFrozenPagesInsteadOfLeakingAnOldVariant"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62352,13 +62366,18 @@
       ],
       "text": "When the `shortself` capability is disabled, the attribute name `shortself` is still a reserved attribute name and MUST NOT be used as an extension.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The Core model reserves shortself even when the runtime capability is disabled.",
+        "roles": [
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EnforcesNamingAndSystemAttributeOverlayRules"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62383,13 +62402,17 @@
       ],
       "text": "- REQUIRED if the `shortself` capability is enabled.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "When enabled, shortself is present on the Registry, Group, Resource, metadata, and Version representations.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ShortSelfCoversEntityPlanesWithoutRewritingDomainUrlsOrDocuments"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62414,13 +62437,18 @@
       ],
       "text": "- MUST NOT appear in responses if the `shortself` capability is disabled.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "With shortself disabled, API projections omit it from the Registry, Group, Resource, metadata, and Version outputs.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CollectionsProjectionKeepsOnlyNestedEntityShortSelf",
+          "ShortSelfIsStableAcrossDisableEnableAndFrozenRestart"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62445,13 +62473,17 @@
       ],
       "text": "- MUST be immutable for the lifetime of the entity.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The short URL survives capability disable/enable and frozen persistence restart for the same entity.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ShortSelfIsStableAcrossDisableEnableAndFrozenRestart"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62476,13 +62508,17 @@
       ],
       "text": "- MUST be unique across all entities in the Registry.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Generated shortself values are distinct across the Registry, Group, Resource, metadata, and Version planes.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ShortSelfCoversEntityPlanesWithoutRewritingDomainUrlsOrDocuments"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62507,13 +62543,18 @@
       ],
       "text": "- MUST be a non-empty absolute URL referencing the same entity as the `self` URL, either directly or indirectly via a protocol-specific redirect.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Generated shortself values are absolute and resolve to the entity's xid; aliases retain their own identity when resolving appended Version paths.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ShortSelfIsStableAcrossDisableEnableAndFrozenRestart",
+          "ShortNavigationRetainsLocalAliasIdentityAndDeletedAliasesDoNotRebind"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62538,13 +62579,18 @@
       ],
       "text": "- MUST be a read-only attribute.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The compiled shortself attribute is read-only across Registry, Group, Resource, Version, and Resource metadata planes.",
+        "roles": [
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CoreShortSelfAttributesAreImmutableReadonlyUrlsAcrossEntityPlanes"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62569,13 +62615,19 @@
       ],
       "text": "- MUST NOT contain the `$` character as that is reserved for specification defined suffixes (such as `$details`).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Generated shortself values omit the reserved $ character, including when a caller appends a Version path.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ShortSelfIsStableAcrossDisableEnableAndFrozenRestart",
+          "ShortSelfCoversEntityPlanesWithoutRewritingDomainUrlsOrDocuments",
+          "ShortNavigationRetainsLocalAliasIdentityAndDeletedAliasesDoNotRebind"
+        ],
         "nativeEvidence": []
       }
     },

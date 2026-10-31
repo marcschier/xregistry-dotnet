@@ -51,6 +51,11 @@ public class RegistryShortSelfTests
             var shortUrl = entity.GetProperty("shortself").GetString()!;
             await Assert.That(urls.Add(shortUrl)).IsTrue();
             await Assert.That(shortUrl.Contains('$', StringComparison.Ordinal)).IsFalse();
+            if (path is "/teams/g/files/f$details" or "/teams/g/files/f/versions/1$details")
+            {
+                await Assert.That(shortUrl.Length)
+                    .IsLessThan(entity.GetProperty("self").GetString()!.Length);
+            }
         }
 
         var result = await Send(engine, RegistryAction.Read, "/teams/g/files/f$details", null, new KeyValuePair<string, string?>("inline", "file,meta"));

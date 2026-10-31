@@ -96,6 +96,31 @@ public class RegistryModelTests
     }
 
     [Test]
+    public async Task CoreShortSelfAttributesAreImmutableReadonlyUrlsAcrossEntityPlanes()
+    {
+        var model = RegistryModel.Compile(RegistryJson.Parse("""
+            {"groups":{"teams":{"singular":"team","resources":{"notes":{"singular":"note","hasdocument":false}}}}}
+            """));
+        var resource = model.Groups["teams"].Resources["notes"];
+        var shortSelfAttributes = new[]
+        {
+            model.Attributes["shortself"],
+            model.Groups["teams"].Attributes["shortself"],
+            resource.ResourceAttributes["shortself"],
+            resource.Attributes["shortself"],
+            resource.MetaAttributes["shortself"]
+        };
+
+        foreach (var shortSelf in shortSelfAttributes)
+        {
+            await Assert.That(shortSelf.Type).IsEqualTo(RegistryValueType.Url);
+            await Assert.That(shortSelf.Required).IsFalse();
+            await Assert.That(shortSelf.Immutable).IsTrue();
+            await Assert.That(shortSelf.ReadOnly).IsTrue();
+        }
+    }
+
+    [Test]
     public async Task ResourceAnnotationsPreserveModelVersionAndEmptyLabelValues()
     {
         var model = RegistryModel.Compile(RegistryJson.Parse("""
@@ -660,6 +685,7 @@ public class RegistryModelTests
     [Test]
     [Arguments("""{"attributes":{"epoch":{"type":"string"}}}""")]
     [Arguments("""{"attributes":{"self":{"readonly":false}}}""")]
+    [Arguments("""{"attributes":{"shortself":"string"}}""")]
     [Arguments("""{"attributes":{"specversion":{"required":false}}}""")]
     [Arguments("""{"attributes":{"specversion":{"default":null}}}""")]
     [Arguments("""{"groups":{"model":{"singular":"m"}}}""")]
