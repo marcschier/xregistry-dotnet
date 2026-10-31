@@ -77292,13 +77292,22 @@
       ],
       "text": "The `ignore` flag MAY be used on any write operation to indicate that certain parts of the request message MUST be ignored by the server. This flag is designed for cases where a user wants to import data into a Registry without going through the (potentially tedious) process of removing certain parts of the data in advance. Typically, in an \"export->import\" scenario.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Ignore is implemented for ordinary imports, epoch, rooted ID and readonly bulk omission. The aggregate all-aspects clause also requires both default-version fields, every nested path and every write form; those parts are not all established by the selected cases.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "IgnoreFlagsPermitEntityImportWithoutSuppressingNestedIdentityGuards",
+          "ReadonlyIgnoreOmitsOnlyLockedResourcesAndPreservesOtherEpochGuards",
+          "IgnoringTheOnlyTargetedReadonlyResourceIsBadFlag",
+          "NestedAndRepeatedReadonlyIgnorePreserveTheLockedSubtree",
+          "UnsupportedReadonlyIgnoreAndMalformedCollectionEntriesReject",
+          "AllIgnoreSpellingsSkipReadonlyButDoNotEraseNestedIdentityChecks"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77323,13 +77332,22 @@
       ],
       "text": "This value indicates that any `capabilities` attribute included in the request MUST be ignored.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Direct import assertions show root ID/epoch/capabilities/modelsource ignored while nested IDs remain guarded; repeated/bulk ignores preserve independent guards and do not grant new authorization. Collection targets do not strip member IDs.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "IgnoreFlagsPermitEntityImportWithoutSuppressingNestedIdentityGuards",
+          "ReadonlyIgnoreOmitsOnlyLockedResourcesAndPreservesOtherEpochGuards",
+          "IgnoringTheOnlyTargetedReadonlyResourceIsBadFlag",
+          "NestedAndRepeatedReadonlyIgnorePreserveTheLockedSubtree",
+          "UnsupportedReadonlyIgnoreAndMalformedCollectionEntriesReject",
+          "AllIgnoreSpellingsSkipReadonlyButDoNotEraseNestedIdentityChecks"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77354,13 +77372,17 @@
       ],
       "text": "This value indicates that any `defaultversionid` attribute included in the request MUST be ignored.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Strip implements Meta defaultversionid/defaultversionsticky omission and strips both Resource ID and versionid only on a direct Version request. No reviewed direct assertions cover these exact flag cases, including a nested new-model path; root ID/epoch tests are not replacements.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "IgnoreFlagsPermitEntityImportWithoutSuppressingNestedIdentityGuards"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77385,13 +77407,17 @@
       ],
       "text": "This value indicates that any `defaultversionsticky` attribute included in the request MUST be ignored.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Strip implements Meta defaultversionid/defaultversionsticky omission and strips both Resource ID and versionid only on a direct Version request. No reviewed direct assertions cover these exact flag cases, including a nested new-model path; root ID/epoch tests are not replacements.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "IgnoreFlagsPermitEntityImportWithoutSuppressingNestedIdentityGuards"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77416,13 +77442,22 @@
       ],
       "text": "This value indicates that any `epoch` attribute included in the request MUST be ignored.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Direct import assertions show root ID/epoch/capabilities/modelsource ignored while nested IDs remain guarded; repeated/bulk ignores preserve independent guards and do not grant new authorization. Collection targets do not strip member IDs.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "IgnoreFlagsPermitEntityImportWithoutSuppressingNestedIdentityGuards",
+          "ReadonlyIgnoreOmitsOnlyLockedResourcesAndPreservesOtherEpochGuards",
+          "IgnoringTheOnlyTargetedReadonlyResourceIsBadFlag",
+          "NestedAndRepeatedReadonlyIgnorePreserveTheLockedSubtree",
+          "UnsupportedReadonlyIgnoreAndMalformedCollectionEntriesReject",
+          "AllIgnoreSpellingsSkipReadonlyButDoNotEraseNestedIdentityChecks"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77448,13 +77483,22 @@
       ],
       "text": "When this value is used then any `<SINGULAR>id` present in the root entity MUST be ignored, and any validation to ensure it matches the targeted entity's existing `<SINGULAR>id` value MUST NOT be performed.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Direct import assertions show root ID/epoch/capabilities/modelsource ignored while nested IDs remain guarded; repeated/bulk ignores preserve independent guards and do not grant new authorization. Collection targets do not strip member IDs.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "IgnoreFlagsPermitEntityImportWithoutSuppressingNestedIdentityGuards",
+          "ReadonlyIgnoreOmitsOnlyLockedResourcesAndPreservesOtherEpochGuards",
+          "IgnoringTheOnlyTargetedReadonlyResourceIsBadFlag",
+          "NestedAndRepeatedReadonlyIgnorePreserveTheLockedSubtree",
+          "UnsupportedReadonlyIgnoreAndMalformedCollectionEntriesReject",
+          "AllIgnoreSpellingsSkipReadonlyButDoNotEraseNestedIdentityChecks"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77479,13 +77523,22 @@
       ],
       "text": "This feature MUST only apply in cases where the request is targeted to a single entity not a collection.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Direct import assertions show root ID/epoch/capabilities/modelsource ignored while nested IDs remain guarded; repeated/bulk ignores preserve independent guards and do not grant new authorization. Collection targets do not strip member IDs.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "IgnoreFlagsPermitEntityImportWithoutSuppressingNestedIdentityGuards",
+          "ReadonlyIgnoreOmitsOnlyLockedResourcesAndPreservesOtherEpochGuards",
+          "IgnoringTheOnlyTargetedReadonlyResourceIsBadFlag",
+          "NestedAndRepeatedReadonlyIgnorePreserveTheLockedSubtree",
+          "UnsupportedReadonlyIgnoreAndMalformedCollectionEntriesReject",
+          "AllIgnoreSpellingsSkipReadonlyButDoNotEraseNestedIdentityChecks"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77510,13 +77563,22 @@
       ],
       "text": "Note that any nested entities in the request MUST retain their `<SINGULAR>id` values.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Direct import assertions show root ID/epoch/capabilities/modelsource ignored while nested IDs remain guarded; repeated/bulk ignores preserve independent guards and do not grant new authorization. Collection targets do not strip member IDs.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "IgnoreFlagsPermitEntityImportWithoutSuppressingNestedIdentityGuards",
+          "ReadonlyIgnoreOmitsOnlyLockedResourcesAndPreservesOtherEpochGuards",
+          "IgnoringTheOnlyTargetedReadonlyResourceIsBadFlag",
+          "NestedAndRepeatedReadonlyIgnorePreserveTheLockedSubtree",
+          "UnsupportedReadonlyIgnoreAndMalformedCollectionEntriesReject",
+          "AllIgnoreSpellingsSkipReadonlyButDoNotEraseNestedIdentityChecks"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77541,13 +77603,17 @@
       ],
       "text": "In cases where the target entity is a Version, then the flag MUST apply to both the Resource's `<SINGULAR>id` and the `versionid`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Strip implements Meta defaultversionid/defaultversionsticky omission and strips both Resource ID and versionid only on a direct Version request. No reviewed direct assertions cover these exact flag cases, including a nested new-model path; root ID/epoch tests are not replacements.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "IgnoreFlagsPermitEntityImportWithoutSuppressingNestedIdentityGuards"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77572,13 +77638,22 @@
       ],
       "text": "This value indicates that any `modelsource` attribute included in the request MUST be ignored.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Direct import assertions show root ID/epoch/capabilities/modelsource ignored while nested IDs remain guarded; repeated/bulk ignores preserve independent guards and do not grant new authorization. Collection targets do not strip member IDs.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "IgnoreFlagsPermitEntityImportWithoutSuppressingNestedIdentityGuards",
+          "ReadonlyIgnoreOmitsOnlyLockedResourcesAndPreservesOtherEpochGuards",
+          "IgnoringTheOnlyTargetedReadonlyResourceIsBadFlag",
+          "NestedAndRepeatedReadonlyIgnorePreserveTheLockedSubtree",
+          "UnsupportedReadonlyIgnoreAndMalformedCollectionEntriesReject",
+          "AllIgnoreSpellingsSkipReadonlyButDoNotEraseNestedIdentityChecks"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77603,13 +77678,21 @@
       ],
       "text": "This value indicates that any attempt to modify a read-only Resource MUST be silently ignored as if the Resource in question was never included in the request. Usage of this value in situations where removing the Resource from the request would invalidate the syntax or semantics of the request MUST generate an error ([bad_flag](#bad_flag)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Readonly bulk ignore preserves the locked subtree and processed-result membership, but sole-target or invalidating cascade use rejects bad_flag. Unsupported ignore values and malformed selected entries reject without partial state.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ReadonlyIgnoreOmitsOnlyLockedResourcesAndPreservesOtherEpochGuards",
+          "IgnoringTheOnlyTargetedReadonlyResourceIsBadFlag",
+          "NestedAndRepeatedReadonlyIgnorePreserveTheLockedSubtree",
+          "UnsupportedReadonlyIgnoreAndMalformedCollectionEntriesReject",
+          "AllIgnoreSpellingsSkipReadonlyButDoNotEraseNestedIdentityChecks"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77634,9 +77717,11 @@
       ],
       "text": "Implementations MAY define additional values.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Additional ignore values are an implementation extension point, not mandatory. This profile rejects unoffered values and does not assert future/custom ignore behavior.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -77665,13 +77750,21 @@
       ],
       "text": "Specifying an invalid, or unsupported, value for this flag MUST generate an error ([bad_ignore](#bad_ignore)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Readonly bulk ignore preserves the locked subtree and processed-result membership, but sole-target or invalidating cascade use rejects bad_flag. Unsupported ignore values and malformed selected entries reject without partial state.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ReadonlyIgnoreOmitsOnlyLockedResourcesAndPreservesOtherEpochGuards",
+          "IgnoringTheOnlyTargetedReadonlyResourceIsBadFlag",
+          "NestedAndRepeatedReadonlyIgnorePreserveTheLockedSubtree",
+          "UnsupportedReadonlyIgnoreAndMalformedCollectionEntriesReject",
+          "AllIgnoreSpellingsSkipReadonlyButDoNotEraseNestedIdentityChecks"
+        ],
         "nativeEvidence": []
       }
     },
