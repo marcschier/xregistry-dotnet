@@ -68,7 +68,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
     }
 
     internal async ValueTask ValidateAsync(ReadOnlyMemory<byte> document, int syntax, string? rootReference = null,
-        bool requireRootService = false)
+        bool requireRootService = false, Action<string>? validateImport = null)
     {
         var resolveUris = rootReference is not null && context.Options.DocumentUri is not null;
         var rootName = resolveUris ? context.Options.DocumentUri!.AbsoluteUri : rootReference ?? "root.proto";
@@ -84,6 +84,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             foreach (var import in imports)
             {
                 context.Work();
+                validateImport?.Invoke(import.Name);
                 var key = resolveUris ? new Uri(new Uri(item.Name, UriKind.Absolute), import.Name).AbsoluteUri : import.Name;
                 dependencies.Add((key, import.IsPublic));
                 if (_documents.Add(key))

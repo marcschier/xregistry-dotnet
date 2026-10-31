@@ -10,6 +10,64 @@ namespace XRegistry.Validation.Tests;
 
 public class GrpcOperationResolutionTests
 {
+    [Test]
+    [Arguments("has space.proto")]
+    [Arguments("has\\tcontrol.proto")]
+    [Arguments("has\\ncontrol.proto")]
+    [Arguments("bad%.proto")]
+    [Arguments("bad%GG.proto")]
+    public async Task GrpcRejectsMalformedImportUrisBeforeRetrieval(string import)
+    {
+        var calls = 0;
+        var result = await ApiOperationDocumentResolver.ResolveAsync("gRPC/proto3", "text/plain",
+            Encoding.UTF8.GetBytes("syntax='proto3'; import '" + import + "'; service S {}"),
+            Reference("S"), new Uri("https://example.test/root.proto"), (_, _) =>
+            {
+                calls++;
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes("syntax='proto3';"));
+            });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("dependency.uri");
+        await Assert.That(result.GrpcOperation).IsNull();
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task GrpcPreservesEncodedImportPathsForCallerAuthorization()
+    {
+        var calls = new List<string>();
+        var result = await ApiOperationDocumentResolver.ResolveAsync("gRPC/proto3", "text/plain",
+            Encoding.UTF8.GetBytes("""
+                syntax='proto3'; import 'has%20space.proto'; service S { rpc Get(Row) returns(Row); }
+                """), Reference("S"), new Uri("https://example.test/root.proto"), (uri, _) =>
+            {
+                calls.Add(uri);
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes("syntax='proto3'; message Row {}"));
+            });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.GrpcOperation!.RequestType).IsEqualTo("Row");
+        await Assert.That(calls.SequenceEqual(["https://example.test/has%20space.proto"])).IsTrue();
+    }
+
+    [Test]
+    public async Task GrpcValidatesImportedDocumentUriSpellingsBeforeResolvingTheirDependencies()
+    {
+        var calls = new List<string>();
+        var result = await ApiOperationDocumentResolver.ResolveAsync("gRPC/proto3", "text/plain",
+            Encoding.UTF8.GetBytes("""
+                syntax='proto3'; import 'child.proto'; message Row {} service S { rpc Get(Row) returns(Row); }
+                """), Reference("S"), new Uri("https://example.test/root.proto"), (uri, _) =>
+            {
+                calls.Add(uri);
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes(
+                    "syntax='proto3'; import 'bad%.proto';"));
+            });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("dependency.uri");
+        await Assert.That(result.GrpcOperation).IsNull();
+        await Assert.That(calls.SequenceEqual(["https://example.test/child.proto"])).IsTrue();
+    }
+
     private static ApiOperationReference Reference(string service = "p.S", string method = "Get") =>
         ApiOperationReference.Parse("/apigroups/g/apis/a#services/" + service + "/operations/" + method);
 

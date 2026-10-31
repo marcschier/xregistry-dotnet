@@ -289,6 +289,10 @@ message names and both streaming flags. `Operation` remains undefined and
 Relative imports require an absolute `documentUri`; only the caller's resolver
 can retrieve dependencies. Imported services are not selectable through the
 entry source's locator. Descriptor-set selection remains unsupported.
+Import URI spellings are checked before URI normalization or retrieval, including
+imports in dependency documents. Raw whitespace, controls and malformed percent
+escapes report `Invalid` with `dependency.uri`; valid percent-encoded paths remain
+available to the caller's authorization callback.
 
 `ApiOperationDocumentResolver.Capabilities` advertises finite parser and retrieval
 budgets: 1 MiB per document, 4 MiB total, 100,000 parsed JSON values or source
