@@ -68,7 +68,7 @@ public class RegistryReadonlyValidationEpochTests
             RegistryId = "validation-order",
             PublicRoot = new Uri("https://registry.example"),
             Model = RegistryModel.Compile(RegistryJson.Parse("""
-                {"groups":{"teams":{"singular":"team","resources":{"schemas":{"singular":"schema","versionmode":"modifiedat",
+                {"groups":{"teams":{"singular":"team","resources":{"schemas":{"singular":"schema","versionmode":"modifiedat","singleversionroot":true,
                   "validateformat":true,"validatecompatibility":true}}}}}
                 """)),
             ResourceValidator = new BuiltInRegistryResourceValidator(),

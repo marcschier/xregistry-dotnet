@@ -30,12 +30,14 @@ public class ModelAndVersionTests
     [Arguments("semver", 2)]
     public async Task RetentionBoundariesPreserveExactNewestChainAcrossVersionModes(string mode, int limit)
     {
+        var singleRoot = mode == "manual" ? "" : ",\"singleversionroot\":true";
         var model = """
             {"groups":{"teams":{"singular":"team","resources":{"notes":{
-              "singular":"note","hasdocument":false,"versionmode":"MODE" LIMIT
+              "singular":"note","hasdocument":false,"versionmode":"MODE" ROOT LIMIT
             }}}}}
             """.Replace("LIMIT", limit < 0 ? "" : ",\"maxversions\":" +
                     limit.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal)
+                .Replace("ROOT", singleRoot, StringComparison.Ordinal)
                 .Replace("MODE", mode, StringComparison.Ordinal);
         await Assert.That(RegistryModel.Compile(RegistryJson.Parse(model)).Groups["teams"].Resources["notes"].MaxVersions)
             .IsEqualTo(new System.Numerics.BigInteger(Math.Max(0, limit)));
@@ -164,7 +166,7 @@ public class ModelAndVersionTests
     {
         const string model = """
             {"groups":{"teams":{"singular":"team","resources":{"notes":{
-              "singular":"note","hasdocument":false,"maxversions":0,"versionmode":"modifiedat"
+              "singular":"note","hasdocument":false,"maxversions":0,"versionmode":"modifiedat","singleversionroot":true
             }}}}}
             """;
         var store = new InMemoryRegistryPersistence();
@@ -229,15 +231,13 @@ public class ModelAndVersionTests
     }
 
     [Test]
-    [Arguments(false)]
-    [Arguments(true)]
-    public async Task CreatedAtAncestryReordersTiesUpdatesDeletionAndRetentionAtomically(bool explicitSingleRoot)
+    public async Task CreatedAtAncestryReordersTiesUpdatesDeletionAndRetentionAtomically()
     {
         var model = """
             {"groups":{"teams":{"singular":"team","resources":{"notes":{
-              "singular":"note","hasdocument":false,"maxversions":0,"versionmode":"createdat" ROOT
+              "singular":"note","hasdocument":false,"maxversions":0,"versionmode":"createdat","singleversionroot":true
             }}}}}
-            """.Replace("ROOT", explicitSingleRoot ? ",\"singleversionroot\":true" : "", StringComparison.Ordinal);
+            """;
         await Assert.That(RegistryModel.Compile(RegistryJson.Parse(model)).Groups["teams"].Resources["notes"].SingleVersionRoot)
             .IsTrue();
         var store = new InMemoryRegistryPersistence();
@@ -296,7 +296,7 @@ public class ModelAndVersionTests
     {
         const string model = """
             {"groups":{"teams":{"singular":"team","resources":{"notes":{
-              "singular":"note","hasdocument":false,"maxversions":0,"versionmode":"semver"
+              "singular":"note","hasdocument":false,"maxversions":0,"versionmode":"semver","singleversionroot":true
             }}}}}
             """;
         await Assert.That(RegistryModel.Compile(RegistryJson.Parse(model)).Groups["teams"].Resources["notes"].SingleVersionRoot)
@@ -367,11 +367,13 @@ public class ModelAndVersionTests
     [Arguments("semver", "SeMvEr")]
     public async Task VersionModeCaseVariantsPreservePublicationRetentionAndRestart(string mode, string authoredMode)
     {
+        var singleRoot = mode == "manual" ? "" : ",\"singleversionroot\":true";
         var model = """
             {"groups":{"teams":{"singular":"team","resources":{"notes":{
-              "singular":"note","hasdocument":false,"maxversions":2,"versionmode":"MODE"
+              "singular":"note","hasdocument":false,"maxversions":2,"versionmode":"MODE" ROOT
             }}}}}
-            """.Replace("MODE", authoredMode, StringComparison.Ordinal);
+            """.Replace("ROOT", singleRoot, StringComparison.Ordinal)
+                .Replace("MODE", authoredMode, StringComparison.Ordinal);
         await Assert.That(RegistryModel.Compile(RegistryJson.Parse(model)).Groups["teams"].Resources["notes"].VersionMode)
             .IsEqualTo(mode);
         var store = new InMemoryRegistryPersistence();
@@ -587,7 +589,7 @@ public class ModelAndVersionTests
     {
         const string model = """
             {"groups":{"teams":{"singular":"team","resources":{"notes":{
-              "singular":"note","hasdocument":false,"maxversions":0,"versionmode":"semver"
+              "singular":"note","hasdocument":false,"maxversions":0,"versionmode":"semver","singleversionroot":true
             }}}}}
             """;
         var replacement = model.Replace("\"maxversions\":0", "\"maxversions\":1", StringComparison.Ordinal);
@@ -741,9 +743,10 @@ public class ModelAndVersionTests
         var store = new InMemoryRegistryPersistence();
         var model = """
             {"groups":{"teams":{"singular":"team","resources":{"notes":{
-              "singular":"note","hasdocument":false,"setversionid":false,"maxversions":0,"versionmode":"MODE"
+              "singular":"note","hasdocument":false,"setversionid":false,"maxversions":0,"versionmode":"MODE" ROOT
             }}}}}
-            """.Replace("MODE", mode, StringComparison.Ordinal);
+            """.Replace("ROOT", mode == "manual" ? "" : ",\"singleversionroot\":true", StringComparison.Ordinal)
+                .Replace("MODE", mode, StringComparison.Ordinal);
         var engine = Create(model, persistence: store);
         var first = await Send(engine, RegistryAction.Replace, "/teams/g/notes/n", """{"name":"first"}""");
         var firstId = mode == "semver" ? "1.0.0" : "1";
@@ -889,7 +892,7 @@ public class ModelAndVersionTests
         var store = new InMemoryRegistryPersistence();
         const string model = """
             {"groups":{"teams":{"singular":"team","resources":{"notes":{
-              "singular":"note","hasdocument":false,"maxversions":0,"versionmode":"semver"
+              "singular":"note","hasdocument":false,"maxversions":0,"versionmode":"semver","singleversionroot":true
             }}}}}
             """;
         var engine = Create(model, persistence: store);
@@ -1039,7 +1042,7 @@ public class ModelAndVersionTests
         var value = requiredSticky ? "true" : "false";
         var model = """
             {"groups":{"teams":{"singular":"team","resources":{"notes":{
-              "singular":"note","hasdocument":false,"maxversions":0,"versionmode":"semver",
+              "singular":"note","hasdocument":false,"maxversions":0,"versionmode":"semver","singleversionroot":true,
               "metaattributes":{"defaultversionsticky":{
                 "enum":[STICKY],"required":true,"default":STICKY
               }}
@@ -1250,7 +1253,7 @@ public class ModelAndVersionTests
             TimeProvider = clock,
             Model = RegistryModel.Compile(RegistryJson.Parse("""
                 {"groups":{"teams":{"singular":"team","resources":{"notes":{
-                  "singular":"note","hasdocument":false,"versionmode":"semver"
+                  "singular":"note","hasdocument":false,"versionmode":"semver","singleversionroot":true
                 }}}}}
                 """))
         };
@@ -1451,7 +1454,7 @@ public class ModelAndVersionTests
             TimeProvider = new OrderingClock(),
             Model = RegistryModel.Compile(RegistryJson.Parse("""
                 {"groups":{"teams":{"singular":"team","resources":{"notes":{
-                  "singular":"note","hasdocument":false,"versionmode":"modifiedat"
+                  "singular":"note","hasdocument":false,"versionmode":"modifiedat","singleversionroot":true
                 }}}}}
                 """))
         }, new InMemoryRegistryPersistence(), new PermitPolicy());
@@ -1472,7 +1475,7 @@ public class ModelAndVersionTests
     {
         var engine = Create("""
             {"groups":{"teams":{"singular":"team","resources":{"notes":{
-              "singular":"note","hasdocument":false,"versionmode":"createdat"
+              "singular":"note","hasdocument":false,"versionmode":"createdat","singleversionroot":true
             }}}}}
             """);
         await Send(engine, RegistryAction.Replace, "/teams/g/notes/n/versions/z", """{"createdat":"2020-01-01T00:00:00Z"}""");

@@ -231,9 +231,10 @@ public class RegistryModelTests
     [Arguments("SemVer", true)]
     public async Task EnforcesVersionAndDocumentControls(string mode, bool singleRoot)
     {
+        var singleRootSetting = singleRoot ? ",\"singleversionroot\":true" : "";
         var resource = CompileResource($$"""
             {"singular":"file","maxversions":9007199254740993,"versionmode":"{{mode}}",
-             "hasdocument":false,"setversionid":false,"validateformat":true,
+             "hasdocument":false{{singleRootSetting}},"setversionid":false,"validateformat":true,
              "validatecompatibility":true,"strictvalidation":true}
             """);
         await Assert.That(resource.MaxVersions.ToString(System.Globalization.CultureInfo.InvariantCulture)).IsEqualTo("9007199254740993");
@@ -250,7 +251,12 @@ public class RegistryModelTests
 
     [Test]
     [Arguments("""{"singular":"file","versionmode":"random"}""", "versionmode")]
+    [Arguments("""{"singular":"file","versionmode":"createdat"}""", "singleversionroot")]
+    [Arguments("""{"singular":"file","versionmode":"modifiedat"}""", "singleversionroot")]
+    [Arguments("""{"singular":"file","versionmode":"semver"}""", "singleversionroot")]
     [Arguments("""{"singular":"file","versionmode":"createdat","singleversionroot":false}""", "singleversionroot")]
+    [Arguments("""{"singular":"file","versionmode":"modifiedat","singleversionroot":false}""", "singleversionroot")]
+    [Arguments("""{"singular":"file","versionmode":"semver","singleversionroot":false}""", "singleversionroot")]
     [Arguments("""{"singular":"file","validatecompatibility":true}""", "validatecompatibility")]
     [Arguments("""{"singular":"file","maxversions":-1}""", "maxversions")]
     [Arguments("""{"singular":"file","maxversions":0.5}""", "maxversions")]
@@ -263,6 +269,24 @@ public class RegistryModelTests
         var diagnostic = TestErrors.Capture(() => CompileResource(resource));
         await Assert.That(diagnostic.Code).IsEqualTo("model_error");
         await Assert.That(diagnostic.Path).IsEqualTo("/groups/dirs/resources/files/" + suffix);
+    }
+
+    [Test]
+    [Arguments("manual", "", false)]
+    [Arguments("manual", "false", false)]
+    [Arguments("manual", "true", true)]
+    [Arguments("createdat", "true", true)]
+    [Arguments("modifiedat", "true", true)]
+    [Arguments("semver", "true", true)]
+    public async Task SingleVersionRootDefaultsFalseAndAutomaticModesRequireTrue(
+        string mode, string authored, bool expected)
+    {
+        var setting = authored.Length == 0 ? "" : ",\"singleversionroot\":" + authored;
+        var resource = $$"""
+            {"singular":"file","versionmode":"{{mode}}"{{setting}}}
+            """;
+        var compiled = CompileResource(resource);
+        await Assert.That(compiled.SingleVersionRoot).IsEqualTo(expected);
     }
 
     [Test]

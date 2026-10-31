@@ -199,7 +199,7 @@ public class RegistryCapabilityTests
     public async Task VersionModeRestrictionsValidateTheCompleteCombinedModelCandidate()
     {
         var model = RegistryModel.Compile(RegistryJson.Parse("""
-            {"groups":{"teams":{"singular":"team","resources":{"notes":{"singular":"note","hasdocument":false,"versionmode":"semver"}}}}}
+            {"groups":{"teams":{"singular":"team","resources":{"notes":{"singular":"note","hasdocument":false,"versionmode":"semver","singleversionroot":true}}}}}
             """));
         var engine = MutableEngine(model: model);
         await ExpectCode(() => Send(engine, RegistryAction.Patch, "/capabilities", """{"versionmodes":["manual"]}"""), "capability_error");

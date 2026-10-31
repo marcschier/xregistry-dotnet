@@ -82,7 +82,7 @@ internal static partial class ModelCompiler
                 throw Diagnostics.Error("model_error", at + "/versionmode", "Unknown versionmode.");
             }
 
-            var singleRoot = Boolean(value, "singleversionroot", versionMode != "manual", at);
+            var singleRoot = Boolean(value, "singleversionroot", false, at);
             if (!singleRoot && versionMode != "manual")
             {
                 throw Diagnostics.Error("model_error", at + "/singleversionroot", "This versionmode requires a single root.");

@@ -84148,7 +84148,7 @@
       "text": "- `createdat` - Ancestor Processing: The `ancestorid` value of each Version MUST be determined via examination of the `createdat` timestamp of each Version and the Versions sorted in ascending order, where the first one will be the \"root\" (oldest) Version and its `ancestorid` value MUST be its `versionid`. If there is more than one Version with the same `createdat` timestamp then those MUST be ordered in ascending case-insensitive order based on their `versionid` values. - When this `versionmode` is used, the `singleversionroot` aspect MUST be set to `true`.",
       "review": {
         "status": "reviewed",
-        "note": "CreatedAtAncestryReordersTiesUpdatesDeletionAndRetentionAtomically proves compiled singleversionroot true with omitted and explicit settings, every predecessor in an out-of-order batch, equivalent timestamp fractions and case-insensitive A/b ties. Moving Z's createdat ahead of the original root rebuilds the full chain and selects b; middle deletion reconnects it. A batch containing a valid reorder and invalid timestamp rolls back export/events. Later publication and retention to two preserve the oldest sticky default and newest Version with repaired ancestry. Exact chain and default membership survive restart at every stage.",
+        "note": "SingleVersionRootDefaultsFalseAndAutomaticModesRequireTrue proves automatic modes reject an omitted or false setting and accept true. CreatedAtAncestryReordersTiesUpdatesDeletionAndRetentionAtomically proves every predecessor in an out-of-order batch, equivalent timestamp fractions and case-insensitive A/b ties. Moving Z's createdat ahead of the original root rebuilds the full chain and selects b; middle deletion reconnects it. A batch containing a valid reorder and invalid timestamp rolls back export/events. Later publication and retention to two preserve the oldest sticky default and newest Version with repaired ancestry. Exact chain and default membership survive restart at every stage.",
         "roles": [
           "server"
         ]
@@ -84156,7 +84156,8 @@
       "implementation": {
         "status": "implemented",
         "testIds": [
-          "CreatedAtAncestryReordersTiesUpdatesDeletionAndRetentionAtomically"
+          "CreatedAtAncestryReordersTiesUpdatesDeletionAndRetentionAtomically",
+          "SingleVersionRootDefaultsFalseAndAutomaticModesRequireTrue"
         ],
         "nativeEvidence": []
       }
@@ -84183,7 +84184,7 @@
       "text": "- `modifiedat` - This is the same as the `createdat` algorithm except that the `modifiedat` attribute of each Version MUST be used instead of the `createdat` attribute.",
       "review": {
         "status": "reviewed",
-        "note": "ModifiedAtAncestryUsesTimestampTiesAndPersistsRepairedOrdering uses a fixed clock and createdat values opposite the modifiedat ordering. It asserts every predecessor for equivalent modifiedat timestamps and case-insensitive ID ties, explicit timestamp reordering, rejected mixed batch rollback, deletion reconnect, later publication and sticky retention. Retention repair touches the remaining child's modifiedat to the fixed request time without changing createdat, and the final chain/export persist through restart. ModifiedAtOrderingReachesAStableAncestryAfterIndirectTimestampTouches additionally proves repeated repair when an ancestry change alters ordering.",
+        "note": "SingleVersionRootDefaultsFalseAndAutomaticModesRequireTrue proves automatic modes reject an omitted or false setting and accept true. ModifiedAtAncestryUsesTimestampTiesAndPersistsRepairedOrdering uses a fixed clock and createdat values opposite the modifiedat ordering. It asserts every predecessor for equivalent modifiedat timestamps and case-insensitive ID ties, explicit timestamp reordering, rejected mixed batch rollback, deletion reconnect, later publication and sticky retention. Retention repair touches the remaining child's modifiedat to the fixed request time without changing createdat, and the final chain/export persist through restart. ModifiedAtOrderingReachesAStableAncestryAfterIndirectTimestampTouches additionally proves repeated repair when an ancestry change alters ordering.",
         "roles": [
           "server"
         ]
@@ -84192,7 +84193,8 @@
         "status": "implemented",
         "testIds": [
           "ModifiedAtAncestryUsesTimestampTiesAndPersistsRepairedOrdering",
-          "ModifiedAtOrderingReachesAStableAncestryAfterIndirectTimestampTouches"
+          "ModifiedAtOrderingReachesAStableAncestryAfterIndirectTimestampTouches",
+          "SingleVersionRootDefaultsFalseAndAutomaticModesRequireTrue"
         ],
         "nativeEvidence": []
       }
@@ -84219,7 +84221,7 @@
       "text": "- `semver` - Ancestor Processing: The `ancestorid` value of each Version MUST either be its `versionid` value (if it is the oldest Version), or the `versionid` of the next oldest Version per the [Semantic Versioning](https://semver.org/) specification's \"precedence\" ordering rules. - When this `versionmode` is used, the `singleversionroot` aspect MUST be set to `true`.",
       "review": {
         "status": "reviewed",
-        "note": "SemverAncestryUsesPrecedenceThroughBatchDeletionRetentionAndRestart asserts compiled singleversionroot true and every predecessor in a reverse-authored fifteen-Version batch: numeric prerelease ordering, numeric before nonnumeric, ASCII lexical ordering, longer prerelease lists, release precedence, patch/minor/major and arbitrary-precision components. Authored self-root ancestors are replaced by the SemVer chain. Invalid numeric components and prerelease syntax reject without changing export/events. Middle deletion reconnects the chain; reducing retention to three preserves the oldest sticky default and the two greatest Versions. Exact ancestry, default membership and event counts persist through restart.",
+        "note": "SingleVersionRootDefaultsFalseAndAutomaticModesRequireTrue proves automatic modes reject an omitted or false setting and accept true. SemverAncestryUsesPrecedenceThroughBatchDeletionRetentionAndRestart asserts every predecessor in a reverse-authored fifteen-Version batch: numeric prerelease ordering, numeric before nonnumeric, ASCII lexical ordering, longer prerelease lists, release precedence, patch/minor/major and arbitrary-precision components. Authored self-root ancestors are replaced by the SemVer chain. Invalid numeric components and prerelease syntax reject without changing export/events. Middle deletion reconnects the chain; reducing retention to three preserves the oldest sticky default and the two greatest Versions. Exact ancestry, default membership and event counts persist through restart.",
         "roles": [
           "server"
         ]
@@ -84227,7 +84229,8 @@
       "implementation": {
         "status": "implemented",
         "testIds": [
-          "SemverAncestryUsesPrecedenceThroughBatchDeletionRetentionAndRestart"
+          "SemverAncestryUsesPrecedenceThroughBatchDeletionRetentionAndRestart",
+          "SingleVersionRootDefaultsFalseAndAutomaticModesRequireTrue"
         ],
         "nativeEvidence": []
       }
@@ -84285,7 +84288,7 @@
       "text": "- When not specified, the default value MUST be `false`.",
       "review": {
         "status": "reviewed",
-        "note": "ManualSingleRootDefaultsAllowIndependentRootsAndRejectInvalidModelTightening proves omitted and explicit false compile to a multiple-root manual policy, admits two authored self-roots and preserves them through restart. Tightening to true rejects without changing model/export/events, then succeeds after joining the roots.",
+        "note": "ManualSingleRootDefaultsAllowIndependentRootsAndRejectInvalidModelTightening proves omitted and explicit false compile to a multiple-root manual policy, admits two authored self-roots and preserves them through restart. SingleVersionRootDefaultsFalseAndAutomaticModesRequireTrue confirms the common false default and that automatic modes reject that effective value unless true is explicitly authored. Tightening to true rejects without changing model/export/events, then succeeds after joining the roots.",
         "roles": [
           "server"
         ]
@@ -84293,7 +84296,8 @@
       "implementation": {
         "status": "implemented",
         "testIds": [
-          "ManualSingleRootDefaultsAllowIndependentRootsAndRejectInvalidModelTightening"
+          "ManualSingleRootDefaultsAllowIndependentRootsAndRejectInvalidModelTightening",
+          "SingleVersionRootDefaultsFalseAndAutomaticModesRequireTrue"
         ],
         "nativeEvidence": []
       }
