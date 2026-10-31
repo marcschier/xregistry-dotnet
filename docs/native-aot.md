@@ -139,18 +139,19 @@ development cell, not requirement-level release qualification.
 
 ## Current evidence and uncovered cells
 
-The complete Validation suite at `5db1ee7d2602aad963167229a5adcfe18baacc82`
-passed on Windows x64 under .NET 8 and .NET 10: 5,203 cases and 907 methods per
+The complete Validation suite at `fec26fabc1296f9c5f3fb407c3e34a4a34b251a4`
+passed on Windows x64 under .NET 8 and .NET 10: 5,301 cases and 920 methods per
 framework. The runs include the Protobuf declaration-scope, import-visibility,
 cross-syntax enum, adjacent-literal, typed-constant, reserved-range,
-option-target and leading-decimal corrections, alongside the earlier API,
+option-target and leading-decimal corrections, RPC empty statements, grammar
+token-kind checks and file-wide package scope, alongside the earlier API,
 Smithy and Avro checks. Both publications ran ILC without
 IL diagnostics. Native executable, managed control, report, proof and receipt
 hashes match; regenerated receipts and complete native/managed case inventories
 agree. Both managed proofs were rejected, and source inventories remained
 unchanged. Evidence is retained at
-`D:\temp\xregistry-validation-5db1ee7-net8\native-suites-mkzh9d1a` and
-`D:\temp\xregistry-validation-5db1ee7-net10\native-suites-aonkf5ix`.
+`D:\temp\xregistry-validation-fec26fa-net8\native-suites-yjzp1xun` and
+`D:\temp\xregistry-validation-fec26fa-net10\native-suites-jmzcomh4`.
 These selected-project runs do not refresh other platforms or complete
 thirteen-suite cells, or promote requirement-level qualification.
 
