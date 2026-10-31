@@ -230,6 +230,7 @@ public class BridgeViewTests
         foreach (var path in new[]
         {
             "/registry?inline=dirs.g.files", "/registry?inline=dirs.*.files",
+            "/registry?inline=dirs.foo*", "/registry?inline=*.dirs",
             "/registry/dirs/g/files/shared?inline=filebase64", "/registry/dirs/g/files/shared?collections",
             "/registry?doc&doc", "/registry?inline=site"
         })
@@ -237,6 +238,22 @@ public class BridgeViewTests
             using var response = await client.GetAsync(path);
             await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.BadRequest);
         }
+        await Assert.That(source.Opens).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("/registry?inline=dir")]
+    [Arguments("/registry?inline=DIRS")]
+    public async Task InlineCollectionNamesRequireExactPluralCase(string path)
+    {
+        var source = new ControlledSource("local", "v1", ["shared"]);
+        await using var app = await BridgeFixture.StartAsync([source.Registration()]);
+        using var client = BridgeFixture.Client(app);
+
+        using var response = await client.GetAsync(path);
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.BadRequest);
+        await Assert.That((await BridgeFixture.Json(response)).GetProperty("code").GetString()).IsEqualTo("bad_inline");
         await Assert.That(source.Opens).IsEqualTo(0);
     }
 

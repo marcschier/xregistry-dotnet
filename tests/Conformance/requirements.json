@@ -17253,17 +17253,17 @@
       ],
       "text": "There MAY be multiple `<PATH>`s specified in a single request and each protocol binding specification will indicate how the list is specified.",
       "review": {
-        "status": "informative",
-        "note": "The protocol may serialize multiple inline paths; its binding defines list syntax. Concrete comma/repeated-path semantics are not promoted from this permission row.",
+        "status": "reviewed",
+        "note": "The HTTP server accepts comma-separated inline paths; DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication requests two paths and asserts the resulting document. This evidence qualifies server support only.",
         "roles": [
-          "client",
-          "server",
-          "producer"
+          "server"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "qualified",
+        "testIds": [
+          "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication"
+        ],
         "nativeEvidence": []
       }
     },
@@ -17284,18 +17284,18 @@
       "text": "The `*` value MAY be used to indicate that all nested inlineable attributes at that level in the hierarchy (and below) MUST be inlined - except `model`, `modelsource` and `capabilities` at the root of the Registry. These three are excluded since the data associated with them are configuration related. To include their data the request MUST include `<PATH>` values of `model`, `modelsource` or `capabilities` explicitly. Use of `*` MUST only be used as the last part of the `<PATH>` (in its entirety). For example, `foo*` and `*.foo` are not valid `<PATH>` values, but `*` and `endpoints.*` are.",
       "review": {
         "status": "reviewed",
-        "note": "Wildcard expansion, configuration exclusion and invalid non-leaf wildcard rejection are in source. The directly reviewed producer Doc test requests explicit paths, not every wildcard/configuration form; full *, prefix.*, foo* and explicit configuration inclusion semantics need separate vectors.",
+        "note": "BridgeRootInlineIsExplicitAndDoesNotAddSourceRequests verifies root wildcard expansion, excludes model/modelsource/capabilities from wildcard output, and includes them when explicitly requested. InvalidInlineAndCollectionsInputsFailBeforeAnySourceAcquisition rejects internal, prefixed and suffixed wildcard forms. This qualifies server behavior; producer-specific document traversal is not established by these cases.",
         "roles": [
-          "server",
-          "producer"
+          "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "qualified",
         "testIds": [
           "InvalidInlineAndCollectionsInputsFailBeforeAnySourceAcquisition",
           "CollectionsViewOmitsOnlyTheTopEntityAndKeepsNestedMetadataAndPointers",
-          "ExportUsesRelativePointersAndNoDefaultProjection"
+          "ExportUsesRelativePointersAndNoDefaultProjection",
+          "BridgeRootInlineIsExplicitAndDoesNotAddSourceRequests"
         ],
         "nativeEvidence": []
       }
@@ -17379,19 +17379,19 @@
       "text": "When specifying a collection to be inlined, it MUST be specified using the plural name for the collection in its defined case.",
       "review": {
         "status": "reviewed",
-        "note": "Source lookup uses exact model plural names and case, not a folded singular lookup. Direct valid plural paths are tested, but a dedicated case-variant/singular rejection matrix was not established.",
+        "note": "The server accepts valid plural paths and rejects both the singular collection name and a case-variant plural name before source acquisition. Producer rejection behavior is not established by this test.",
         "roles": [
-          "server",
-          "producer"
+          "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "qualified",
         "testIds": [
           "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
           "EveryEntityAndCollectionUsesItsActualResponseRoot",
           "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks",
-          "InvalidInlineAndCollectionsInputsFailBeforeAnySourceAcquisition"
+          "InvalidInlineAndCollectionsInputsFailBeforeAnySourceAcquisition",
+          "InlineCollectionNamesRequireExactPluralCase"
         ],
         "nativeEvidence": []
       }
@@ -77859,13 +77859,20 @@
       ],
       "text": "While the `<RESOURCE>` and `<RESOURCE>base64` attributes are defined as two separate attributes, they are technically two separate \"views\" of the same underlying data. As such, the usage of each will be based on the content type of the Resource, and specifying `<RESOURCE>` in the `inline` flag value MUST be interpreted as a request for the appropriate attribute. In other words, `<RESOURCE>base64` is not a valid `inline` value.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The bridge selects the appropriate file or filebase64 view from content type, preserves JSON domain values, and rejects filebase64 as an inline selector. These tests qualify the server path only.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "qualified",
+        "testIds": [
+          "BinaryChangesOnlyRequestedDocumentEncodingAndJsonDomainValuesRemainUntouched",
+          "EmptyAndInvalidJsonDocumentsUseExactBase64Fallback",
+          "InvalidInlineAndCollectionsInputsFailBeforeAnySourceAcquisition",
+          "ExternalInlineDescriptorRemainsAUrlRatherThanEmptyOrFetchedBytes"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77890,13 +77897,19 @@
       ],
       "text": "The value of the `inline` flag is a list of `<PATH>` values where each is a string indicating which inlineable attribute to show in the response. References to nested attributes are represented using an [xRegistry dot (`.`) notation](#xregistry-dot--notation) where the xRegistry collection names along the hierarchy are concatenated. For example: `endpoints.messages.versions` will inline all Versions of Messages.  Non-leaf parts of the `<PATH>` MUST only reference xRegistry collection names and not any specific entity IDs since `<PATH>` is meant to be an abstract traversal of the model.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Bridge view tests exercise dotted nested collection paths and reject a specific entity ID in a non-leaf position before opening the source. This qualifies server path handling.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "qualified",
+        "testIds": [
+          "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
+          "EveryEntityAndCollectionUsesItsActualResponseRoot",
+          "InvalidInlineAndCollectionsInputsFailBeforeAnySourceAcquisition"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77921,13 +77934,17 @@
       ],
       "text": "There MAY be multiple `<PATH>`s specified in a single request and each protocol binding specification will indicate how the list is specified.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The HTTP server accepts comma-separated inline paths; DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication requests two paths and asserts the resulting document. This evidence qualifies server support only.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "qualified",
+        "testIds": [
+          "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77953,13 +77970,18 @@
       ],
       "text": "The `*` value MAY be used to indicate that all nested inlineable attributes at that level in the hierarchy (and below) MUST be inlined - except `model`, `modelsource` and `capabilities` at the root of the Registry. These three are excluded since the data associated with them are configuration related. To include their data the request MUST include `<PATH>` values of `model`, `modelsource` or `capabilities` explicitly. Use of `*` MUST only be used as the last part of the `<PATH>` (in its entirety). For example, `foo*` and `*.foo` are not valid `<PATH>` values, but `*` and `endpoints.*` are.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "BridgeRootInlineIsExplicitAndDoesNotAddSourceRequests verifies root wildcard expansion, configuration exclusions and explicit inclusion; InvalidInlineAndCollectionsInputsFailBeforeAnySourceAcquisition rejects internal, prefixed and suffixed wildcard forms. This qualifies server behavior only.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "qualified",
+        "testIds": [
+          "BridgeRootInlineIsExplicitAndDoesNotAddSourceRequests",
+          "InvalidInlineAndCollectionsInputsFailBeforeAnySourceAcquisition"
+        ],
         "nativeEvidence": []
       }
     },
@@ -78021,13 +78043,17 @@
       ],
       "text": "The specific value of `<PATH>` will vary based on where the request is directed. For example, a request to the root of the Registry MUST start with a `<GROUPS>` name, while a request directed at a Group would start with a `<RESOURCES>` name.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "EveryEntityAndCollectionUsesItsActualResponseRoot asserts paths relative to Registry, Group collection, Group, Resource collection and Resource request targets.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "qualified",
+        "testIds": [
+          "EveryEntityAndCollectionUsesItsActualResponseRoot"
+        ],
         "nativeEvidence": []
       }
     },
@@ -78052,13 +78078,17 @@
       ],
       "text": "When specifying a collection to be inlined, it MUST be specified using the plural name for the collection in its defined case.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The server accepts valid plural paths and rejects both the singular collection name and a case-variant plural name before source acquisition. Producer rejection behavior is not established by this test.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "qualified",
+        "testIds": [
+          "InlineCollectionNamesRequireExactPluralCase"
+        ],
         "nativeEvidence": []
       }
     },
