@@ -12,6 +12,150 @@ namespace XRegistry.Server.Tests;
 public class ModelAndVersionTests
 {
     [Test]
+    public async Task DefaultSelectionFlagOverridesMetaAndAtomicallyReplacesDeletedDefault()
+    {
+        var store = new InMemoryRegistryPersistence();
+        const string model = """
+            {"groups":{"teams":{"singular":"team","resources":{"notes":{
+              "singular":"note","hasdocument":false,"maxversions":0,"versionmode":"semver"
+            }}}}}
+            """;
+        var engine = Create(model, persistence: store);
+        foreach (var id in new[] { "1.0.0", "2.0.0", "3.0.0" })
+        {
+            await Send(engine, RegistryAction.Replace, "/teams/g/notes/n/versions/" + id, "{\"name\":\"" + id + "\"}");
+        }
+        await Send(engine, RegistryAction.Patch, "/teams/g/notes/n/meta",
+            """{"defaultversionid":"3.0.0","defaultversionsticky":false}""", new KeyValuePair<string, string?>("setdefaultversionid", "1.0.0"));
+        await AssertSelectionAsync(engine, "1.0.0", true);
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        await Send(engine, RegistryAction.Delete, "/teams/g/notes/n/versions/1.0.0", null,
+            new KeyValuePair<string, string?>("setdefaultversionid", "2.0.0"));
+        await AssertSelectionAsync(engine, "2.0.0", true);
+        await ExpectCode(() => Send(engine, RegistryAction.Read, "/teams/g/notes/n/versions/1.0.0"), "not_found");
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events + 1);
+        engine = Create(model, persistence: store);
+        await AssertSelectionAsync(engine, "2.0.0", true);
+        await Send(engine, RegistryAction.Patch, "/teams/g/notes/n/meta",
+            """{"defaultversionid":"2.0.0","defaultversionsticky":true}""", new KeyValuePair<string, string?>("setdefaultversionid", "null"));
+        await AssertSelectionAsync(engine, "3.0.0", false);
+        await AssertSelectionAsync(Create(model, persistence: store), "3.0.0", false);
+        await Send(engine, RegistryAction.Patch, "/teams/g/notes/n", """{"meta":{"defaultversionsticky":false}}""",
+            new KeyValuePair<string, string?>("setdefaultversionid", "2.0.0"));
+        await AssertSelectionAsync(engine, "2.0.0", true);
+        await Send(engine, RegistryAction.Patch, "/teams/g/notes/n/versions/3.0.0", """{"name":"changed"}""",
+            new KeyValuePair<string, string?>("setdefaultversionid", "3.0.0"));
+        await AssertSelectionAsync(engine, "3.0.0", true);
+        await Send(engine, RegistryAction.Patch, "/teams/g/notes/n/versions", """{"4.0.0":{"name":"new target"}}""",
+            new KeyValuePair<string, string?>("setdefaultversionid", "4.0.0"));
+        await AssertSelectionAsync(engine, "4.0.0", true);
+        await AssertSelectionAsync(Create(model, persistence: store), "4.0.0", true);
+
+        async Task AssertSelectionAsync(RegistryEngine current, string id, bool sticky)
+        {
+            var meta = (await Send(current, RegistryAction.Read, "/teams/g/notes/n/meta")).Metadata!.RootElement;
+            await Assert.That(meta.GetProperty("defaultversionid").GetString()).IsEqualTo(id);
+            await Assert.That(meta.GetProperty("defaultversionsticky").GetBoolean()).IsEqualTo(sticky);
+            var version = (await Send(current, RegistryAction.Read, "/teams/g/notes/n/versions/" + id)).Metadata!.RootElement;
+            await Assert.That(version.GetProperty("isdefault").GetBoolean()).IsTrue();
+        }
+    }
+
+    [Test]
+    public async Task DefaultSelectionFlagRejectsInvalidUsesWithoutPersistingMutations()
+    {
+        var store = new InMemoryRegistryPersistence();
+        var engine = Create(persistence: store);
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n/versions/Root", """{"name":"stored"}""");
+        var before = (await Send(engine, RegistryAction.Read, "/export")).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        foreach (var target in new[] { "missing", "root" })
+        {
+            await ExpectCode(() => Send(engine, RegistryAction.Patch, "/teams/g/notes/n/meta", """{"defaultversionsticky":true}""",
+                new KeyValuePair<string, string?>("setdefaultversionid", target)), "unknown_id");
+            await AssertUnchangedAsync(engine);
+        }
+        await ExpectCode(() => Send(engine, RegistryAction.Patch, "/teams/g/notes/n/versions",
+            """{"New":{"name":"must not persist"}}""", new KeyValuePair<string, string?>("setdefaultversionid", "missing")),
+            "unknown_id");
+        await AssertUnchangedAsync(engine);
+        foreach (var target in new string?[] { null, "", "bad/id" })
+        {
+            await ExpectCode(() => Send(engine, RegistryAction.Patch, "/teams/g/notes/n/meta", "{}",
+                new KeyValuePair<string, string?>("setdefaultversionid", target)), "bad_defaultversionid");
+            await AssertUnchangedAsync(engine);
+        }
+        await ExpectCode(() => Send(engine, RegistryAction.Patch, "/teams/g/notes/n/meta", "{}",
+            new("setdefaultversionid", "Root"), new("setdefaultversionid", "Root")), "bad_flag");
+        await AssertUnchangedAsync(engine);
+        foreach (var (action, path) in new[]
+        {
+            (RegistryAction.Read, "/teams/g/notes/n"),
+            (RegistryAction.Head, "/teams/g/notes/n"),
+            (RegistryAction.Options, "/teams/g/notes/n"),
+            (RegistryAction.Patch, "/teams/g/notes/n/meta"),
+            (RegistryAction.Replace, "/teams/g/notes/n/versions/new"),
+            (RegistryAction.Post, "/teams/g/notes/n/versions")
+        })
+        {
+            await ExpectCode(() => Send(engine, action, path, "{}", new KeyValuePair<string, string?>("setdefaultversionid", "request")), "bad_flag");
+            await AssertUnchangedAsync(engine);
+        }
+        foreach (var path in new[] { "/", "/teams", "/teams/g", "/teams/g/notes" })
+        {
+            await ExpectCode(() => Send(engine, RegistryAction.Patch, path, "{}", new KeyValuePair<string, string?>("setdefaultversionid", "Root")), "bad_flag");
+            await AssertUnchangedAsync(engine);
+        }
+        await ExpectCode(() => Send(engine, RegistryAction.Post, "/teams/g/notes/n",
+            """{"versionid":"Root","name":"changed"}""", new KeyValuePair<string, string?>("setdefaultversionid", "request")),
+            "defaultversionid_request");
+        await AssertUnchangedAsync(engine);
+        await AssertUnchangedAsync(Create(persistence: store));
+        var options = await Send(engine, RegistryAction.Options, "/teams/g/notes/n", null,
+            new KeyValuePair<string, string?>("unknownflag", "ignored"));
+        await Assert.That(options.AllowedActions.Contains(RegistryAction.Options)).IsTrue();
+        await Assert.That(options.AllowedActions.Contains(RegistryAction.Read)).IsTrue();
+        await AssertUnchangedAsync(engine);
+
+        async Task AssertUnchangedAsync(RegistryEngine current)
+        {
+            await Assert.That((await Send(current, RegistryAction.Read, "/export")).Metadata!.RootElement.GetRawText())
+                .IsEqualTo(before);
+            await Assert.That((await current.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        }
+    }
+
+    [Test]
+    public async Task DefaultSelectionRequestFlagSelectsOnlyNewAssignedVersionAndPersists()
+    {
+        var store = new InMemoryRegistryPersistence();
+        const string model = """
+            {"groups":{"teams":{"singular":"team","resources":{"notes":{
+              "singular":"note","hasdocument":false,"setversionid":false,"maxversions":0
+            }}}}}
+            """;
+        var engine = Create(model, persistence: store);
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n", """{"name":"first"}""");
+        var created = await Send(engine, RegistryAction.Post, "/teams/g/notes/n", """{"name":"assigned"}""",
+            new KeyValuePair<string, string?>("setdefaultversionid", "request"));
+        var id = created.Metadata!.RootElement.GetProperty("versionid").GetString()!;
+        await Assert.That(id).IsEqualTo("2");
+        await Assert.That(created.Metadata.RootElement.GetProperty("isdefault").GetBoolean()).IsTrue();
+        var meta = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n/meta")).Metadata!.RootElement;
+        await Assert.That(meta.GetProperty("defaultversionid").GetString()).IsEqualTo(id);
+        await Assert.That(meta.GetProperty("defaultversionsticky").GetBoolean()).IsTrue();
+        await Send(engine, RegistryAction.Post, "/teams/g/notes/n", """{"name":"later"}""");
+        var persisted = (await Send(Create(model, persistence: store), RegistryAction.Read, "/teams/g/notes/n/meta"))
+            .Metadata!.RootElement;
+        await Assert.That(persisted.GetProperty("defaultversionid").GetString()).IsEqualTo(id);
+        await Assert.That(persisted.GetProperty("defaultversionsticky").GetBoolean()).IsTrue();
+        var selected = (await Send(Create(model, persistence: store), RegistryAction.Read,
+            "/teams/g/notes/n/versions/" + id)).Metadata!.RootElement;
+        await Assert.That(selected.GetProperty("name").GetString()).IsEqualTo("assigned");
+        await Assert.That(selected.GetProperty("isdefault").GetBoolean()).IsTrue();
+    }
+
+    [Test]
     [Arguments(false, RegistryAction.Patch)]
     [Arguments(false, RegistryAction.Replace)]
     [Arguments(true, RegistryAction.Patch)]

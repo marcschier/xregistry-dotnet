@@ -77067,13 +77067,17 @@
       ],
       "text": "The `setdefaultversionid` flag MAY be used on any write operation directed to a single Resource, its `meta` sub-object or its Versions. The primary use case is one in which the current default Version is being deleted and the client wishes to choose a new default Version at the same time - to avoid an incorrect one being chosen temporarily.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Direct Resource, Meta, Version and Version collection writes select the exact flagged target. Deleting the current default selects another Version in the same persisted event batch; collection creation can select a target created by that operation.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultSelectionFlagOverridesMetaAndAtomicallyReplacesDeletedDefault"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77098,13 +77102,17 @@
       ],
       "text": "Use of this flag on an operation that allows for modifying multiple Resources MUST generate an error ([bad_flag](#bad_flag)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Registry, Group collection, Group and Resource collection PATCH reject the flag with bad_flag. Exact exported state and event count remain unchanged, including after restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultSelectionFlagRejectsInvalidUsesWithoutPersistingMutations"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77129,13 +77137,18 @@
       ],
       "text": "This flag MUST include a single parameter, a string containing the case-sensitive `versionid` of the Version that is to become the new default Version.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Missing, empty and malformed values reject bad_defaultversionid; repeated values reject bad_flag. A wrong-case target rejects unknown_id, while exact target selection succeeds and persists.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultSelectionFlagRejectsInvalidUsesWithoutPersistingMutations",
+          "DefaultSelectionFlagOverridesMetaAndAtomicallyReplacesDeletedDefault"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77160,13 +77173,17 @@
       ],
       "text": "- A value of `null` indicates that the client wishes to switch to the [\"default = newest\" algorithm](#default-version-of-a-resource). In other words, the \"sticky\" aspect of the current default Version will be removed and `meta.defaultversionsticky` MUST be set to `false`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The null flag overrides an older pointer and sticky true in Meta input, selects newest semver, exposes false and preserves that selection after restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultSelectionFlagOverridesMetaAndAtomicallyReplacesDeletedDefault"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77191,13 +77208,17 @@
       ],
       "text": "- If during a Version create operation the server is asked to choose the `versionid` value for the new Version, then including that value as the `setdefaultversionid` value is not possible. In those cases a value of `request` MAY be used as a way to reference that new Version.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "With client Version IDs disabled, Resource POST assigns ID 2 and request selects exactly that new Version. Later publication leaves the sticky selection and exact selected metadata intact through restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultSelectionRequestFlagSelectsOnlyNewAssignedVersionAndPersists"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77222,13 +77243,18 @@
       ],
       "text": "- A value of `request` MUST only be used on APIs that allow the creation of only a single new Version. In the case of HTTP, that is the `POST` API directed to a Resource. This is because no other operation allows for the creation of a single Version without specifying its `versionid`. Using it when more than one Version is created MUST generate an error ([too_many_versions](#too_many_versions)).  Other uses of this value on an inappropriate API MUST generate an error ([bad_flag](#bad_flag)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Resource POST with a generated ID succeeds; read/head/options, Meta PATCH, Version replacement and Version collection POST reject request with bad_flag. The multi-created-Version too_many_versions branch has no direct evidence in this slice, so the composite obligation remains pending.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "DefaultSelectionFlagRejectsInvalidUsesWithoutPersistingMutations",
+          "DefaultSelectionRequestFlagSelectsOnlyNewAssignedVersionAndPersists"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77253,13 +77279,17 @@
       ],
       "text": "- If a value of `request` was used but no Version was created for the request, then an error ([defaultversionid_request](#defaultversionid_request)) MUST be generated.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Resource POST replacing an existing Version with request rejects defaultversionid_request. The attempted Version metadata change leaves no persisted state or event change.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultSelectionFlagRejectsInvalidUsesWithoutPersistingMutations"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77284,13 +77314,17 @@
       ],
       "text": "- If a non-`null` and non-`request` value does not reference an existing Version of the Resource, after all Version processing is completed, then an error ([unknown_id](#unknown_id)) MUST be generated.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Missing and wrong-case target flags reject unknown_id after a valid attempted Meta mutation. Exact export and event count are unchanged after each rejection and restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultSelectionFlagRejectsInvalidUsesWithoutPersistingMutations"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77315,13 +77349,18 @@
       ],
       "text": "- Setting the `meta.defaultversionid` to a non-empty value via this flag MUST also set the `meta.defaultversionsticky` attribute to `true`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact target flags set sticky true despite false Meta input and during deletion of the previous default. The assigned-Version request flag also sets true and prevents later publication from moving the default.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultSelectionFlagOverridesMetaAndAtomicallyReplacesDeletedDefault",
+          "DefaultSelectionRequestFlagSelectsOnlyNewAssignedVersionAndPersists"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77346,13 +77385,17 @@
       ],
       "text": "- Use on a request that updates more than one Resource MUST generate an error ([bad_flag](#bad_flag)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Multi-Resource-capable write paths reject the flag before mutation. The full export and event count are preserved across Registry, Group and collection attempts and restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultSelectionFlagRejectsInvalidUsesWithoutPersistingMutations"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77377,13 +77420,17 @@
       ],
       "text": "- Use of this flag MUST override any `meta.defaultversionid` and `meta.defaultversionsticky` values that are present in the request.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "An explicit older target overrides newer pointer and false sticky Meta values. The null flag reverses that policy despite older pointer and true sticky input; both results persist.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultSelectionFlagOverridesMetaAndAtomicallyReplacesDeletedDefault"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77408,13 +77455,17 @@
       ],
       "text": "Any other invalid usage of this flag MUST generate an error ([bad_defaultversionid](#bad_defaultversionid)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Missing parameter, empty parameter and illegal identifier syntax reject bad_defaultversionid. Separate invalid operation and duplicate-parameter controls assert the more specific bad_flag contract.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultSelectionFlagRejectsInvalidUsesWithoutPersistingMutations"
+        ],
         "nativeEvidence": []
       }
     },

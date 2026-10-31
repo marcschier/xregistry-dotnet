@@ -295,7 +295,10 @@ Ignore supports capabilities,
 defaultversionid, defaultversionsticky, epoch, id, modelsource and readonly,
 subject to the enabled flags/ignores choices.
 
-Unknown or capability-disabled query flags are ignored. `/export` still applies
+Unknown or capability-disabled query flags are ignored. Direct engine OPTIONS
+validates enabled flags before returning the Allow list; write-only
+`setdefaultversionid` therefore rejects with `bad_flag` on OPTIONS as it does
+on GET and HEAD. `/export` still applies
 its implicit `doc&inline=*,capabilities,modelsource` projection when explicit
 use of those flags is disabled. Only an enabled explicit `inline` overrides the
 export default. An enabled bare or empty `inline` means `*`, so it includes the

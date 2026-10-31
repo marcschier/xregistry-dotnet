@@ -131,6 +131,7 @@ public sealed partial class RegistryEngine : IReadOnlyRegistryHostBackend
         CheckAvailability(operation.Path, operation.Action, capabilities);
         if (operation.Action == RegistryAction.Options)
         {
+            _ = RequestFlags.Parse(operation, Limits, capabilities);
             var result = new RegistryResult(RegistryResultKind.Success, operation.Path) { AllowedActions = EffectiveAllowed(operation.Path, allowed, capabilities) };
             if (context.PrepareResponseAsync is { } prepare)
             {
