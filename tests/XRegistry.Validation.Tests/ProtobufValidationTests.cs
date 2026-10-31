@@ -485,6 +485,75 @@ public class ProtobufValidationTests
     }
 
     [Test]
+    [Arguments("""option java_multiple_files="true"; message Root {}""")]
+    [Arguments("""option optimize_for="SPEED"; message Root {}""")]
+    [Arguments("""message Root { option deprecated="false"; }""")]
+    [Arguments("""message Root { repeated int32 value=1 [packed="true"]; }""")]
+    [Arguments("""message Root { optional int32 value=1 [deprecated="true"]; }""")]
+    [Arguments("""message Root { optional int32 value=1 [lazy="false"]; }""")]
+    [Arguments("""message Root { optional int32 value=1 [weak="false"]; }""")]
+    [Arguments("""enum State { option allow_alias="true"; ZERO=0; }""")]
+    [Arguments("""enum State { option deprecated="false"; ZERO=0; }""")]
+    [Arguments("""enum State { ZERO=0 [deprecated="true"]; }""")]
+    [Arguments("""message Root {} service S { option deprecated="true"; rpc Get(Root) returns (Root); }""")]
+    [Arguments("""message Root {} service S { rpc Get(Root) returns (Root) { option deprecated="true"; } }""")]
+    public async Task QuotedOptionValuesNeverMasqueradeAsBooleansOrEnumConstants(string declarations)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                Encoding.UTF8.GetBytes($"syntax=\"proto{syntax}\"; {declarations}"));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.option");
+            var native = declarations.Replace("\"true\"", "true", StringComparison.Ordinal)
+                .Replace("\"false\"", "false", StringComparison.Ordinal)
+                .Replace("\"SPEED\"", "SPEED", StringComparison.Ordinal);
+            var valid = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                Encoding.UTF8.GetBytes($"syntax=\"proto{syntax}\"; {native}"));
+            await Assert.That(valid.Status).IsEqualTo(DocumentValidationStatus.Valid);
+            await Assert.That(valid.Diagnostics.Count).IsEqualTo(0);
+        }
+    }
+
+    [Test]
+    [Arguments("bool", "\"true\"")]
+    [Arguments("bool", "\"false\"")]
+    [Arguments("double", "\"1.5\"")]
+    [Arguments("float", "\"inf\"")]
+    [Arguments("float", "\"nan\"")]
+    [Arguments("State", "\"ZERO\"")]
+    [Arguments("bool", "\"tr\" 'ue'")]
+    [Arguments("double", "\"1.\" '5'")]
+    [Arguments("State", "\"ZE\" 'RO'")]
+    public async Task QuotedDefaultsNeverMasqueradeAsScalarOrEnumConstants(string type, string value)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/2",
+            Encoding.UTF8.GetBytes($"syntax=\"proto2\"; enum State {{ ZERO=0; }} " +
+                $"message Root {{ optional {type} value=1 [default={value}]; }}"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.default");
+    }
+
+    [Test]
+    [Arguments("bool", "true")]
+    [Arguments("bool", "false")]
+    [Arguments("double", "1.5")]
+    [Arguments("float", "inf")]
+    [Arguments("float", "-inf")]
+    [Arguments("float", "nan")]
+    [Arguments("State", "ZERO")]
+    [Arguments("string", "\"true\"")]
+    [Arguments("bytes", "\"ZERO\"")]
+    public async Task TypedDefaultsRetainValidNativeConstants(string type, string value)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/2",
+            Encoding.UTF8.GetBytes($"syntax=\"proto2\"; enum State {{ ZERO=0; }} " +
+                $"message Root {{ optional {type} value=1 [default={value}]; }}"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
     public async Task SuppliedImportBindsTheDeclaredMessageNotArbitraryText()
     {
         var source = Encoding.UTF8.GetBytes("""syntax="proto3"; import "child.proto"; message Parent { Child child=1; }""");

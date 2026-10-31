@@ -143,12 +143,12 @@ internal sealed class ProtobufSyntax(ValidationContext context)
         }
         else if (field.Type == "bool")
         {
-            Require(value.Text is "true" or "false", "protobuf.default", "A boolean default must be true or false.");
+            Require(IsBoolean(value), "protobuf.default", "A boolean default must be true or false.");
         }
         else if (field.Type is "float" or "double")
         {
-            Require(value.Text is "inf" or "-inf" or "nan" ||
-                double.TryParse(value.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out _),
+            Require((value.Kind == TokenKind.Identifier && value.Text is "inf" or "-inf" or "nan") ||
+                (value.Kind == TokenKind.Number && double.TryParse(value.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out _)),
                 "protobuf.default", "A floating-point default is malformed.");
         }
         else if (Scalars.Contains(field.Type))
@@ -162,7 +162,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
         }
         else
         {
-            Require(resolved is { IsEnum: true } && resolved.EnumNames.Contains(value.Text),
+            Require(value.Kind == TokenKind.Identifier && resolved is { IsEnum: true } && resolved.EnumNames.Contains(value.Text),
                 "protobuf.default", "Only a declared enum member can be a user-type default.");
         }
     }
@@ -296,6 +296,8 @@ internal sealed class ProtobufSyntax(ValidationContext context)
         tokens.Add(new(TokenKind.End, ""));
         return tokens;
     }
+
+    private static bool IsBoolean(Token token) => token.Kind == TokenKind.Identifier && token.Text is "true" or "false";
 
     private static BigInteger Integer(Token token)
     {
@@ -503,7 +505,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                             defaultValue = value;
                             break;
                         case "packed":
-                            Require(value.Text is "true" or "false", "protobuf.option", "packed must be boolean.");
+                            Require(IsBoolean(value), "protobuf.option", "packed must be boolean.");
                             packed = value.Text == "true";
                             break;
                         case "json_name":
@@ -512,7 +514,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                         case "deprecated":
                         case "lazy":
                         case "weak":
-                            Require(value.Text is "true" or "false", "protobuf.option", "This field option must be boolean.");
+                            Require(IsBoolean(value), "protobuf.option", "This field option must be boolean.");
                             break;
                         default:
                             Unsupported("This field option has no implemented validation policy.");
@@ -548,7 +550,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                     Expect("=");
                     var value = Constant();
                     Expect(";");
-                    Require(value.Text is "true" or "false", "protobuf.option", "The enum option must be boolean.");
+                    Require(IsBoolean(value), "protobuf.option", "The enum option must be boolean.");
                     if (option == "allow_alias") { allowAlias = value.Text == "true"; }
                     else if (option != "deprecated") { Unsupported("Unsupported enum option."); }
                 }
@@ -566,7 +568,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                     {
                         Require(Identifier() == "deprecated", "protobuf.option", "Unsupported enum value option.");
                         Expect("=");
-                        Require(Constant().Text is "true" or "false", "protobuf.option", "deprecated must be boolean.");
+                        Require(IsBoolean(Constant()), "protobuf.option", "deprecated must be boolean.");
                         Expect("]");
                     }
 
@@ -651,11 +653,12 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             else if (option is "deprecated" or "java_multiple_files" or "cc_generic_services" or
                 "java_generic_services" or "py_generic_services" or "cc_enable_arenas")
             {
-                Require(value.Text is "true" or "false", "protobuf.option", "The option requires a boolean.");
+                Require(IsBoolean(value), "protobuf.option", "The option requires a boolean.");
             }
             else if (option == "optimize_for")
             {
-                Require(value.Text is "SPEED" or "CODE_SIZE" or "LITE_RUNTIME", "protobuf.option", "Invalid optimization mode.");
+                Require(value.Kind == TokenKind.Identifier && value.Text is "SPEED" or "CODE_SIZE" or "LITE_RUNTIME",
+                    "protobuf.option", "Invalid optimization mode.");
             }
             else { Unsupported("This Protobuf option has no implemented validation policy."); }
         }

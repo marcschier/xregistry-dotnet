@@ -43820,7 +43820,10 @@
           "AdjacentReservedNameLiteralsRejectTheCombinedFieldName",
           "AdjacentStringLiteralsKeepCombinedValueConstraints",
           "ProtoTwoStringDefaultsAcceptAdjacentLiterals",
-          "SyntaxDiscriminatorDoesNotAcceptAdjacentLiterals"
+          "SyntaxDiscriminatorDoesNotAcceptAdjacentLiterals",
+          "QuotedOptionValuesNeverMasqueradeAsBooleansOrEnumConstants",
+          "QuotedDefaultsNeverMasqueradeAsScalarOrEnumConstants",
+          "TypedDefaultsRetainValidNativeConstants"
         ],
         "nativeEvidence": []
       }

@@ -164,6 +164,8 @@ vocabulary/source mapping. It does not supply their implementation.
   Adjacent string literals are combined before supported option, default,
   import-path and reserved-name checks. Escape decoding remains incomplete;
   syntax discriminators do not accept concatenated literals.
+  Option and default validation checks token kinds before values, so quoted
+  strings cannot satisfy boolean, floating-point or enum constant requirements.
   Editions and custom extensions remain unsupported. This does not add gRPC
   API operation selection.
 - Add full API format validators and the remaining language resolvers. The

@@ -67,6 +67,11 @@ supported string-valued options or defaults, as defined by the
 Path and duplicate-name checks use the combined value before acquisition.
 The `syntax` discriminator still requires one literal; concatenation does not
 add escape decoding or unsupported option policies.
+Option and default checks distinguish quoted strings from native constants.
+For example, `"true"` cannot satisfy a boolean option, and `"ZERO"` cannot
+satisfy an enum default. This also applies when adjacent literals produce the
+same text. Boolean options report `protobuf.option`; malformed defaults report
+`protobuf.default`. String and bytes defaults retain their quoted representation.
 Editions, custom extensions, complete weak-import semantics and gRPC API
 selection remain unsupported.
 
