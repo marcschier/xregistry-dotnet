@@ -13103,14 +13103,18 @@
       "text": "- MUST NOT be present if the Resource model's `validateformat` attribute is `false` or the Version's `format` attribute is absent.",
       "review": {
         "status": "reviewed",
-        "note": "ApplyValidation removes flags/reasons when not requested. Direct no-compatibility cases exist but do not prove both independent format-flag absence cases (validateformat=false and format absent); no unrelated syntax success is substituted.",
+        "note": "Direct tests prove flag and reason absence for both independent gates: a recognized format with model validation disabled, and a Version without format. Publication, document replacement and new Versions retain exact bytes without validator calls; removing a checked format clears its prior result flags.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DisabledFormatValidationSkipsRecognizedFormatsAndOmitsResultFlags",
+          "VersionsWithoutFormatSkipValidatorCallsAndValidationFlags",
+          "RemovingFormatClearsPriorValidationFlagsWithoutAnotherValidatorCall"
+        ],
         "nativeEvidence": []
       }
     },

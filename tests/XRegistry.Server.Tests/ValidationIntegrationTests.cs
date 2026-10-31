@@ -18,6 +18,47 @@ public class ValidationIntegrationTests
         """;
 
     [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task DisabledFormatValidationSkipsRecognizedFormatsAndOmitsResultFlags(bool strict)
+    {
+        var validator = new ExactValidator();
+        var model = ValidatingModel.Replace("\"validateformat\":true", "\"validateformat\":false,\"strictvalidation\":" +
+            (strict ? "true" : "false"), StringComparison.Ordinal)
+            .Replace("\"validatecompatibility\":true", "\"validatecompatibility\":false", StringComparison.Ordinal);
+        var engine = new RegistryEngine(new()
+        {
+            RegistryId = "disabled-format",
+            PublicRoot = new Uri("https://registry.example"),
+            Model = RegistryModel.Compile(RegistryJson.Parse(model)),
+            ResourceValidator = validator
+        }, new InMemoryRegistryPersistence(), new PermitPolicy());
+        await Send(engine, RegistryAction.Replace, "/teams/g/files/f$details", """
+            {"versionid":"v1","format":"test/v1","filebase64":"AA=="}
+            """);
+        await Send(engine, RegistryAction.Patch, "/teams/g/files/f/versions/v1$details", """
+            {"filebase64":"AQ=="}
+            """);
+        await Send(engine, RegistryAction.Post, "/teams/g/files/f$details", """
+            {"versionid":"v2","format":"test/v1","filebase64":"Ag=="}
+            """);
+        foreach (var version in new[] { "v1", "v2" })
+        {
+            var result = await Send(engine, RegistryAction.Read, "/teams/g/files/f/versions/" + version + "$details");
+            await Assert.That(result.Metadata!.RootElement.GetProperty("format").GetString()).IsEqualTo("test/v1");
+            foreach (var field in new[] { "formatvalidated", "formatvalidatedreason", "compatibilityvalidated", "compatibilityvalidatedreason" })
+            {
+                await Assert.That(result.Metadata.RootElement.TryGetProperty(field, out _)).IsFalse();
+            }
+            var stored = await Send(engine, RegistryAction.Read, "/teams/g/files/f/versions/" + version);
+            using var bytes = stored.Document!.OpenRead();
+            await Assert.That(bytes.ReadByte()).IsEqualTo(version == "v1" ? 1 : 2);
+            await Assert.That(bytes.ReadByte()).IsEqualTo(-1);
+        }
+        await Assert.That(validator.Calls).IsEqualTo(0);
+    }
+
+    [Test]
     [Arguments(false, false)]
     [Arguments(false, true)]
     [Arguments(true, false)]
