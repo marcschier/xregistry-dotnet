@@ -103,7 +103,7 @@ internal static partial class ModelCompiler
 
             var count = BigInteger.Zero;
             var max = Member(value, "maxversions");
-            if (HasValue(max))
+            if (max.ValueKind != JsonValueKind.Undefined)
             {
                 if (max.ValueKind != JsonValueKind.Number)
                 {

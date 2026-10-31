@@ -271,6 +271,7 @@ public class RegistryModelTests
     [Arguments("""{"singular":"file","maxversions":-1}""", "maxversions")]
     [Arguments("""{"singular":"file","maxversions":0.5}""", "maxversions")]
     [Arguments("""{"singular":"file","maxversions":"1"}""", "maxversions")]
+    [Arguments("""{"singular":"file","maxversions":null}""", "maxversions")]
     [Arguments("""{"singular":"file","hasdocument":1}""", "hasdocument")]
     [Arguments("""{"singular":"file","typemap":{"a**b":"json"}}""", "typemap/a**b")]
     [Arguments("""{"singular":"file","typemap":{"a":"yaml"}}""", "typemap/a")]
