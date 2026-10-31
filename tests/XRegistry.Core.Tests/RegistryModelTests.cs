@@ -26,6 +26,7 @@ public class RegistryModelTests
         await Assert.That(resource.MaxVersions).IsEqualTo(BigInteger.Zero);
         await Assert.That(resource.HasDocument).IsTrue();
         await Assert.That(resource.SetVersionId).IsTrue();
+        await Assert.That(resource.Annotations.Description).IsNull();
         await Assert.That(resource.Annotations.ModelVersion).IsNull();
         await Assert.That(resource.Annotations.Labels.Count).IsEqualTo(0);
         await Assert.That(resource.VersionMode).IsEqualTo("manual");
@@ -44,11 +45,13 @@ public class RegistryModelTests
     {
         var model = RegistryModel.Compile(RegistryJson.Parse("""
             {"groups":{"dirs":{"singular":"dir","resources":{"files":{
-              "singular":"file","modelversion":"1.0-rc4+local","labels":{"empty":"","owner":"team"}
+              "singular":"file","description":"Files published for the team",
+              "modelversion":"1.0-rc4+local","labels":{"empty":"","owner":"team"}
             }}}}}
             """));
         var resource = model.Groups["dirs"].Resources["files"];
 
+        await Assert.That(resource.Annotations.Description).IsEqualTo("Files published for the team");
         await Assert.That(resource.Annotations.ModelVersion).IsEqualTo("1.0-rc4+local");
         await Assert.That(resource.Annotations.Labels.Count).IsEqualTo(2);
         await Assert.That(resource.Annotations.Labels["empty"]).IsEqualTo("");
@@ -56,6 +59,7 @@ public class RegistryModelTests
 
         var effective = model.EffectiveModel.RootElement.GetProperty("groups").GetProperty("dirs")
             .GetProperty("resources").GetProperty("files");
+        await Assert.That(effective.GetProperty("description").GetString()).IsEqualTo("Files published for the team");
         await Assert.That(effective.GetProperty("modelversion").GetString()).IsEqualTo("1.0-rc4+local");
         await Assert.That(effective.GetProperty("labels").GetProperty("empty").GetString()).IsEqualTo("");
         await Assert.That(effective.GetProperty("labels").GetProperty("owner").GetString()).IsEqualTo("team");

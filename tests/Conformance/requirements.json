@@ -31388,15 +31388,18 @@
       "text": "- OPTIONAL",
       "review": {
         "status": "reviewed",
-        "note": "Resource description is an optional string annotation preserved by Annotations/ModelWriter and not interpreted as document content. No direct Resource-description source/effective assertion was found; attribute-description include tests are a different scope.",
+        "note": "Resource description is an optional string annotation preserved by Annotations/ModelWriter and not interpreted as document content. CompilesIndependentMinimalSpecModel asserts omission; ResourceAnnotationsPreserveModelVersionAndEmptyLabelValues asserts the authored description in both the compiled annotations and effective model.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CompilesIndependentMinimalSpecModel",
+          "ResourceAnnotationsPreserveModelVersionAndEmptyLabelValues"
+        ],
         "nativeEvidence": []
       }
     },
