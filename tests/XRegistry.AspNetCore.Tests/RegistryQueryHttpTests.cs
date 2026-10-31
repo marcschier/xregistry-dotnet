@@ -155,6 +155,7 @@ public class RegistryQueryHttpTests
     [Test]
     [Arguments("limit=0", "bad_flag")]
     [Arguments("limit=18446744073709551616", "bad_flag")]
+    [Arguments("sort=rank&sort=name", "bad_sort")]
     [Arguments("sort=unknown", "bad_sort")]
     [Arguments("filter=active%3DTRUE", "bad_filter")]
     public async Task InvalidQueryCasesHaveIndependent400Errors(string query, string code)

@@ -95340,13 +95340,18 @@
       ],
       "text": "The [core xRegistry specification](./spec.md) defines a set of [request flags](./spec.md#request-flags) that MAY be used to control the processing of requests as well as influence how response messages are generated. Each flag is mapped to an HTTP query parameter per the following rules:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The HTTP binding maps Core flags from the raw query string into ordered request parameters; integration tests exercise composed filter, sort, inline, document, and binary flags.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SharedLogicalFactsSurviveRawHttpDefaultMetaFilteringAndBinaryDocumentProjection",
+          "RawHttpFilterSortAndOpaqueLinksUseTrustedMountCountAndExpiry"
+        ],
         "nativeEvidence": []
       }
     },
@@ -95371,13 +95376,19 @@
       ],
       "text": "- When the flag is a boolean type of flag then it MUST be serialized as `?FLAG_NAME`, all lower case.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Raw HTTP integration requests use lower-case boolean names without a value and verify their document, binary, and collections effects.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SharedLogicalFactsSurviveRawHttpDefaultMetaFilteringAndBinaryDocumentProjection",
+          "MappedCollectionsOnlyResponseKeepsNestedShortSelf",
+          "MetadataDocumentProjectionAndHeadKeepPageRepresentationStable"
+        ],
         "nativeEvidence": []
       }
     },
@@ -95403,13 +95414,18 @@
       ],
       "text": "- When the flag has a single value associated with it, then it MUST be serialized as `?FLAG_NAME=VALUE`, where the `FLAG_NAME` MUST be all lower case. The flag MUST NOT be specified more than once.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "HTTP query tests exercise lower-case valued flags and verify that a repeated single-valued sort parameter is rejected.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "RawHttpFilterSortAndOpaqueLinksUseTrustedMountCountAndExpiry",
+          "InvalidQueryCasesHaveIndependent400Errors"
+        ],
         "nativeEvidence": []
       }
     },
@@ -95434,13 +95450,21 @@
       ],
       "text": "- When the flag allows for multiple values, then each value MUST be serialized as a separate query parameter per the previous bullets.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The HTTP client preserves ordered repeated query entries, while Server integration tests exercise repeated filter, ignore, and inline parameters.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "RegistryPrefixAndOrderedRepeatedParametersArePreserved",
+          "RawRepeatedFiltersAreOrAndQuotedValuesAreNotSqlLiterals",
+          "ReadonlyIgnoreReturnsOnlyProcessedEntriesAndRejectsSingleTargets",
+          "EnabledExplicitInlineOverridesExportDefaults"
+        ],
         "nativeEvidence": []
       }
     },
@@ -95465,13 +95489,18 @@
       ],
       "text": "A server MAY support the `?filter` query parameter allowing clients to reduce the response entities to just the ones that match certain criteria.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The HTTP Server applies filter query parameters to collection results and reports matching entities and counts.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "RawHttpFilterSortAndOpaqueLinksUseTrustedMountCountAndExpiry",
+          "RawRepeatedFiltersAreOrAndQuotedValuesAreNotSqlLiterals"
+        ],
         "nativeEvidence": []
       }
     },
@@ -95496,13 +95525,17 @@
       ],
       "text": "This query parameter MUST be serialized as:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The HTTP filter binding accepts the comma-separated expression syntax and repeated filter keys with percent-encoded values.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "RawRepeatedFiltersAreOrAndQuotedValuesAreNotSqlLiterals"
+        ],
         "nativeEvidence": []
       }
     },
@@ -95527,13 +95560,17 @@
       ],
       "text": "- All `<EXPRESSION>` values within the scope of one `?filter` query parameter MUST be evaluated as a logical `AND` per the [core specification](./spec.md#filter-flag).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "One raw HTTP filter containing comma-separated predicates returns only entities satisfying both predicates.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "RawRepeatedFiltersAreOrAndQuotedValuesAreNotSqlLiterals"
+        ],
         "nativeEvidence": []
       }
     },
@@ -95559,13 +95596,17 @@
       ],
       "text": "- The `?filter` query parameter MAY appear multiple times and if so MUST be evaluated as a logical `OR` with the other `?filter` query parameters that appear - per the [core specification](./spec.md#filter-flag).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Separate raw HTTP filter parameters union their result sets, while comma-separated expressions within each parameter remain conjunctive.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "RawRepeatedFiltersAreOrAndQuotedValuesAreNotSqlLiterals"
+        ],
         "nativeEvidence": []
       }
     },
@@ -95591,13 +95632,18 @@
       ],
       "text": "A server MAY support the `?ignore` query parameter on any write operation to indicate that certain aspects of the request message MUST be ignored by the server.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The HTTP Server applies ignore parameters to both collection writes and root POST operations, leaving ignored configuration unchanged.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ReadonlyIgnoreReturnsOnlyProcessedEntriesAndRejectsSingleTargets",
+          "RootPostDoesNotReinterpretIgnoredConfiguration"
+        ],
         "nativeEvidence": []
       }
     },
@@ -95622,13 +95668,18 @@
       ],
       "text": "This query parameter MUST be serialized as:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "HTTP write tests cover comma-separated values, a bare parameter, an empty value, and the wildcard alias.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "RootPostDoesNotReinterpretIgnoredConfiguration",
+          "RootPostWithOnlyIgnoredConfigurationReturnsEmptyMap"
+        ],
         "nativeEvidence": []
       }
     },
@@ -95653,13 +95704,18 @@
       ],
       "text": "- The `?ignore` query parameter MAY be specified more than once.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Repeated ignore parameters are applied together to a collection PATCH and a multi-group root POST.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ReadonlyIgnoreReturnsOnlyProcessedEntriesAndRejectsSingleTargets",
+          "RootPostReturnsOnlyProcessedGroupsAndPreservesIgnoredConfiguration"
+        ],
         "nativeEvidence": []
       }
     },
@@ -95684,13 +95740,19 @@
       ],
       "text": "A server MAY support the `?inline` query parameter on any request to indicate which nested collections/objects, or potentially large attributes, are to be included in the response message.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The HTTP Server supports inline query parameters on registry, resource, and collection reads, including paged document views.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "MetadataDocumentProjectionAndHeadKeepPageRepresentationStable",
+          "EnabledExplicitInlineOverridesExportDefaults",
+          "DocumentViewMetaInlineKeepsResourceShapeWithoutDuplicatingTargetMetadataForAliases"
+        ],
         "nativeEvidence": []
       }
     },
@@ -95715,13 +95777,18 @@
       ],
       "text": "This query parameter MUST be serialized as:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "HTTP inline parameters accept bare, empty, single-path, comma-separated-path, and repeated-path forms.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EnabledExplicitInlineOverridesExportDefaults",
+          "EnabledBareInlineOverridesExportConfigurationDefaults"
+        ],
         "nativeEvidence": []
       }
     },
@@ -95746,13 +95813,17 @@
       ],
       "text": "- The value portion of the `?inline` query parameter MAY Include a single `<PATH>` value or be a comma-separated list of `<PATH>` values.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Both a single inline path and a comma-separated path list produce the requested response projection.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EnabledExplicitInlineOverridesExportDefaults"
+        ],
         "nativeEvidence": []
       }
     },
@@ -95777,13 +95848,17 @@
       ],
       "text": "- The `?inline` query parameter MAY be specified more than once.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Repeated inline parameters compose into the same selected output as a comma-separated list.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EnabledExplicitInlineOverridesExportDefaults"
+        ],
         "nativeEvidence": []
       }
     },
@@ -95808,13 +95883,18 @@
       ],
       "text": "A server MAY support the `?sort` query parameter on any request directed to a collection of Groups, Resources or Versions.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Raw HTTP queries apply sorting to Group and Resource collections, including paginated responses.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "RawHttpFilterSortAndOpaqueLinksUseTrustedMountCountAndExpiry",
+          "MetaAndDefaultVersionFactsUseSharedCorePlanesAndExactNumericOrdering"
+        ],
         "nativeEvidence": []
       }
     },
@@ -95839,13 +95919,19 @@
       ],
       "text": "This query parameter MUST be serialized as:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "HTTP sort queries accept both the attribute-only form and an explicit asc/desc direction; invalid and repeated values are rejected.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "MetaAndDefaultVersionFactsUseSharedCorePlanesAndExactNumericOrdering",
+          "RawHttpFilterSortAndOpaqueLinksUseTrustedMountCountAndExpiry",
+          "InvalidQueryCasesHaveIndependent400Errors"
+        ],
         "nativeEvidence": []
       }
     },

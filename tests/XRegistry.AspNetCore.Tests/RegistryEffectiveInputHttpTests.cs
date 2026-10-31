@@ -72,7 +72,7 @@ public class RegistryEffectiveInputHttpTests
         await SeedDocumentAsync(host.Client);
 
         var body = (await GetMetadataAsync(host.Client, "/registry/export?" + query)).RootElement;
-        await Assert.That(body.GetProperty("self").GetString()).IsEqualTo("#/");
+        await Assert.That(body.GetProperty("self").GetString()).IsEqualTo("#");
         await Assert.That(body.GetProperty("teamsurl").GetString()).IsEqualTo("#/teams");
         await Assert.That(body.GetProperty("teams").EnumerateObject().Single().Name).IsEqualTo("g");
         var group = body.GetProperty("teams").GetProperty("g");
@@ -334,7 +334,7 @@ public class RegistryEffectiveInputHttpTests
     private static async Task AssertFullExportAsync(RegistryJson metadata, bool includeConfiguration)
     {
         var root = metadata.RootElement;
-        await Assert.That(root.GetProperty("self").GetString()).IsEqualTo("#/");
+        await Assert.That(root.GetProperty("self").GetString()).IsEqualTo("#");
         await Assert.That(root.GetProperty("teamsurl").GetString()).IsEqualTo("#/teams");
         var resource = root.GetProperty("teams").GetProperty("g").GetProperty("files").GetProperty("f");
         await Assert.That(resource.GetProperty("self").GetString()).IsEqualTo("#/teams/g/files/f");

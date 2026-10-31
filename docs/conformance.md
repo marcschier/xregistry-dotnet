@@ -44,7 +44,7 @@ it does not transfer historical qualification to a successor.
 | federation | 120 | 56 | 0 |
 | file | 41 | 19 | 0 |
 | git | 39 | 18 | 0 |
-| http | 520 | 258 | 0 |
+| http | 520 | 275 | 0 |
 | http-federation | 84 | 36 | 0 |
 | mapping | 95 | 39 | 0 |
 | media-endpoints | 7 | 7 | 0 |
