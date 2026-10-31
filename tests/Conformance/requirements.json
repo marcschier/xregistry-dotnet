@@ -71648,13 +71648,17 @@
       ],
       "text": "- MUST be `<SINGULAR>id` of the Version.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Explicit Version routes expose exact Root and Child Version identities with the owning noteid. API and document export preserve those identities after accepted matching updates, ignored membership input and restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ResourceDefaultVersionIdentityRejectsMismatchesAndIgnoresForgedMembership"
+        ],
         "nativeEvidence": []
       }
     },
@@ -71679,13 +71683,17 @@
       ],
       "text": "- REQUIRED in API and document views.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Selected and nonselected Versions expose their exact versionid in API responses and full document export after metadata replacement, ignored membership inputs and persisted restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ResourceDefaultVersionIdentityRejectsMismatchesAndIgnoresForgedMembership"
+        ],
         "nativeEvidence": []
       }
     },
@@ -71710,13 +71718,17 @@
       ],
       "text": "- MUST NOT use a value of `null` or `request` due to these being reserved for use by the [SetDefaultVersionID Flag](#setdefaultversionid-flag).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Both reserved spellings reject malformed_id on explicit Version replacement, Resource POST, Version collection PATCH and new Resource replacement. Full export and events remain unchanged through restart; differently cased Null and Request are accepted exact identities.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ReservedVersionIdsRejectAcrossPublicationRoutesWithoutChangingState"
+        ],
         "nativeEvidence": []
       }
     },
@@ -71741,13 +71753,17 @@
       ],
       "text": "- If present in a request operation's serialization of a Resource's default Version attributes, then it MUST match the Resource's current `meta.defaultversionid` value (if defined), otherwise an error ([mismatched_id](./spec.md#mismatched_id)) MUST be generated.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Resource PATCH and replacement reject an older, wrong-case or missing Version ID with mismatched_id. Full exported state and event count survive rejection and restart; the exact current Child ID accepts the intended metadata update.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ResourceDefaultVersionIdentityRejectsMismatchesAndIgnoresForgedMembership"
+        ],
         "nativeEvidence": []
       }
     },
@@ -71772,13 +71788,17 @@
       ],
       "text": "- REQUIRED.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Both selected and nonselected Versions always expose a Boolean membership value in API metadata and document export, regardless of submitted read-only values; output survives restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ResourceDefaultVersionIdentityRejectsMismatchesAndIgnoresForgedMembership"
+        ],
         "nativeEvidence": []
       }
     },
@@ -71803,13 +71823,17 @@
       ],
       "text": "- MUST be a [read-only](#read-only-changed) attribute.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "PATCH and replacement ignore supplied isdefault true, false, null, quoted Boolean, object and number inputs on both selected and nonselected Versions. Actual Meta selection controls membership in API and document export after restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ResourceDefaultVersionIdentityRejectsMismatchesAndIgnoresForgedMembership"
+        ],
         "nativeEvidence": []
       }
     },
@@ -71865,13 +71889,17 @@
       ],
       "text": "- When specified, MUST be either `true` or `false`, case-sensitive.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Authoritative isdefault output is a JSON Boolean for both membership states in API and document views. Read-only client input is ignored rather than subjected to mutable-value admission, including quoted and non-Boolean values.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ResourceDefaultVersionIdentityRejectsMismatchesAndIgnoresForgedMembership"
+        ],
         "nativeEvidence": []
       }
     },

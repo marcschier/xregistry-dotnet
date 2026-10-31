@@ -12,6 +12,91 @@ namespace XRegistry.Server.Tests;
 public class ModelAndVersionTests
 {
     [Test]
+    [Arguments("null")]
+    [Arguments("request")]
+    public async Task ReservedVersionIdsRejectAcrossPublicationRoutesWithoutChangingState(string id)
+    {
+        var store = new InMemoryRegistryPersistence();
+        var engine = Create(persistence: store);
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n/versions/Root", """{"name":"retained"}""");
+        var before = (await Send(engine, RegistryAction.Read, "/export")).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        foreach (var (action, path, body) in new[]
+        {
+            (RegistryAction.Replace, "/teams/g/notes/n/versions/" + id, """{"name":"invalid"}"""),
+            (RegistryAction.Post, "/teams/g/notes/n", "{\"versionid\":\"" + id + "\",\"name\":\"invalid\"}"),
+            (RegistryAction.Patch, "/teams/g/notes/n/versions", "{\"" + id + "\":{\"name\":\"invalid\"}}"),
+            (RegistryAction.Replace, "/teams/g/notes/new", "{\"versionid\":\"" + id + "\"}")
+        })
+        {
+            await ExpectCode(() => Send(engine, action, path, body), "malformed_id");
+            await Assert.That((await Send(engine, RegistryAction.Read, "/export")).Metadata!.RootElement.GetRawText())
+                .IsEqualTo(before);
+            await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        }
+        await Assert.That((await Send(Create(persistence: store), RegistryAction.Read, "/export")).Metadata!.RootElement.GetRawText())
+            .IsEqualTo(before);
+        var allowedId = id == "null" ? "Null" : "Request";
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n/versions/" + allowedId, """{"name":"case-sensitive"}""");
+        var accepted = (await Send(Create(persistence: store), RegistryAction.Read,
+            "/teams/g/notes/n/versions/" + allowedId)).Metadata!.RootElement;
+        await Assert.That(accepted.GetProperty("versionid").GetString()).IsEqualTo(allowedId);
+        await Assert.That(accepted.GetProperty("name").GetString()).IsEqualTo("case-sensitive");
+    }
+
+    [Test]
+    [Arguments(RegistryAction.Patch)]
+    [Arguments(RegistryAction.Replace)]
+    public async Task ResourceDefaultVersionIdentityRejectsMismatchesAndIgnoresForgedMembership(RegistryAction action)
+    {
+        var store = new InMemoryRegistryPersistence();
+        var engine = Create(persistence: store);
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n/versions/Root", """{"name":"root"}""");
+        await Send(engine, RegistryAction.Post, "/teams/g/notes/n", """{"versionid":"Child","name":"child"}""");
+        var before = (await Send(engine, RegistryAction.Read, "/export")).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        foreach (var id in new[] { "Root", "child", "missing" })
+        {
+            await ExpectCode(() => Send(engine, action, "/teams/g/notes/n",
+                "{\"versionid\":\"" + id + "\",\"name\":\"must not persist\"}"), "mismatched_id");
+            await Assert.That((await Send(engine, RegistryAction.Read, "/export")).Metadata!.RootElement.GetRawText())
+                .IsEqualTo(before);
+            await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        }
+        await Assert.That((await Send(Create(persistence: store), RegistryAction.Read, "/export")).Metadata!.RootElement.GetRawText())
+            .IsEqualTo(before);
+        await Send(engine, action, "/teams/g/notes/n", """{"versionid":"Child","name":"matched","isdefault":false}""");
+        foreach (var input in new[] { "true", "false", "null", "\"True\"", "{}", "1" })
+        {
+            await Send(engine, action, "/teams/g/notes/n/versions/Root", "{\"name\":\"root\",\"isdefault\":" + input + "}");
+            await Send(engine, action, "/teams/g/notes/n/versions/Child", "{\"name\":\"matched\",\"isdefault\":" + input + "}");
+            await AssertMembershipAsync(engine);
+        }
+        await AssertMembershipAsync(Create(persistence: store));
+        var doc = (await Send(engine, RegistryAction.Read, "/export")).Metadata!.RootElement
+            .GetProperty("teams").GetProperty("g").GetProperty("notes").GetProperty("n").GetProperty("versions");
+        await Assert.That(doc.GetProperty("Root").GetProperty("isdefault").GetBoolean()).IsFalse();
+        await Assert.That(doc.GetProperty("Child").GetProperty("isdefault").GetBoolean()).IsTrue();
+        await Assert.That(doc.GetProperty("Root").GetProperty("versionid").GetString()).IsEqualTo("Root");
+        await Assert.That(doc.GetProperty("Child").GetProperty("versionid").GetString()).IsEqualTo("Child");
+
+        async Task AssertMembershipAsync(RegistryEngine current)
+        {
+            var meta = (await Send(current, RegistryAction.Read, "/teams/g/notes/n/meta")).Metadata!.RootElement;
+            await Assert.That(meta.GetProperty("defaultversionid").GetString()).IsEqualTo("Child");
+            var root = (await Send(current, RegistryAction.Read, "/teams/g/notes/n/versions/Root")).Metadata!.RootElement;
+            var child = (await Send(current, RegistryAction.Read, "/teams/g/notes/n/versions/Child")).Metadata!.RootElement;
+            await Assert.That(root.GetProperty("versionid").GetString()).IsEqualTo("Root");
+            await Assert.That(child.GetProperty("versionid").GetString()).IsEqualTo("Child");
+            await Assert.That(root.GetProperty("noteid").GetString()).IsEqualTo("n");
+            await Assert.That(child.GetProperty("noteid").GetString()).IsEqualTo("n");
+            await Assert.That(root.GetProperty("isdefault").GetBoolean()).IsFalse();
+            await Assert.That(child.GetProperty("isdefault").GetBoolean()).IsTrue();
+            await Assert.That(child.GetProperty("name").GetString()).IsEqualTo("matched");
+        }
+    }
+
+    [Test]
     public async Task DefaultSelectionFlagOverridesMetaAndAtomicallyReplacesDeletedDefault()
     {
         var store = new InMemoryRegistryPersistence();
