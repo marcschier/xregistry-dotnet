@@ -17989,19 +17989,18 @@
       "text": "Sorting MUST be done using the data type comparison rules as specified in the [filter Flag](#filter-flag) section. However, there are certain situations that might introduce ambiguity between implementations. For example, not all persistent stores support `NaNs` (Not-a-Number values), or if the data type of an attribute changes on a per-instance basis, then consistent sorting across implementations on that attribute might be challenging. While interoperability is critical, requiring consistency in these edge cases could be excessively burdensome for implementations. To that end, this specification does not mandate the exact ordering in these situations, aside from the requirement that an implementation MUST sort the result the same way each time.",
       "review": {
         "status": "reviewed",
-        "note": "Typed scalar and stable ID ordering is supported; ordinal case-insensitive strings are a documented policy choice. Full mixed-type/NaN/conditional-type deterministic repeat behavior and every comparison type are not independently established by ordinary numeric/name sorts.",
+        "note": "Numeric, Boolean, string and timestamp sorts use their comparison rules. Conditional timestamp/string values produce the same ID order across repeated queries with different source orders; JSON cannot represent NaN.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
+          "ModelKnownScalarSortUsesMissingLowAndSameDirectionIdTies",
           "SortingUsesScalarValuesMissingLowAndSameDirectionIdTies",
-          "SortRejectsUnknownComplexWildcardAndNestedCollectionProjections",
-          "EscapedStarsAreLiteralsAndTimestampOffsetsNormalizeBeforeComparison",
-          "FractionalAndNegativeExponentComparisonsNeverUseFloatingPoint"
+          "SortUsesTimestampComparisonAndIsDeterministicAcrossConditionalTypes"
         ],
         "nativeEvidence": []
       }

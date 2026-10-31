@@ -125,6 +125,25 @@ public class SharedQuerySemanticsTests
     }
 
     [Test]
+    public async Task SortUsesTimestampComparisonAndIsDeterministicAcrossConditionalTypes()
+    {
+        var source = Groups();
+        source.Collections["/fleets"] = ["/fleets/a", "/fleets/c", "/fleets/b"];
+        source.Add("/fleets/a", """{"fleetid":"a","kind":"clock","when":"2025-01-01T02:00:00+02:00"}""");
+        source.Add("/fleets/b", """{"fleetid":"b","kind":"clock","when":"2024-12-31T23:59:59Z"}""");
+        source.Add("/fleets/c", """{"fleetid":"c","kind":"text","when":"2025-01-01T00:00:00Z"}""");
+
+        using var firstBudget = new RegistryQueryBudget();
+        var first = await Evaluate(source, firstBudget, sort: "when");
+        source.Collections["/fleets"] = ["/fleets/b", "/fleets/c", "/fleets/a"];
+        using var secondBudget = new RegistryQueryBudget();
+        var second = await Evaluate(source, secondBudget, sort: "when");
+
+        await Assert.That(Ids(first)).IsEqualTo("b,c,a");
+        await Assert.That(Ids(second)).IsEqualTo("b,c,a");
+    }
+
+    [Test]
     public async Task EscapedStarsFractionsLargeNegativeExponentsAndConditionalTimestampsRemainExact()
     {
         var source = Groups();
