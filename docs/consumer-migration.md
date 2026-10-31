@@ -72,6 +72,13 @@ For example, `"true"` cannot satisfy a boolean option, and `"ZERO"` cannot
 satisfy an enum default. This also applies when adjacent literals produce the
 same text. Boolean options report `protobuf.option`; malformed defaults report
 `protobuf.default`. String and bytes defaults retain their quoted representation.
+Reserved-number ranges cannot overlap, including at a shared endpoint or across
+separate statements. Duplicate singleton reservations also fail with
+`protobuf.reserved`; adjacent nonoverlapping ranges remain valid. Checks retain
+the distinct message-tag and signed enum-number bounds and charge each interval
+comparison to the validation work budget. The publisher's
+[descriptor schema](https://github.com/protocolbuffers/protobuf/blob/v33.0/src/google/protobuf/descriptor.proto)
+defines these range constraints.
 Editions, custom extensions, complete weak-import semantics and gRPC API
 selection remain unsupported.
 

@@ -554,6 +554,77 @@ public class ProtobufValidationTests
     }
 
     [Test]
+    [Arguments("reserved 1 to 5, 5 to 9;", DocumentValidationStatus.Invalid)]
+    [Arguments("reserved 5 to 9; reserved 1 to 5;", DocumentValidationStatus.Invalid)]
+    [Arguments("reserved 1 to 9, 3 to 5;", DocumentValidationStatus.Invalid)]
+    [Arguments("reserved 3 to 5, 1 to 9;", DocumentValidationStatus.Invalid)]
+    [Arguments("reserved 4; reserved 4;", DocumentValidationStatus.Invalid)]
+    [Arguments("reserved 1 to 5; reserved 3;", DocumentValidationStatus.Invalid)]
+    [Arguments("reserved 3; reserved 1 to 5;", DocumentValidationStatus.Invalid)]
+    [Arguments("reserved 1 to max; reserved 2;", DocumentValidationStatus.Invalid)]
+    [Arguments("reserved 1 to 4, 5 to 9;", DocumentValidationStatus.Valid)]
+    [Arguments("reserved 5 to 9; reserved 1 to 4;", DocumentValidationStatus.Valid)]
+    [Arguments("reserved 1; reserved 2;", DocumentValidationStatus.Valid)]
+    public async Task ReservedRangesRejectOverlapWithoutRejectingAdjacentIntervals(
+        string reservations, DocumentValidationStatus expected)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            foreach (var declaration in new[]
+            {
+                $"message Root {{ {reservations} }}",
+                $"enum State {{ ZERO=0; {reservations} }}"
+            })
+            {
+                var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                    Encoding.UTF8.GetBytes($"syntax=\"proto{syntax}\"; {declaration}"));
+                await Assert.That(result.Status).IsEqualTo(expected);
+                if (expected == DocumentValidationStatus.Invalid)
+                {
+                    await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.reserved");
+                }
+                else { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("reserved -2147483648 to -1; reserved -1;", DocumentValidationStatus.Invalid)]
+    [Arguments("reserved 2147483647; reserved 2147483647 to max;", DocumentValidationStatus.Invalid)]
+    [Arguments("reserved -2147483648 to -2; reserved -1; reserved 2147483647;", DocumentValidationStatus.Valid)]
+    public async Task EnumReservedRangesCheckBothSignedBoundaries(
+        string reservations, DocumentValidationStatus expected)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            Encoding.UTF8.GetBytes($"syntax=\"proto3\"; enum State {{ ZERO=0; {reservations} }}"));
+        await Assert.That(result.Status).IsEqualTo(expected);
+        if (expected == DocumentValidationStatus.Invalid)
+        {
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.reserved");
+        }
+        else { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+    }
+
+    [Test]
+    [Arguments(20000, DocumentValidationStatus.Indeterminate)]
+    [Arguments(100000, DocumentValidationStatus.Valid)]
+    public async Task ReservedRangeComparisonsRespectTheCumulativeWorkBudget(
+        long workLimit, DocumentValidationStatus expected)
+    {
+        var ranges = string.Join(",", Enumerable.Range(1, 256).Select(static number =>
+            number.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            Encoding.UTF8.GetBytes($"syntax=\"proto3\"; message Root {{ reserved {ranges}; }}"),
+            new DocumentValidationOptions { MaxWork = workLimit });
+        await Assert.That(result.Status).IsEqualTo(expected);
+        if (expected == DocumentValidationStatus.Indeterminate)
+        {
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("limit.work");
+        }
+        else { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+    }
+
+    [Test]
     public async Task SuppliedImportBindsTheDeclaredMessageNotArbitraryText()
     {
         var source = Encoding.UTF8.GetBytes("""syntax="proto3"; import "child.proto"; message Parent { Child child=1; }""");

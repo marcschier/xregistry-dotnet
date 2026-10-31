@@ -166,6 +166,8 @@ vocabulary/source mapping. It does not supply their implementation.
   syntax discriminators do not accept concatenated literals.
   Option and default validation checks token kinds before values, so quoted
   strings cannot satisfy boolean, floating-point or enum constant requirements.
+  Reserved-number checks reject overlapping intervals and duplicate singletons
+  across statements while accepting adjacent nonoverlapping ranges.
   Editions and custom extensions remain unsupported. This does not add gRPC
   API operation selection.
 - Add full API format validators and the remaining language resolvers. The

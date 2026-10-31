@@ -607,6 +607,13 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                     Require(first >= (enumeration ? int.MinValue : 1) &&
                         last <= (enumeration ? int.MaxValue : 536870911) && first <= last,
                         "protobuf.reserved", "The reserved number range is invalid.");
+                    foreach (var range in ranges)
+                    {
+                        owner.Context.Work();
+                        Require(last < range.First || first > range.Last,
+                            "protobuf.reserved", "Reserved number ranges must not overlap.");
+                    }
+
                     ranges.Add(((int)first, (int)last));
                 }
             }

@@ -43823,7 +43823,10 @@
           "SyntaxDiscriminatorDoesNotAcceptAdjacentLiterals",
           "QuotedOptionValuesNeverMasqueradeAsBooleansOrEnumConstants",
           "QuotedDefaultsNeverMasqueradeAsScalarOrEnumConstants",
-          "TypedDefaultsRetainValidNativeConstants"
+          "TypedDefaultsRetainValidNativeConstants",
+          "ReservedRangesRejectOverlapWithoutRejectingAdjacentIntervals",
+          "EnumReservedRangesCheckBothSignedBoundaries",
+          "ReservedRangeComparisonsRespectTheCumulativeWorkBudget"
         ],
         "nativeEvidence": []
       }
