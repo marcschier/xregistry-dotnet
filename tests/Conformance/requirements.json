@@ -27788,16 +27788,17 @@
       "text": "- OPTIONAL.",
       "review": {
         "status": "reviewed",
-        "note": "Target is optional and absent definitions keep Target null. Scalar validation succeeds without a target/model lookup for ordinary scalar attributes. No independent target-omission assertion spans all three target-capable types.",
+        "note": "XID and URI/URL definitions compile without target. Targetless XIDs remain unrestricted by model type; slash-relative URI/URL values remain unconstrained when target is absent.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "ScalarValuesPreserveTypePrecisionAndNormalizeTimestamps"
+          "TargetlessXidsKeepTheirUnrestrictedEntityKinds",
+          "SlashRelativeValuesWithoutATargetDefinitionRemainUnconstrained"
         ],
         "nativeEvidence": []
       }
