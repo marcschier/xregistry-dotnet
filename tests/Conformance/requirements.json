@@ -31448,15 +31448,18 @@
       "text": "- OPTIONAL.",
       "review": {
         "status": "reviewed",
-        "note": "Resource labels are optional model annotations, separate from Resource-instance Meta labels and Version labels. The compiler shares string-pair parsing with model/Group labels; no direct assertion verifies this Resource-model location or preserves its empty-string values.",
+        "note": "Resource labels are optional model annotations, separate from Resource-instance Meta labels and Version labels. CompilesIndependentMinimalSpecModel asserts omission; ResourceAnnotationsPreserveModelVersionAndEmptyLabelValues preserves empty and nonempty string values through the effective model.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CompilesIndependentMinimalSpecModel",
+          "ResourceAnnotationsPreserveModelVersionAndEmptyLabelValues"
+        ],
         "nativeEvidence": []
       }
     },
@@ -31476,15 +31479,18 @@
       "text": "- OPTIONAL.",
       "review": {
         "status": "reviewed",
-        "note": "Resource modelversion inherits the optional opaque-string semantics, not Version versionid ordering rules. Annotations stores it verbatim and ModelWriter emits it. There is no direct Resource-modelversion assertion in the inspected test set.",
+        "note": "Resource modelversion is an optional opaque string, not a Version versionid ordering value. CompilesIndependentMinimalSpecModel asserts omission; ResourceAnnotationsPreserveModelVersionAndEmptyLabelValues preserves the authored string in the compiled definition and effective model.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CompilesIndependentMinimalSpecModel",
+          "ResourceAnnotationsPreserveModelVersionAndEmptyLabelValues"
+        ],
         "nativeEvidence": []
       }
     },
