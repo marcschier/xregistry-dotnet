@@ -1054,6 +1054,74 @@ public class ProtobufValidationTests
     }
 
     [Test]
+    [Arguments("true")]
+    [Arguments("false")]
+    public async Task AuthoredMapEntryOptionsCannotReplaceMapSyntax(string value)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var label = syntax == 2 ? "optional " : "";
+            foreach (var body in new[]
+            {
+                $"message Root {{ option map_entry={value}; }}",
+                $"message Root {{ message Entry {{ option map_entry={value}; {label}string key=1; {label}int32 value=2; }} }}",
+                $"message Root {{ map<string,int32> values=1; option map_entry={value}; }}"
+            })
+            {
+                var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                    Encoding.UTF8.GetBytes($"syntax='proto{syntax}'; {body}"));
+                await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+                await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.map_entry");
+            }
+        }
+    }
+
+    [Test]
+    public async Task ImportedAuthoredMapEntryOptionsAreRejected()
+    {
+        var requests = 0;
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            Encoding.UTF8.GetBytes("syntax='proto3'; import 'dep.proto'; message Root {}"), new()
+            {
+                ResolveReference = (_, _) =>
+                {
+                    requests++;
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+                        Encoding.UTF8.GetBytes("syntax='proto2'; message Entry { option map_entry=false; }"));
+                }
+            });
+        await Assert.That(requests).IsEqualTo(1);
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.map_entry");
+    }
+
+    [Test]
+    public async Task NativeMapSyntaxDoesNotRequireAnAuthoredMapEntryOption()
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                Encoding.UTF8.GetBytes($"syntax='proto{syntax}'; message Root {{ " +
+                    "map<string,int32> numbers=1; map<int32,Child> children=2; message Child {} }"));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+            await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+        }
+    }
+
+    [Test]
+    [Arguments("option map_entry=true; message Root {}")]
+    [Arguments("message Root { oneof choice { option map_entry=false; string value=1; } }")]
+    [Arguments("message Root {} service S { option map_entry=true; }")]
+    [Arguments("message Root {} service S { rpc Get(Root) returns (Root) { option map_entry=false; } }")]
+    public async Task MapEntryOptionsRejectNonMessageDeclarationPlacement(string body)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            Encoding.UTF8.GetBytes($"syntax='proto3'; {body}"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.option_scope");
+    }
+
+    [Test]
     [Arguments("unknown=true")]
     [Arguments("unknown=17")]
     [Arguments("unknown=\"text\"")]

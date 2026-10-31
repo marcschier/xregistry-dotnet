@@ -822,6 +822,12 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             var value = Constant();
             Expect(";");
             Require(option != "debug_redact", "protobuf.option_scope", "debug_redact is only valid on fields and enum values.");
+            if (option == "map_entry")
+            {
+                Require(target == OptionTarget.Message, "protobuf.option_scope", "map_entry is a message descriptor option.");
+                ValidationContext.Fail(DocumentValidationStatus.Invalid, "$", "protobuf.map_entry",
+                    "map_entry cannot be authored in a schema; use map syntax.");
+            }
             if (option is "java_package" or "java_outer_classname" or "go_package" or "csharp_namespace" or
                 "objc_class_prefix" or "php_namespace" or "php_metadata_namespace" or "ruby_package")
             {

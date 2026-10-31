@@ -227,6 +227,10 @@ vocabulary/source mapping. It does not supply their implementation.
   The `debug_redact` hint now accepts native booleans on fields and enum values,
   including imported declarations. Misplaced, non-boolean and duplicate
   settings fail. Runtime redaction and debug-output formatting are not added.
+  Explicit message `map_entry` assignments now fail per the descriptor's
+  prohibition on authored settings, including false, nested and imported
+  assignments. Native map syntax remains valid; synthetic descriptor generation
+  is not added.
   Enum and enum-value unknown/custom options now report the same unsupported
   policy outcome as other declarations; supported boolean and alias rules,
   enum-value duplicate checks and token-kind checks remain enforced.

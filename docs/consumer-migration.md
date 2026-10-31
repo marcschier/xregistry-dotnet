@@ -209,6 +209,13 @@ non-boolean values and repeated assignments report `protobuf.option`.
 Imported schemas retain the same checks. This validates the authored hint,
 but does not redact runtime values or implement debug-output formatting.
 
+Explicit message `map_entry` assignments report `Invalid` with
+`protobuf.map_entry`, whether the value is `true` or `false`. The publisher's
+descriptor schema prohibits setting this generated option in `.proto` files
+and requires native `map<...>` syntax instead. Nested and imported messages
+retain the same restriction; ordinary map declarations remain valid.
+This does not generate synthetic map-entry descriptors.
+
 Enum and enum-value options use the same explicit policy boundary as other
 declarations. Unknown option names or actual custom-option syntax report
 `Unsupported`, rather than treating an unimplemented option as malformed solely

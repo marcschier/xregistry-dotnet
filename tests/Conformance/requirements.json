@@ -43902,6 +43902,10 @@
           "DebugRedactOptionsRemainSingularOnEachFieldOrEnumValue",
           "DebugRedactOptionsRejectOtherDeclarationScopes",
           "DebugRedactOptionsRetainImportedFieldAndEnumValueValidation",
+          "AuthoredMapEntryOptionsCannotReplaceMapSyntax",
+          "ImportedAuthoredMapEntryOptionsAreRejected",
+          "NativeMapSyntaxDoesNotRequireAnAuthoredMapEntryOption",
+          "MapEntryOptionsRejectNonMessageDeclarationPlacement",
           "EnumAndEnumValueUnknownOptionPoliciesRemainUnsupported",
           "EnumOptionPoliciesPreserveKnownBooleansAliasesAndInvalidSyntax"
         ],
