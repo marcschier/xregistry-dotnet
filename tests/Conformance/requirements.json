@@ -16000,17 +16000,16 @@
       "text": "- `=` operator: - When `<VALUE>` is `null` then only entities without the specified `<ATTRIBUTE>` MUST be included in the response. - When a non-`null` `<VALUE>` is specified then `<VALUE>` MUST be the desired value of the attribute being examined. Only entities whose specified `<ATTRIBUTE>` with this `<VALUE>` MUST be included in the response. - When `<VALUE>` is absent then the implied `<VALUE>` is an empty string and the matching MUST be done as specified in the previous bullet.",
       "review": {
         "status": "reviewed",
-        "note": "Equality, null and absent-value-as-empty literal logic is present and direct vectors cover them. The engine empty-string vector uses name:\"\", which violates name's separate nonempty constraint; it is useful comparator evidence, not proof of valid empty-name ingestion. A valid modeled optional-string empty-value end-to-end vector is still needed before full-row promotion.",
+        "note": "The empty-string `description=` filter matches the entity with an empty description; explicit `null` matches entities where the attribute is absent.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "FilterLiteralMissingNullAndPrecisionCasesHaveIndependentExpectedIds",
-          "OwnsInputAndPreservesExactNumbersAndPresence"
+          "FilterLiteralMissingNullAndPrecisionCasesHaveIndependentExpectedIds"
         ],
         "nativeEvidence": []
       }
@@ -16031,14 +16030,14 @@
       "text": "- `!=`, `<>` operators: - When `<VALUE>` is `null` then it MUST have the same semantics as a filter expression of `<ATTRIBUTE>` as specified above (meaning, present with any non-`null` value). - When `<VALUE>` is non-`null` then only entities without the specified `<ATTRIBUTE>` and `<VALUE>` MUST be included in the response. This MUST be semantically equivalent to `NOT(<ATTRIBUTE>=<VALUE>)`, and this also means that if `<ATTRIBUTE>` is missing then that attribute will match the filter.",
       "review": {
         "status": "reviewed",
-        "note": "Direct vectors cover both != and <> for a non-null numeric value, missing-field inclusion and <>null existence. A full independent !=null and wildcard/empty-string negation matrix is not established from these cases alone.",
+        "note": "Both `!=` and `<>` include the entity with a missing rank when compared with a non-null value; their `null` form matches present non-null ranks.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "FilterLiteralMissingNullAndPrecisionCasesHaveIndependentExpectedIds"
         ],
@@ -16062,14 +16061,14 @@
       "text": "- `<`, `<=`, `>`, `>=` operators: - `<VALUE>` MUST NOT be `null`. - Only entities with the specified `<ATTRIBUTE>` and `<VALUE>` that matches the comparison operator's semantics MUST be included in the response. - `<` refers to \"less than\". - `<=` refers to \"less than or equal to\". - `>` refers to \"greater than\". - `>=` refers to \"greater than or equal to\".",
       "review": {
         "status": "reviewed",
-        "note": "Direct vectors exercise numeric <, <=, >, boolean ordering and rejection of >=null. The entire four-operator/boundary predicate row lacks a direct successful numeric >= equality-boundary case in this reviewed assertion set.",
+        "note": "Numeric and boolean vectors exercise all four relative operators; null comparison operands are rejected as bad_filter.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "FilterLiteralMissingNullAndPrecisionCasesHaveIndependentExpectedIds",
           "InvalidFilterLiteralsAndUnsupportedPathOperatorsRejectExplicitly"
@@ -16215,17 +16214,16 @@
       "text": "Additionally, wildcards (`*`) MAY be used in string `<VALUE>`s with the following constraints:",
       "review": {
         "status": "reviewed",
-        "note": "Equality wildcard matching and rejection in a relative > comparison are directly exercised. Whole wildcard/operator coverage, including !=/<> with wildcard and every relative operator, is not established by the reviewed vectors.",
+        "note": "String wildcard vectors cover substring matches with `=`, exclusion with `!=` and `<>`, and `*` as existence including an empty string.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "FilterLiteralMissingNullAndPrecisionCasesHaveIndependentExpectedIds",
-          "InvalidFilterLiteralsAndUnsupportedPathOperatorsRejectExplicitly"
+          "FilterLiteralMissingNullAndPrecisionCasesHaveIndependentExpectedIds"
         ],
         "nativeEvidence": []
       }
@@ -16246,14 +16244,14 @@
       "text": "- They MUST only be used when the comparison operator is `=`, `!=` or `<>`.",
       "review": {
         "status": "reviewed",
-        "note": "Equality wildcard matching and rejection in a relative > comparison are directly exercised. Whole wildcard/operator coverage, including !=/<> with wildcard and every relative operator, is not established by the reviewed vectors.",
+        "note": "The validator rejects a wildcard with a relative comparison operator; accepted wildcard values are exercised with `=`, `!=` and `<>`.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "FilterLiteralMissingNullAndPrecisionCasesHaveIndependentExpectedIds",
           "InvalidFilterLiteralsAndUnsupportedPathOperatorsRejectExplicitly"
@@ -76113,13 +76111,20 @@
       ],
       "text": "The `filter` flag MAY be used to indicate that the response MUST include only those entities that match the specified filter criteria expressions. This means that any Registry Collection's `<COLLECTION>*` attributes will be modified to match the resulting subset. In particular:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact result IDs, filtered collection maps, AND intersections, and repeated-filter unions are asserted against the query result.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FilterCommasAreAndAndRepeatedParametersAreOrWithoutNumericStringComparison",
+          "NestedAndIntersectsMatchingLeavesRatherThanDifferentSiblingWitnesses",
+          "OrMatchingParentIncludesItsChildrenWhileAndRestrictsTheChildCollection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76144,13 +76149,20 @@
       ],
       "text": "- If the collection is inlined, it MUST only include entities that match the filter expression(s).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A filtered request omits unrequested inline data; when inline is requested, assertions restrict collections to selected leaves and include descendants of matching parents.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FiltersDoNotInlineAndEmptyCollectionLinksUseExcludeAll",
+          "NestedAndIntersectsMatchingLeavesRatherThanDifferentSiblingWitnesses",
+          "OrMatchingParentIncludesItsChildrenWhileAndRestrictsTheChildCollection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76175,13 +76187,20 @@
       ],
       "text": "- The collection `url` attribute MAY include the appropriate filter expression(s) such that a query to that URL would return the same subset of entities, if the protocol supports including the filter flag value as part of the URL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The collection URL preserves the selected subset and is followed from root and Group-relative filtered requests; empty selections use excludeall.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FiltersDoNotInlineAndEmptyCollectionLinksUseExcludeAll",
+          "GroupRelativeNestedFilterLinksReproduceTheSelectedCollection",
+          "NestedSharedSelectionUpdatesCountsAndProducesAnExactFollowableCollectionLink"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76206,13 +76225,21 @@
       ],
       "text": "- The collection `count` attribute MUST only count the entities that match the filter expression(s).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Root and nested collection counts are asserted against the exact filtered members, including an empty result.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FiltersDoNotInlineAndEmptyCollectionLinksUseExcludeAll",
+          "GroupRelativeNestedFilterLinksReproduceTheSelectedCollection",
+          "NestedAndIntersectsMatchingLeavesRatherThanDifferentSiblingWitnesses",
+          "OrMatchingParentIncludesItsChildrenWhileAndRestrictsTheChildCollection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76237,13 +76264,19 @@
       ],
       "text": "- For expressions that are AND'd together, only entities that satisfy both expressions MUST be returned.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Comma-separated predicates intersect on the same entity or matching subtree; tests reject matches witnessed only by different sibling Resources.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "NestedAndIntersectsMatchingLeavesRatherThanDifferentSiblingWitnesses",
+          "AndRequiresOneMatchingSubtreeWhileRepeatedFiltersUnionParentsAndLeaves"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76268,13 +76301,20 @@
       ],
       "text": "- For expressions that are OR'd together, only entities that satisfy either expression MUST be returned.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Repeated filter values form a union, and assertions verify matching parents retain descendants while the child collection remains filtered.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FilterCommasAreAndAndRepeatedParametersAreOrWithoutNumericStringComparison",
+          "OrMatchingParentIncludesItsChildrenWhileAndRestrictsTheChildCollection",
+          "AndRequiresOneMatchingSubtreeWhileRepeatedFiltersUnionParentsAndLeaves"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76299,13 +76339,20 @@
       ],
       "text": "- `<PATH>` MUST be an [xRegistry dot (`.`) notation](#xregistry-dot--notation) traversal of the Registry to the entity of interest, or absent if at the top of the Registry request.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Nested filters traverse dot-notation paths through collections, objects, maps, and arrays; IDs are omitted from data paths.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DotPathsTraverseObjectsMapsAndArraysWithRegistryIdsElided",
+          "NestedAndIntersectsMatchingLeavesRatherThanDifferentSiblingWitnesses",
+          "GroupRelativeNestedFilterLinksReproduceTheSelectedCollection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76330,13 +76377,18 @@
       ],
       "text": "- The `<PATH>` value MUST be based on the requesting URL and not the root of the Registry. Meaning, if the URL targets a Group then the `<PATH>` value would be relative to the Group and not the root of the Registry. See the examples below.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The Group request filters its child collection with `items.itemid=x`; the emitted URL is followed and returns that same child.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "GroupRelativeNestedFilterLinksReproduceTheSelectedCollection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76361,13 +76413,20 @@
       ],
       "text": "- `<ATTRIBUTE>` MUST be the attribute in the entity to be examined.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Filters name model attributes and nested attributes explicitly; invalid literals and unsupported attribute paths produce bad_filter.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FilterLiteralMissingNullAndPrecisionCasesHaveIndependentExpectedIds",
+          "DotPathsTraverseObjectsMapsAndArraysWithRegistryIdsElided",
+          "InvalidFilterLiteralsAndUnsupportedPathOperatorsRejectExplicitly"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76392,13 +76451,19 @@
       ],
       "text": "- A non-`null` `<VALUE>` MUST only be used when referencing scalar attributes.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A non-null comparison against an object value is rejected as bad_filter; scalar and nested scalar comparisons are exercised separately.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "InvalidFilterLiteralsAndUnsupportedPathOperatorsRejectExplicitly",
+          "DotPathsTraverseObjectsMapsAndArraysWithRegistryIdsElided"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76424,13 +76489,19 @@
       ],
       "text": "- A reference to a nonexistent attribute SHOULD NOT generate an error and SHOULD be treated the same as a non-matching situation. For example, a filter expression of `myobj.myattr=5` would not match if: `myobj` is missing, `myattr` is missing, or `myattr` is not `5`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Unknown attributes return no matches without an error; nested object paths also skip entities whose parent object is absent.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FilterLiteralMissingNullAndPrecisionCasesHaveIndependentExpectedIds",
+          "DotPathsTraverseObjectsMapsAndArraysWithRegistryIdsElided"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76455,13 +76526,18 @@
       ],
       "text": "- No operator: - When no operator is specified then the response MUST include all entities that have the `<ATTRIBUTE>` present with any non-`null` value.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The no-operator rank filter returns every entity with a present non-null rank and excludes the entity without one.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FilterLiteralMissingNullAndPrecisionCasesHaveIndependentExpectedIds"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76486,13 +76562,18 @@
       ],
       "text": "- `=` operator: - When `<VALUE>` is `null` then only entities without the specified `<ATTRIBUTE>` MUST be included in the response. - When a non-`null` `<VALUE>` is specified then `<VALUE>` MUST be the desired value of the attribute being examined. Only entities whose specified `<ATTRIBUTE>` with this `<VALUE>` MUST be included in the response. - When `<VALUE>` is absent then the implied `<VALUE>` is an empty string and the matching MUST be done as specified in the previous bullet.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The empty-string `description=` filter matches the entity with an empty description; explicit `null` matches entities where the attribute is absent.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FilterLiteralMissingNullAndPrecisionCasesHaveIndependentExpectedIds"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76517,13 +76598,18 @@
       ],
       "text": "- `!=`, `<>` operators: - When `<VALUE>` is `null` then it MUST have the same semantics as a filter expression of `<ATTRIBUTE>` as specified above (meaning, present with any non-`null` value). - When `<VALUE>` is non-`null` then only entities without the specified `<ATTRIBUTE>` and `<VALUE>` MUST be included in the response. This MUST be semantically equivalent to `NOT(<ATTRIBUTE>=<VALUE>)`, and this also means that if `<ATTRIBUTE>` is missing then that attribute will match the filter.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Both `!=` and `<>` include the entity with a missing rank when compared with a non-null value; their `null` form matches present non-null ranks.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FilterLiteralMissingNullAndPrecisionCasesHaveIndependentExpectedIds"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76549,13 +76635,19 @@
       ],
       "text": "- `<`, `<=`, `>`, `>=` operators: - `<VALUE>` MUST NOT be `null`. - Only entities with the specified `<ATTRIBUTE>` and `<VALUE>` that matches the comparison operator's semantics MUST be included in the response. - `<` refers to \"less than\". - `<=` refers to \"less than or equal to\". - `>` refers to \"greater than\". - `>=` refers to \"greater than or equal to\".",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Numeric and boolean vectors exercise all four relative operators; null comparison operands are rejected as bad_filter.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FilterLiteralMissingNullAndPrecisionCasesHaveIndependentExpectedIds",
+          "InvalidFilterLiteralsAndUnsupportedPathOperatorsRejectExplicitly"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76690,9 +76782,12 @@
       ],
       "text": "- It is STRONGLY RECOMMENDED to use Unicode collation based on en-US.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The implementation deliberately uses ordinal case-insensitive comparison, not en-US Unicode collation. The source says STRONGLY RECOMMENDED, not MUST; deterministic ordinal ordering is a policy/interoperability limitation, not reported as a mandatory behavior defect.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
