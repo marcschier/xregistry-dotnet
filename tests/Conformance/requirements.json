@@ -16187,7 +16187,7 @@
       "text": "- It is STRONGLY RECOMMENDED to use Unicode collation based on en-US.",
       "review": {
         "status": "reviewed",
-        "note": "String filter equality, relative comparison, wildcard matching, and sorting use case-insensitive en-US Unicode collation.",
+        "note": "String filter equality, relative comparison, wildcard matching, and sorting use case-insensitive en-US Unicode collation; invariant comparison is used only when the runtime disables named cultures.",
         "roles": [
           "server",
           "producer"
@@ -16666,15 +16666,17 @@
       "text": "The `ignore` flag MAY be used on any write operation to indicate that certain parts of the request message MUST be ignored by the server. This flag is designed for cases where a user wants to import data into a Registry without going through the (potentially tedious) process of removing certain parts of the data in advance. Typically, in an \"export->import\" scenario.",
       "review": {
         "status": "reviewed",
-        "note": "Ignore is implemented for ordinary imports, epoch, rooted ID and readonly bulk omission. The aggregate all-aspects clause also requires both default-version fields, every nested path and every write form; those parts are not all established by the selected cases.",
+        "note": "Direct tests cover root import fields, nested IDs, epoch and readonly guards, default-version selection/stickiness, ignored-resource omission, repeated and wildcard forms, and unsupported or malformed values across Replace, Patch, Post, and Delete.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "IgnoreFlagsPermitEntityImportWithoutSuppressingNestedIdentityGuards",
+          "IgnoreDefaultVersionFieldsPreservesSelectionAndStickiness",
+          "IgnoreIdOnTargetedVersionStripsResourceAndVersionIdentifiers",
           "ReadonlyIgnoreOmitsOnlyLockedResourcesAndPreservesOtherEpochGuards",
           "IgnoringTheOnlyTargetedReadonlyResourceIsBadFlag",
           "NestedAndRepeatedReadonlyIgnorePreserveTheLockedSubtree",
@@ -76812,7 +76814,7 @@
       "text": "- It is STRONGLY RECOMMENDED to use Unicode collation based on en-US.",
       "review": {
         "status": "reviewed",
-        "note": "String filter equality, relative comparison, wildcard matching, and sorting use case-insensitive en-US Unicode collation.",
+        "note": "String filter equality, relative comparison, wildcard matching, and sorting use case-insensitive en-US Unicode collation; invariant comparison is used only when the runtime disables named cultures.",
         "roles": [
           "server",
           "producer"
@@ -77324,15 +77326,17 @@
       "text": "The `ignore` flag MAY be used on any write operation to indicate that certain parts of the request message MUST be ignored by the server. This flag is designed for cases where a user wants to import data into a Registry without going through the (potentially tedious) process of removing certain parts of the data in advance. Typically, in an \"export->import\" scenario.",
       "review": {
         "status": "reviewed",
-        "note": "Ignore is implemented for ordinary imports, epoch, rooted ID and readonly bulk omission. The aggregate all-aspects clause also requires both default-version fields, every nested path and every write form; those parts are not all established by the selected cases.",
+        "note": "Direct tests cover root import fields, nested IDs, epoch and readonly guards, default-version selection/stickiness, ignored-resource omission, repeated and wildcard forms, and unsupported or malformed values across Replace, Patch, Post, and Delete.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "IgnoreFlagsPermitEntityImportWithoutSuppressingNestedIdentityGuards",
+          "IgnoreDefaultVersionFieldsPreservesSelectionAndStickiness",
+          "IgnoreIdOnTargetedVersionStripsResourceAndVersionIdentifiers",
           "ReadonlyIgnoreOmitsOnlyLockedResourcesAndPreservesOtherEpochGuards",
           "IgnoringTheOnlyTargetedReadonlyResourceIsBadFlag",
           "NestedAndRepeatedReadonlyIgnorePreserveTheLockedSubtree",

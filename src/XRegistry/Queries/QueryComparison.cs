@@ -10,7 +10,7 @@ namespace XRegistry.Queries;
 
 internal static class QueryComparison
 {
-    private static readonly CompareInfo s_stringComparer = CultureInfo.GetCultureInfo("en-US").CompareInfo;
+    private static readonly CompareInfo s_stringComparer = StringComparerInfo();
     private const CompareOptions StringComparisonOptions = CompareOptions.IgnoreCase;
     private static readonly IReadOnlyDictionary<string, RegistryAttributeDefinition> s_timestamp =
         new Dictionary<string, RegistryAttributeDefinition>(StringComparer.Ordinal)
@@ -284,6 +284,18 @@ internal static class QueryComparison
         catch (RegistryException exception)
         {
             throw new RegistryException(new("bad_filter", "", "The timestamp query literal is invalid."), exception);
+        }
+    }
+
+    private static CompareInfo StringComparerInfo()
+    {
+        try
+        {
+            return CultureInfo.GetCultureInfo("en-US").CompareInfo;
+        }
+        catch (CultureNotFoundException)
+        {
+            return CultureInfo.InvariantCulture.CompareInfo;
         }
     }
 

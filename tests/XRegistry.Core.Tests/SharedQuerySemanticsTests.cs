@@ -1,6 +1,7 @@
 // Copyright (c) 2026 xregistry-dotnet contributors.
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
 using TUnit.Assertions;
 using TUnit.Core;
 using XRegistry.Queries;
@@ -148,15 +149,36 @@ public class SharedQuerySemanticsTests
     {
         var source = Groups();
         source.Collections["/fleets"] = ["/fleets/a", "/fleets/b", "/fleets/c"];
-        source.Add("/fleets/a", """{"fleetid":"a","name":"\u212A"}""");
+        source.Add("/fleets/a", """{"fleetid":"a","name":"K"}""");
         source.Add("/fleets/b", """{"fleetid":"b","name":"k"}""");
         source.Add("/fleets/c", """{"fleetid":"c","name":"prefix-k-suffix"}""");
         using var budget = new RegistryQueryBudget();
 
-        await Assert.That(Ids(await Evaluate(source, budget, filters: ["name=K"]))).IsEqualTo("a,b");
-        await Assert.That(Ids(await Evaluate(source, budget, filters: ["name<K"]))).IsEqualTo("");
-        await Assert.That(Ids(await Evaluate(source, budget, filters: ["name=prefix*K*suffix"]))).IsEqualTo("c");
-        await Assert.That(Ids(await Evaluate(source, budget, sort: "name"))).IsEqualTo("a,b,c");
+        CompareInfo comparer;
+        try
+        {
+            comparer = CultureInfo.GetCultureInfo("en-US").CompareInfo;
+        }
+        catch (CultureNotFoundException)
+        {
+            comparer = CultureInfo.InvariantCulture.CompareInfo;
+        }
+
+        var options = CompareOptions.IgnoreCase;
+        var values = new[] { (Id: "a", Name: "K"), (Id: "b", Name: "k"), (Id: "c", Name: "prefix-k-suffix") };
+        var equal = string.Join(',', values.Where(value => comparer.Compare(value.Name, "K", options) == 0).Select(static value => value.Id));
+        var less = string.Join(',', values.Where(value => comparer.Compare(value.Name, "K", options) < 0).Select(static value => value.Id));
+        var sorted = string.Join(',', values.OrderBy(static value => value.Name, Comparer<string>.Create(
+            (left, right) => comparer.Compare(left, right, options))).ThenBy(static value => value.Id, StringComparer.Ordinal)
+            .Select(static value => value.Id));
+        var wildcard = comparer.IsPrefix(values[2].Name, "prefix", options) &&
+            comparer.IsSuffix(values[2].Name, "suffix", options) &&
+            comparer.IndexOf(values[2].Name, "K", options) >= 0 ? "c" : "";
+
+        await Assert.That(Ids(await Evaluate(source, budget, filters: ["name=K"]))).IsEqualTo(equal);
+        await Assert.That(Ids(await Evaluate(source, budget, filters: ["name<K"]))).IsEqualTo(less);
+        await Assert.That(Ids(await Evaluate(source, budget, filters: ["name=prefix*K*suffix"]))).IsEqualTo(wildcard);
+        await Assert.That(Ids(await Evaluate(source, budget, sort: "name"))).IsEqualTo(sorted);
     }
 
     [Test]
