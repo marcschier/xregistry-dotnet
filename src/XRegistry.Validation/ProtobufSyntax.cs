@@ -141,7 +141,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                 return result;
             }
 
-            if (separator >= 0 && _definitions.ContainsKey(prefix.Length == 0 ? first : prefix + "." + first))
+            if (separator >= 0 && _symbols.Contains(prefix.Length == 0 ? first : prefix + "." + first))
             {
                 return null;
             }

@@ -42,12 +42,15 @@ caller-supplied imports. Collisions report `Invalid` with `protobuf.duplicate`,
 regardless of declaration order. Names remain case-sensitive, and reuse in
 different containing messages or packages is valid. Registering a service name
 does not make it a message type.
-Relative compound type names stop at the nearest message or enum owning their
+Relative compound type names stop at the nearest declaration owning their
 first component. If that owner lacks the requested nested type, lookup reports
 `protobuf.type` rather than falling back to an outer declaration with the same
 prefix. A leading dot still selects the outermost scope, and import visibility
 remains required. This follows the publisher's
 [inner-to-outer name-resolution rule](https://protobuf.dev/programming-guides/proto3/#packages-and-name-resolution).
+Fields, oneofs and enum values can also own that first component; they cannot
+provide a nested type or be bypassed by an outer relative declaration.
+These checks do not depend on declaration order.
 The [Proto2](https://protobuf.dev/reference/protobuf/proto2-spec/#message-definition)
 and [Proto3](https://protobuf.dev/reference/protobuf/proto3-spec/#message-definition)
 specifications define the message-name rules; the publisher also explains

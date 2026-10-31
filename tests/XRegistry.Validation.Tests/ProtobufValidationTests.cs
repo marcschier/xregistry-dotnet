@@ -13,6 +13,9 @@ public class ProtobufValidationTests
     [Arguments("message Name {}")]
     [Arguments("enum Name { ZERO=0; }")]
     [Arguments("message Name { message Other {} }")]
+    [Arguments("optional string Name=2;")]
+    [Arguments("oneof Name { string text=2; }")]
+    [Arguments("enum Local { Name=0; }")]
     public async Task RelativeCompoundTypeNamesDoNotBypassNearerTypeOwners(string local)
     {
         foreach (var syntax in new[] { 2, 3 })
@@ -51,6 +54,27 @@ public class ProtobufValidationTests
             Encoding.UTF8.GetBytes(document));
         await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
         await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("optional string Name=2;")]
+    [Arguments("oneof Name { string text=2; }")]
+    [Arguments("enum Local { Name=0; }")]
+    public async Task CompoundTypeShadowingIsIndependentOfDeclarationOrder(string local)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            foreach (var before in new[] { false, true })
+            {
+                var field = "optional Name.Child value=1;";
+                var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                    Encoding.UTF8.GetBytes($"syntax='proto{syntax}'; package example; " +
+                        "message Name { message Child {} } message Root { " +
+                        (before ? local + field : field + local) + " }"));
+                await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+                await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.type");
+            }
+        }
     }
 
     [Test]

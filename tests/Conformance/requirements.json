@@ -43880,6 +43880,7 @@
           "LazyMessageFieldsRetainPublicImportVisibility",
           "LazyAndUnverifiedLazyRemainIndependentFieldOptions",
           "RelativeCompoundTypeNamesDoNotBypassNearerTypeOwners",
+          "CompoundTypeShadowingIsIndependentOfDeclarationOrder",
           "RelativeCompoundTypeNamesStillBindTheNearestDeclaredChild",
           "RelativeCompoundTypeOwnersDoNotFallbackAfterAMissingIntermediateType",
           "RelativeCompoundTypeOwnershipIncludesImportedOuterDeclarations",
