@@ -60835,13 +60835,20 @@
       ],
       "text": "- `xidtype` - MUST be a URL reference to an [xRegistry model](./model.md#registry-model) type. The reference MUST point to one of: the Registry itself (`/`), a Group type (`/<GROUPS>`), a Resource type (`/<GROUPS>/<RESOURCES>`) or Version type for a Resource (`/<GROUPS>/<RESOURCES>/versions`). Its value MUST reference a defined/valid type in the Registry. It MUST use the plural names of the referenced types, if it is a Group, Resource or Version.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "`ModelPaths.ParseType` accepts `/`, defined plural Group types, Resource types, or their `/versions` collection; `CheckModelType` rejects undefined types. Tests cover each valid form and reject singular, unknown, entity, template, uppercase, and absolute-URL paths.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "XidTypesAcceptDefinedPluralModelTypePaths",
+          "XidTypesRejectNonModelPathsAndUndefinedTypes"
+        ],
         "nativeEvidence": []
       }
     },

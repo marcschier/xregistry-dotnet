@@ -102,6 +102,40 @@ public class RegistryXidTargetKindTests
     }
 
     [Test]
+    [Arguments("/")]
+    [Arguments("/gs")]
+    [Arguments("/gs/rs")]
+    [Arguments("/gs/rs/versions")]
+    public async Task XidTypesAcceptDefinedPluralModelTypePaths(string typePath)
+    {
+        var model = XidTypeModel();
+        var result = RegistryMetadataValidator.Validate(RegistryJson.Parse("{\"ref\":\"" + typePath + "\"}"),
+            model.Attributes["body"].Attributes, new() { Model = model });
+
+        await Assert.That(result.Metadata.RootElement.GetProperty("ref").GetString()).IsEqualTo(typePath);
+        await Assert.That(result.Obligations.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("/unknown")]
+    [Arguments("/gs/unknown")]
+    [Arguments("/gs/g")]
+    [Arguments("/gs/rs[/versions]")]
+    [Arguments("/gs/rs/versions/v1")]
+    [Arguments("/GS")]
+    [Arguments("https://example.test/gs")]
+    public async Task XidTypesRejectNonModelPathsAndUndefinedTypes(string typePath)
+    {
+        var model = XidTypeModel();
+        var error = TestErrors.Capture(() => RegistryMetadataValidator.Validate(
+            RegistryJson.Parse("{\"ref\":\"" + typePath + "\"}"), model.Attributes["body"].Attributes,
+            new() { Model = model }));
+
+        await Assert.That(error.Code).IsEqualTo("invalid_attribute");
+        await Assert.That(error.Path).IsEqualTo("/ref");
+    }
+
+    [Test]
     public async Task MissingModelContextReturnsAnExplicitObligationWithoutResolvingEntities()
     {
         var model = Model("/gs/rs");
@@ -127,4 +161,9 @@ public class RegistryXidTargetKindTests
             }}
             """));
     }
+
+    private static RegistryModel XidTypeModel() => RegistryModel.Compile(RegistryJson.Parse("""
+        {"attributes":{"body":{"type":"object","attributes":{"ref":"xidtype"}}},
+         "groups":{"gs":{"singular":"g","resources":{"rs":{"singular":"r"}}}}}
+        """));
 }
