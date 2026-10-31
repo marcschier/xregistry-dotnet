@@ -27661,16 +27661,17 @@
       "text": "An attribute of `*` MUST NOT use the `ifvalues` feature, but a non-`*` attribute MAY define an `ifvalues` attribute named `*` as long as there isn't already one defined for this level in the entity.",
       "review": {
         "status": "reviewed",
-        "note": "CompileAttribute forbids ifvalues on *; CheckConditionalNames rejects a conditional * when a static * already exists. A named discriminator may introduce a wildcard, and the direct header test proves declared attributes still win. The two wildcard-conflict rejection branches lack direct compiler assertions.",
+        "note": "RejectsInvalidModelAspectsWithExactPointers checks that * cannot define ifvalues and that a conditional * conflicts with a static *. ConditionalWildcardNeverOverridesDeclaredAttributes verifies that declared attributes still take precedence.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "ConditionalWildcardNeverOverridesDeclaredAttributes"
+          "ConditionalWildcardNeverOverridesDeclaredAttributes",
+          "RejectsInvalidModelAspectsWithExactPointers"
         ],
         "nativeEvidence": []
       }

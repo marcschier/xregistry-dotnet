@@ -413,6 +413,8 @@ public class RegistryModelTests
     [Arguments("""{"attributes":{"a":{"type":"string","matchversions":true}}}""", "/attributes/a/matchversions", "model_error")]
     [Arguments("""{"attributes":{"*":{"type":"any","required":true}}}""", "/attributes/*", "model_error")]
     [Arguments("""{"attributes":{"*":{"type":"any","readonly":true}}}""", "/attributes/*", "model_error")]
+    [Arguments("""{"attributes":{"*":{"type":"any","ifvalues":{"x":{"siblingattributes":{}}}}}}""", "/attributes/*", "model_error")]
+    [Arguments("""{"attributes":{"*":{"type":"string"},"mode":{"type":"string","ifvalues":{"open":{"siblingattributes":{"*":{"type":"string"}}}}}}}""", "/attributes/mode/ifvalues/open/siblingattributes/*", "model_error")]
     [Arguments("""{"attributes":{"a":{"type":"string","target":"/dirs/files"}}}""", "/attributes/a/target", "model_error")]
     [Arguments("""{"attributes":{"a":{"type":"urlabsolute","target":"/dirs/files"}}}""", "/attributes/a/target", "model_error")]
     [Arguments("""{"attributes":{"a":{"type":"uri","target":"/dirs/files/meta"}}}""", "/attributes/a/target", "model_error")]
