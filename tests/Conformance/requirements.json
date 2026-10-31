@@ -28255,7 +28255,8 @@
       "implementation": {
         "status": "implemented",
         "testIds": [
-          "CompilesNestedItemsAndStaticVersionMatchObligations"
+          "CompilesNestedItemsAndStaticVersionMatchObligations",
+          "RejectsInvalidModelAspectsWithExactPointers"
         ],
         "nativeEvidence": []
       }
@@ -29441,14 +29442,14 @@
       "text": "- REQUIRED.",
       "review": {
         "status": "reviewed",
-        "note": "Item definitions use the same lowercase type parser and require a type unless inherited from a system item. Positive nested item types are asserted; a direct missing item.type rejection is absent from the aspect table.",
+        "note": "RejectsInvalidModelAspectsWithExactPointers verifies that an array item without type fails at /attributes/a/item/type. CompilesNestedItemsAndStaticVersionMatchObligations verifies nested item types.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "CompilesNestedItemsAndStaticVersionMatchObligations"
         ],
