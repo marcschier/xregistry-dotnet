@@ -32,6 +32,49 @@ public class LifecycleTests
     }
 
     [Test]
+    [Arguments("/teams/g")]
+    [Arguments("/teams/g/notes/n")]
+    [Arguments("/teams/g/notes/n/versions/v1")]
+    public async Task EpochFlagGuardsSingleEntityDeletes(string path)
+    {
+        var engine = Create();
+        await Send(engine, RegistryAction.Replace, "/teams/g", "{}");
+        if (path != "/teams/g")
+        {
+            await Send(engine, RegistryAction.Replace, "/teams/g/notes/n", "{}");
+        }
+
+        if (path.EndsWith("/versions/v1", StringComparison.Ordinal))
+        {
+            await Send(engine, RegistryAction.Replace, path, "{}");
+        }
+
+        await ExpectCode(() => Send(engine, RegistryAction.Delete, path, null, new KeyValuePair<string, string?>("epoch", "1")), "mismatched_epoch");
+        await Send(engine, RegistryAction.Delete, path, null, new KeyValuePair<string, string?>("epoch", "0"));
+        await ExpectCode(() => Send(engine, RegistryAction.Read, path), "not_found");
+    }
+
+    [Test]
+    [Arguments(RegistryAction.Read, "/teams/g")]
+    [Arguments(RegistryAction.Delete, "/teams")]
+    [Arguments(RegistryAction.Delete, "/teams/g/notes")]
+    [Arguments(RegistryAction.Delete, "/teams/g/notes/n/versions")]
+    public async Task EpochFlagRejectsNonDeleteAndCollectionTargets(RegistryAction action, string path)
+    {
+        await ExpectCode(() => Send(Create(), action, path, null, new KeyValuePair<string, string?>("epoch", "0")), "bad_flag");
+    }
+
+    [Test]
+    public async Task EpochFlagRejectsNullInsteadOfDeletingWithoutAGuard()
+    {
+        var engine = Create();
+        await Send(engine, RegistryAction.Replace, "/teams/g", "{}");
+
+        await ExpectCode(() => Send(engine, RegistryAction.Delete, "/teams/g", null, new KeyValuePair<string, string?>("epoch", "null")), "bad_flag");
+        await Send(engine, RegistryAction.Delete, "/teams/g", null, new KeyValuePair<string, string?>("epoch", "0"));
+    }
+
+    [Test]
     public async Task NestedCollectionUpdatesPreserveAbsentAndEmptyMapsAndRejectInvalidEntitiesAtomically()
     {
         var engine = Create();

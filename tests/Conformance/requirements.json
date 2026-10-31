@@ -15534,16 +15534,17 @@
       "text": "The `epoch` flag MAY be used on any delete operation directed to a single entity if the protocol being used doesn't normally include the serialization of the \"to be deleted\" entity in the request. In those cases, this flag is used to request that the entity's current `epoch` value matches this flag's value for the purpose of the server's [`epoch` conflict checking algorithm](#epoch-attribute).",
       "review": {
         "status": "reviewed",
-        "note": "Epoch flag is limited to single-entity Delete and placed into the Resource's Meta guard when appropriate. Body epoch assertions are not a direct flag-on-delete assertion; no complete single-entity flag vector is promoted.",
+        "note": "Direct server tests cover matching and stale guards on Group, Resource, and Version deletes, plus rejection on non-Delete, collection, and null-valued requests.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "EpochZeroNullMissingAndHugeGuardsAreExact",
-          "PostCollectionsReturnsOnlyProcessedChildrenAndDeleteGuardsAreAtomic"
+          "EpochFlagGuardsSingleEntityDeletes",
+          "EpochFlagRejectsNonDeleteAndCollectionTargets",
+          "EpochFlagRejectsNullInsteadOfDeletingWithoutAGuard"
         ],
         "nativeEvidence": []
       }

@@ -137,10 +137,9 @@ internal sealed class RequestFlags
                     try
                     {
                         flags.Epoch = JsonNode.Parse(RegistryJson.Parse(parameter.Value ?? "", limits.Json).RootElement.GetRawText());
-                        if (flags.Epoch is not null)
-                        {
-                            _ = ServerJson.Unsigned(flags.Epoch, operation.Path.EscapedPath);
-                        }
+                        _ = ServerJson.Unsigned(flags.Epoch ?? throw ServerErrors.Create(
+                            "invalid_attribute", operation.Path.EscapedPath, "An unsigned integer is required."),
+                            operation.Path.EscapedPath);
                     }
                     catch (RegistryException exception)
                     {
