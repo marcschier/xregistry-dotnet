@@ -847,6 +847,105 @@ public class ProtobufValidationTests
     }
 
     [Test]
+    [Arguments("IDEMPOTENCY_UNKNOWN")]
+    [Arguments("NO_SIDE_EFFECTS")]
+    [Arguments("IDEMPOTENT")]
+    public async Task RpcIdempotencyOptionsAcceptDeclaredNativeConstants(string value)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            foreach (var streaming in new[] { ("", ""), ("stream ", ""), ("", "stream "), ("stream ", "stream ") })
+            {
+                var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                    Encoding.UTF8.GetBytes($"syntax='proto{syntax}'; message Root {{}} service S {{ " +
+                        $"rpc Get({streaming.Item1}Root) returns ({streaming.Item2}Root) {{ ; option deprecated=false; " +
+                        $"option idempotency_level={value}; ; }} }}"));
+                await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+                await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("'IDEMPOTENT'")]
+    [Arguments("'NO_' 'SIDE_EFFECTS'")]
+    [Arguments("idempotent")]
+    [Arguments("UNKNOWN")]
+    [Arguments("true")]
+    [Arguments("0")]
+    [Arguments("1")]
+    [Arguments("2")]
+    [Arguments("+IDEMPOTENT")]
+    [Arguments("-NO_SIDE_EFFECTS")]
+    public async Task RpcIdempotencyOptionsRejectNonNativeOrUnknownConstants(string value)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                Encoding.UTF8.GetBytes($"syntax='proto{syntax}'; message Root {{}} service S {{ " +
+                    $"rpc Get(Root) returns (Root) {{ option idempotency_level={value}; }} }}"));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.option");
+        }
+    }
+
+    [Test]
+    [Arguments("option idempotency_level=IDEMPOTENT; message Root {}")]
+    [Arguments("message Root { option idempotency_level=IDEMPOTENT; }")]
+    [Arguments("message Root { oneof choice { option idempotency_level=IDEMPOTENT; int32 value=1; } }")]
+    [Arguments("message Root {} service S { option idempotency_level=IDEMPOTENT; }")]
+    [Arguments("message Root { optional int32 value=1 [idempotency_level=IDEMPOTENT]; }")]
+    [Arguments("enum E { option idempotency_level=IDEMPOTENT; ZERO=0; }")]
+    [Arguments("enum E { ZERO=0 [idempotency_level=IDEMPOTENT]; }")]
+    public async Task RpcIdempotencyOptionsRequireMethodDeclarationScope(string body)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                Encoding.UTF8.GetBytes($"syntax='proto{syntax}'; {body}"));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.option_scope");
+        }
+    }
+
+    [Test]
+    [Arguments("IDEMPOTENT", "IDEMPOTENT")]
+    [Arguments("NO_SIDE_EFFECTS", "IDEMPOTENT")]
+    [Arguments("IDEMPOTENCY_UNKNOWN", "NO_SIDE_EFFECTS")]
+    public async Task RpcIdempotencyOptionsRemainSingular(string first, string second)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            Encoding.UTF8.GetBytes("syntax='proto3'; message Root {} service S { rpc Get(Root) returns (Root) { " +
+                $"option idempotency_level={first}; option deprecated=true; option idempotency_level={second}; }} }}"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.option");
+    }
+
+    [Test]
+    public async Task RpcIdempotencyOptionsHaveIndependentMethodAndFileScopes()
+    {
+        var requests = 0;
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            Encoding.UTF8.GetBytes("syntax='proto3'; import 'dep.proto'; message Root {} service S { " +
+                "rpc First(Root) returns (Root) { option idempotency_level=IDEMPOTENT; } " +
+                "rpc Second(Root) returns (Root) { option idempotency_level=NO_SIDE_EFFECTS; } " +
+                "rpc Third(Root) returns (Root) { option idempotency_level=IDEMPOTENCY_UNKNOWN; } " +
+                "rpc Omitted(Root) returns (Root); }"), new()
+            {
+                ResolveReference = (_, _) =>
+                {
+                    requests++;
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+                        Encoding.UTF8.GetBytes("syntax='proto2'; package dep; message Root {} service S { " +
+                            "rpc First(Root) returns (Root) { option idempotency_level=NO_SIDE_EFFECTS; } }"));
+                }
+            });
+        await Assert.That(requests).IsEqualTo(1);
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
     [Arguments("unknown=true")]
     [Arguments("unknown=17")]
     [Arguments("unknown=\"text\"")]

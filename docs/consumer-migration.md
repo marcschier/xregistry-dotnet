@@ -194,6 +194,15 @@ schemas. Other decoded characters and literal backslash spellings remain valid.
 NUL remains permitted in string and bytes defaults and other string-valued
 options. This does not implement ProtoJSON serialization or message parsing.
 
+RPC method `idempotency_level` options accept the native `IDEMPOTENCY_UNKNOWN`,
+`NO_SIDE_EFFECTS` and `IDEMPOTENT` constants defined in the publisher's descriptor
+schema. Quoted, numeric, signed or unknown constants report `protobuf.option`;
+placement on another declaration kind reports `protobuf.option_scope`.
+Assignments remain singular within each method, while sibling methods and
+imported files can declare independent values. Unary and streaming methods use
+the same policy. This validates the declared hint without selecting HTTP verbs,
+implementing transport behavior or adding gRPC operation selection.
+
 Enum and enum-value options use the same explicit policy boundary as other
 declarations. Unknown option names or actual custom-option syntax report
 `Unsupported`, rather than treating an unimplemented option as malformed solely

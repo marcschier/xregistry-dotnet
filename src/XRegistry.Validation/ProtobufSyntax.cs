@@ -635,6 +635,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                     Require(seen.Add(option), "protobuf.option", "Field options must be unique.");
                     Expect("=");
                     var value = Constant();
+                    Require(option != "idempotency_level", "protobuf.option_scope", "idempotency_level is only valid on RPC methods.");
                     switch (option)
                     {
                         case "default":
@@ -699,6 +700,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                     Expect("=");
                     var value = Constant();
                     Expect(";");
+                    Require(option != "idempotency_level", "protobuf.option_scope", "idempotency_level is only valid on RPC methods.");
                     if (option is not ("allow_alias" or "deprecated")) { Unsupported("Unsupported enum option."); }
                     Require(IsBoolean(value), "protobuf.option", "The enum option must be boolean.");
                     Require(options.Add(option), "protobuf.option", "Singular enum options must be assigned only once.");
@@ -723,6 +725,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                             Require(seen.Add(option), "protobuf.option", "Enum value options must be unique.");
                             Expect("=");
                             var value = Constant();
+                            Require(option != "idempotency_level", "protobuf.option_scope", "idempotency_level is only valid on RPC methods.");
                             if (option != "deprecated") { Unsupported("Unsupported enum value option."); }
                             Require(IsBoolean(value), "protobuf.option", "deprecated must be boolean.");
                         }
@@ -835,6 +838,13 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                 Require(target == OptionTarget.File, "protobuf.option_scope", "This option is only valid at file scope.");
                 Require(value.Kind == TokenKind.Identifier && value.Text is "SPEED" or "CODE_SIZE" or "LITE_RUNTIME",
                     "protobuf.option", "Invalid optimization mode.");
+            }
+            else if (option == "idempotency_level")
+            {
+                Require(target == OptionTarget.Method, "protobuf.option_scope", "idempotency_level is only valid on RPC methods.");
+                Require(value.Kind == TokenKind.Identifier &&
+                    value.Text is "IDEMPOTENCY_UNKNOWN" or "NO_SIDE_EFFECTS" or "IDEMPOTENT",
+                    "protobuf.option", "idempotency_level must be a declared native IdempotencyLevel constant.");
             }
             else { Unsupported("This Protobuf option has no implemented validation policy."); }
             Require(seen.Add(option), "protobuf.option", "Singular declaration options must be assigned only once.");

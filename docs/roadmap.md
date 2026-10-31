@@ -220,6 +220,10 @@ vocabulary/source mapping. It does not supply their implementation.
   concatenation, including in imported schemas. String/bytes defaults and
   other string options retain NUL values; this does not add ProtoJSON encoding
   or message parsing.
+  RPC `idempotency_level` options now accept the descriptor's three native
+  constants only on method declarations. Invalid constants, misplaced settings
+  and duplicate assignments fail; methods and imported files retain independent
+  settings. This adds no HTTP transport behavior or gRPC operation selection.
   Enum and enum-value unknown/custom options now report the same unsupported
   policy outcome as other declarations; supported boolean and alias rules,
   enum-value duplicate checks and token-kind checks remain enforced.

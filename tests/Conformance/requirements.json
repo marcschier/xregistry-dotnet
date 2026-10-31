@@ -43892,6 +43892,11 @@
           "JsonNameNulCheckDoesNotRestrictOtherDecodedValues",
           "NulRemainsLegalInStringOptionsAndStringOrBytesDefaults",
           "ImportedJsonNamesRetainDecodedNulValidation",
+          "RpcIdempotencyOptionsAcceptDeclaredNativeConstants",
+          "RpcIdempotencyOptionsRejectNonNativeOrUnknownConstants",
+          "RpcIdempotencyOptionsRequireMethodDeclarationScope",
+          "RpcIdempotencyOptionsRemainSingular",
+          "RpcIdempotencyOptionsHaveIndependentMethodAndFileScopes",
           "EnumAndEnumValueUnknownOptionPoliciesRemainUnsupported",
           "EnumOptionPoliciesPreserveKnownBooleansAliasesAndInvalidSyntax"
         ],
