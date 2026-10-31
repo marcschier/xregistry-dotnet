@@ -438,8 +438,14 @@ Trait names and property names may use single or double quotes; quoted names
 cannot be empty or contain backslashes or control characters below U+0020.
 Names match exactly without Unicode normalization or JSON Pointer decoding.
 Missing properties and descent through scalars or arrays yield absence; a
-property containing null still exists. Unquoted numeric keys and
-function properties other than `(keys)`, `(values)`, projection `(first)` and
+property containing null still exists. Unquoted numeric path segments use their
+exact authored spelling as object keys: `|1e2` selects `"1e2"`, not `"100"`,
+and `|0` never indexes an array. This also applies to scoped context paths and
+properties forwarded through projections. These segments follow
+[`SelectorPathSegment`](https://smithy.io/2.0/spec/selectors.html#grammar-token-selectors-SelectorPathSegment);
+they are property names, so the 256-character arithmetic comparison limit does
+not apply. Scanning and object lookup still consume the shared work budget.
+Function properties other than `(keys)`, `(values)`, projection `(first)` and
 the `(length)` checks below remain unsupported. Property scans consume the
 shared work budget.
 Trait and nested-property predicates also support `>`, `>=`, `<` and `<=`.

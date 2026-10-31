@@ -266,7 +266,10 @@ vocabulary/source mapping. It does not supply their implementation.
   Literal nested object paths and quoted trait/property names use exact
   matching. Missing properties and descent through scalars or arrays yield
   absence; present nulls still exist. Property scans consume the shared work
-  budget. Unquoted numeric path tokens and function properties
+  budget. Unquoted numeric path tokens address exact authored object keys,
+  including signs, fractions and exponents; they are not normalized or used as
+  array indices. Scoped paths and projections share the same rule, and key
+  spellings are text rather than arithmetic operands. Function properties
   other than `(keys)`, `(values)`, projection `(first)` and supported `(length)`
   remain unsupported.
   Numeric trait/node predicates support `>`, `>=`, `<` and `<=` with exact

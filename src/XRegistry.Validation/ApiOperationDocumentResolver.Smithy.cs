@@ -2740,7 +2740,11 @@ public static partial class ApiOperationDocumentResolver
                         }
                         else if (property is "keys" or "values") { projection = true; }
                     }
-                    else { property = AttributeName(); }
+                    else
+                    {
+                        property = position < text.Length && (char.IsAsciiDigit(text[position]) || text[position] == '-')
+                            ? NumericOperand() : AttributeName();
+                    }
                     if (property is null) { return false; }
                     if (attribute == "trait" && properties is null && !function &&
                         !IsSmithyShapeId(property.Contains('#', StringComparison.Ordinal)
