@@ -113,6 +113,18 @@ public class SharedQuerySemanticsTests
     }
 
     [Test]
+    public async Task DefaultCollectionSortOrdersUnsortedSourceIdsAscending()
+    {
+        var source = Groups();
+        source.Collections["/fleets"] = ["/fleets/z", "/fleets/a", "/fleets/m"];
+        source.Add("/fleets/z", """{"fleetid":"z"}""");
+        source.Add("/fleets/m", """{"fleetid":"m"}""");
+        using var budget = new RegistryQueryBudget();
+
+        await Assert.That(Ids(await Evaluate(source, budget, defaultSort: true))).IsEqualTo("a,m,z");
+    }
+
+    [Test]
     public async Task EscapedStarsFractionsLargeNegativeExponentsAndConditionalTimestampsRemainExact()
     {
         var source = Groups();

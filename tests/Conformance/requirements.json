@@ -17958,16 +17958,17 @@
       "text": "When a pagination type of feature is used to return the results, but the `sort` flag is not specified, then the server MUST sort the results on the entities' `<SINGULAR>id` value in ascending order. When pagination is not used, it is RECOMMENDED that servers still sort the results by `<SINGULAR>id` (asc) for consistency.",
       "review": {
         "status": "reviewed",
-        "note": "The shared source is passed DefaultSortById for pagination and leaves a deterministic nonpaged order. Pagination requirements were not re-reviewed; direct assertions selected here do not establish every no-sort paged collection kind/continuation, so this row is not promoted from another review's counts.",
+        "note": "With no sort flag, paginated collection queries set DefaultSortById; a deliberately unsorted source is returned by ID, and the HTTP test verifies that ordering across page boundaries.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "CapabilityChangesArePersistedAndDrivePaginationRatherThanOnlyAdvertisingIt"
+          "DefaultCollectionSortOrdersUnsortedSourceIdsAscending",
+          "PaginationWithoutSortReturnsEntityIdsAscendingAcrossPages"
         ],
         "nativeEvidence": []
       }

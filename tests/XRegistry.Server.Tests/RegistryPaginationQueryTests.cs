@@ -36,6 +36,21 @@ public class RegistryPaginationQueryTests
     }
 
     [Test]
+    public async Task PaginationWithoutSortReturnsEntityIdsAscendingAcrossPages()
+    {
+        var engine = await Seed();
+        var first = await Send(engine, RegistryAction.Read, "/fleets", null,
+            new KeyValuePair<string, string?>("limit", "2"));
+        await Assert.That(string.Join(',', Ids(first.Metadata!.RootElement))).IsEqualTo("a,b");
+        var next = first.Page!.Links.Single(static link => link.Relation == "next").Target;
+
+        var second = await Follow(engine, next);
+        await Assert.That(string.Join(',', Ids(second.Metadata!.RootElement))).IsEqualTo("c,d");
+        await Assert.That(second.Page!.TotalCount).IsEqualTo(4UL);
+        await Assert.That(second.Page.Links.Any(static link => link.Relation == "next")).IsFalse();
+    }
+
+    [Test]
     [Arguments("0")]
     [Arguments("-1")]
     [Arguments("+1")]
