@@ -49,7 +49,7 @@ it does not transfer historical qualification to a successor.
 | mapping | 95 | 39 | 0 |
 | media-endpoints | 7 | 7 | 0 |
 | message | 178 | 91 | 0 |
-| model | 487 | 273 | 0 |
+| model | 487 | 274 | 0 |
 | oci | 140 | 60 | 0 |
 | opcua | 205 | 0 | 0 |
 | openusd | 122 | 59 | 0 |

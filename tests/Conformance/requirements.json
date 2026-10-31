@@ -84256,13 +84256,18 @@
       ],
       "text": "- OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "ManualSingleRootDefaultsAllowIndependentRootsAndRejectInvalidModelTightening proves a Resource model can omit this aspect. SingleVersionRootDefaultsFalseAndAutomaticModesRequireTrue proves automatic version modes require an explicitly authored true value.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ManualSingleRootDefaultsAllowIndependentRootsAndRejectInvalidModelTightening",
+          "SingleVersionRootDefaultsFalseAndAutomaticModesRequireTrue"
+        ],
         "nativeEvidence": []
       }
     },

@@ -599,7 +599,7 @@ internal static partial class ModelCompiler
         var value = Member(node, name);
         return value.ValueKind switch
         {
-            JsonValueKind.Undefined or JsonValueKind.Null => fallback,
+            JsonValueKind.Undefined => fallback,
             JsonValueKind.True => true,
             JsonValueKind.False => false,
             _ => throw Diagnostics.Error("model_error", Diagnostics.At(path, name), "A boolean is required.")
