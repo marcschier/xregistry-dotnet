@@ -130,11 +130,20 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             return _definitions.GetValueOrDefault(type[1..]);
         }
 
+        var separator = type.IndexOf('.');
+        var first = separator < 0 ? type : type[..separator];
         for (var prefix = scope; ; prefix = prefix.Contains('.', StringComparison.Ordinal) ? prefix[..prefix.LastIndexOf('.')] : "")
         {
-            if (_definitions.TryGetValue(prefix.Length == 0 ? type : prefix + "." + type, out var result))
+            context.Work();
+            var candidate = prefix.Length == 0 ? type : prefix + "." + type;
+            if (_definitions.TryGetValue(candidate, out var result))
             {
                 return result;
+            }
+
+            if (separator >= 0 && _definitions.ContainsKey(prefix.Length == 0 ? first : prefix + "." + first))
+            {
+                return null;
             }
 
             if (prefix.Length == 0)

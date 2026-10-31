@@ -10,6 +10,89 @@ namespace XRegistry.Validation.Tests;
 public class ProtobufValidationTests
 {
     [Test]
+    [Arguments("message Name {}")]
+    [Arguments("enum Name { ZERO=0; }")]
+    [Arguments("message Name { message Other {} }")]
+    public async Task RelativeCompoundTypeNamesDoNotBypassNearerTypeOwners(string local)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            foreach (var type in new[] { "Name.Child", ".example.Name.Child" })
+            {
+                foreach (var field in new[]
+                {
+                    $"optional {type} value=1;",
+                    $"map<string,{type}> value=1;",
+                    $"oneof choice {{ {type} value=1; }}"
+                })
+                {
+                    var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                        Encoding.UTF8.GetBytes($"syntax='proto{syntax}'; package example; " +
+                            "message Name { message Child {} } message Root { " + local + field + " }"));
+                    await Assert.That(result.Status).IsEqualTo(type.StartsWith('.')
+                        ? DocumentValidationStatus.Valid : DocumentValidationStatus.Invalid);
+                    if (type.StartsWith('.')) { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+                    else { await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.type"); }
+                }
+            }
+        }
+    }
+
+    [Test]
+    public async Task RelativeCompoundTypeNamesStillBindTheNearestDeclaredChild()
+    {
+        const string document = """
+            syntax='proto3'; package example;
+            message Name { enum Child { ZERO=0; } }
+            message Root { message Name { message Child {} }
+              Name.Child value=1 [lazy=true]; }
+            """;
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            Encoding.UTF8.GetBytes(document));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("Name.Child.Grand", DocumentValidationStatus.Invalid)]
+    [Arguments(".example.Name.Child.Grand", DocumentValidationStatus.Valid)]
+    public async Task RelativeCompoundTypeOwnersDoNotFallbackAfterAMissingIntermediateType(
+        string type, DocumentValidationStatus expected)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            Encoding.UTF8.GetBytes("syntax='proto3'; package example; " +
+                "message Name { message Child { message Grand {} } } " +
+                $"message Root {{ message Name {{ message Child {{}} }} {type} value=1; }}"));
+        await Assert.That(result.Status).IsEqualTo(expected);
+        if (expected == DocumentValidationStatus.Valid) { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+        else { await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.type"); }
+    }
+
+    [Test]
+    [Arguments("Name.Child", DocumentValidationStatus.Invalid)]
+    [Arguments(".example.Name.Child", DocumentValidationStatus.Valid)]
+    public async Task RelativeCompoundTypeOwnershipIncludesImportedOuterDeclarations(
+        string type, DocumentValidationStatus expected)
+    {
+        var calls = 0;
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            Encoding.UTF8.GetBytes($"syntax='proto3'; package example; import 'dep.proto'; " +
+                $"message Root {{ message Name {{}} {type} value=1; }}"), new()
+            {
+                ResolveReference = (_, _) =>
+                {
+                    calls++;
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+                        "syntax='proto3'; package example; message Name { message Child {} }"u8.ToArray());
+                }
+            });
+        await Assert.That(calls).IsEqualTo(1);
+        await Assert.That(result.Status).IsEqualTo(expected);
+        if (expected == DocumentValidationStatus.Valid) { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+        else { await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.type"); }
+    }
+
+    [Test]
     [Arguments("service S {}")]
     [Arguments("message Request {} message Response {} service S { rpc Get(Request) returns (Response); }")]
     [Arguments("package example.api; message M {} service S { rpc Get(stream M) returns (M); rpc Put(M) returns (stream M); rpc Both(stream M) returns (stream M); }")]

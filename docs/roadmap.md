@@ -244,6 +244,10 @@ vocabulary/source mapping. It does not supply their implementation.
   enum-value duplicate checks and token-kind checks remain enforced.
   Editions and custom extensions remain unsupported. This does not add gRPC
   API operation selection.
+  Relative compound type names now respect a nearer message or enum that owns
+  their first component. Missing nested types cannot fall back to an outer
+  owner; leading-dot references still start at the outermost scope. Complete
+  package and non-type shadowing rules remain under review.
   The document validator now accepts `gRPC/proto3` under the same bounded
   declaration policy and requires at least one root service. Imported services
   cannot satisfy the root requirement; imported types retain syntax and
