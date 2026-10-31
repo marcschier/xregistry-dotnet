@@ -179,6 +179,97 @@ public class RegistryModelTests
     }
 
     [Test]
+    public async Task NonStrictScalarEnumIsAdvisoryButKeepsItsScalarType()
+    {
+        var model = RegistryModel.Compile(RegistryJson.Parse("""
+            {"attributes":{"suggested":{"type":"string","enum":["alpha"],"strict":false}}}
+            """));
+        var options = new RegistryMetadataValidationOptions { Mode = RegistryMetadataMode.ClientInput };
+        var accepted = RegistryMetadataValidator.Validate(
+            RegistryJson.Parse("""{"suggested":"beta"}"""), model.Attributes, options);
+
+        await Assert.That(accepted.Metadata.RootElement.GetProperty("suggested").GetString()).IsEqualTo("beta");
+
+        var rejected = TestErrors.Capture(() => RegistryMetadataValidator.Validate(
+            RegistryJson.Parse("""{"suggested":2}"""), model.Attributes, options));
+        await Assert.That(rejected.Code).IsEqualTo("invalid_attribute");
+        await Assert.That(rejected.Path).IsEqualTo("/suggested");
+    }
+
+    [Test]
+    public async Task ScalarAttributeAspectsUseNormativeDefaults()
+    {
+        var model = RegistryModel.Compile(RegistryJson.Parse("""
+            {"attributes":{"suggested":{"type":"string","enum":["alpha"]}},
+             "groups":{"dirs":{"singular":"dir","resources":{"files":{
+               "singular":"file","attributes":{"tag":"string"}
+             }}}}}
+            """));
+        var suggested = model.Attributes["suggested"];
+        var tag = model.Groups["dirs"].Resources["files"].Attributes["tag"];
+
+        await Assert.That(suggested.Strict).IsTrue();
+        await Assert.That(tag.MatchVersions).IsFalse();
+
+        var effective = model.EffectiveModel.RootElement;
+        await Assert.That(effective.GetProperty("attributes").GetProperty("suggested").GetProperty("strict").GetBoolean())
+            .IsTrue();
+        await Assert.That(effective.GetProperty("groups").GetProperty("dirs").GetProperty("resources")
+            .GetProperty("files").GetProperty("attributes").GetProperty("tag").GetProperty("matchversions").GetBoolean())
+            .IsFalse();
+    }
+
+    [Test]
+    public async Task ExtendedObjectNameCharsetAppliesToConditionalSiblingAttributes()
+    {
+        var extended = RegistryModel.Compile(RegistryJson.Parse("""
+            {"attributes":{"properties":{"type":"object","namecharset":"EXTENDED","attributes":{
+              "mode":{"type":"string","ifvalues":{"on":{"siblingattributes":{"extra-field":"integer"}}}},
+              "direct-name":"integer"
+            }}}}
+            """)).Attributes["properties"];
+        var result = RegistryMetadataValidator.Validate(
+            RegistryJson.Parse("""{"mode":"on","extra-field":3,"direct-name":4}"""), extended.Attributes);
+
+        await Assert.That(extended.NameCharset).IsEqualTo("extended");
+        await Assert.That(result.Metadata.RootElement.GetProperty("extra-field").GetInt32()).IsEqualTo(3);
+        await Assert.That(result.Metadata.RootElement.GetProperty("direct-name").GetInt32()).IsEqualTo(4);
+
+        var diagnostic = TestErrors.Capture(() => RegistryModel.Compile(RegistryJson.Parse("""
+            {"attributes":{"properties":{"type":"object","attributes":{
+              "mode":{"type":"string","ifvalues":{"on":{"siblingattributes":{"extra-field":"integer"}}}}
+            }}}}
+            """)));
+        await Assert.That(diagnostic.Code).IsEqualTo("model_error");
+        await Assert.That(diagnostic.Path)
+            .IsEqualTo("/attributes/properties/attributes/mode/ifvalues/on/siblingattributes/extra-field");
+    }
+
+    [Test]
+    public async Task ObjectNameCharsetDefaultsToStrict()
+    {
+        var model = RegistryModel.Compile(RegistryJson.Parse("""
+            {"attributes":{"properties":{"type":"object","attributes":{"*":"string"}}}}
+            """));
+        var properties = model.Attributes["properties"];
+        var accepted = RegistryMetadataValidator.Validate(
+            RegistryJson.Parse("""{"properties":{"valid_name":"value"}}"""), model.Attributes,
+            new() { Mode = RegistryMetadataMode.ClientInput });
+
+        await Assert.That(properties.NameCharset).IsEqualTo("strict");
+        await Assert.That(model.EffectiveModel.RootElement.GetProperty("attributes").GetProperty("properties")
+            .GetProperty("namecharset").GetString()).IsEqualTo("strict");
+        await Assert.That(accepted.Metadata.RootElement.GetProperty("properties").GetProperty("valid_name").GetString())
+            .IsEqualTo("value");
+
+        var rejected = TestErrors.Capture(() => RegistryMetadataValidator.Validate(
+            RegistryJson.Parse("""{"properties":{"invalid-name":"value"}}"""), model.Attributes,
+            new() { Mode = RegistryMetadataMode.ClientInput }));
+        await Assert.That(rejected.Code).IsEqualTo("unknown_attribute");
+        await Assert.That(rejected.Path).IsEqualTo("/properties/invalid-name");
+    }
+
+    [Test]
     [Arguments("""{"attributes":{"a":{"type":"array"}}}""", "/attributes/a/item", "model_error")]
     [Arguments("""{"attributes":{"a":{"type":"map","item":{"type":"string","required":true}}}}""", "/attributes/a/item/required", "model_error")]
     [Arguments("""{"attributes":{"a":{"type":"string","item":{"type":"string"}}}}""", "/attributes/a/item", "model_error")]

@@ -28131,7 +28131,7 @@
       "text": "- Per the [Attributes and Extensions](./spec.md#attributes-and-extensions) section, attribute names are normally limited to just the set of characters that ensure they can reliably be used in cases such as code variable names without the need for some escaping mechanism. However, there are situations where object-typed attribute names need to support additional characters, such as a dash (`-`), and it is known that they will never be used in those restricted character set situations. By setting the `namecharset` aspect to `extended` the server MUST allow for an extended set of valid characters in attribute names for this object.",
       "review": {
         "status": "reviewed",
-        "note": "Extended object naming reuses the Core map-key grammar rather than permitting arbitrary Unicode or punctuation. The nested model test accepts a-b and canonicalizes EXTENDED. Runtime acceptance/rejection of extended object members is not directly asserted by that compilation-only test.",
+        "note": "A runtime test accepts a dashed direct object member and conditional sibling under extended naming. The full character-set boundary is not established by this example.",
         "roles": [
           "server",
           "producer"
@@ -28140,7 +28140,8 @@
       "implementation": {
         "status": "pending",
         "testIds": [
-          "CompilesNestedItemsAndStaticVersionMatchObligations"
+          "CompilesNestedItemsAndStaticVersionMatchObligations",
+          "ExtendedObjectNameCharsetAppliesToConditionalSiblingAttributes"
         ],
         "nativeEvidence": []
       }
@@ -28161,15 +28162,17 @@
       "text": "The allowed character set for attribute names within an `object` MUST also apply to the top-level `siblingattributes` of any `ifvalues` defined for those attributes.",
       "review": {
         "status": "reviewed",
-        "note": "CompileAttribute passes its containing scope's extended flag into conditional sibling compilation, and the runtime uses that object's same naming scope. The inspected nested-ifvalues tests use strict names, so extended conditional sibling naming is implemented in source but lacks direct evidence.",
+        "note": "An executable model test accepts and validates a dashed conditional sibling under extended object naming, then confirms the same definition is rejected under strict naming.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ExtendedObjectNameCharsetAppliesToConditionalSiblingAttributes"
+        ],
         "nativeEvidence": []
       }
     },
@@ -28189,15 +28192,17 @@
       "text": "- When not specified, the default value MUST be `strict`.",
       "review": {
         "status": "reviewed",
-        "note": "RegistryAttributeDefinition and CompileAttribute both default NameCharset to strict; ModelWriter emits it for objects. No direct test asserts the omitted object aspect's resulting value and strict runtime boundary together.",
+        "note": "A direct test confirms omitted namecharset compiles and serializes as strict, accepts a valid name, and rejects a dashed name at runtime.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ObjectNameCharsetDefaultsToStrict"
+        ],
         "nativeEvidence": []
       }
     },
@@ -28369,14 +28374,16 @@
       "text": "When specified without `strict` being `true`, this list is just a suggested set of values and the attribute is NOT REQUIRED to use one of them.",
       "review": {
         "status": "reviewed",
-        "note": "Allowed bypasses enum membership when Strict is false, preserving enum as advice while retaining scalar type validation. No direct strict:false out-of-enum acceptance assertion was found; compiler rejection of an invalid default with implicit strict:true does not cover this case.",
+        "note": "A direct scalar test accepts a string outside the enum when strict is false and still rejects a nonstring value.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "NonStrictScalarEnumIsAdvisoryButKeepsItsScalarType"
+        ],
         "nativeEvidence": []
       }
     },
@@ -28463,7 +28470,7 @@
       "text": "- When not specified, the default value MUST be `true`.",
       "review": {
         "status": "reviewed",
-        "note": "Strict defaults to true in the record and compiler. The invalid-default and strict-enum ifvalues cases omit strict yet are rejected, directly observing the default rather than merely checking a member count.",
+        "note": "A direct model test omits strict on an enum-bearing attribute and asserts true in both the compiled model and effective-model output.",
         "roles": [
           "server",
           "producer"
@@ -28472,7 +28479,8 @@
       "implementation": {
         "status": "implemented",
         "testIds": [
-          "RejectsInvalidModelAspectsWithExactPointers"
+          "RejectsInvalidModelAspectsWithExactPointers",
+          "ScalarAttributeAspectsUseNormativeDefaults"
         ],
         "nativeEvidence": []
       }
@@ -28493,16 +28501,17 @@
       "text": "- OPTIONAL.",
       "review": {
         "status": "reviewed",
-        "note": "Matchversions is optional and false unless explicitly enabled. The minimal Resource omits it; positive and misplaced-true tests cover use/rejection, but no direct assertion isolates omitted matchversions with divergent Version values.",
+        "note": "The direct default test compiles a Resource attribute with matchversions omitted and confirms that omission is accepted.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "CompilesNestedItemsAndStaticVersionMatchObligations"
+          "CompilesNestedItemsAndStaticVersionMatchObligations",
+          "ScalarAttributeAspectsUseNormativeDefaults"
         ],
         "nativeEvidence": []
       }
@@ -28586,15 +28595,17 @@
       "text": "- When not specified, the default value MUST be `false`.",
       "review": {
         "status": "reviewed",
-        "note": "MatchVersions defaults to false via the record and Boolean fallback, with no implicit promotion for ordinary Version scalars. The existing tests assert the explicit true path, not this omitted-aspect value or its lack of cross-Version restriction.",
+        "note": "A direct model test omits matchversions on a Resource attribute and asserts false in both the compiled model and effective-model output.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ScalarAttributeAspectsUseNormativeDefaults"
+        ],
         "nativeEvidence": []
       }
     },
