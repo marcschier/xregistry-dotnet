@@ -30682,16 +30682,17 @@
       "text": "The `<RESOURCES>` portion of the map key MUST be the plural name of the Resource type being referenced.",
       "review": {
         "status": "reviewed",
-        "note": "CompileConstraints resolves the first path component only through the Resource dictionary's plural key. A positive schemas.format test observes ResourceType/attribute-path separation, but no direct singular-instead-of-plural or unknown-Resource assertion was found.",
+        "note": "ConstraintsRejectArrayMapWildcardAndConditionalAttributes verifies that the Resource singular cannot replace the plural in a constraint key.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "EnforcesConstraintSubsetsAndDefaults"
+          "EnforcesConstraintSubsetsAndDefaults",
+          "ConstraintsRejectArrayMapWildcardAndConditionalAttributes"
         ],
         "nativeEvidence": []
       }

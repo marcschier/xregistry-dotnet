@@ -13,6 +13,7 @@ public class RegistryConstraintTests
     [Arguments("""{"groups":{"gs":{"singular":"g","constraints":{"rs.values.key":{}},"resources":{"rs":{"singular":"r","attributes":{"values":{"type":"map","item":{"type":"string"}}}}}}}}""", "/groups/gs/constraints/rs.values.key")]
     [Arguments("""{"groups":{"gs":{"singular":"g","constraints":{"rs.extra":{}},"resources":{"rs":{"singular":"r","attributes":{"*":"string"}}}}}}""", "/groups/gs/constraints/rs.extra")]
     [Arguments("""{"groups":{"gs":{"singular":"g","constraints":{"rs.dynamic":{}},"resources":{"rs":{"singular":"r","attributes":{"mode":{"type":"string","ifvalues":{"on":{"siblingattributes":{"dynamic":"string"}}}}}}}}}}""", "/groups/gs/constraints/rs.dynamic")]
+    [Arguments("""{"groups":{"gs":{"singular":"g","constraints":{"r.value":{}},"resources":{"rs":{"singular":"r","attributes":{"value":"string"}}}}}}""", "/groups/gs/constraints/r.value")]
     public async Task ConstraintsRejectArrayMapWildcardAndConditionalAttributes(string json, string expectedPath)
     {
         var error = TestErrors.Capture(() => RegistryModel.Compile(RegistryJson.Parse(json)));
