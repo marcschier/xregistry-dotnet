@@ -29290,16 +29290,17 @@
       "text": "- OPTIONAL.",
       "review": {
         "status": "reviewed",
-        "note": "Nested object attributes are optional and compile to an empty set when omitted; explicit maps recursively compile. Nested-object tests cover present definitions, but no direct successful empty or omitted child-definition map assertion was found.",
+        "note": "A direct test compiles object attributes both without a nested attribute map and with an empty map.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "CompilesNestedItemsAndStaticVersionMatchObligations"
+          "CompilesNestedItemsAndStaticVersionMatchObligations",
+          "ObjectAttributeDefinitionsCanBeAbsentOrEmpty"
         ],
         "nativeEvidence": []
       }
@@ -29321,16 +29322,17 @@
       "text": "- MAY be present when the owning attribute's `type` is `object`, otherwise it MUST NOT be present. It MAY be absent or an empty list if there are no defined attributes for the nested `object`.",
       "review": {
         "status": "reviewed",
-        "note": "A non-null attributes aspect is accepted only on object; the compiler rejects attributes:{} on string. Empty/absent object maps are supported in source, but the compound permission has no direct positive empty-map assertion alongside the tested invalid placement.",
+        "note": "A direct test accepts nested attributes both when omitted and when supplied as an empty map, and verifies both compile to an empty attribute definition; the exact-path model test rejects the aspect on a string.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "RejectsInvalidModelAspectsWithExactPointers"
+          "RejectsInvalidModelAspectsWithExactPointers",
+          "ObjectAttributeDefinitionsCanBeAbsentOrEmpty"
         ],
         "nativeEvidence": []
       }

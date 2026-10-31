@@ -312,6 +312,22 @@ public class RegistryModelTests
     }
 
     [Test]
+    public async Task ObjectAttributeDefinitionsCanBeAbsentOrEmpty()
+    {
+        foreach (var json in new[]
+        {
+            """{"attributes":{"empty":{"type":"object"}}}""",
+            """{"attributes":{"empty":{"type":"object","attributes":{}}}}"""
+        })
+        {
+            var model = RegistryModel.Compile(RegistryJson.Parse(json));
+            await Assert.That(model.Attributes["empty"].Attributes.Count).IsEqualTo(0);
+            await Assert.That(model.EffectiveModel.RootElement.GetProperty("attributes").GetProperty("empty")
+                .GetProperty("attributes").EnumerateObject().Count()).IsEqualTo(0);
+        }
+    }
+
+    [Test]
     [Arguments("""{"attributes":{"a":{"type":"array"}}}""", "/attributes/a/item", "model_error")]
     [Arguments("""{"attributes":{"a":{"type":"map","item":{"type":"string","required":true}}}}""", "/attributes/a/item/required", "model_error")]
     [Arguments("""{"attributes":{"a":{"type":"string","item":{"type":"string"}}}}""", "/attributes/a/item", "model_error")]
