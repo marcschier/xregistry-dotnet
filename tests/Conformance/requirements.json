@@ -15583,6 +15583,7 @@
           "ResourceFactsUseDefaultVersionWhileMetaAndIsDefaultKeepTheirOwnMeaning",
           "FilterAfterWholeResourceShadowNeverRecoversLowerPriorityVersions",
           "MetaAndDefaultVersionFactsUseSharedCorePlanesAndExactNumericOrdering",
+          "GroupRelativeNestedFilterLinksReproduceTheSelectedCollection",
           "NestedSharedSelectionUpdatesCountsAndProducesAnExactFollowableCollectionLink",
           "ExcludeAllValidatesOnlyTheOwnerWithoutEnumeratingItsChildren",
           "ProducerQueriesAuthorizeTheCollectionOwnerBeforeReadingMembers"
@@ -15646,7 +15647,7 @@
       "text": "- The collection `url` attribute MAY include the appropriate filter expression(s) such that a query to that URL would return the same subset of entities, if the protocol supports including the filter flag value as part of the URL.",
       "review": {
         "status": "reviewed",
-        "note": "Filtered collection navigation preserves the needed sub-filter. Direct assertions check a nonempty rebased URL and actually follow it to the expected producer members, as well as checking excludeall for an empty selected collection.",
+        "note": "Direct assertions follow both root-relative and Group-relative filtered collection URLs and verify that an empty selected collection uses excludeall.",
         "roles": [
           "server",
           "producer"
@@ -15661,6 +15662,7 @@
           "ResourceFactsUseDefaultVersionWhileMetaAndIsDefaultKeepTheirOwnMeaning",
           "FilterAfterWholeResourceShadowNeverRecoversLowerPriorityVersions",
           "MetaAndDefaultVersionFactsUseSharedCorePlanesAndExactNumericOrdering",
+          "GroupRelativeNestedFilterLinksReproduceTheSelectedCollection",
           "NestedSharedSelectionUpdatesCountsAndProducesAnExactFollowableCollectionLink",
           "ExcludeAllValidatesOnlyTheOwnerWithoutEnumeratingItsChildren",
           "ProducerQueriesAuthorizeTheCollectionOwnerBeforeReadingMembers"
@@ -16339,14 +16341,14 @@
       "text": "- A `<VALUE>` of `*` MUST be equivalent to checking for the existence of the attribute, with any value (even an empty string). In other words, the filter will only fail if the attribute has no value at all.",
       "review": {
         "status": "reviewed",
-        "note": "Glob's sole-star case matches any present string, including empty, and fails absent values. No direct sole-star/valid-empty-optional-string/null/missing vector was established; multi-star substring cases are not equivalent proof. Scalar-only/string wildcard context remains relevant.",
+        "note": "The sole-star vector matches an explicitly present empty description and excludes entities with no description. The comparison is scoped to the string attribute defined by the query model.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "FilterLiteralMissingNullAndPrecisionCasesHaveIndependentExpectedIds"
         ],
@@ -76578,13 +76580,19 @@
       ],
       "text": "- For boolean attributes, comparisons MUST be an exact case-sensitive match (`true` or `false`). For relative comparisons, `false` is less than `true`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Direct vectors check exact-case boolean literals, reject uppercase TRUE, and verify false is less than true.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FilterLiteralMissingNullAndPrecisionCasesHaveIndependentExpectedIds",
+          "InvalidFilterLiteralsAndUnsupportedPathOperatorsRejectExplicitly"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76609,13 +76617,19 @@
       ],
       "text": "- For numeric attributes, standard numeric comparisons rules apply. Note that numerics MUST NOT be treated as strings for comparison.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Direct numeric vectors cover >= at its boundary and distinguish values above 2^53, exponent-equivalent values, and long decimal fractions.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FilterLiteralMissingNullAndPrecisionCasesHaveIndependentExpectedIds",
+          "FractionalAndNegativeExponentComparisonsNeverUseFloatingPoint"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76640,13 +76654,18 @@
       ],
       "text": "- The strings MUST be compared in a case-insensitive manner.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Direct string vectors match Alpha and ALPHA with the same case-insensitive equality filter.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FilterLiteralMissingNullAndPrecisionCasesHaveIndependentExpectedIds"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76702,13 +76721,19 @@
       ],
       "text": "Additionally, wildcards (`*`) MAY be used in string `<VALUE>`s with the following constraints:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Direct vectors cover substring and escaped stars, empty-string existence, permitted equality and inequality operators, and rejection for relative or non-string comparisons.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FilterLiteralMissingNullAndPrecisionCasesHaveIndependentExpectedIds",
+          "InvalidFilterLiteralsAndUnsupportedPathOperatorsRejectExplicitly"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76733,13 +76758,18 @@
       ],
       "text": "- They MUST only be used when the comparison operator is `=`, `!=` or `<>`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A relative-comparison wildcard is rejected, and both inequality operators are exercised with wildcard string values.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FilterLiteralMissingNullAndPrecisionCasesHaveIndependentExpectedIds"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76764,13 +76794,18 @@
       ],
       "text": "- The presence of a wildcard indicates that any number of characters MAY appear at that location in the `<VALUE>`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The substring wildcard vector matches text with arbitrary characters between the literal prefix and suffix.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FilterLiteralMissingNullAndPrecisionCasesHaveIndependentExpectedIds"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76795,13 +76830,18 @@
       ],
       "text": "- The wildcard MAY be escaped via the use of a backslash (`\\\\`) character (e.g. `abc\\*def`) to mean that the `*` is to be interpreted as a normal character and not as a wildcard.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "An escaped star is matched as a literal character rather than as a wildcard.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EscapedStarsAreLiteralsAndTimestampOffsetsNormalizeBeforeComparison"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76826,13 +76866,18 @@
       ],
       "text": "- A `<VALUE>` of `*` MUST be equivalent to checking for the existence of the attribute, with any value (even an empty string). In other words, the filter will only fail if the attribute has no value at all.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The sole-star vector matches the explicitly present empty description and excludes entities without that attribute.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FilterLiteralMissingNullAndPrecisionCasesHaveIndependentExpectedIds"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76858,13 +76903,20 @@
       ],
       "text": "As previously specified, when a query includes a filter expression, any nested xRegistry collections in the response SHOULD result in the specification of a `<COLLECTION>url` attribute that allows clients to easily traverse into that collection with the appropriate sub-filter expression to yield the same results as the original filter, but just for that nested collection. However, if a collection has zero entities (regardless of whether the empty list is due to the filter or due to the collection being empty), server MUST use a special filter expression, `excludeall`, to indicate no results are to be returned for that URL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Root-relative and Group-relative nested collection URLs are followed to verify their selected members. Empty selected collections use excludeall.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FiltersDoNotInlineAndEmptyCollectionLinksUseExcludeAll",
+          "GroupRelativeNestedFilterLinksReproduceTheSelectedCollection",
+          "NestedSharedSelectionUpdatesCountsAndProducesAnExactFollowableCollectionLink"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76889,13 +76941,18 @@
       ],
       "text": "URLs with the `excludeall` filter expression MUST adhere to the following:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Direct assertions cover an empty collection result, not_found for an entity URL, and bad_filter when excludeall is combined with another filter.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FiltersDoNotInlineAndEmptyCollectionLinksUseExcludeAll"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76920,13 +76977,18 @@
       ],
       "text": "- If the URL references a collection then an empty collection (`{}`) MUST be returned.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The excludeall collection request returns an empty JSON object.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FiltersDoNotInlineAndEmptyCollectionLinksUseExcludeAll"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76951,13 +77013,18 @@
       ],
       "text": "- If the URL references an entity, then an error ([not_found](#not_found)) MUST be generated.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "An excludeall request to an entity is asserted to return not_found.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FiltersDoNotInlineAndEmptyCollectionLinksUseExcludeAll"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76982,13 +77049,18 @@
       ],
       "text": "- If any other filter expression appears at the same time, then an error ([bad_filter](#bad_filter)) MUST be generated.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Combining excludeall with another filter is asserted to return bad_filter.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FiltersDoNotInlineAndEmptyCollectionLinksUseExcludeAll"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77013,13 +77085,18 @@
       ],
       "text": "If the request references an entity (not a collection), and the filter expression references an attribute in that entity (i.e. there is no `<PATH>`), then if the expression does not match the entity, that entity MUST NOT be returned. In other words, a `404 Not Found` would be generated in the HTTP protocol case.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A nonmatching filter on a requested entity is asserted to return not_found.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FiltersDoNotInlineAndEmptyCollectionLinksUseExcludeAll"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77044,13 +77121,18 @@
       ],
       "text": "Invalid filter expressions MUST generate an error ([bad_filter](#bad_filter)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Invalid literals, unsupported wildcard comparisons, and malformed paths are asserted to return bad_filter.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "InvalidFilterLiteralsAndUnsupportedPathOperatorsRejectExplicitly"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77076,13 +77158,20 @@
       ],
       "text": "Specifying a filter does not imply inlining. Inlining MAY be used at the same time but MUST NOT result in additional entities being included in the results unless they are children of a matching leaf entity.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Filtering does not imply inlining; when inline is requested, assertions restrict collections to selected leaves and include descendants of matching parents.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FiltersDoNotInlineAndEmptyCollectionLinksUseExcludeAll",
+          "NestedAndIntersectsMatchingLeavesRatherThanDifferentSiblingWitnesses",
+          "OrMatchingParentIncludesItsChildrenWhileAndRestrictsTheChildCollection"
+        ],
         "nativeEvidence": []
       }
     },

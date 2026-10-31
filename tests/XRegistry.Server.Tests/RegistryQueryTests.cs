@@ -43,16 +43,22 @@ public class RegistryQueryTests
     [Arguments("rank>9007199254740992", "c")]
     [Arguments("rank=2e0", "a")]
     [Arguments("rank<=2", "a")]
+    [Arguments("rank>=10", "b,c")]
     [Arguments("rank<2", "")]
     [Arguments("rank!=2", "b,c,d")]
     [Arguments("rank<>2", "b,c,d")]
+    [Arguments("active<true", "a")]
     [Arguments("rank=null", "d")]
     [Arguments("rank", "a,b,c")]
     [Arguments("rank<>null", "a,b,c")]
     [Arguments("description=", "d")]
+    [Arguments("description=*", "d")]
     [Arguments("description=null", "a,b,c")]
+    [Arguments("name=ALPHA", "a,c")]
     [Arguments("name=\"Alpha\"", "")]
     [Arguments("name=*LPH*", "a,c")]
+    [Arguments("name!=*LPH*", "b,d")]
+    [Arguments("name<>*LPH*", "b,d")]
     [Arguments("active>false", "b,c")]
     [Arguments("active!=false", "b,c,d")]
     [Arguments("unknown=value", "")]
@@ -73,6 +79,25 @@ public class RegistryQueryTests
         await Assert.That(Ids(result.Metadata!.RootElement)).IsEquivalentTo(["b"], StringComparer.Ordinal);
         await Assert.That(Ids(result.Metadata.RootElement.GetProperty("b").GetProperty("items"))).IsEquivalentTo(["z"], StringComparer.Ordinal);
         await Assert.That(result.Metadata.RootElement.GetProperty("b").GetProperty("itemscount").GetInt32()).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task GroupRelativeNestedFilterLinksReproduceTheSelectedCollection()
+    {
+        var engine = await Seed();
+        var result = await Send(engine, RegistryAction.Read, "/fleets/a", null,
+            new KeyValuePair<string, string?>("filter", "items.itemid=x"),
+            new KeyValuePair<string, string?>("inline", "*"));
+        var group = result.Metadata!.RootElement;
+        await Assert.That(Ids(group.GetProperty("items"))).IsEquivalentTo(["x"], StringComparer.Ordinal);
+        await Assert.That(group.GetProperty("itemscount").GetInt32()).IsEqualTo(1);
+        await Assert.That(group.GetProperty("itemsurl").GetString())
+            .IsEqualTo("https://registry.example/catalog/fleets/a/items?filter=itemid%3Dx");
+
+        var followed = await Send(engine, RegistryAction.Read, "/fleets/a/items", null,
+            new KeyValuePair<string, string?>("filter", "itemid=x"));
+        await Assert.That(Ids(followed.Metadata!.RootElement)).IsEquivalentTo(["x"], StringComparer.Ordinal);
+        await Assert.That(followed.Metadata.RootElement.GetProperty("x").GetProperty("name").GetString()).IsEqualTo("match");
     }
 
     [Test]
@@ -103,8 +128,9 @@ public class RegistryQueryTests
         await Assert.That(result.Metadata.RootElement.GetProperty("fleetscount").GetInt32()).IsEqualTo(0);
         await Assert.That(result.Metadata.RootElement.GetProperty("fleetsurl").GetString())
             .IsEqualTo("https://registry.example/catalog/fleets?filter=excludeall");
-        await Assert.That(Ids((await Send(engine, RegistryAction.Read, "/fleets", null,
-            new KeyValuePair<string, string?>("filter", "excludeall"))).Metadata!.RootElement).Length).IsEqualTo(0);
+        var empty = await Send(engine, RegistryAction.Read, "/fleets", null,
+            new KeyValuePair<string, string?>("filter", "excludeall"));
+        await Assert.That(empty.Metadata!.RootElement.EnumerateObject().Any()).IsFalse();
         await ExpectCode(() => Send(engine, RegistryAction.Read, "/fleets/a", null,
             new KeyValuePair<string, string?>("filter", "excludeall")), "not_found");
         await ExpectCode(() => Send(engine, RegistryAction.Read, "/", null,
@@ -177,6 +203,7 @@ public class RegistryQueryTests
     [Arguments("info=non-scalar")]
     [Arguments("name>*a")]
     [Arguments("rank>=null")]
+    [Arguments("rank=*")]
     [Arguments("info.reviewers[-1]=x")]
     [Arguments("name!x")]
     public async Task InvalidFilterLiteralsAndUnsupportedPathOperatorsRejectExplicitly(string filter)
