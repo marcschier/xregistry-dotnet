@@ -1113,12 +1113,70 @@ public class ProtobufValidationTests
     [Arguments("message Root { oneof choice { option map_entry=false; string value=1; } }")]
     [Arguments("message Root {} service S { option map_entry=true; }")]
     [Arguments("message Root {} service S { rpc Get(Root) returns (Root) { option map_entry=false; } }")]
+    [Arguments("message Root { string value=1 [map_entry=true]; }")]
+    [Arguments("enum E { option map_entry=false; ZERO=0; }")]
+    [Arguments("enum E { ZERO=0 [map_entry=true]; }")]
     public async Task MapEntryOptionsRejectNonMessageDeclarationPlacement(string body)
     {
         var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
             Encoding.UTF8.GetBytes($"syntax='proto3'; {body}"));
         await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
         await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.option_scope");
+    }
+
+    [Test]
+    [Arguments("java_package='example'", "file")]
+    [Arguments("java_outer_classname='Root'", "file")]
+    [Arguments("go_package='example'", "file")]
+    [Arguments("csharp_namespace='Example'", "file")]
+    [Arguments("objc_class_prefix='EX'", "file")]
+    [Arguments("php_namespace='Example'", "file")]
+    [Arguments("php_metadata_namespace='Example'", "file")]
+    [Arguments("ruby_package='Example'", "file")]
+    [Arguments("java_multiple_files=true", "file")]
+    [Arguments("cc_generic_services=false", "file")]
+    [Arguments("java_generic_services=false", "file")]
+    [Arguments("py_generic_services=false", "file")]
+    [Arguments("cc_enable_arenas=true", "file")]
+    [Arguments("optimize_for=SPEED", "file")]
+    [Arguments("allow_alias=true", "enum")]
+    [Arguments("packed=false", "field")]
+    [Arguments("lazy=false", "field")]
+    [Arguments("jstype=JS_NORMAL", "field")]
+    [Arguments("json_name='value'", "field")]
+    [Arguments("weak=false", "field")]
+    [Arguments("default=0", "field")]
+    [Arguments("idempotency_level=IDEMPOTENT", "method")]
+    [Arguments("debug_redact=true", "field,enum-value")]
+    [Arguments("deprecated=false", "file,message,field,enum,enum-value,service,method")]
+    public async Task SupportedOptionsUseConsistentScopeChecksAtEveryTarget(string assignment, string allowed)
+    {
+        foreach (var syntax in assignment.StartsWith("default=", StringComparison.Ordinal) ? new[] { 2 } : new[] { 2, 3 })
+        {
+            var option = $"option {assignment};";
+            var label = assignment.StartsWith("packed=", StringComparison.Ordinal) ? "repeated " : "optional ";
+            var type = assignment.StartsWith("lazy=", StringComparison.Ordinal) ? "Child" : "int64";
+            var field = $"{label}{type} value=1 [{assignment}];";
+            foreach (var (target, body) in new[]
+            {
+                ("file", $"{option} message Root {{}}"),
+                ("message", $"message Root {{ {option} }}"),
+                ("oneof", $"message Root {{ oneof choice {{ {option} int64 value=1; }} }}"),
+                ("field", $"message Root {{ message Child {{}} {field} }}"),
+                ("enum", $"enum E {{ {option} ZERO=0; }}"),
+                ("enum-value", $"enum E {{ ZERO=0 [{assignment}]; }}"),
+                ("service", $"message Root {{}} service S {{ {option} }}"),
+                ("method", $"message Root {{}} service S {{ rpc Get(Root) returns (Root) {{ {option} }} }}")
+            })
+            {
+                var permitted = allowed.Split(',').Contains(target);
+                var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                    Encoding.UTF8.GetBytes($"syntax='proto{syntax}'; {body}"));
+                await Assert.That(result.Status).IsEqualTo(permitted ? DocumentValidationStatus.Valid : DocumentValidationStatus.Invalid);
+                if (permitted) { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+                else { await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.option_scope"); }
+            }
+        }
     }
 
     [Test]

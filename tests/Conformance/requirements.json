@@ -43906,6 +43906,7 @@
           "ImportedAuthoredMapEntryOptionsAreRejected",
           "NativeMapSyntaxDoesNotRequireAnAuthoredMapEntryOption",
           "MapEntryOptionsRejectNonMessageDeclarationPlacement",
+          "SupportedOptionsUseConsistentScopeChecksAtEveryTarget",
           "EnumAndEnumValueUnknownOptionPoliciesRemainUnsupported",
           "EnumOptionPoliciesPreserveKnownBooleansAliasesAndInvalidSyntax"
         ],

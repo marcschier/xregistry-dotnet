@@ -183,6 +183,9 @@ vocabulary/source mapping. It does not supply their implementation.
   across statements while accepting adjacent nonoverlapping ranges.
   Supported file options reject message, oneof, service and method placement;
   `deprecated` is rejected on oneofs. Unknown/custom options remain unsupported.
+  Supported option scopes now use one check across all declaration targets,
+  including fields and enum values. Known misplaced options consistently
+  report `protobuf.option_scope`; unknown/custom policies remain unsupported.
   Floating defaults accept leading-decimal/exponent forms without allowing
   decimal fractions in integer-only contexts.
   Floating defaults distinguish integer radix syntax from decimal floating

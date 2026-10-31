@@ -417,7 +417,26 @@ internal sealed class ProtobufSyntax(ValidationContext context)
     private static void Unsupported(string detail) => ValidationContext.Fail(DocumentValidationStatus.Unsupported, "$", "protobuf.unsupported", detail);
 
     private enum TokenKind { Identifier, Number, String, Symbol, End }
-    private enum OptionTarget { File, Message, Oneof, Service, Method }
+    private enum OptionTarget { File, Message, Oneof, Field, Enum, EnumValue, Service, Method }
+
+    private static void RequireOptionScope(string option, OptionTarget target)
+    {
+        var allowed = option switch
+        {
+            "java_package" or "java_outer_classname" or "go_package" or "csharp_namespace" or
+            "objc_class_prefix" or "php_namespace" or "php_metadata_namespace" or "ruby_package" or
+            "java_multiple_files" or "cc_generic_services" or "java_generic_services" or
+            "py_generic_services" or "cc_enable_arenas" or "optimize_for" => target == OptionTarget.File,
+            "packed" or "lazy" or "jstype" or "json_name" or "weak" or "default" => target == OptionTarget.Field,
+            "allow_alias" => target == OptionTarget.Enum,
+            "idempotency_level" => target == OptionTarget.Method,
+            "debug_redact" => target is OptionTarget.Field or OptionTarget.EnumValue,
+            "deprecated" => target != OptionTarget.Oneof,
+            "map_entry" => target == OptionTarget.Message,
+            _ => true
+        };
+        Require(allowed, "protobuf.option_scope", "The option is not defined for this declaration kind.");
+    }
     private sealed record Token(TokenKind Kind, string SourceText, bool HasEscapes = false,
         ReadOnlyMemory<byte> StringBytes = default)
     {
@@ -635,7 +654,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                     Require(seen.Add(option), "protobuf.option", "Field options must be unique.");
                     Expect("=");
                     var value = Constant();
-                    Require(option != "idempotency_level", "protobuf.option_scope", "idempotency_level is only valid on RPC methods.");
+                    RequireOptionScope(option, OptionTarget.Field);
                     switch (option)
                     {
                         case "default":
@@ -701,8 +720,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                     Expect("=");
                     var value = Constant();
                     Expect(";");
-                    Require(option != "idempotency_level", "protobuf.option_scope", "idempotency_level is only valid on RPC methods.");
-                    Require(option != "debug_redact", "protobuf.option_scope", "debug_redact is only valid on fields and enum values.");
+                    RequireOptionScope(option, OptionTarget.Enum);
                     if (option is not ("allow_alias" or "deprecated")) { Unsupported("Unsupported enum option."); }
                     Require(IsBoolean(value), "protobuf.option", "The enum option must be boolean.");
                     Require(options.Add(option), "protobuf.option", "Singular enum options must be assigned only once.");
@@ -727,7 +745,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                             Require(seen.Add(option), "protobuf.option", "Enum value options must be unique.");
                             Expect("=");
                             var value = Constant();
-                            Require(option != "idempotency_level", "protobuf.option_scope", "idempotency_level is only valid on RPC methods.");
+                            RequireOptionScope(option, OptionTarget.EnumValue);
                             if (option is not ("deprecated" or "debug_redact")) { Unsupported("Unsupported enum value option."); }
                             Require(IsBoolean(value), "protobuf.option", "The enum value option must be boolean.");
                         }
@@ -821,36 +839,30 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             Expect("=");
             var value = Constant();
             Expect(";");
-            Require(option != "debug_redact", "protobuf.option_scope", "debug_redact is only valid on fields and enum values.");
+            RequireOptionScope(option, target);
             if (option == "map_entry")
             {
-                Require(target == OptionTarget.Message, "protobuf.option_scope", "map_entry is a message descriptor option.");
                 ValidationContext.Fail(DocumentValidationStatus.Invalid, "$", "protobuf.map_entry",
                     "map_entry cannot be authored in a schema; use map syntax.");
             }
             if (option is "java_package" or "java_outer_classname" or "go_package" or "csharp_namespace" or
                 "objc_class_prefix" or "php_namespace" or "php_metadata_namespace" or "ruby_package")
             {
-                Require(target == OptionTarget.File, "protobuf.option_scope", "This option is only valid at file scope.");
                 Require(value.Kind == TokenKind.String, "protobuf.option", "The language namespace option requires a string.");
                 _ = value.Text;
             }
             else if (option is "deprecated" or "java_multiple_files" or "cc_generic_services" or
                 "java_generic_services" or "py_generic_services" or "cc_enable_arenas")
             {
-                Require(option == "deprecated" ? target != OptionTarget.Oneof : target == OptionTarget.File,
-                    "protobuf.option_scope", "The option is not defined for this declaration kind.");
                 Require(IsBoolean(value), "protobuf.option", "The option requires a boolean.");
             }
             else if (option == "optimize_for")
             {
-                Require(target == OptionTarget.File, "protobuf.option_scope", "This option is only valid at file scope.");
                 Require(value.Kind == TokenKind.Identifier && value.Text is "SPEED" or "CODE_SIZE" or "LITE_RUNTIME",
                     "protobuf.option", "Invalid optimization mode.");
             }
             else if (option == "idempotency_level")
             {
-                Require(target == OptionTarget.Method, "protobuf.option_scope", "idempotency_level is only valid on RPC methods.");
                 Require(value.Kind == TokenKind.Identifier &&
                     value.Text is "IDEMPOTENCY_UNKNOWN" or "NO_SIDE_EFFECTS" or "IDEMPOTENT",
                     "protobuf.option", "idempotency_level must be a declared native IdempotencyLevel constant.");
