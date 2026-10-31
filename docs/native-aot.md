@@ -139,8 +139,8 @@ development cell, not requirement-level release qualification.
 
 ## Current evidence and uncovered cells
 
-The complete Validation suite at `cec0d03dd3ce180d8e66a2e0d40b9171ee18479f`
-passed on Windows x64 under .NET 8 and .NET 10: 5,665 cases and 978 methods per
+The complete Validation suite at `5b956dc878d7bab7c9755e3368eae80203d5ec35`
+passed on Windows x64 under .NET 8 and .NET 10: 5,736 cases and 994 methods per
 framework. The runs include the Protobuf declaration-scope, import-visibility,
 cross-syntax enum, adjacent-literal, typed-constant, reserved-range,
 option-target and leading-decimal corrections, RPC empty statements, grammar
@@ -151,14 +151,21 @@ Text consumers check UTF-8 after adjacent literals are combined; bytes defaults
 retain arbitrary octets. The refreshed runs also include message-only `lazy`,
 64-bit integral `jstype`, singular declaration options, shared option-name
 grammar, decoded NUL rejection in `json_name`, RPC `idempotency_level` and
-field/enum-value `debug_redact` checks. These cases ran alongside the earlier API,
+field/enum-value `debug_redact` checks. The current runs also cover authored
+`map_entry` rejection, shared native-option scope checks, scalar generator hints
+and Avro 1.12 protocol alias ownership across named types and within records
+and anonymous requests. These cases ran alongside the earlier API,
 Smithy and Avro checks. Both publications ran ILC without
 IL diagnostics. Native executable, managed control, report, proof and receipt
 hashes match; regenerated receipts and complete native/managed case inventories
 agree. Both managed proofs were rejected, and source inventories remained
-unchanged. Evidence is retained at
-`D:\temp\xregistry-validation-cec0d03-net8\native-suites-3zfh9ljf` and
-`D:\temp\xregistry-validation-cec0d03-net10\native-suites-gfi3d1u1`.
+unchanged. Both native proofs report zero JIT-compiled methods; the matching
+managed controls report 4,024 under .NET 8 and 4,005 under .NET 10.
+The source inventory SHA-256 is
+`360c137b22f727d663d010f51c36e6e486c19e06f2378dea7219aa875ee77df4`.
+Evidence is retained at
+`D:\temp\xregistry-validation-5b956dc-net8\native-suites-h2p843lp` and
+`D:\temp\xregistry-validation-5b956dc-net10\native-suites-me_xvqrb`.
 These selected-project runs do not refresh other platforms or complete
 thirteen-suite cells, or promote requirement-level qualification.
 
