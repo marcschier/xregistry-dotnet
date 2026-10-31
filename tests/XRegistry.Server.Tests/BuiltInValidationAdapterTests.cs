@@ -136,6 +136,39 @@ public class BuiltInValidationAdapterTests
     }
 
     [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task UnsupportedCompatibilityModeIsUnknownRatherThanAnEstablishedViolation(bool strict)
+    {
+        var engine = ValidatingEngine(strict: strict, allowCapabilityUpdates: true);
+        await Send(engine, RegistryAction.Replace, "/sets/g/schemas/s$details", """
+            {"versionid":"v1","format":"Avro/1.11.0","schema":"int","meta":{"compatibility":"full"}}
+            """);
+        await Send(engine, RegistryAction.Patch, "/capabilities", """{"compatibilities":{"Avro/1.11.0":["full"]}}""");
+        if (strict)
+        {
+            await ExpectCode(() => Send(engine, RegistryAction.Patch, "/sets/g/schemas/s/meta",
+                """{"compatibility":"backward"}"""), "compatibility_unknown");
+        }
+        else
+        {
+            await Send(engine, RegistryAction.Patch, "/sets/g/schemas/s/meta", """{"compatibility":"backward"}""");
+        }
+        var meta = await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/meta");
+        await Assert.That(meta.Metadata!.RootElement.GetProperty("compatibility").GetString())
+            .IsEqualTo(strict ? "full" : "backward");
+        var details = await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/versions/v1$details");
+        await Assert.That(details.Metadata!.RootElement.GetProperty("formatvalidated").GetBoolean()).IsTrue();
+        await Assert.That(details.Metadata.RootElement.GetProperty("compatibilityvalidated").GetBoolean()).IsEqualTo(strict);
+        await Assert.That(details.Metadata.RootElement.TryGetProperty("compatibilityvalidatedreason", out var reason)).IsEqualTo(!strict);
+        if (!strict) { await Assert.That(reason.GetString()).IsNotNullOrEmpty(); }
+        var stored = await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/versions/v1");
+        using var bytes = stored.Document!.OpenRead();
+        using var reader = new StreamReader(bytes, Encoding.UTF8);
+        await Assert.That(await reader.ReadToEndAsync()).IsEqualTo("\"int\"");
+    }
+
+    [Test]
     public async Task InvalidSyntaxRejectsPublicationInsteadOfBecomingAValidationFlag()
     {
         var engine = ValidatingEngine();
@@ -553,7 +586,7 @@ public class BuiltInValidationAdapterTests
 
     internal static RegistryEngine ValidatingEngine(bool strict = false, RegistryLimits? limits = null,
         DocumentValidationOptions? validationOptions = null, IRegistryPersistence? persistence = null,
-        bool hasDocument = true, int maxVersions = 0, bool? validateCompatibility = true)
+        bool hasDocument = true, int maxVersions = 0, bool? validateCompatibility = true, bool allowCapabilityUpdates = false)
     {
         var model = strict ? ValidatedModel.Replace("\"strictvalidation\":false", "\"strictvalidation\":true", StringComparison.Ordinal) : ValidatedModel;
         if (validateCompatibility is null)
@@ -582,6 +615,7 @@ public class BuiltInValidationAdapterTests
             PublicRoot = new Uri("https://registry.example"),
             Model = RegistryModel.Compile(RegistryJson.Parse(model)),
             ResourceValidator = new BuiltInRegistryResourceValidator(validationOptions),
+            AllowCapabilityUpdates = allowCapabilityUpdates,
             Limits = limits ?? new()
         }, persistence ?? new InMemoryRegistryPersistence(), new PermitPolicy());
     }

@@ -32893,7 +32893,7 @@
       "text": "- The `format` validation logic MUST generate an error ([format_violation](spec.md#format_violation)) if the Version's `format` is an unsupported value.",
       "review": {
         "status": "reviewed",
-        "note": "Strict unsupported format rejects publication, but the engine and tests use format_unknown, whereas this model paragraph names format_violation. Core's formatvalidated definition expressly requires format_unknown/format_external. This is an uncorrected source conflict, not evidence that rejection is missing.",
+        "note": "This historical snapshot conflicts with Core by naming format_violation for unsupported formats. The pinned merged successor upstream-4a7e7f5e corrects the Model clause to format_unknown and has separate direct evidence under model-8974c93d68b2545714b1f4fd-1. Historical text is retained, not treated as the current error contract.",
         "roles": [
           "server"
         ]
@@ -32923,7 +32923,7 @@
       "text": "- The `compatibility` validation logic MUST generate an error ([compatibility_violation](spec.md#compatibility_violation)) if the Resource's `meta.compatibility` value is an unsupported value.",
       "review": {
         "status": "reviewed",
-        "note": "Strict unsupported compatibility is rejected as compatibility_unknown, directly asserted for unsupported non-Avro evolution. This model clause instead names compatibility_violation, while Core's compatibilityvalidated definition requires compatibility_unknown. Established incompatibility remains a distinct violation error.",
+        "note": "This historical snapshot conflicts with Core by naming compatibility_violation for unsupported modes. The pinned merged successor upstream-4a7e7f5e corrects the clause to compatibility_unknown; model-6119764a75349fd44358abb5-1 has direct unsupported-mode evidence. Established incompatibility remains a distinct violation error.",
         "roles": [
           "server"
         ]
@@ -32952,15 +32952,16 @@
       "text": "- If the Version's `format` value is absent, then format and compatibility validation logic MUST NOT be performed for that Version.",
       "review": {
         "status": "reviewed",
-        "note": "Absent format disables both checks before strictness matters. The standalone policy test uses invalid document bytes with missing format and still obtains accepted with null flags; the engine gates match this source logic, but its corresponding response/callback assertion is absent.",
+        "note": "Direct engine cases with missing format and present compatibility mode prove zero validator calls and absent result flags across publication, replacement and new Versions, retaining exact bytes under both strictness settings.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "MissingFormatAndMissingModeDoNotInventValidationResults"
+          "MissingFormatAndMissingModeDoNotInventValidationResults",
+          "VersionsWithoutFormatSkipValidatorCallsAndValidationFlags"
         ],
         "nativeEvidence": []
       }
@@ -33040,15 +33041,16 @@
       "text": "- Regardless of the value of this aspect, if the Version's `format` value is absent, then format and compatibility validation logic MUST NOT be performed for that Version.",
       "review": {
         "status": "reviewed",
-        "note": "Regardless of strictness, missing format makes both checks unrequested. The independent policy assertion uses strict:true and verifies neither flag is invented. The engine's hasFormat guards were inspected, but a direct engine test of this unconditional exemption is not present.",
+        "note": "Direct engine tests isolate missing format with model validation enabled and a present compatibility mode. Both strictness settings retain exact bytes without validator calls or result flags across publication, replacement and new Versions.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "MissingFormatAndMissingModeDoNotInventValidationResults"
+          "MissingFormatAndMissingModeDoNotInventValidationResults",
+          "VersionsWithoutFormatSkipValidatorCallsAndValidationFlags"
         ],
         "nativeEvidence": []
       }
@@ -83969,13 +83971,18 @@
       ],
       "text": "- When not specified, the default value MUST be `false`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The merged successor retains the false format-validation default. Omitted and explicit false cases assert the compiled flag, zero validator calls, exact bytes and absent results under both strictness modes.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DisabledFormatValidationSkipsRecognizedFormatsAndOmitsResultFlags"
+        ],
         "nativeEvidence": []
       }
     },
@@ -84031,13 +84038,17 @@
       ],
       "text": "- When `hasdocument` is `true`, and a Version uses the `<RESOURCE>url` attribute to reference the document in an external datastore, the resulting [`formatvalidated`](spec.md#format-attribute) attribute on the Version MUST be `\"false\"`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The merged successor preserves the external-Document rule. Relaxed publication and local-to-external replacement return false flags with reasons and never fetch the Document; reversal restores validated local bytes. Strict mode rejects atomically with format_external.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ExternalDocumentsRemainUncheckedAndStrictFailuresPreserveLocalValidation"
+        ],
         "nativeEvidence": []
       }
     },
@@ -84062,13 +84073,18 @@
       ],
       "text": "- A value of `true` indicates that the server MUST generate an error ([format_violation](spec.md#format_violation)) if any Version of a Resource instance of this Resource type does not adhere to the `format` value of that Version. An absent `format` value on a Version MUST be treated as a request to disable both \"format\" and \"compatibility\" verification logic for that Version.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The merged successor preserves invalid-format rejection and the absent-format exemption. Direct tests reject invalid publication/replacement atomically and prove zero validator calls with absent format and a present compatibility mode, including strict mode.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "InvalidSyntaxRejectsPublicationInsteadOfBecomingAValidationFlag",
+          "VersionsWithoutFormatSkipValidatorCallsAndValidationFlags"
+        ],
         "nativeEvidence": []
       }
     },
@@ -84093,13 +84109,17 @@
       ],
       "text": "- A value of `false` indicates that the server MUST NOT perform any `format` checking for Versions of Resources of this Resource type.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The merged successor retains the prohibition. Recognized formats with false or omitted model validation cause zero validator calls across publication, replacement and new Versions, with exact bytes and no result flags.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DisabledFormatValidationSkipsRecognizedFormatsAndOmitsResultFlags"
+        ],
         "nativeEvidence": []
       }
     },
@@ -84186,13 +84206,18 @@
       ],
       "text": "- When not specified, the default value MUST be `false`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The merged successor retains the false compatibility-validation default. Omitted and explicit false cases assert the compiled flag while syntax validation remains enabled; real dependency counts isolate skipped compatibility passes under both strictness modes.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DisabledCompatibilityAvoidsDependencyRechecksWhileFormatValidationRemainsEnabled"
+        ],
         "nativeEvidence": []
       }
     },
@@ -84248,13 +84273,17 @@
       ],
       "text": "- When a Version does not have a `format` value then compatibility verification MUST NOT be done.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The merged successor retains the exemption. With compatibility mode present, missing-format Versions publish, replace bytes and create another Version without validator calls or result flags under both strictness modes.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "VersionsWithoutFormatSkipValidatorCallsAndValidationFlags"
+        ],
         "nativeEvidence": []
       }
     },
@@ -84310,13 +84339,17 @@
       ],
       "text": "- A value of `false` indicates that the server MUST NOT perform any `compatibility` checking for instances of this Resource type.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The merged successor retains the prohibition. Actual dependency acquisition counts distinguish syntax-only passes from enabled compatibility passes, with format and mode present and both strictness settings.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DisabledCompatibilityAvoidsDependencyRechecksWhileFormatValidationRemainsEnabled"
+        ],
         "nativeEvidence": []
       }
     },
@@ -84434,13 +84467,17 @@
       ],
       "text": "- The `format` validation logic MUST generate an error ([format_unknown](spec.md#format_unknown)) if the Version's `format` is an unsupported value.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The merged successor corrects the historical format_violation reference to format_unknown, matching Core's formatvalidated contract. Direct strict-mode publication tests assert format_unknown and no persisted entities for an unsupported format; relaxed controls return false flags with reasons.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "UnconfiguredFormatValidationIsExplicitlyUnknownNeverSuccessful"
+        ],
         "nativeEvidence": []
       }
     },
@@ -84465,13 +84502,17 @@
       ],
       "text": "- The `compatibility` validation logic MUST generate an error ([compatibility_unknown](spec.md#compatibility_unknown)) if the Resource's `meta.compatibility` value is an unsupported value.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The merged successor corrects the historical compatibility_violation reference to compatibility_unknown. A valid backward mode excluded by the selected capability profile rejects a strict Meta update with compatibility_unknown and preserves the previous mode, validated results and exact bytes. Invalid enum values are rejected earlier by model validation.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "UnsupportedCompatibilityModeIsUnknownRatherThanAnEstablishedViolation"
+        ],
         "nativeEvidence": []
       }
     },
@@ -84496,13 +84537,17 @@
       ],
       "text": "- If the Version's `format` value is absent, then format and compatibility validation logic MUST NOT be performed for that Version.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The merged successor retains this relaxed-mode exemption. Direct engine tests with missing format and present compatibility mode prove no validator calls and no result flags, including byte replacement and additional Versions.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "VersionsWithoutFormatSkipValidatorCallsAndValidationFlags"
+        ],
         "nativeEvidence": []
       }
     },
@@ -84559,13 +84604,17 @@
       ],
       "text": "- If the Resource's `meta.compatibility` value is unsupported, then the Version's `compatibilityvalidated` attribute MUST be set to `false`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The merged successor preserves the relaxed-mode rule. A valid backward mode excluded by the selected capability profile is retained as metadata while compatibilityvalidated is false with a reason; syntax remains validated and exact bytes are unchanged.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "UnsupportedCompatibilityModeIsUnknownRatherThanAnEstablishedViolation"
+        ],
         "nativeEvidence": []
       }
     },
@@ -84590,13 +84639,17 @@
       ],
       "text": "- Regardless of the value of this aspect, if the Version's `format` value is absent, then format and compatibility validation logic MUST NOT be performed for that Version.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The merged successor retains the unconditional exemption. Both strictness modes with model validation enabled and a present compatibility mode accept missing-format Versions without validator calls or invented results, preserving exact bytes.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "VersionsWithoutFormatSkipValidatorCallsAndValidationFlags"
+        ],
         "nativeEvidence": []
       }
     },
