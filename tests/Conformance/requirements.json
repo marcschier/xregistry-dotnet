@@ -75573,13 +75573,27 @@
       ],
       "text": "Implementations of this specification SHOULD support all specification-defined flags.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The Server advertises the complete Core flag set when capabilities requests all flags; focused behavior tests cover each supported flag.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CapabilityPatchReplacesWholeMembersAndPutResetsOmittedDefaults",
+          "BinaryFlagChangesOnlyInlineResourceAndVersionDocumentEncoding",
+          "CollectionsOnlyRootDoesNotExposeItsShortSelf",
+          "EveryEntityAndCollectionUsesItsActualResponseRoot",
+          "EpochFlagGuardsSingleEntityDeletes",
+          "FiltersDoNotInlineAndEmptyCollectionLinksUseExcludeAll",
+          "IgnoreFlagsPermitEntityImportWithoutSuppressingNestedIdentityGuards",
+          "InlineFlagWithoutValueMatchesWildcard",
+          "DefaultSelectionRequestFlagSelectsOnlyNewAssignedVersionAndPersists",
+          "SortingUsesScalarValuesMissingLowAndSameDirectionIdTies",
+          "SpecVersionFlagIsCaseInsensitiveAndIgnoresPatch"
+        ],
         "nativeEvidence": []
       }
     },
@@ -75677,13 +75691,19 @@
       ],
       "text": "The `collections` flag MAY be used on requests directed to the Registry itself, or to Group instances, to indicate that the response message MUST NOT include any attributes from the top-level entity (Registry or Group), but instead MUST include only all of the nested xRegistry Collection maps that are defined at that level. Specifying it on a request directed to some other part of the Registry MUST generate an error ([bad_flag](#bad_flag)). Use of this flag MUST implicitly turn on [inlining](#inline-flag) within a value of `*`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The flag is restricted to Registry and Group targets, projects only nested collection maps, and recursively inlines their descendants; other targets return bad_flag.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CollectionsOnlyRootDoesNotExposeItsShortSelf",
+          "CollectionsProjectionKeepsOnlyNestedEntityShortSelf",
+          "CollectionsFlagRejectsTargetsOtherThanRegistryOrGroup"
+        ],
         "nativeEvidence": []
       }
     },
@@ -75708,13 +75728,18 @@
       ],
       "text": "Servers MAY choose to include, or exclude, the sibling `<COLLECTION>url` and `<COLLECTION>count` attributes for those top-level collections.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The Server omits sibling collection URL/count attributes in collections-only output, an allowed choice; tests assert only collection maps remain at each requested level.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CollectionsOnlyRootDoesNotExposeItsShortSelf",
+          "CollectionsProjectionKeepsOnlyNestedEntityShortSelf"
+        ],
         "nativeEvidence": []
       }
     },
@@ -75740,13 +75765,20 @@
       ],
       "text": "The `doc` flag MAY be used to indicate that the response MUST use \"document view\" when serializing entities and MUST be modified to do the following:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The document-view projection is exercised across response roots, Resource/Version serialization, validation-field removal, cross-reference exclusion, and relative-versus-absolute link behavior; the detailed clauses are mapped separately.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EveryEntityAndCollectionUsesItsActualResponseRoot",
+          "DocVersionOmitsValidationReasonsButApiRetainsThem",
+          "DocumentViewMetaInlineKeepsResourceShapeWithoutDuplicatingTargetMetadataForAliases",
+          "DocumentLinksAreRelativeOnlyWhenTheirTargetsAreIncluded"
+        ],
         "nativeEvidence": []
       }
     },

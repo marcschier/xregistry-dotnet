@@ -40,8 +40,9 @@ public class RegistryCapabilityTests
         await Send(engine, RegistryAction.Replace, "/capabilities", """{"flags":["*"]}""");
         caps = (await Send(engine, RegistryAction.Read, "/capabilities")).Metadata!.RootElement;
         await Assert.That(caps.GetProperty("pagination").GetBoolean()).IsTrue();
-        await Assert.That(caps.GetProperty("flags").EnumerateArray().Any(static item => item.GetString() == "sort")).IsTrue();
-        await Assert.That(caps.GetProperty("flags").EnumerateArray().Any(static item => item.GetString() == "*")).IsFalse();
+        await Assert.That(caps.GetProperty("flags").EnumerateArray().Select(static item => item.GetString()!))
+            .IsEquivalentTo(["binary", "collections", "doc", "epoch", "filter", "ignore", "inline",
+                "setdefaultversionid", "sort", "specversion"], StringComparer.Ordinal);
     }
 
     [Test]
