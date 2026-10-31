@@ -10,6 +10,8 @@ namespace XRegistry.Queries;
 
 internal static class QueryComparison
 {
+    private static readonly CompareInfo s_stringComparer = CultureInfo.GetCultureInfo("en-US").CompareInfo;
+    private const CompareOptions StringComparisonOptions = CompareOptions.IgnoreCase;
     private static readonly IReadOnlyDictionary<string, RegistryAttributeDefinition> s_timestamp =
         new Dictionary<string, RegistryAttributeDefinition>(StringComparer.Ordinal)
         {
@@ -120,7 +122,7 @@ internal static class QueryComparison
         var a = left.GetValue<string>();
         var b = right.GetValue<string>();
         budget.Spend(a.Length + b.Length);
-        return type == RegistryValueType.Timestamp ? CompareTimestamps(a, b) : StringComparer.OrdinalIgnoreCase.Compare(a, b);
+        return type == RegistryValueType.Timestamp ? CompareTimestamps(a, b) : s_stringComparer.Compare(a, b, StringComparisonOptions);
     }
 
     private static int CompareLiteral(JsonNode value, RegistryValueType? type, string literal, string operation,
@@ -158,7 +160,7 @@ internal static class QueryComparison
 
                 literal = literal.Replace("\\*", "*", StringComparison.Ordinal);
                 budget.Spend(text.Length + literal.Length);
-                return StringComparer.OrdinalIgnoreCase.Compare(text, literal);
+                return s_stringComparer.Compare(text, literal, StringComparisonOptions);
             default:
                 throw Diagnostics.Error("bad_filter", "", "A non-null filter literal cannot compare a complex value.");
         }
@@ -188,11 +190,11 @@ internal static class QueryComparison
         budget.Spend(text.Length + pattern.Length);
         if (!wildcard)
         {
-            return text.Equals(pieces[0], StringComparison.OrdinalIgnoreCase);
+            return s_stringComparer.Compare(text, pieces[0], StringComparisonOptions) == 0;
         }
 
-        if (!text.StartsWith(pieces[0], StringComparison.OrdinalIgnoreCase) ||
-            !text.EndsWith(pieces[^1], StringComparison.OrdinalIgnoreCase) ||
+        if (!s_stringComparer.IsPrefix(text, pieces[0], StringComparisonOptions) ||
+            !s_stringComparer.IsSuffix(text, pieces[^1], StringComparisonOptions) ||
             text.Length < pieces[0].Length + pieces[^1].Length)
         {
             return false;
@@ -203,7 +205,7 @@ internal static class QueryComparison
         for (var index = 1; index < pieces.Count - 1; index++)
         {
             budget.Spend((long)(end - position + 1) * Math.Max(1, pieces[index].Length));
-            var found = text.AsSpan(position, end - position).IndexOf(pieces[index], StringComparison.OrdinalIgnoreCase);
+            var found = s_stringComparer.IndexOf(text, pieces[index], position, end - position, StringComparisonOptions);
             if (found < 0)
             {
                 return false;

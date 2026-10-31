@@ -144,6 +144,22 @@ public class SharedQuerySemanticsTests
     }
 
     [Test]
+    public async Task StringFiltersAndSortUseEnUsUnicodeCollation()
+    {
+        var source = Groups();
+        source.Collections["/fleets"] = ["/fleets/a", "/fleets/b", "/fleets/c"];
+        source.Add("/fleets/a", """{"fleetid":"a","name":"\u212A"}""");
+        source.Add("/fleets/b", """{"fleetid":"b","name":"k"}""");
+        source.Add("/fleets/c", """{"fleetid":"c","name":"prefix-k-suffix"}""");
+        using var budget = new RegistryQueryBudget();
+
+        await Assert.That(Ids(await Evaluate(source, budget, filters: ["name=K"]))).IsEqualTo("a,b");
+        await Assert.That(Ids(await Evaluate(source, budget, filters: ["name<K"]))).IsEqualTo("");
+        await Assert.That(Ids(await Evaluate(source, budget, filters: ["name=prefix*K*suffix"]))).IsEqualTo("c");
+        await Assert.That(Ids(await Evaluate(source, budget, sort: "name"))).IsEqualTo("a,b,c");
+    }
+
+    [Test]
     public async Task EscapedStarsFractionsLargeNegativeExponentsAndConditionalTimestampsRemainExact()
     {
         var source = Groups();

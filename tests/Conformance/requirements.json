@@ -16187,15 +16187,17 @@
       "text": "- It is STRONGLY RECOMMENDED to use Unicode collation based on en-US.",
       "review": {
         "status": "reviewed",
-        "note": "The implementation deliberately uses ordinal case-insensitive comparison, not en-US Unicode collation. The source says STRONGLY RECOMMENDED, not MUST; deterministic ordinal ordering is a policy/interoperability limitation, not reported as a mandatory behavior defect.",
+        "note": "String filter equality, relative comparison, wildcard matching, and sorting use case-insensitive en-US Unicode collation.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "StringFiltersAndSortUseEnUsUnicodeCollation"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76810,15 +76812,17 @@
       "text": "- It is STRONGLY RECOMMENDED to use Unicode collation based on en-US.",
       "review": {
         "status": "reviewed",
-        "note": "The implementation deliberately uses ordinal case-insensitive comparison, not en-US Unicode collation. The source says STRONGLY RECOMMENDED, not MUST; deterministic ordinal ordering is a policy/interoperability limitation, not reported as a mandatory behavior defect.",
+        "note": "String filter equality, relative comparison, wildcard matching, and sorting use case-insensitive en-US Unicode collation.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "StringFiltersAndSortUseEnUsUnicodeCollation"
+        ],
         "nativeEvidence": []
       }
     },
