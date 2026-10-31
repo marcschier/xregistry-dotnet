@@ -206,7 +206,8 @@ public static class RegistryMetadataValidator
         }
 
         internal JsonObject Object(JsonObject input, IReadOnlyDictionary<string, RegistryAttributeDefinition> declared,
-            string path, bool extended, int depth, JsonElement retained = default)
+            string path, bool extended, int depth, JsonElement retained = default,
+            string invalidNameCode = "unknown_attribute")
         {
             Work(depth);
             var definitions = RegistryConditionalAttributes.Resolve(declared, (definition, _) =>
@@ -249,13 +250,16 @@ public static class RegistryMetadataValidator
             foreach (var property in input)
             {
                 var at = Diagnostics.At(path, property.Key);
-                if (!definitions.TryGetValue(property.Key, out var definition))
+                if (!RegistryNames.IsAttribute(property.Key, extended))
                 {
-                    if (!RegistryNames.IsAttribute(property.Key, extended) ||
-                        !definitions.TryGetValue("*", out definition))
-                    {
-                        throw Diagnostics.Error("unknown_attribute", at, "The attribute is not allowed by the effective model.");
-                    }
+                    throw Diagnostics.Error(invalidNameCode, at,
+                        "The attribute name does not conform to its name character set.");
+                }
+
+                if (!definitions.TryGetValue(property.Key, out var definition) &&
+                    !definitions.TryGetValue("*", out definition))
+                {
+                    throw Diagnostics.Error("unknown_attribute", at, "The attribute is not allowed by the effective model.");
                 }
 
                 if (Submitted && definition.ReadOnly)
@@ -317,7 +321,8 @@ public static class RegistryMetadataValidator
                     throw Diagnostics.Error("invalid_attribute", path, "The attribute must be an object.");
                 }
 
-                return Object(obj, definition.Attributes, path, definition.NameCharset == "extended", depth);
+                return Object(obj, definition.Attributes, path, definition.NameCharset == "extended", depth,
+                    invalidNameCode: "invalid_attribute");
             }
 
             if (definition.Type is RegistryValueType.Array or RegistryValueType.Map)

@@ -222,18 +222,33 @@ public class RegistryModelTests
     [Test]
     public async Task ExtendedObjectNameCharsetAppliesToConditionalSiblingAttributes()
     {
-        var extended = RegistryModel.Compile(RegistryJson.Parse("""
+        var model = RegistryModel.Compile(RegistryJson.Parse("""
             {"attributes":{"properties":{"type":"object","namecharset":"EXTENDED","attributes":{
               "mode":{"type":"string","ifvalues":{"on":{"siblingattributes":{"extra-field":"integer"}}}},
-              "direct-name":"integer"
+              "direct-name":"integer","*":"string"
             }}}}
-            """)).Attributes["properties"];
+            """));
+        var extended = model.Attributes["properties"];
         var result = RegistryMetadataValidator.Validate(
-            RegistryJson.Parse("""{"mode":"on","extra-field":3,"direct-name":4}"""), extended.Attributes);
+            RegistryJson.Parse("""
+                {"properties":{"mode":"on","extra-field":3,"direct-name":4,
+                  "1leading":"value","with.dot":"value","with:colon":"value"}}
+                """),
+            model.Attributes, new() { Mode = RegistryMetadataMode.ClientInput });
 
         await Assert.That(extended.NameCharset).IsEqualTo("extended");
-        await Assert.That(result.Metadata.RootElement.GetProperty("extra-field").GetInt32()).IsEqualTo(3);
-        await Assert.That(result.Metadata.RootElement.GetProperty("direct-name").GetInt32()).IsEqualTo(4);
+        var value = result.Metadata.RootElement.GetProperty("properties");
+        await Assert.That(value.GetProperty("extra-field").GetInt32()).IsEqualTo(3);
+        await Assert.That(value.GetProperty("direct-name").GetInt32()).IsEqualTo(4);
+        await Assert.That(value.GetProperty("1leading").GetString()).IsEqualTo("value");
+        await Assert.That(value.GetProperty("with.dot").GetString()).IsEqualTo("value");
+        await Assert.That(value.GetProperty("with:colon").GetString()).IsEqualTo("value");
+
+        var invalidName = TestErrors.Capture(() => RegistryMetadataValidator.Validate(
+            RegistryJson.Parse("""{"properties":{"Upper":"value"}}"""), model.Attributes,
+            new() { Mode = RegistryMetadataMode.ClientInput }));
+        await Assert.That(invalidName.Code).IsEqualTo("invalid_attribute");
+        await Assert.That(invalidName.Path).IsEqualTo("/properties/Upper");
 
         var diagnostic = TestErrors.Capture(() => RegistryModel.Compile(RegistryJson.Parse("""
             {"attributes":{"properties":{"type":"object","attributes":{
@@ -265,7 +280,7 @@ public class RegistryModelTests
         var rejected = TestErrors.Capture(() => RegistryMetadataValidator.Validate(
             RegistryJson.Parse("""{"properties":{"invalid-name":"value"}}"""), model.Attributes,
             new() { Mode = RegistryMetadataMode.ClientInput }));
-        await Assert.That(rejected.Code).IsEqualTo("unknown_attribute");
+        await Assert.That(rejected.Code).IsEqualTo("invalid_attribute");
         await Assert.That(rejected.Path).IsEqualTo("/properties/invalid-name");
     }
 

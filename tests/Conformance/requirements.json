@@ -28100,17 +28100,17 @@
       "text": "- Specifies the name of the character set that defines the allowable characters that can be used for the object's top-level attribute names. Any attempt to define a top-level attribute for this object that does not adhere to the characters defined by the character set name MUST generate an error ([invalid_attribute](./spec.md#invalid_attribute)).",
       "review": {
         "status": "reviewed",
-        "note": "CompileAttributes checks names with the object's character set and Validator.Object checks wildcard runtime names likewise. Compilation uses model_error, while unknown runtime names use unknown_attribute; the clause names invalid_attribute. Exact strict/extended runtime boundaries and this diagnostic distinction lack direct evidence.",
+        "note": "Runtime tests reject a dashed name under strict and an uppercase name under extended with invalid_attribute; valid extended punctuation and digit-leading names are accepted.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "WildcardsDoNotPermitInvalidNamesOrBypassDeclaredTypes",
-          "CompilesNestedItemsAndStaticVersionMatchObligations"
+          "ObjectNameCharsetDefaultsToStrict",
+          "ExtendedObjectNameCharsetAppliesToConditionalSiblingAttributes"
         ],
         "nativeEvidence": []
       }
@@ -28131,16 +28131,15 @@
       "text": "- Per the [Attributes and Extensions](./spec.md#attributes-and-extensions) section, attribute names are normally limited to just the set of characters that ensure they can reliably be used in cases such as code variable names without the need for some escaping mechanism. However, there are situations where object-typed attribute names need to support additional characters, such as a dash (`-`), and it is known that they will never be used in those restricted character set situations. By setting the `namecharset` aspect to `extended` the server MUST allow for an extended set of valid characters in attribute names for this object.",
       "review": {
         "status": "reviewed",
-        "note": "A runtime test accepts a dashed direct object member and conditional sibling under extended naming. The full character-set boundary is not established by this example.",
+        "note": "Runtime tests accept digit-leading names and names containing dash, dot, or colon under extended naming; they reject uppercase names.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "CompilesNestedItemsAndStaticVersionMatchObligations",
           "ExtendedObjectNameCharsetAppliesToConditionalSiblingAttributes"
         ],
         "nativeEvidence": []
