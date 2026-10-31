@@ -75769,13 +75769,20 @@
       ],
       "text": "- MUST remove the default Version attributes from a Resource's serialization.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The document Resource is built without the inherited default-Version projection; direct assertions cover inherited name/version identity and document content while the selected Version remains separately inlined.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ExportUsesRelativePointersAndNoDefaultProjection",
+          "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
+          "EveryEntityAndCollectionUsesItsActualResponseRoot"
+        ],
         "nativeEvidence": []
       }
     },
@@ -75835,13 +75842,18 @@
       ],
       "text": "- MUST remove the `shortself` attribute from all entity serializations.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "ShortSelf tests cover Resource, Meta and Version entity planes, verify document view removes the attribute, and preserve opaque domain-document fields and API behavior.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ShortSelfCoversEntityPlanesWithoutRewritingDomainUrlsOrDocuments",
+          "ShortSelfIsStableAcrossDisableEnableAndFrozenRestart"
+        ],
         "nativeEvidence": []
       }
     },
@@ -75866,13 +75878,21 @@
       ],
       "text": "- When a Resource (source) uses the `xref` feature, the target Resource's attributes MUST be excluded from the source's serialization.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Document aliases remain source-local: output preserves local identity and xref but excludes target metadata, default-Version projection, and Versions.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DocumentAliasStaysUnresolvedAndAliasVersionViewsHaveSpecificCoreError",
+          "MetadataAndDocumentQueriesUseLogicalValuesBeforeProjection",
+          "DocumentViewDoesNotCreateRelativePointersToFilteredOutDefaultVersions",
+          "XrefFiltersUseLogicalVersionsButDocumentViewStillHidesTheTargetProjection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -75897,13 +75917,25 @@
       ],
       "text": "- Resources and Versions MUST be serialized in their [xRegistry metadata view](#resource-metadata-vs-resource-document) and not as any potential domain-specific document.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Document view returns xRegistry Resource/Version metadata, keeps raw document bytes out of the metadata projection, and includes domain content only when the corresponding Version is explicitly inlined.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ExportUsesRelativePointersAndNoDefaultProjection",
+          "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
+          "EveryEntityAndCollectionUsesItsActualResponseRoot",
+          "DocVersionOmitsValidationReasonsButApiRetainsThem",
+          "ModeledDocumentFormNamesRemainDocumentlessMetadata",
+          "NamedDocumentFormDefinitionsStillOverrideWildcardTypes",
+          "UnmodeledDocumentFormNamesStillRejectWithoutPublication",
+          "ActualDocumentStreamsStayProhibitedWithoutConsumption"
+        ],
         "nativeEvidence": []
       }
     },
@@ -75960,13 +75992,20 @@
       ],
       "text": "All of the relative URLs mentioned in the last bullet above MUST begin with `#` and be followed by a [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) reference to the entity within the response, e.g. `#/endpoints/e1`. This means that they are relative to the root of the document (response) generated, and not necessarily relative to the root of the Registry. Additionally, when those URLs are relative and reference a Resource or Version, any protocol-specific modifications to the URLs (e.g. the HTTP `$details` suffix) MUST NOT be present despite the semantics of the suffix being applied (as noted below).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Generated pointers use the response root, escape JSON Pointer tokens, omit protocol-specific details suffixes, and encode the empty root pointer as `#`.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
+          "EveryEntityAndCollectionUsesItsActualResponseRoot",
+          "ExportUsesRelativePointersAndNoDefaultProjection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76062,13 +76101,21 @@
       ],
       "text": "Note that the `meta` entity's attributes `epoch` through `defaultversionsticky` MUST be excluded if `xref` is set because those would appear as part of the target Resource's `meta` entity. Also notice the default Version's attributes do not appear.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Document alias Meta includes source identity and xref but omits target-owned metadata and default-Version attributes.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DocumentAliasStaysUnresolvedAndAliasVersionViewsHaveSpecificCoreError",
+          "MetadataAndDocumentQueriesUseLogicalValuesBeforeProjection",
+          "DocumentViewDoesNotCreateRelativePointersToFilteredOutDefaultVersions",
+          "XrefFiltersUseLogicalVersionsButDocumentViewStillHidesTheTargetProjection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76094,13 +76141,21 @@
       ],
       "text": "If this flag is used on a request directed to a Resource's `versions` collection, or to one of its Versions, but the Resource is defined as an `xref` to another Resource, then the server MUST generate an error ([cannot_doc_xref](#cannot_doc_xref)) and SHOULD indicate that using this flag on this part of the hierarchy is not valid - due to those entities not technically existing in document view.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Document view rejects an alias Versions request with the Core `cannot_doc_xref` error instead of traversing a target hierarchy absent from the source document.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DocumentAliasStaysUnresolvedAndAliasVersionViewsHaveSpecificCoreError",
+          "MetadataAndDocumentQueriesUseLogicalValuesBeforeProjection",
+          "DocumentViewDoesNotCreateRelativePointersToFilteredOutDefaultVersions",
+          "XrefFiltersUseLogicalVersionsButDocumentViewStillHidesTheTargetProjection"
+        ],
         "nativeEvidence": []
       }
     },
