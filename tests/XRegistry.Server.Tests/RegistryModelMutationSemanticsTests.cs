@@ -37,6 +37,38 @@ public class RegistryModelMutationSemanticsTests
     }
 
     [Test]
+    public async Task ChangingDefaultPreservesExistingValuesAndAppliesOnNewEntitiesAndNullReset()
+    {
+        var initial = JsonNode.Parse(ModelSource)!;
+        var attributes = initial["groups"]!["gs"]!["resources"]!["rs"]!["attributes"]!;
+        attributes["color"]!["required"] = true;
+        attributes["color"]!["default"] = "red";
+        var store = new InMemoryRegistryPersistence();
+        var engine = Create(initial.ToJsonString(), store);
+
+        await Send(engine, RegistryAction.Replace, "/gs/g/rs/first", "{}");
+        await Assert.That((await Send(engine, RegistryAction.Read, "/gs/g/rs/first")).Metadata!
+            .RootElement.GetProperty("color").GetString()).IsEqualTo("red");
+
+        attributes["color"]!["default"] = "blue";
+        await Send(engine, RegistryAction.Replace, "/modelsource", initial.ToJsonString());
+
+        await Assert.That((await Send(engine, RegistryAction.Read, "/gs/g/rs/first")).Metadata!
+            .RootElement.GetProperty("color").GetString()).IsEqualTo("red");
+        await Send(engine, RegistryAction.Replace, "/gs/g/rs/second", "{}");
+        await Assert.That((await Send(engine, RegistryAction.Read, "/gs/g/rs/second")).Metadata!
+            .RootElement.GetProperty("color").GetString()).IsEqualTo("blue");
+
+        await Send(engine, RegistryAction.Patch, "/gs/g/rs/first", """{"color":null}""");
+        await Assert.That((await Send(engine, RegistryAction.Read, "/gs/g/rs/first")).Metadata!
+            .RootElement.GetProperty("color").GetString()).IsEqualTo("blue");
+
+        var restarted = Create(persistence: store);
+        await Assert.That((await Send(restarted, RegistryAction.Read, "/gs/g/rs/first")).Metadata!
+            .RootElement.GetProperty("color").GetString()).IsEqualTo("blue");
+    }
+
+    [Test]
     [Arguments("enum")]
     [Arguments("required")]
     [Arguments("matchversions")]

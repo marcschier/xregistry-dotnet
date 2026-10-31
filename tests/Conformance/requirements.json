@@ -29229,15 +29229,16 @@
       "text": "- If the default value of an attribute changes over time, all existing instances of that attribute MUST retain their current values and not be automatically changed to the new default value. In other words, a new default value MUST only apply to new or subsequent updates (when set to `null`, which would reset it to the current default value) of existing instances of the attribute.",
       "review": {
         "status": "reviewed",
-        "note": "Default application only replaces absent/null values, so existing non-null values survive model revalidation; a later null reset uses the current definition. Existing tests cover default insertion, not a model-default change followed by retained old values and an explicit reset.",
+        "note": "An engine test changes a default from red to blue, verifies an existing value stays red and a new entity receives blue, then resets the old value with null and checks blue survives restart.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "DefaultsApplyWithinPresentObjectsButNeverCreateAnOptionalParent"
+          "DefaultsApplyWithinPresentObjectsButNeverCreateAnOptionalParent",
+          "ChangingDefaultPreservesExistingValuesAndAppliesOnNewEntitiesAndNullReset"
         ],
         "nativeEvidence": []
       }
