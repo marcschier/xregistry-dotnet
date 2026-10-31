@@ -25,6 +25,20 @@ public class RegistryMetadataTests
     }
 
     [Test]
+    public async Task EmptyStringIsPresentAndDistinctFromAnAbsentAttribute()
+    {
+        var definitions = Shape("""{"value":"string"}""");
+        var absent = RegistryMetadataValidator.Validate(RegistryJson.Parse("{}"), definitions);
+        var present = RegistryMetadataValidator.Validate(RegistryJson.Parse("""{"value":""}"""), definitions);
+        var hasValue = present.Metadata.RootElement.TryGetProperty("value", out var value);
+
+        await Assert.That(absent.Metadata.RootElement.TryGetProperty("value", out _)).IsFalse();
+        await Assert.That(hasValue).IsTrue();
+        await Assert.That(value.ValueKind).IsEqualTo(JsonValueKind.String);
+        await Assert.That(value.GetString()).IsEqualTo("");
+    }
+
+    [Test]
     [Arguments("\"text\"")]
     [Arguments("false")]
     [Arguments("-1")]

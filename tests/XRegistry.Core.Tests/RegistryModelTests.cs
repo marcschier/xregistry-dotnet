@@ -227,6 +227,47 @@ public class RegistryModelTests
     }
 
     [Test]
+    public async Task AttributeNamesAreLimitedToOneThroughSixtyThreeCharacters()
+    {
+        var shortest = RegistryModel.Compile(RegistryJson.Parse("""{"attributes":{"a":"string"}}"""));
+        var longestName = new string('a', 63);
+        var longest = RegistryModel.Compile(RegistryJson.Parse(
+            "{\"attributes\":{\"" + longestName + "\":\"string\"}}"));
+        var tooLongName = new string('a', 64);
+        var rejected = TestErrors.Capture(() => RegistryModel.Compile(RegistryJson.Parse(
+            "{\"attributes\":{\"" + tooLongName + "\":\"string\"}}")));
+
+        await Assert.That(shortest.Attributes.ContainsKey("a")).IsTrue();
+        await Assert.That(longest.Attributes.ContainsKey(longestName)).IsTrue();
+        await Assert.That(rejected.Code).IsEqualTo("model_error");
+        await Assert.That(rejected.Path).IsEqualTo("/attributes/" + tooLongName);
+    }
+
+    [Test]
+    [Arguments("a", true)]
+    [Arguments("a0", true)]
+    [Arguments("_leading", true)]
+    [Arguments("a_name", true)]
+    [Arguments("Upper", false)]
+    [Arguments("has-hyphen", false)]
+    [Arguments("has.period", false)]
+    [Arguments("1leading", false)]
+    public async Task AttributeNamesFollowCoreCharacterRules(string name, bool valid)
+    {
+        var modelJson = "{\"attributes\":{\"" + name + "\":\"string\"}}";
+        if (valid)
+        {
+            var model = RegistryModel.Compile(RegistryJson.Parse(modelJson));
+            await Assert.That(model.Attributes.ContainsKey(name)).IsTrue();
+            return;
+        }
+
+        var rejected = TestErrors.Capture(() => RegistryModel.Compile(RegistryJson.Parse(modelJson)));
+        await Assert.That(rejected.Code).IsEqualTo("model_error");
+        await Assert.That(rejected.Path).IsEqualTo("/attributes/" + name);
+    }
+
+    [Test]
     public async Task CollectionItemEnumsAndStrictRoundTripThroughTheEffectiveModel()
     {
         var model = CompileCollectionItemModel();

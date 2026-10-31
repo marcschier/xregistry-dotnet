@@ -60873,9 +60873,11 @@
       ],
       "text": "The 6 variants of URI/URL are provided to allow for strict type adherence when needed. However, for attributes that are simply \"pointers\" that might in practice be any of those 6 types, it is RECOMMENDED that `uri` be used.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "This recommendation is directed at model authors. The shipped model defines no generic pointer attribute whose type can vary among the six URI/URL variants; the implementation supports the `uri` type.",
+        "roles": [
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -60904,9 +60906,12 @@
       ],
       "text": "Attributes that are defined to be relative URIs or URLs MUST state what they are relative to and any constraints on their values, if any. How, or where, this is specified is out of scope of this specification.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The requirement is directed at model declarations, but the spec defines no machine-readable field or validation rule for the base and value constraints. No such relative URI/URL attribute is declared by the shipped model; automatic enforcement for extension models remains unqualified.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -60935,9 +60940,12 @@
       ],
       "text": "All attributes (specification-defined and extensions) MUST adhere to the following rules:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "This clause introduces the following attribute-specific rules; it adds no behavior independent of those child requirements.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -60966,13 +60974,18 @@
       ],
       "text": "- Their names MUST be between 1 and 63 characters in length.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Model declarations enforce the inclusive 1-63 character bound.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AttributeNamesAreLimitedToOneThroughSixtyThreeCharacters"
+        ],
         "nativeEvidence": []
       }
     },
@@ -60998,13 +61011,18 @@
       ],
       "text": "- Their names MUST only contain lowercase alphanumeric characters or an underscore (`[a-z0-9_]`) and MUST NOT start with a digit (`[0-9]`).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Model declarations enforce the lowercase alphanumeric/underscore grammar and reject leading digits.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AttributeNamesFollowCoreCharacterRules"
+        ],
         "nativeEvidence": []
       }
     },
@@ -61029,13 +61047,18 @@
       ],
       "text": "- For string attributes, an empty string is a valid value and MUST NOT be treated the same as an attribute with no value (or absence of the attribute).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The validator preserves an explicitly supplied empty string as a present string value; an omitted attribute remains absent.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EmptyStringIsPresentAndDistinctFromAnAbsentAttribute"
+        ],
         "nativeEvidence": []
       }
     },
@@ -61061,13 +61084,21 @@
       ],
       "text": "- For scalar attributes, the string serialization of the attribute name and its value MUST NOT exceed 4096 bytes. This is to ensure that it can appear in an HTTP header without exceeding implementation limits (see [RFC6265/Limits](https://datatracker.ietf.org/doc/html/rfc6265#section-6.1)). In cases where larger amounts of data are needed, it is RECOMMENDED that an attribute (of type URL) be defined that references a separate document. For example, `documentation` can be considered such an attribute for `description`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Scalar name/value serialization is capped at 4096 UTF-8 bytes; the system model exposes the documentation URL field for longer descriptions.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ScalarDescriptionCountsItsNameAtTheInclusive4096ByteBoundary",
+          "ScalarBoundaryCountsUtf8BytesRatherThanUtf16Characters",
+          "JsonNameAndValueEscapesDoNotConsumeTheScalarByteBudget",
+          "SystemStringAndUrlFieldsAlsoEnforceInclusiveScalarBoundaries"
+        ],
         "nativeEvidence": []
       }
     },
