@@ -29572,14 +29572,14 @@
       "text": "- REQUIRED when `item.type` is `map` or `array`.",
       "review": {
         "status": "reviewed",
-        "note": "Recursive collection items require their own item definition, using the same array/map guard. A nested array/map/object chain is directly inspected; the negative missing-item assertion is only at the first collection level, so recursive rejection evidence is incomplete.",
+        "note": "RejectsInvalidModelAspectsWithExactPointers verifies that a nested array without its own item definition fails at /attributes/a/item/item. CompilesNestedItemsAndStaticVersionMatchObligations verifies a valid nested chain.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "CompilesNestedItemsAndStaticVersionMatchObligations",
           "RejectsInvalidModelAspectsWithExactPointers"
