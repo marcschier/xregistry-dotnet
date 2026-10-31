@@ -56,6 +56,48 @@ public class CrossReferenceTests
     }
 
     [Test]
+    public async Task DocumentViewMetaInlineKeepsResourceShapeWithoutDuplicatingTargetMetadataForAliases()
+    {
+        var engine = Create();
+        await Send(engine, RegistryAction.Replace, "/teams/target/notes/original", """{"name":"target name"}""");
+        await Send(engine, RegistryAction.Replace, "/teams/source/notes/alias",
+            """{"meta":{"xref":"/teams/target/notes/original"}}""");
+
+        var target = (await Send(engine, RegistryAction.Read, "/teams/target/notes/original", null,
+            new KeyValuePair<string, string?>("doc", null), new("inline", "meta"))).Metadata!.RootElement;
+        var targetMeta = target.GetProperty("meta");
+        await Assert.That(target.GetProperty("noteid").GetString()).IsEqualTo("original");
+        await Assert.That(target.GetProperty("self").GetString()).IsEqualTo("#");
+        await Assert.That(target.GetProperty("metaurl").GetString()).IsEqualTo("#/meta");
+        await Assert.That(target.TryGetProperty("name", out _)).IsFalse();
+        await Assert.That(targetMeta.GetProperty("noteid").GetString()).IsEqualTo("original");
+        await Assert.That(targetMeta.GetProperty("self").GetString()).IsEqualTo("#/meta");
+        await Assert.That(targetMeta.GetProperty("xid").GetString()).IsEqualTo("/teams/target/notes/original/meta");
+        await Assert.That(targetMeta.GetProperty("defaultversionid").GetString()).IsEqualTo("1");
+        await Assert.That(targetMeta.GetProperty("defaultversionsticky").GetBoolean()).IsFalse();
+        await Assert.That(targetMeta.GetProperty("defaultversionurl").GetString())
+            .IsEqualTo("https://registry.example/catalog/teams/target/notes/original/versions/1");
+        await Assert.That(targetMeta.TryGetProperty("name", out _)).IsFalse();
+
+        var alias = (await Send(engine, RegistryAction.Read, "/teams/source/notes/alias", null,
+            new KeyValuePair<string, string?>("doc", null), new("inline", "meta"))).Metadata!.RootElement;
+        var aliasMeta = alias.GetProperty("meta");
+        await Assert.That(alias.TryGetProperty("name", out _)).IsFalse();
+        await Assert.That(aliasMeta.GetProperty("noteid").GetString()).IsEqualTo("alias");
+        await Assert.That(aliasMeta.GetProperty("self").GetString()).IsEqualTo("#/meta");
+        await Assert.That(aliasMeta.GetProperty("xid").GetString()).IsEqualTo("/teams/source/notes/alias/meta");
+        await Assert.That(aliasMeta.GetProperty("xref").GetString()).IsEqualTo("/teams/target/notes/original");
+        foreach (var attribute in new[]
+        {
+            "epoch", "labels", "createdat", "modifiedat", "readonly", "compatibility", "deprecated",
+            "defaultversionid", "defaultversionurl", "defaultversionsticky"
+        })
+        {
+            await Assert.That(aliasMeta.TryGetProperty(attribute, out _)).IsFalse();
+        }
+    }
+
+    [Test]
     public async Task ClearingCrossReferenceCreatesFreshVersionWithoutResurrectingOldMetadata()
     {
         var engine = Create();

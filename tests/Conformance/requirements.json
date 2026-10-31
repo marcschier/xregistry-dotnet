@@ -76081,13 +76081,18 @@
       ],
       "text": "For clarity, the serialization of a Resource (when using `?inline=meta`) in document view MUST adhere to the following:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The Server document-view serializer keeps Resource identity at the response root, places metadata under meta, uses relative pointers only for inlined targets, and excludes target-owned metadata from a cross-reference Resource's meta view.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DocumentViewMetaInlineKeepsResourceShapeWithoutDuplicatingTargetMetadataForAliases",
+          "DefaultVersionUrlsUseAuthoritativeMetadataAndDocumentPointers"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76191,13 +76196,19 @@
       ],
       "text": "The `epoch` flag MAY be used on any delete operation directed to a single entity if the protocol being used doesn't normally include the serialization of the \"to be deleted\" entity in the request. In those cases, this flag is used to request that the entity's current `epoch` value matches this flag's value for the purpose of the server's [`epoch` conflict checking algorithm](#epoch-attribute).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The Server accepts an epoch query flag for single Group, Resource, and Version deletions, checks the current value for mismatches, and rejects non-delete, collection, and null-value uses.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EpochFlagGuardsSingleEntityDeletes",
+          "EpochFlagRejectsNonDeleteAndCollectionTargets",
+          "EpochFlagRejectsNullInsteadOfDeletingWithoutAGuard"
+        ],
         "nativeEvidence": []
       }
     },
@@ -78737,13 +78748,18 @@
       ],
       "text": "When a request is directed to a collection of Groups, Resources or Versions, the `Sort` flag MAY be used to indicate the order in which the entities of that collection are to be returned (i.e. sorted). Use of the `sort` flag on a non-collection result MUST generate an error ([sort_noncollection](#sort_noncollection)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The shared query planner accepts sort only for Group, Resource and Version collection paths and returns sort_noncollection for entity paths.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SortingUsesScalarValuesMissingLowAndSameDirectionIdTies",
+          "SortRejectsAnEntityTargetEvenWithNoMatchingRows"
+        ],
         "nativeEvidence": []
       }
     },
@@ -78769,13 +78785,18 @@
       ],
       "text": "This flag MUST include a single parameter, a string containing the attribute (`<ATTRIBUTE>`) name to use as the \"sort key\" plus an OPTIONAL indication of whether the results are to be sorted in ascending or descending order.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The parser rejects repeated sort parameters; the query accepts one scalar path with an optional asc/desc order.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SortRejectsRepeatedParameters",
+          "SortingUsesScalarValuesMissingLowAndSameDirectionIdTies"
+        ],
         "nativeEvidence": []
       }
     },
@@ -78801,13 +78822,17 @@
       ],
       "text": "- `<ATTRIBUTE>` MUST be a [dot (`.`) notation](#xregistry-dot--notation) path to one of the attributes defined in collection's entities that will be the primary sort key for the results. The attribute MUST only reference a scalar attribute within the top-level collection, it MUST NOT attempt to traverse into a nested xRegistry collection even if that nested collection is inlined.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Sort projections are compiled against model-known scalar fields and reject unknown, complex, wildcard, or nested-collection paths.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SortRejectsUnknownComplexWildcardAndNestedCollectionProjections"
+        ],
         "nativeEvidence": []
       }
     },
@@ -78834,13 +78859,17 @@
       ],
       "text": "- An OPTIONAL \"sort order\" (`asc` for ascending, `desc` for descending) MAY be specified to indicate whether the first entity in the returned collection MUST be the \"lowest\" values (`asc`) or whether it MUST be the \"highest\" value (`desc`). When not specified, the default value MUST be `asc`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Sort tests exercise the default ascending order and explicit descending order for scalar keys.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SortingUsesScalarValuesMissingLowAndSameDirectionIdTies"
+        ],
         "nativeEvidence": []
       }
     },
@@ -78866,13 +78895,18 @@
       ],
       "text": "When a pagination type of feature is used to return the results, but the `sort` flag is not specified, then the server MUST sort the results on the entities' `<SINGULAR>id` value in ascending order. When pagination is not used, it is RECOMMENDED that servers still sort the results by `<SINGULAR>id` (asc) for consistency.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Pagination without an explicit sort orders entity IDs ascending across page boundaries; the shared query engine also sorts an unsorted source by ID.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "PaginationWithoutSortReturnsEntityIdsAscendingAcrossPages",
+          "DefaultCollectionSortOrdersUnsortedSourceIdsAscending"
+        ],
         "nativeEvidence": []
       }
     },
@@ -78897,13 +78931,18 @@
       ],
       "text": "Sorting MUST be done using the data type comparison rules as specified in the [filter Flag](#filter-flag) section. However, there are certain situations that might introduce ambiguity between implementations. For example, not all persistent stores support `NaNs` (Not-a-Number values), or if the data type of an attribute changes on a per-instance basis, then consistent sorting across implementations on that attribute might be challenging. While interoperability is critical, requiring consistency in these edge cases could be excessively burdensome for implementations. To that end, this specification does not mandate the exact ordering in these situations, aside from the requirement that an implementation MUST sort the result the same way each time.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Sorting uses the same typed comparison implementation as filtering; direct tests cover timestamp normalization, conditional per-instance types, string collation, and deterministic results across source order.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SortUsesTimestampComparisonAndIsDeterministicAcrossConditionalTypes",
+          "StringFiltersAndSortUseEnUsUnicodeCollation"
+        ],
         "nativeEvidence": []
       }
     },
@@ -78928,13 +78967,18 @@
       ],
       "text": "Entities that do not have a value for the specified attribute MUST be treated the same as if they had the \"lowest\" possible value for that attribute. If more than one entity shares the same attribute value then the `<SINGULAR>id` MUST be used as a secondary sorting key, using the same `asc`/`desc` value specified for the primary sorting key.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Tests verify missing values sort lowest and tied values use the entity ID in the primary sort direction.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SortingUsesScalarValuesMissingLowAndSameDirectionIdTies",
+          "ModelKnownScalarSortUsesMissingLowAndSameDirectionIdTies"
+        ],
         "nativeEvidence": []
       }
     },
@@ -78959,13 +79003,19 @@
       ],
       "text": "An invalid usage of, or value for, the `sort` flag MUST generate an error ([bad_sort](#bad_sort)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Unknown and unsupported projections, invalid directions, and repeated sort parameters return bad_sort; entity targets return sort_noncollection.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SortRejectsUnknownComplexWildcardAndNestedCollectionProjections",
+          "SortRejectsRepeatedParameters",
+          "SortRejectsAnEntityTargetEvenWithNoMatchingRows"
+        ],
         "nativeEvidence": []
       }
     },
@@ -78991,13 +79041,17 @@
       ],
       "text": "The SpecVersion flag MAY be used to indicate the xRegistry specification version that the response MUST adhere to. The parameter value of this flag MUST be a case-insensitive string.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The flag accepts case variations of the supported version; its parser normalizes the parameter before matching the supported major/minor and suffix.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SpecVersionFlagIsCaseInsensitiveAndIgnoresPatch"
+        ],
         "nativeEvidence": []
       }
     },
@@ -79022,13 +79076,18 @@
       ],
       "text": "If the specified version is not supported, then an error ([unsupported_specversion](#unsupported_specversion)) MUST be generated. When not specified, the default value MUST be the newest version of this specification supported by the server.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Unsupported major/minor and suffix values return unsupported_specversion. Omission selects the newest supported version, currently 1.0-rc4.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SpecVersionFlagRejectsUnsupportedMajorMinorOrSuffix",
+          "UnspecifiedSpecVersionUsesTheNewestSupportedVersion"
+        ],
         "nativeEvidence": []
       }
     },
@@ -79053,13 +79112,17 @@
       ],
       "text": "When comparing `specversion` strings, the server MUST silently ignore the \"patch\" version number and only consider the \"major.minor\" version numbers. This is because any \"patch\" version updates will only contain clarifications and ought not require any code changes for server implementations. Therefore, all patch versions of the same \"major.minor\" version MUST be forwards and backwards compatible.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A numeric patch component is ignored when matching the supported 1.0-rc4 version; both 1.0.7-rC4 and the unpatched form return identical representations.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SpecVersionFlagIsCaseInsensitiveAndIgnoresPatch"
+        ],
         "nativeEvidence": []
       }
     },
@@ -79084,13 +79147,18 @@
       ],
       "text": "However, due to the potential for semantics changes of versions with suffix values (e.g. `v2.0.0-rc1`), the suffix value MUST be part of the comparison checking.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Suffix changes are significant: rc3 and rc5 variants of 1.0 are rejected as unsupported_specversion while rc4 is accepted case-insensitively.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SpecVersionFlagIsCaseInsensitiveAndIgnoresPatch",
+          "SpecVersionFlagRejectsUnsupportedMajorMinorOrSuffix"
+        ],
         "nativeEvidence": []
       }
     },

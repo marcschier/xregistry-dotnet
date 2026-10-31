@@ -239,6 +239,15 @@ public class RegistryQueryTests
     }
 
     [Test]
+    public async Task SortRejectsRepeatedParameters()
+    {
+        var engine = await Seed();
+        await ExpectCode(() => Send(engine, RegistryAction.Read, "/fleets", null,
+            new KeyValuePair<string, string?>("sort", "rank"),
+            new KeyValuePair<string, string?>("sort", "name")), "bad_sort");
+    }
+
+    [Test]
     public async Task ConditionalTimestampDefinitionsUseTheirActiveModelType()
     {
         var engine = Create("""

@@ -417,9 +417,23 @@ public sealed partial class RegistryEngine
                 if (source.Attributes["xref"] is not null)
                 {
                     meta["xref"] = source.Attributes["xref"]!.DeepClone();
+                    if (DocumentView)
+                    {
+                        foreach (var attribute in new[]
+                        {
+                            "epoch", "labels", "createdat", "modifiedat", "readonly", "compatibility", "deprecated",
+                            "defaultversionid", "defaultversionurl", "defaultversionsticky"
+                        })
+                        {
+                            meta.Remove(attribute);
+                        }
+                    }
                 }
 
-                meta["defaultversionurl"] = _engine.Url(resourceKey + "/versions/" + Uri.EscapeDataString(defaultId), definition.HasDocument);
+                if (!DocumentView || source.Attributes["xref"] is null)
+                {
+                    meta["defaultversionurl"] = _engine.Url(resourceKey + "/versions/" + Uri.EscapeDataString(defaultId), definition.HasDocument);
+                }
                 meta.Remove("shortself");
                 if (_capabilities.ShortSelf && !DocumentView)
                 {
