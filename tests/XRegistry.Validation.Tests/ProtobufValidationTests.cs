@@ -285,6 +285,130 @@ public class ProtobufValidationTests
     }
 
     [Test]
+    [Arguments(0)]
+    [Arguments(1)]
+    [Arguments(2)]
+    [Arguments(3)]
+    [Arguments(4)]
+    public async Task PackagePositionDoesNotChangeDeclarationScopeOrMessageSelection(int position)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var declarations = new List<string>
+            {
+                "message Root { optional .example.Leaf value=1; optional .example.State state=2; }",
+                "message Leaf {}",
+                "enum State { ZERO=0; }",
+                "service S { rpc Get(.example.Root) returns (.example.Leaf); }"
+            };
+            declarations.Insert(position, "package example;");
+            var schema = Encoding.UTF8.GetBytes($"syntax=\"proto{syntax}\"; " + string.Join(" ", declarations));
+            var validated = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}", schema);
+            await Assert.That(validated.Status).IsEqualTo(DocumentValidationStatus.Valid);
+            await Assert.That(validated.Diagnostics.Count).IsEqualTo(0);
+            var selected = await SchemaObjectSelector.SelectAsync($"Protobuf/{syntax}", schema,
+                "https://schemas.test/root.proto#example.Root");
+            await Assert.That(selected.Status).IsEqualTo(SchemaObjectSelectionStatus.Selected);
+            await Assert.That(selected.Selection!.TypeName).IsEqualTo("example.Root");
+            await Assert.That(selected.Diagnostics.Count).IsEqualTo(0);
+        }
+    }
+
+    [Test]
+    [Arguments("message Leaf {}", DocumentValidationStatus.Valid)]
+    [Arguments("message Root {}", DocumentValidationStatus.Invalid)]
+    [Arguments("service Root {}", DocumentValidationStatus.Invalid)]
+    [Arguments("enum E { Root=0; }", DocumentValidationStatus.Invalid)]
+    public async Task LateImportedPackageControlsTypeBindingAndCrossFileSymbols(
+        string imported, DocumentValidationStatus expected)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            foreach (var lateImportPackage in new[] { false, true })
+            {
+                var calls = 0;
+                var schema = $"syntax=\"proto{syntax}\"; import \"other.proto\"; " +
+                    "message Root { optional .example.Leaf value=1; } package example;";
+                var importedBody = lateImportPackage ? imported + " package example;" : "package example; " + imported;
+                var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                    Encoding.UTF8.GetBytes(schema),
+                    new DocumentValidationOptions
+                    {
+                        ResolveReference = (name, _) =>
+                        {
+                            calls++;
+                            return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes(
+                                $"syntax=\"proto{syntax}\"; {importedBody}"));
+                        }
+                    });
+                await Assert.That(calls).IsEqualTo(1);
+                await Assert.That(result.Status).IsEqualTo(expected);
+                if (expected == DocumentValidationStatus.Invalid)
+                {
+                    await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.duplicate");
+                }
+                else { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("package first; message M {} package second;", "protobuf.package")]
+    [Arguments("message M {} package same; package same;", "protobuf.package")]
+    [Arguments("message M {} package .example;", "protobuf.identifier")]
+    [Arguments("message M {} package example.;", "protobuf.identifier")]
+    [Arguments("message M {} package \"example\";", "protobuf.identifier")]
+    public async Task PackageDeclarationsRetainFullIdentifierAndUniquenessRules(string body, string code)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                Encoding.UTF8.GetBytes($"syntax=\"proto{syntax}\"; {body}"));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo(code);
+        }
+    }
+
+    [Test]
+    public async Task PackageDiscoveryIgnoresNestedNamesAndStringContents()
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var schema = Encoding.UTF8.GetBytes($"syntax=\"proto{syntax}\"; " + """
+                option java_package="package wrong; { }";
+                message package {
+                    message Nested { optional string package=1 [json_name="; package wrong;"]; }
+                    optional Nested value=1;
+                }
+                service S { rpc package(.example.package) returns (.example.package); }
+                package example;
+                """);
+            var selected = await SchemaObjectSelector.SelectAsync($"Protobuf/{syntax}", schema,
+                "https://schemas.test/root.proto#example.package");
+            await Assert.That(selected.Status).IsEqualTo(SchemaObjectSelectionStatus.Selected);
+            await Assert.That(selected.Selection!.TypeName).IsEqualTo("example.package");
+            await Assert.That(selected.Diagnostics.Count).IsEqualTo(0);
+        }
+    }
+
+    [Test]
+    public async Task PackageDiscoveryUsesTheFullDottedNameAndFiniteWorkBudget()
+    {
+        var schema = Encoding.UTF8.GetBytes("syntax=\"proto3\";" + new string(';', 256) +
+            "message Root { optional .example.nested.Leaf value=1; } message Leaf {} package example.nested;");
+        var limited = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3", schema,
+            new DocumentValidationOptions { MaxWork = 500 });
+        await Assert.That(limited.Status).IsEqualTo(DocumentValidationStatus.Indeterminate);
+        await Assert.That(limited.Diagnostics[0].Code).IsEqualTo("limit.work");
+        var selected = await SchemaObjectSelector.SelectAsync("Protobuf/3", schema,
+            "https://schemas.test/root.proto#example.nested.Root",
+            new() { Validation = new() { MaxWork = 10_000 } });
+        await Assert.That(selected.Status).IsEqualTo(SchemaObjectSelectionStatus.Selected);
+        await Assert.That(selected.Selection!.TypeName).IsEqualTo("example.nested.Root");
+        await Assert.That(selected.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
     [Arguments("optional string foo=1; message foo {}")]
     [Arguments("message foo {} optional string foo=1;")]
     [Arguments("optional string foo=1; enum foo { ZERO=0; }")]

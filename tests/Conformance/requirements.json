@@ -43840,7 +43840,12 @@
           "QuotedSyntaxDelimitersAndCustomOptionMarkersAreInvalid",
           "QuotedRequiredLabelNeverActsAsAProtoTwoFieldLabel",
           "ImportKeywordTokenKindsPreserveLiteralAcquisitionPaths",
-          "GrammarSpellingsRemainValidInsideStringValues"
+          "GrammarSpellingsRemainValidInsideStringValues",
+          "PackagePositionDoesNotChangeDeclarationScopeOrMessageSelection",
+          "LateImportedPackageControlsTypeBindingAndCrossFileSymbols",
+          "PackageDeclarationsRetainFullIdentifierAndUniquenessRules",
+          "PackageDiscoveryIgnoresNestedNamesAndStringContents",
+          "PackageDiscoveryUsesTheFullDottedNameAndFiniteWorkBudget"
         ],
         "nativeEvidence": []
       }

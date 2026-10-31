@@ -368,6 +368,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
 
             Require(expectedSyntax is null || expectedSyntax == _syntax,
                 "protobuf.syntax", "The document syntax disagrees with the declared format.");
+            _package = FindFilePackage();
             var packageSeen = false;
             while (Current.Kind != TokenKind.End)
             {
@@ -375,7 +376,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                 if (Take("package"))
                 {
                     Require(!packageSeen, "protobuf.package", "Only one package declaration is allowed.");
-                    _package = TypeName();
+                    _package = FullIdentifier();
                     packageSeen = true;
                     Expect(";");
                 }
@@ -399,6 +400,37 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             }
 
             return _imports;
+        }
+
+        private string FindFilePackage()
+        {
+            var start = _index;
+            var depth = 0;
+            var statementStart = true;
+            var package = "";
+            while (Current.Kind != TokenKind.End)
+            {
+                owner.Context.Work();
+                if (depth == 0 && statementStart && Take("package"))
+                {
+                    package = FullIdentifier();
+                    Expect(";");
+                    statementStart = true;
+                    continue;
+                }
+
+                var token = tokens[_index++];
+                if (token.Kind == TokenKind.Symbol)
+                {
+                    if (token.Text == "{") { depth++; }
+                    else if (token.Text == "}") { depth--; }
+                    statementStart = depth == 0 && token.Text is ";" or "}";
+                }
+                else { statementStart = false; }
+            }
+
+            _index = start;
+            return package;
         }
 
         private void Message(string scope)
@@ -707,7 +739,12 @@ internal sealed class ProtobufSyntax(ValidationContext context)
         private string TypeName()
         {
             var prefix = Take(".") ? "." : "";
-            var name = prefix + Identifier();
+            return prefix + FullIdentifier();
+        }
+
+        private string FullIdentifier()
+        {
+            var name = Identifier();
             while (Take(".")) { name += "." + Identifier(); }
             return name;
         }

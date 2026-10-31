@@ -102,6 +102,16 @@ separate a field name from its number. Such documents report `Invalid`; real
 custom-option syntax still reports `Unsupported`. Strings retain their value
 semantics: `import "public" "other.proto";` acquires `publicother.proto` through
 the caller's resolver rather than treating `"public"` as an import modifier.
+The package applies to every declaration in its file, including declarations
+before the `package` statement. Validation and message selection therefore use
+the same fully qualified names regardless of that statement's position;
+imported files determine their own package scope. Package names require a
+full identifier without a leading dot, and duplicate package statements remain
+invalid. These rules follow the
+[Proto2](https://protobuf.dev/reference/protobuf/proto2-spec/#proto-file)
+and [Proto3](https://protobuf.dev/reference/protobuf/proto3-spec/#proto-file)
+file grammars and their package declarations. Package discovery consumes the
+same finite work budget as declaration validation.
 Editions, custom extensions, complete weak-import semantics and gRPC API
 selection remain unsupported.
 

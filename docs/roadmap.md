@@ -177,6 +177,9 @@ vocabulary/source mapping. It does not supply their implementation.
   Grammar matching retains token kinds: quoted keywords, labels and separators
   cannot act as syntax, while adjacent import literals retain their combined
   path and supported string-valued options/defaults remain valid.
+  File-wide package scope no longer depends on statement position, including
+  for imported declarations and root message selection. Dotted package names
+  use the full-identifier grammar; package discovery is work-budgeted.
   Editions and custom extensions remain unsupported. This does not add gRPC
   API operation selection.
 - Add full API format validators and the remaining language resolvers. The
