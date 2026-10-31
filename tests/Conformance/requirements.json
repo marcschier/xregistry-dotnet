@@ -43821,6 +43821,8 @@
           "AdjacentStringLiteralsKeepCombinedValueConstraints",
           "ProtoTwoStringDefaultsAcceptAdjacentLiterals",
           "SyntaxDiscriminatorDoesNotAcceptAdjacentLiterals",
+          "HexadecimalStringEscapesAcceptOneOrTwoDigits",
+          "HexadecimalAndUnicodeEscapesRejectMissingOrInvalidRequiredDigits",
           "QuotedOptionValuesNeverMasqueradeAsBooleansOrEnumConstants",
           "QuotedDefaultsNeverMasqueradeAsScalarOrEnumConstants",
           "TypedDefaultsRetainValidNativeConstants",

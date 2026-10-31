@@ -164,6 +164,9 @@ vocabulary/source mapping. It does not supply their implementation.
   Adjacent string literals are combined before supported option, default,
   import-path and reserved-name checks. Escape decoding remains incomplete;
   syntax discriminators do not accept concatenated literals.
+  Hexadecimal escapes accept the publisher-defined one/two-digit widths;
+  Unicode escapes retain fixed-width checks. Decoded string/byte semantics
+  remain incomplete.
   Option and default validation checks token kinds before values, so quoted
   strings cannot satisfy boolean, floating-point or enum constant requirements.
   Reserved-number checks reject overlapping intervals and duplicate singletons

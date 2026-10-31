@@ -255,7 +255,11 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                             "protobuf.string", "The string escape is not supported by Protobuf syntax.");
                         if (character is 'x' or 'X' or 'u' or 'U')
                         {
-                            var digits = character is 'u' ? 4 : character is 'U' ? 8 : 2;
+                            var digits = character is 'u' ? 4 : character is 'U' ? 8 : 1;
+                            if (character is 'x' or 'X' && index + 1 < text.Length && char.IsAsciiHexDigit(text[index + 1]))
+                            {
+                                digits = 2;
+                            }
                             Require(index + digits <= text.Length && text.AsSpan(index, digits).ToArray().All(char.IsAsciiHexDigit),
                                 "protobuf.string", "The string hexadecimal escape is malformed.");
                             content.Append('\\').Append(character).Append(text.AsSpan(index, digits));

@@ -67,6 +67,11 @@ supported string-valued options or defaults, as defined by the
 Path and duplicate-name checks use the combined value before acquisition.
 The `syntax` discriminator still requires one literal; concatenation does not
 add escape decoding or unsupported option policies.
+Hexadecimal string escapes accept one or two digits after `\x` or `\X`;
+following characters remain literal content. A missing first hexadecimal digit
+still reports `protobuf.string`, and `\u`/`\U` retain their fixed four/eight-digit
+checks. This lexical-width correction does not complete decoded string or bytes
+semantics.
 Option and default checks distinguish quoted strings from native constants.
 For example, `"true"` cannot satisfy a boolean option, and `"ZERO"` cannot
 satisfy an enum default. This also applies when adjacent literals produce the

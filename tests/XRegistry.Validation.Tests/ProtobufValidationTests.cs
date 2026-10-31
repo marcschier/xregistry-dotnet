@@ -1256,6 +1256,55 @@ public class ProtobufValidationTests
     }
 
     [Test]
+    [Arguments("\\x0")]
+    [Arguments("\\x1")]
+    [Arguments("\\xf")]
+    [Arguments("\\XA")]
+    [Arguments("\\x0g")]
+    [Arguments("\\x12")]
+    [Arguments("\\XAF")]
+    [Arguments("\\x123")]
+    [Arguments("\\xF\" \"F")]
+    public async Task HexadecimalStringEscapesAcceptOneOrTwoDigits(string value)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            foreach (var quote in new[] { '"', '\'' })
+            {
+                var quoted = $"{quote}{value.Replace("\"", quote.ToString(), StringComparison.Ordinal)}{quote}";
+                var defaultOption = syntax == 2 ? $",default={quoted}" : "";
+                var schema = $"syntax=\"proto{syntax}\"; option java_package={quoted}; " +
+                    $"message M {{ optional string value=1 [json_name={quoted}{defaultOption}]; }}";
+                var result = await new BuiltInDocumentValidator().ValidateAsync(
+                    $"Protobuf/{syntax}", Encoding.UTF8.GetBytes(schema));
+                await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+                await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("\\x")]
+    [Arguments("\\X")]
+    [Arguments("\\xg")]
+    [Arguments("\\Xz")]
+    [Arguments("\\x\" \"1")]
+    [Arguments("\\u123")]
+    [Arguments("\\U0000012")]
+    [Arguments("\\u12z4")]
+    [Arguments("\\U0000000z")]
+    public async Task HexadecimalAndUnicodeEscapesRejectMissingOrInvalidRequiredDigits(string value)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                Encoding.UTF8.GetBytes($"syntax=\"proto{syntax}\"; option java_package=\"{value}\"; message M {{}}"));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.string");
+        }
+    }
+
+    [Test]
     [Arguments("0")]
     [Arguments("-0")]
     [Arguments("+0")]
