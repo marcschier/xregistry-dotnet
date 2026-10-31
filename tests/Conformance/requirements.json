@@ -83982,15 +83982,16 @@
       "text": "- The value of this attribute MUST be case-insensitive.",
       "review": {
         "status": "reviewed",
-        "note": "MaNuAl compiles to manual and executes the same branching and tie behavior as the omitted/default mode in ManualNewestUsesOnlyLeavesThenTimestampAndCaseInsensitiveId. Mixed-case admission and behavior for the other supported modes remain unasserted, so this general clause remains pending.",
+        "note": "VersionModeCaseVariantsPreservePublicationRetentionAndRestart compiles uppercase and mixed-case manual, createdat, modifiedat and semver values to their canonical mode. Each variant proves two-Version newest selection and ancestry, sticky-default retention after a third publication, mode-appropriate deletion repair, unchanged selected Version metadata, exact exported state and event count through restart. The separate manual test retains omitted/default and mixed-case branching/tie evidence.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "ManualNewestUsesOnlyLeavesThenTimestampAndCaseInsensitiveId"
+          "ManualNewestUsesOnlyLeavesThenTimestampAndCaseInsensitiveId",
+          "VersionModeCaseVariantsPreservePublicationRetentionAndRestart"
         ],
         "nativeEvidence": []
       }

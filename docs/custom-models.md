@@ -69,6 +69,9 @@ because only one Version can remain.
 
 ## Limit retained Versions
 
+The Server accepts `manual`, `createdat`, `modifiedat`, and `semver` without
+case sensitivity; uppercase or mixed-case names select the same algorithm.
+
 The default `versionmode` is `manual`. In that mode, newest selection considers
 only leaves and oldest selection considers only roots; a nonleaf does not become
 the default merely because it has a newer `createdat` timestamp. Timestamp ties

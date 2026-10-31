@@ -12,6 +12,56 @@ namespace XRegistry.Server.Tests;
 public class ModelAndVersionTests
 {
     [Test]
+    [Arguments("manual", "MANUAL")]
+    [Arguments("manual", "MaNuAl")]
+    [Arguments("createdat", "CREATEDAT")]
+    [Arguments("createdat", "CrEaTeDaT")]
+    [Arguments("modifiedat", "MODIFIEDAT")]
+    [Arguments("modifiedat", "MoDiFiEdAt")]
+    [Arguments("semver", "SEMVER")]
+    [Arguments("semver", "SeMvEr")]
+    public async Task VersionModeCaseVariantsPreservePublicationRetentionAndRestart(string mode, string authoredMode)
+    {
+        var model = """
+            {"groups":{"teams":{"singular":"team","resources":{"notes":{
+              "singular":"note","hasdocument":false,"maxversions":2,"versionmode":"MODE"
+            }}}}}
+            """.Replace("MODE", authoredMode, StringComparison.Ordinal);
+        await Assert.That(RegistryModel.Compile(RegistryJson.Parse(model)).Groups["teams"].Resources["notes"].VersionMode)
+            .IsEqualTo(mode);
+        var store = new InMemoryRegistryPersistence();
+        var engine = Create(model, persistence: store);
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n/versions/1.0.0",
+            """{"createdat":"2000-01-01T00:00:00Z","modifiedat":"2000-01-01T00:00:00Z"}""");
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n/versions/2.0.0",
+            """{"createdat":"2010-01-01T00:00:00Z","modifiedat":"2010-01-01T00:00:00Z"}""");
+        var meta = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n/meta")).Metadata!.RootElement;
+        await Assert.That(meta.GetProperty("defaultversionid").GetString()).IsEqualTo("2.0.0");
+        var second = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n/versions/2.0.0")).Metadata!.RootElement;
+        await Assert.That(second.GetProperty("ancestorid").GetString()).IsEqualTo("1.0.0");
+        await Send(engine, RegistryAction.Patch, "/teams/g/notes/n/meta", """{"defaultversionid":"1.0.0"}""");
+        var selected = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n/versions/1.0.0")).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n/versions/3.0.0",
+            """{"createdat":"2020-01-01T00:00:00Z","modifiedat":"2020-01-01T00:00:00Z"}""");
+        var exported = (await Send(engine, RegistryAction.Read, "/export")).Metadata!.RootElement.GetRawText();
+        foreach (var current in new[] { engine, Create(model, persistence: store) })
+        {
+            var versions = (await Send(current, RegistryAction.Read, "/teams/g/notes/n/versions")).Metadata!.RootElement;
+            await Assert.That(versions.EnumerateObject().Count()).IsEqualTo(2);
+            await Assert.That(versions.TryGetProperty("2.0.0", out _)).IsFalse();
+            await Assert.That(versions.GetProperty("1.0.0").GetRawText()).IsEqualTo(selected);
+            await Assert.That(versions.GetProperty("3.0.0").GetProperty("ancestorid").GetString())
+                .IsEqualTo(mode == "manual" ? "3.0.0" : "1.0.0");
+            var retainedMeta = (await Send(current, RegistryAction.Read, "/teams/g/notes/n/meta")).Metadata!.RootElement;
+            await Assert.That(retainedMeta.GetProperty("defaultversionid").GetString()).IsEqualTo("1.0.0");
+            await Assert.That(retainedMeta.GetProperty("defaultversionsticky").GetBoolean()).IsTrue();
+            await Assert.That((await Send(current, RegistryAction.Read, "/export")).Metadata!.RootElement.GetRawText()).IsEqualTo(exported);
+            await Assert.That((await current.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events + 1);
+        }
+    }
+
+    [Test]
     [Arguments(false)]
     [Arguments(true)]
     public async Task ManualImplicitBatchSortsIdsAndInitializesSelfRoot(bool replacement)
