@@ -96,6 +96,31 @@ public class RegistryModelTests
     }
 
     [Test]
+    public async Task CoreXidAttributesAreRequiredImmutableReadonlyXidsAcrossEntityPlanes()
+    {
+        var model = RegistryModel.Compile(RegistryJson.Parse("""
+            {"groups":{"teams":{"singular":"team","resources":{"notes":{"singular":"note","hasdocument":false}}}}}
+            """));
+        var resource = model.Groups["teams"].Resources["notes"];
+        var xids = new[]
+        {
+            model.Attributes["xid"],
+            model.Groups["teams"].Attributes["xid"],
+            resource.ResourceAttributes["xid"],
+            resource.Attributes["xid"],
+            resource.MetaAttributes["xid"]
+        };
+
+        foreach (var xid in xids)
+        {
+            await Assert.That(xid.Type).IsEqualTo(RegistryValueType.Xid);
+            await Assert.That(xid.Required).IsTrue();
+            await Assert.That(xid.Immutable).IsTrue();
+            await Assert.That(xid.ReadOnly).IsTrue();
+        }
+    }
+
+    [Test]
     public async Task CoreShortSelfAttributesAreImmutableReadonlyUrlsAcrossEntityPlanes()
     {
         var model = RegistryModel.Compile(RegistryJson.Parse("""

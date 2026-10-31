@@ -45,15 +45,22 @@ public class EngineTests
             ["/teams/g/notes/n/versions/1"] = "https://registry.example/catalog/teams/g/notes/n/versions/1"
         };
         var selfUrls = new List<string>();
+        var xids = new List<string>();
         foreach (var (path, expectedUrl) in expected)
         {
             var result = await Send(engine, RegistryAction.Read, path);
             var self = result.Metadata!.RootElement.GetProperty("self").GetString()!;
+            var xid = result.Metadata.RootElement.GetProperty("xid").GetString()!;
             await Assert.That(self).IsEqualTo(expectedUrl);
+            await Assert.That(xid).IsEqualTo(path);
+            var pathFromSelf = new Uri(self).AbsolutePath["/catalog".Length..];
+            await Assert.That(xid).IsEqualTo(pathFromSelf.Length == 0 ? "/" : pathFromSelf);
             selfUrls.Add(self);
+            xids.Add(xid);
         }
 
         await Assert.That(selfUrls.Distinct(StringComparer.Ordinal).Count()).IsEqualTo(expected.Count);
+        await Assert.That(xids.Distinct(StringComparer.Ordinal).Count()).IsEqualTo(expected.Count);
     }
 
     [Test]

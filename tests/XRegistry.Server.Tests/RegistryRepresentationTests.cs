@@ -86,9 +86,11 @@ public class RegistryRepresentationTests
             await Assert.That(group.TryGetProperty("shortself", out _)).IsEqualTo(shortSelf && !doc);
         }
         var resource = group.GetProperty("notes").GetProperty("n");
+        await Assert.That(resource.GetProperty("xid").GetString()).IsEqualTo("/teams/g/notes/n");
         await Assert.That(resource.TryGetProperty("shortself", out _)).IsEqualTo(shortSelf && !doc);
         await Assert.That(resource.GetProperty("meta").TryGetProperty("shortself", out _)).IsEqualTo(shortSelf && !doc);
         var version = resource.GetProperty("versions").GetProperty("1");
+        await Assert.That(version.GetProperty("xid").GetString()).IsEqualTo("/teams/g/notes/n/versions/1");
         await Assert.That(version.TryGetProperty("shortself", out _)).IsEqualTo(shortSelf && !doc);
         await Assert.That(version.GetProperty("name").GetString()).IsEqualTo("Nested note");
         var file = group.GetProperty("files").GetProperty("f");

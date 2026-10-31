@@ -56,11 +56,14 @@ public class LifecycleTests
     {
         var engine = Create();
         var result = await Send(engine, RegistryAction.Replace, "/", """
-            {"registryid":"other","epoch":99,"capabilities":"ignored","modelsource":false,
-             "$schema":"https://example/schema","teams":{"g":{"teamid":"g"}}}
+            {"registryid":"other","xid":{"forged":true},"epoch":99,"capabilities":"ignored","modelsource":false,
+             "$schema":"https://example/schema","teams":{"g":{"teamid":"g","xid":17}}}
             """, new KeyValuePair<string, string?>("ignore", "id,epoch,capabilities,modelsource"));
         await Assert.That(result.Metadata!.RootElement.GetProperty("registryid").GetString()).IsEqualTo("test");
+        await Assert.That(result.Metadata.RootElement.GetProperty("xid").GetString()).IsEqualTo("/");
         await Assert.That(result.Metadata.RootElement.GetProperty("teamscount").GetInt32()).IsEqualTo(1);
+        var group = await Send(engine, RegistryAction.Read, "/teams/g");
+        await Assert.That(group.Metadata!.RootElement.GetProperty("xid").GetString()).IsEqualTo("/teams/g");
         await ExpectCode(() => Send(engine, RegistryAction.Patch, "/", """{"teams":{"g":{"teamid":"different"}}}""",
             new KeyValuePair<string, string?>("ignore", "id")), "mismatched_id");
         await ExpectCode(() => Send(engine, RegistryAction.Patch, "/", "{}",

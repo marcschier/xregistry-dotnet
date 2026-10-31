@@ -1203,6 +1203,7 @@ public class ModelAndVersionTests
             await Assert.That(meta.GetProperty("defaultversionid").GetString()).IsEqualTo(versionId);
             await Assert.That(meta.GetProperty("defaultversionurl").GetString()).IsEqualTo(expectedUrl);
             await Assert.That(version.GetProperty("self").GetString()).IsEqualTo(expectedUrl);
+            await Assert.That(version.GetProperty("xid").GetString()).IsEqualTo(versionPath);
         }
     }
 

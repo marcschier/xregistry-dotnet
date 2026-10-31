@@ -2675,22 +2675,20 @@
       "text": "- Description: An immutable server-generated unique identifier of the entity. Unlike `<SINGULAR>id`, which is unique within the scope of its parent, `xid` MUST be unique across the entire Registry, and as such is defined to be a relative URL from the root of the Registry. This value MUST be the same as the `<PATH>` portion of its `self` URL, after the Registry's base URL, without any protocol-specific xRegistry suffix (e.g. `$details` in the HTTP case). Unlike some other relative URIs, `xid` values MUST NOT be shortened based on the incoming request's URL; `xid`s are always relative to the root path of the Registry.",
       "review": {
         "status": "reviewed",
-        "note": "Typed path/XID generation, suffix removal and alias source identity are present. The row's universal/inherited lifetime or invalid-input obligations are not all directly asserted for generated XIDs across API/document/source contexts; body XID immunity is distinct from validating an extension of type xid.",
+        "note": "Server responses derive each entity XID from its full Registry path. Tests compare it with self, preserve it in nested projections, exclude $details from Version XIDs, and verify uniqueness.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "PreservesEscapedPathAndCase",
-          "RecognizesOnlyDefinedProtocolShapes",
-          "ConstructsEscapedPathsWithoutWindowsFilenameRestrictions",
-          "XidTargetsUseModelTypesButAllowDanglingEntityIds",
-          "OneHopAliasKeepsAliasIdentityAndEveryReadInItsSelectedSource",
-          "DanglingAndSecondHopAliasesHaveOnlyIdentityShapeAndNeverFollowAgain",
-          "StructurallyIdenticalButIndependentTypesCannotBeAliasTargets"
+          "CoreXidAttributesAreRequiredImmutableReadonlyXidsAcrossEntityPlanes",
+          "IgnoreFlagsPermitEntityImportWithoutSuppressingNestedIdentityGuards",
+          "SelfUrlsAreUniquePublicHierarchyLocationsForEveryEntityPlane",
+          "DefaultVersionUrlsUseAuthoritativeMetadataAndDocumentPointers",
+          "CollectionsProjectionKeepsOnlyNestedEntityShortSelf"
         ],
         "nativeEvidence": []
       }
@@ -2711,22 +2709,16 @@
       "text": "- REQUIRED.",
       "review": {
         "status": "reviewed",
-        "note": "Typed path/XID generation, suffix removal and alias source identity are present. The row's universal/inherited lifetime or invalid-input obligations are not all directly asserted for generated XIDs across API/document/source contexts; body XID immunity is distinct from validating an extension of type xid.",
+        "note": "The compiled Core model declares xid required on Registry, Group, Resource, Version, and Resource Metadata.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "PreservesEscapedPathAndCase",
-          "RecognizesOnlyDefinedProtocolShapes",
-          "ConstructsEscapedPathsWithoutWindowsFilenameRestrictions",
-          "XidTargetsUseModelTypesButAllowDanglingEntityIds",
-          "OneHopAliasKeepsAliasIdentityAndEveryReadInItsSelectedSource",
-          "DanglingAndSecondHopAliasesHaveOnlyIdentityShapeAndNeverFollowAgain",
-          "StructurallyIdenticalButIndependentTypesCannotBeAliasTargets"
+          "CoreXidAttributesAreRequiredImmutableReadonlyXidsAcrossEntityPlanes"
         ],
         "nativeEvidence": []
       }
@@ -2747,22 +2739,17 @@
       "text": "- MUST be immutable.",
       "review": {
         "status": "reviewed",
-        "note": "Typed path/XID generation, suffix removal and alias source identity are present. The row's universal/inherited lifetime or invalid-input obligations are not all directly asserted for generated XIDs across API/document/source contexts; body XID immunity is distinct from validating an extension of type xid.",
+        "note": "The compiled Core model declares xid immutable and read-only on each entity plane; creation ignores invalid client-supplied values at the root and nested Group.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "PreservesEscapedPathAndCase",
-          "RecognizesOnlyDefinedProtocolShapes",
-          "ConstructsEscapedPathsWithoutWindowsFilenameRestrictions",
-          "XidTargetsUseModelTypesButAllowDanglingEntityIds",
-          "OneHopAliasKeepsAliasIdentityAndEveryReadInItsSelectedSource",
-          "DanglingAndSecondHopAliasesHaveOnlyIdentityShapeAndNeverFollowAgain",
-          "StructurallyIdenticalButIndependentTypesCannotBeAliasTargets"
+          "CoreXidAttributesAreRequiredImmutableReadonlyXidsAcrossEntityPlanes",
+          "IgnoreFlagsPermitEntityImportWithoutSuppressingNestedIdentityGuards"
         ],
         "nativeEvidence": []
       }
@@ -2783,7 +2770,7 @@
       "text": "- MUST be a case-sensitive non-empty relative URL to the current entity.",
       "review": {
         "status": "reviewed",
-        "note": "Generated XIDs retain case, begin with /, exclude $details, and remain Registry-root-relative even when self is response-local or an alias is reidentified.",
+        "note": "RegistryPath.ToXid preserves escaped identifier case and emits a non-empty Registry-root-relative path; generated XIDs are checked across entity planes and nested projections.",
         "roles": [
           "server",
           "producer"
@@ -2793,14 +2780,8 @@
         "status": "implemented",
         "testIds": [
           "PreservesEscapedPathAndCase",
-          "RecognizesOnlyDefinedProtocolShapes",
-          "ConstructsEscapedPathsWithoutWindowsFilenameRestrictions",
-          "OneHopAliasKeepsAliasIdentityAndEveryReadInItsSelectedSource",
-          "DanglingAndSecondHopAliasesHaveOnlyIdentityShapeAndNeverFollowAgain",
-          "StructurallyIdenticalButIndependentTypesCannotBeAliasTargets",
-          "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
-          "EveryEntityAndCollectionUsesItsActualResponseRoot",
-          "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks"
+          "SelfUrlsAreUniquePublicHierarchyLocationsForEveryEntityPlane",
+          "CollectionsProjectionKeepsOnlyNestedEntityShortSelf"
         ],
         "nativeEvidence": []
       }
@@ -2821,22 +2802,19 @@
       "text": "- MUST be of the form: `/[<GROUPS>/<GID>[/<RESOURCES>/<RID>[/meta | /versions/<VID>]]]` and reference valid Group and Resource types. Otherwise, an error ([malformed_xid](#malformed_xid)) MUST be generated.",
       "review": {
         "status": "reviewed",
-        "note": "Typed path/XID generation, suffix removal and alias source identity are present. The row's universal/inherited lifetime or invalid-input obligations are not all directly asserted for generated XIDs across API/document/source contexts; body XID immunity is distinct from validating an extension of type xid.",
+        "note": "RegistryPath recognizes only defined entity shapes, generated XIDs use declared Group and Resource paths, and malformed typed XIDs return the malformed_xid error.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "PreservesEscapedPathAndCase",
           "RecognizesOnlyDefinedProtocolShapes",
           "ConstructsEscapedPathsWithoutWindowsFilenameRestrictions",
-          "XidTargetsUseModelTypesButAllowDanglingEntityIds",
-          "OneHopAliasKeepsAliasIdentityAndEveryReadInItsSelectedSource",
-          "DanglingAndSecondHopAliasesHaveOnlyIdentityShapeAndNeverFollowAgain",
-          "StructurallyIdenticalButIndependentTypesCannotBeAliasTargets"
+          "MalformedTypedXidsUseTheXidCatalogWithoutASecondUriDecode",
+          "SelfUrlsAreUniquePublicHierarchyLocationsForEveryEntityPlane"
         ],
         "nativeEvidence": []
       }
@@ -2857,7 +2835,7 @@
       "text": "- MUST start with the `/` character.",
       "review": {
         "status": "reviewed",
-        "note": "Generated XIDs retain case, begin with /, exclude $details, and remain Registry-root-relative even when self is response-local or an alias is reidentified.",
+        "note": "RegistryPath.ToXid and server responses emit slash-rooted paths, with the Registry root represented by /.",
         "roles": [
           "server",
           "producer"
@@ -2867,14 +2845,7 @@
         "status": "implemented",
         "testIds": [
           "PreservesEscapedPathAndCase",
-          "RecognizesOnlyDefinedProtocolShapes",
-          "ConstructsEscapedPathsWithoutWindowsFilenameRestrictions",
-          "OneHopAliasKeepsAliasIdentityAndEveryReadInItsSelectedSource",
-          "DanglingAndSecondHopAliasesHaveOnlyIdentityShapeAndNeverFollowAgain",
-          "StructurallyIdenticalButIndependentTypesCannotBeAliasTargets",
-          "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
-          "EveryEntityAndCollectionUsesItsActualResponseRoot",
-          "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks"
+          "SelfUrlsAreUniquePublicHierarchyLocationsForEveryEntityPlane"
         ],
         "nativeEvidence": []
       }
@@ -2895,22 +2866,16 @@
       "text": "- MUST be a read-only attribute.",
       "review": {
         "status": "reviewed",
-        "note": "Typed path/XID generation, suffix removal and alias source identity are present. The row's universal/inherited lifetime or invalid-input obligations are not all directly asserted for generated XIDs across API/document/source contexts; body XID immunity is distinct from validating an extension of type xid.",
+        "note": "The compiled Core model marks xid read-only on each entity plane; invalid client-supplied values are silently ignored and server-generated path values are returned.",
         "roles": [
-          "server",
-          "producer"
+          "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "PreservesEscapedPathAndCase",
-          "RecognizesOnlyDefinedProtocolShapes",
-          "ConstructsEscapedPathsWithoutWindowsFilenameRestrictions",
-          "XidTargetsUseModelTypesButAllowDanglingEntityIds",
-          "OneHopAliasKeepsAliasIdentityAndEveryReadInItsSelectedSource",
-          "DanglingAndSecondHopAliasesHaveOnlyIdentityShapeAndNeverFollowAgain",
-          "StructurallyIdenticalButIndependentTypesCannotBeAliasTargets"
+          "CoreXidAttributesAreRequiredImmutableReadonlyXidsAcrossEntityPlanes",
+          "IgnoreFlagsPermitEntityImportWithoutSuppressingNestedIdentityGuards"
         ],
         "nativeEvidence": []
       }
@@ -62653,13 +62618,22 @@
       ],
       "text": "- Description: An immutable server-generated unique identifier of the entity. Unlike `<SINGULAR>id`, which is unique within the scope of its parent, `xid` MUST be unique across the entire Registry, and as such is defined to be a relative URL from the root of the Registry. This value MUST be the same as the `<PATH>` portion of its `self` URL, after the Registry's base URL, without any protocol-specific xRegistry suffix (e.g. `$details` in the HTTP case). Unlike some other relative URIs, `xid` values MUST NOT be shortened based on the incoming request's URL; `xid`s are always relative to the root path of the Registry.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Server responses derive each entity XID from its full Registry path. Tests compare it with self, preserve it in nested projections, exclude $details from Version XIDs, and verify uniqueness.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CoreXidAttributesAreRequiredImmutableReadonlyXidsAcrossEntityPlanes",
+          "IgnoreFlagsPermitEntityImportWithoutSuppressingNestedIdentityGuards",
+          "SelfUrlsAreUniquePublicHierarchyLocationsForEveryEntityPlane",
+          "DefaultVersionUrlsUseAuthoritativeMetadataAndDocumentPointers",
+          "CollectionsProjectionKeepsOnlyNestedEntityShortSelf"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62684,13 +62658,18 @@
       ],
       "text": "- REQUIRED.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The compiled Core model declares xid required on Registry, Group, Resource, Version, and Resource Metadata.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CoreXidAttributesAreRequiredImmutableReadonlyXidsAcrossEntityPlanes"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62715,13 +62694,19 @@
       ],
       "text": "- MUST be immutable.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The compiled Core model declares xid immutable and read-only on each entity plane; creation ignores invalid client-supplied values at the root and nested Group.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CoreXidAttributesAreRequiredImmutableReadonlyXidsAcrossEntityPlanes",
+          "IgnoreFlagsPermitEntityImportWithoutSuppressingNestedIdentityGuards"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62746,13 +62731,20 @@
       ],
       "text": "- MUST be a case-sensitive non-empty relative URL to the current entity.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "RegistryPath.ToXid preserves escaped identifier case and emits a non-empty Registry-root-relative path; generated XIDs are checked across entity planes and nested projections.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "PreservesEscapedPathAndCase",
+          "SelfUrlsAreUniquePublicHierarchyLocationsForEveryEntityPlane",
+          "CollectionsProjectionKeepsOnlyNestedEntityShortSelf"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62777,13 +62769,21 @@
       ],
       "text": "- MUST be of the form: `/[<GROUPS>/<GID>[/<RESOURCES>/<RID>[/meta | /versions/<VID>]]]` and reference valid Group and Resource types. Otherwise, an error ([malformed_xid](#malformed_xid)) MUST be generated.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "RegistryPath recognizes only defined entity shapes, generated XIDs use declared Group and Resource paths, and malformed typed XIDs return the malformed_xid error.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "RecognizesOnlyDefinedProtocolShapes",
+          "ConstructsEscapedPathsWithoutWindowsFilenameRestrictions",
+          "MalformedTypedXidsUseTheXidCatalogWithoutASecondUriDecode",
+          "SelfUrlsAreUniquePublicHierarchyLocationsForEveryEntityPlane"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62808,13 +62808,19 @@
       ],
       "text": "- MUST start with the `/` character.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "RegistryPath.ToXid and server responses emit slash-rooted paths, with the Registry root represented by /.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "PreservesEscapedPathAndCase",
+          "SelfUrlsAreUniquePublicHierarchyLocationsForEveryEntityPlane"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62839,13 +62845,18 @@
       ],
       "text": "- MUST be a read-only attribute.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The compiled Core model marks xid read-only on each entity plane; invalid client-supplied values are silently ignored and server-generated path values are returned.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CoreXidAttributesAreRequiredImmutableReadonlyXidsAcrossEntityPlanes",
+          "IgnoreFlagsPermitEntityImportWithoutSuppressingNestedIdentityGuards"
+        ],
         "nativeEvidence": []
       }
     },
