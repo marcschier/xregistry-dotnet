@@ -30712,16 +30712,18 @@
       "text": "The `<PATH>` portion of the map key MUST be a [dot (`.`) notation](spec.md#xregistry-dot--notation) traversal to the Resource attribute being constrained.",
       "review": {
         "status": "reviewed",
-        "note": "The local path parser supports dot access and single/double-quoted brackets with quote/backslash escapes, while rejecting array-index syntax for constraints. The referenced full dot-notation table was read; direct quoted Resource-path and malformed-operator assertions are missing.",
+        "note": "ConstraintPathsResolveQuotedExtendedObjectAttributes verifies bracket-quoted dot notation for a nested extended-name scalar. ConstraintsRejectArrayMapWildcardAndConditionalAttributes covers prohibited traversals.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "EnforcesConstraintSubsetsAndDefaults"
+          "EnforcesConstraintSubsetsAndDefaults",
+          "ConstraintPathsResolveQuotedExtendedObjectAttributes",
+          "ConstraintsRejectArrayMapWildcardAndConditionalAttributes"
         ],
         "nativeEvidence": []
       }

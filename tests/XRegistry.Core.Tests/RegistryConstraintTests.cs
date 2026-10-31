@@ -21,6 +21,20 @@ public class RegistryConstraintTests
     }
 
     [Test]
+    public async Task ConstraintPathsResolveQuotedExtendedObjectAttributes()
+    {
+        var model = RegistryModel.Compile(RegistryJson.Parse("""
+            {"groups":{"gs":{"singular":"g","constraints":{"rs.payload['extra-name']":{}},
+              "resources":{"rs":{"singular":"r","attributes":{"payload":{"type":"object","namecharset":"extended",
+                "attributes":{"extra-name":"string"}}}}}}}}
+            """));
+        var constraint = model.Groups["gs"].Constraints["rs.payload['extra-name']"];
+        await Assert.That(constraint.AttributePath.Count).IsEqualTo(2);
+        await Assert.That(constraint.AttributePath[0]).IsEqualTo("payload");
+        await Assert.That(constraint.AttributePath[1]).IsEqualTo("extra-name");
+    }
+
+    [Test]
     public async Task EnforcesConstraintSubsetsAndDefaults()
     {
         var model = RegistryModel.Compile(RegistryJson.Parse("""
