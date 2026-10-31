@@ -31,6 +31,27 @@ public class RegistryRepresentationTests
     }
 
     [Test]
+    public async Task InlineFlagWithoutValueMatchesWildcard()
+    {
+        var engine = Create();
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n", """{"name":"nested"}""");
+        await Send(engine, RegistryAction.Replace, "/teams/g/files/f$details", """{"filebase64":"AAE="}""");
+
+        var withoutValue = (await Send(engine, RegistryAction.Read, "/", null,
+            new KeyValuePair<string, string?>("inline", null))).Metadata!.RootElement;
+        var wildcard = (await Send(engine, RegistryAction.Read, "/", null,
+            new KeyValuePair<string, string?>("inline", "*"))).Metadata!.RootElement;
+
+        foreach (var root in new[] { withoutValue, wildcard })
+        {
+            var group = root.GetProperty("teams").GetProperty("g");
+            await Assert.That(group.GetProperty("notes").GetProperty("n").GetProperty("name").GetString()).IsEqualTo("nested");
+            await Assert.That(group.GetProperty("files").GetProperty("f").GetProperty("versions")
+                .GetProperty("1").GetProperty("filebase64").GetString()).IsEqualTo("AAE=");
+        }
+    }
+
+    [Test]
     public async Task GroupRequiredMetadataUsesCanonicalEntityValuesInBothViews()
     {
         var engine = MutableEngine();

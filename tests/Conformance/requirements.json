@@ -17317,15 +17317,17 @@
       "text": "An `inline` flag without any value MAY be supported and if so it MUST have the same semantic meaning as a value of `*`.",
       "review": {
         "status": "reviewed",
-        "note": "Engine and bridge parsers interpret empty inline as *. No direct current assertion compares valueless/empty inline with explicit * under identical state; an explicit wildcard export is not that equivalence check.",
+        "note": "An explicitly present inline flag with no value is equivalent to `inline=*`; the test checks nested collections and an inlined document in both responses.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "InlineFlagWithoutValueMatchesWildcard"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77983,13 +77985,18 @@
       ],
       "text": "An `inline` flag without any value MAY be supported and if so it MUST have the same semantic meaning as a value of `*`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "An explicitly present inline flag with no value is equivalent to `inline=*`; the test checks nested collections and an inlined document in both responses.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "InlineFlagWithoutValueMatchesWildcard"
+        ],
         "nativeEvidence": []
       }
     },
