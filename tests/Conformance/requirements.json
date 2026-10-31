@@ -43829,7 +43829,10 @@
           "ReservedRangeComparisonsRespectTheCumulativeWorkBudget",
           "FileOptionsRejectNonFilePlacement",
           "DeprecatedOptionUsesOnlyItsDeclaredTargets",
-          "UnknownAndCustomOptionsKeepTheirUnsupportedPolicyAtEveryTarget"
+          "UnknownAndCustomOptionsKeepTheirUnsupportedPolicyAtEveryTarget",
+          "FloatingDefaultsAcceptLeadingDecimalAndExponentForms",
+          "FloatingDefaultsRejectMalformedDecimalNeighbors",
+          "LeadingDecimalTokensNeverSatisfyIntegerContexts"
         ],
         "nativeEvidence": []
       }

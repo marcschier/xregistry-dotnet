@@ -261,7 +261,8 @@ internal sealed class ProtobufSyntax(ValidationContext context)
 
                 token = new(TokenKind.Identifier, text[start..index]);
             }
-            else if (char.IsAsciiDigit(value))
+            else if (char.IsAsciiDigit(value) ||
+                value == '.' && index < text.Length && char.IsAsciiDigit(text[index]))
             {
                 while (index < text.Length && (char.IsAsciiLetterOrDigit(text[index]) || text[index] == '.' ||
                     text[index] is '+' or '-' && text[index - 1] is 'e' or 'E'))

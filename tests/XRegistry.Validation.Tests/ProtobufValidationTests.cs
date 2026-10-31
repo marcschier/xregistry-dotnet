@@ -717,6 +717,56 @@ public class ProtobufValidationTests
     }
 
     [Test]
+    [Arguments(".5")]
+    [Arguments("-.5")]
+    [Arguments("+.5")]
+    [Arguments(".5e2")]
+    [Arguments(".5E-2")]
+    [Arguments("-.5e+2")]
+    [Arguments(".0")]
+    [Arguments("1.")]
+    [Arguments("1.e2")]
+    public async Task FloatingDefaultsAcceptLeadingDecimalAndExponentForms(string value)
+    {
+        foreach (var type in new[] { "float", "double" })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/2",
+                Encoding.UTF8.GetBytes($"syntax=\"proto2\"; message Root {{ optional {type} value=1 [default={value}]; }}"));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+            await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+        }
+    }
+
+    [Test]
+    [Arguments(".")]
+    [Arguments(".e2")]
+    [Arguments(".5e")]
+    [Arguments(".5e+")]
+    [Arguments(".5.2")]
+    [Arguments(".5f")]
+    [Arguments(".5 value")]
+    public async Task FloatingDefaultsRejectMalformedDecimalNeighbors(string value)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/2",
+            Encoding.UTF8.GetBytes($"syntax=\"proto2\"; message Root {{ optional double value=1 [default={value}]; }}"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    [Arguments("""syntax="proto3"; message Root { int32 value=.5; }""")]
+    [Arguments("""syntax="proto3"; enum State { ZERO=.0; }""")]
+    [Arguments("""syntax="proto3"; message Root { reserved .1; }""")]
+    [Arguments("""syntax="proto2"; message Root { optional int32 value=1 [default=.5]; }""")]
+    public async Task LeadingDecimalTokensNeverSatisfyIntegerContexts(string source)
+    {
+        var syntax = source.Contains("proto2", StringComparison.Ordinal) ? 2 : 3;
+        var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}", Encoding.UTF8.GetBytes(source));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.integer");
+    }
+
+    [Test]
     public async Task SuppliedImportBindsTheDeclaredMessageNotArbitraryText()
     {
         var source = Encoding.UTF8.GetBytes("""syntax="proto3"; import "child.proto"; message Parent { Child child=1; }""");

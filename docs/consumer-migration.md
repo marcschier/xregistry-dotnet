@@ -84,6 +84,11 @@ appear inside messages, oneofs, services or RPC methods. Misplacement reports
 `Invalid` with `protobuf.option_scope`. The `deprecated` option remains valid
 on its supported declarations but not on a oneof. Unknown and custom options
 still report `Unsupported`; placement checks do not assign them a policy.
+Proto2 floating defaults accept leading-decimal forms such as `.5` and
+`-.5e+2`, as specified by the
+[floating-point grammar](https://protobuf.dev/reference/protobuf/proto2-spec/#floating-point-literals).
+Malformed decimal neighbors remain invalid, and leading-decimal tokens cannot
+satisfy field numbers, enum numbers, reservations or integer defaults.
 Editions, custom extensions, complete weak-import semantics and gRPC API
 selection remain unsupported.
 
