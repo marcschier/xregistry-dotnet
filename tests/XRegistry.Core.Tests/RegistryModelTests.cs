@@ -237,6 +237,25 @@ public class RegistryModelTests
     }
 
     [Test]
+    public async Task EmptyStrictScalarEnumAllowsAnyValueOfItsDeclaredType()
+    {
+        var model = RegistryModel.Compile(RegistryJson.Parse("""
+            {"attributes":{"choice":{"type":"string","enum":[]}}}
+            """));
+        var accepted = RegistryMetadataValidator.Validate(
+            RegistryJson.Parse("""{"choice":"outside-the-enum"}"""), model.Attributes,
+            new() { Mode = RegistryMetadataMode.ClientInput });
+
+        await Assert.That(accepted.Metadata.RootElement.GetProperty("choice").GetString()).IsEqualTo("outside-the-enum");
+
+        var wrongType = TestErrors.Capture(() => RegistryMetadataValidator.Validate(
+            RegistryJson.Parse("""{"choice":1}"""), model.Attributes,
+            new() { Mode = RegistryMetadataMode.ClientInput }));
+        await Assert.That(wrongType.Code).IsEqualTo("invalid_attribute");
+        await Assert.That(wrongType.Path).IsEqualTo("/choice");
+    }
+
+    [Test]
     public async Task ScalarAttributeAspectsUseNormativeDefaults()
     {
         var model = RegistryModel.Compile(RegistryJson.Parse("""

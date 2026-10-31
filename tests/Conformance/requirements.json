@@ -28364,16 +28364,17 @@
       "text": "- A list of possible values for this attribute. Each item in the array MUST be of the type defined by `type`. When not specified, or an empty array, there are no restrictions on the value set of this attribute. This MUST only be used when the `type` is a scalar. See the `strict` attribute below.",
       "review": {
         "status": "reviewed",
-        "note": "Enum must be an array on a scalar and every member passes the declared scalar check; direct cases reject mixed integer/string members and array-typed enum. Allowed treats empty enum as unrestricted. A direct runtime empty-enum equivalence case is still missing.",
+        "note": "An empty enum imposes no value restriction, but the declared scalar type still applies; the dedicated test accepts an out-of-enum string and rejects a number.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "RejectsInvalidModelAspectsWithExactPointers"
+          "RejectsInvalidModelAspectsWithExactPointers",
+          "EmptyStrictScalarEnumAllowsAnyValueOfItsDeclaredType"
         ],
         "nativeEvidence": []
       }
