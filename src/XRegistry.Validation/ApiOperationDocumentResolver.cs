@@ -834,6 +834,9 @@ public static partial class ApiOperationDocumentResolver
                 ? failure.Diagnostic.Code : code,
             failure.Diagnostic.Detail, path);
 
+    private static bool HasRawUriWhitespaceOrControls(string text) =>
+        text.Any(static character => char.IsWhiteSpace(character) || char.IsControl(character));
+
     private static string Escape(string token) =>
         token.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal);
 

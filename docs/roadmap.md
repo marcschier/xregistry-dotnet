@@ -227,7 +227,8 @@ vocabulary/source mapping. It does not supply their implementation.
   normal error dependency checks still apply. Literal input/output/error content
   does not trigger retrieval or instance validation.
   `externalDocumentation` checks a nonempty map of nonempty exact names to
-  nonempty, well-formed absolute URLs on reached roots and members. It does
+  nonempty, well-formed absolute URLs on reached roots and members. Raw URL
+  whitespace and control characters are rejected without trimming. It does
   not restrict links to HTTP, fetch their contents or use them to supply
   missing definitions. Literal examples and unrelated declarations remain
   outside the selected closure.
@@ -511,6 +512,8 @@ vocabulary/source mapping. It does not supply their implementation.
   or maps. Multiple annotated members remain valid, without inferred name
   uniqueness. `xmlNamespace` checks object values on data roots/members,
   required nonempty URI references and optional ASCII identifier prefixes.
+  Raw URI whitespace and control characters are rejected; percent escapes
+  retain their authored spelling.
   Relative references, including RFC 3986 fragments, remain accepted without
   resolution or normalization. Namespace URIs are not dependency-acquisition
   URLs. No XML serialization, prefix binding, namespace scope validation or

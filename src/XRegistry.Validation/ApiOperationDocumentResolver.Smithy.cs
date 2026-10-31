@@ -59,6 +59,7 @@ public static partial class ApiOperationDocumentResolver
 
     private static bool IsSmithyNamespaceUri(string value)
     {
+        if (HasRawUriWhitespaceOrControls(value)) { return false; }
         if (Uri.IsWellFormedUriString(value, UriKind.RelativeOrAbsolute)) { return true; }
         // System.Uri rejects fragments on relative references; validate the RFC 3986 fragment separately.
         var fragment = value.IndexOf('#');
@@ -1887,7 +1888,8 @@ public static partial class ApiOperationDocumentResolver
                                 "An external documentation link requires a nonempty URL string.");
                             var linkText = link.Value.GetString()!;
                             budget.Work(linkText.Length, linkPath);
-                            ValidationContext.Require(Uri.TryCreate(linkText, UriKind.Absolute, out _) &&
+                            ValidationContext.Require(!HasRawUriWhitespaceOrControls(linkText) &&
+                                Uri.TryCreate(linkText, UriKind.Absolute, out _) &&
                                 Uri.IsWellFormedUriString(linkText, UriKind.Absolute), linkPath,
                                 "document.external_documentation", "An external documentation link requires a well-formed absolute URL.");
                         }

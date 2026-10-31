@@ -328,7 +328,7 @@ public static partial class ApiOperationDocumentResolver
     {
         if (!value.TryGetProperty(member, out var url)) { return; }
         var text = url.GetString()!;
-        ValidationContext.Require(!text.Any(character => char.IsWhiteSpace(character) || char.IsControl(character)) &&
+        ValidationContext.Require(!HasRawUriWhitespaceOrControls(text) &&
             Uri.IsWellFormedUriString(text, UriKind.Absolute),
             path + "/" + member, "document.url", "An OpenRPC metadata URL must be a well-formed absolute URL.");
     }

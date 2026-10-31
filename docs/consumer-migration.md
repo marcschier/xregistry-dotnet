@@ -979,10 +979,12 @@ The `xmlNamespace` annotation requires an object on data roots or members.
 Its required `uri` must be a nonempty, well-formed URI reference. Absolute URIs
 and relative references are accepted without retrieval, base resolution or
 normalization; XML Namespaces deprecates relative references but does not forbid
-them. Relative fragments follow the RFC 3986 fragment grammar rather than
-`System.Uri`'s narrower relative-reference handling. An optional `prefix` must
-be a nonempty Smithy XML identifier, without a colon. An operation cannot carry
-this annotation. Service annotations remain outside the selected data closure.
+them. Raw whitespace and control characters are rejected before URI parsing;
+percent-encoded values remain unchanged. Relative fragments follow the RFC 3986
+fragment grammar rather than `System.Uri`'s narrower relative-reference handling.
+An optional `prefix` must be a nonempty Smithy XML identifier, without a colon.
+An operation cannot carry this annotation. Service annotations remain outside
+the selected data closure.
 These declaration checks do not bind prefixes to `xmlName` values, enforce XML
 namespace scopes or retrieve schemas. A namespace URI cannot supply a missing
 member target definition.
@@ -1013,8 +1015,10 @@ The `externalDocumentation` trait requires a nonempty map on reached roots or
 members. Every key must be a nonempty name and every value a nonempty,
 well-formed absolute URL. Names are case-sensitive; whitespace-only names are
 not trimmed or rejected by an invented naming rule. No HTTP-only scheme
-restriction is imposed. Links retain their authored spelling without retrieval,
-normalization or generated documentation. Literal example links and unrelated
+restriction is imposed. URL values reject raw whitespace and control characters
+instead of accepting parser-trimmed text; percent escapes remain authored text.
+Links retain their authored spelling without retrieval, normalization or generated
+documentation. Literal example links and unrelated
 declarations remain outside the selected closure, and documentation URLs cannot
 supply missing shape definitions.
 

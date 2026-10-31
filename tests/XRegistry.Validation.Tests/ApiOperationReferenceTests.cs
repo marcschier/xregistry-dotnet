@@ -6492,6 +6492,7 @@ public class ApiOperationReferenceTests
     [Arguments("#fragment", "fragment")]
     [Arguments("#", "emptyFragment")]
     [Arguments("../events?q=One#Part%20Two/?more", "relative")]
+    [Arguments("../events%09%0A%00#Part%20Two", "encoded")]
     [Arguments("?query#fragment", "query")]
     public async Task SmithyJsonXmlNamespaceRetainsUriReferencesAndOptionalPrefixes(string uri, string? prefix)
     {
@@ -6508,6 +6509,38 @@ public class ApiOperationReferenceTests
         await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
         await Assert.That(result.Diagnostic).IsNull();
         await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["shapes"]!["example#Get"]!.ToJsonString());
+    }
+
+    [Test]
+    [Arguments(" https://example.test/ns")]
+    [Arguments("https://example.test/ns ")]
+    [Arguments("https://example.test/ns\n")]
+    [Arguments("https://example.test/ns\r")]
+    [Arguments("https://example.test/ns\t")]
+    [Arguments("https://example.test/ns\u0001")]
+    [Arguments("https://example.test/\u007f")]
+    [Arguments("../ns\n")]
+    [Arguments("../ns\t#fragment")]
+    [Arguments("https://example.test/\u00a0")]
+    public async Task SmithyJsonUriTraitsRejectRawWhitespaceAndControlsWithoutNormalization(string uri)
+    {
+        var namespaceDocument = SmithyEventBindingDocument("xmlNamespace");
+        namespaceDocument["shapes"]!["example#Event"]!["members"]!["data"]!["traits"]!["smithy.api#xmlNamespace"] =
+            new JsonObject { ["uri"] = uri };
+        var namespaceResult = ResolveSmithy(namespaceDocument.ToJsonString());
+        await Assert.That(namespaceResult.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(namespaceResult.Diagnostic!.Code).IsEqualTo("document.xml_namespace");
+        await Assert.That(namespaceResult.Diagnostic.Path).IsEqualTo(
+            "$/shapes/example#Event/members/data/traits/smithy.api#xmlNamespace/uri");
+        await Assert.That(namespaceResult.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+
+        var documentation = SmithyExternalDocumentationDocument(new JsonObject { ["Reference"] = uri });
+        var documentationResult = ResolveSmithy(documentation.ToJsonString());
+        await Assert.That(documentationResult.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(documentationResult.Diagnostic!.Code).IsEqualTo("document.external_documentation");
+        await Assert.That(documentationResult.Diagnostic.Path).IsEqualTo(
+            "$/shapes/example#Get/traits/smithy.api#externalDocumentation/Reference");
+        await Assert.That(documentationResult.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
     }
 
     [Test]
@@ -6789,6 +6822,7 @@ public class ApiOperationReferenceTests
     [Arguments("http://example.test/")]
     [Arguments("ftp://example.test/docs")]
     [Arguments("file:///docs/reference.html")]
+    [Arguments("https://example.test/Docs%20Name/%09%0A%00")]
     public async Task SmithyJsonExternalDocumentationRetainsNamedUrlsWithoutAcquisition(string url)
     {
         var document = SmithyExternalDocumentationDocument(new JsonObject

@@ -113446,6 +113446,7 @@
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.SmithyJsonXmlBindingsAllowMultipleMembersWithoutInventingNameUniqueness",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.SmithyJsonXmlDeclarationsPreserveNativeMetadataWithoutSerializingOrScanningUnrelatedShapes",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.SmithyJsonXmlNamespaceRetainsUriReferencesAndOptionalPrefixes",
+          "XRegistry.Validation.Tests.ApiOperationReferenceTests.SmithyJsonUriTraitsRejectRawWhitespaceAndControlsWithoutNormalization",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.SmithyJsonXmlNamespaceChecksRequiredUriAndPrefixGrammar",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.SmithyJsonXmlNamespaceSupportsDataRootsAndTheirMembers",
           "XRegistry.Validation.Tests.ApiOperationReferenceTests.SmithyJsonXmlNamespaceCannotAnnotateAnOperation",
