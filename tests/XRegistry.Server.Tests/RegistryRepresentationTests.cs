@@ -4,6 +4,7 @@
 using TUnit.Assertions;
 using TUnit.Core;
 using static XRegistry.Server.Tests.EngineTests;
+using static XRegistry.Server.Tests.LifecycleTests;
 using static XRegistry.Server.Tests.RegistryCapabilityTests;
 
 namespace XRegistry.Server.Tests;
@@ -99,6 +100,21 @@ public class RegistryRepresentationTests
         var resource = group.GetProperty("notes").GetProperty("n");
         await Assert.That(resource.GetProperty("name").GetString()).IsEqualTo("Nested note");
         await Assert.That(resource.GetProperty("shortself").GetString()).IsNotNullOrEmpty();
+    }
+
+    [Test]
+    [Arguments("/teams/g/notes")]
+    [Arguments("/teams/g/notes/n")]
+    [Arguments("/teams/g/notes/n/meta")]
+    [Arguments("/teams/g/notes/n/versions")]
+    [Arguments("/teams/g/notes/n/versions/1")]
+    [Arguments("/capabilities")]
+    [Arguments("/export")]
+    public async Task CollectionsFlagRejectsTargetsOtherThanRegistryOrGroup(string path)
+    {
+        var engine = MutableEngine();
+        await ExpectCode(() => Send(engine, RegistryAction.Read, path, null,
+            new KeyValuePair<string, string?>("collections", null)), "bad_flag");
     }
 
     [Test]

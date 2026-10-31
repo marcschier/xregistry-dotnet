@@ -15108,19 +15108,18 @@
       "text": "The `collections` flag MAY be used on requests directed to the Registry itself, or to Group instances, to indicate that the response message MUST NOT include any attributes from the top-level entity (Registry or Group), but instead MUST include only all of the nested xRegistry Collection maps that are defined at that level. Specifying it on a request directed to some other part of the Registry MUST generate an error ([bad_flag](#bad_flag)). Use of this flag MUST implicitly turn on [inlining](#inline-flag) within a value of `*`.",
       "review": {
         "status": "reviewed",
-        "note": "RESOLVED CORE-PROTOCOL-006: Collections-only Registry/Group responses omit the top entity's shortself while preserving ordinary nested entity short URLs and collection contents. API/Doc and enabled/disabled capability combinations retain opaque domain data and response/authorization limits. This compound clause remains pending its broader behavior/evidence obligations. These are implementation/evidence mappings, not release or all-platform qualification.",
+        "note": "Registry and Group responses contain only nested collection maps with recursively inlined entities. Resource, Meta, Resource/Version collection, Version, Capabilities and Export targets reject the flag with bad_flag.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "CollectionsOnlyRootDoesNotExposeItsShortSelf",
           "CollectionsProjectionKeepsOnlyNestedEntityShortSelf",
-          "MappedCollectionsOnlyResponseKeepsNestedShortSelf",
-          "MappedCollectionsProjectionCannotBypassTheResponseByteBudget"
+          "CollectionsFlagRejectsTargetsOtherThanRegistryOrGroup"
         ],
         "nativeEvidence": []
       }
