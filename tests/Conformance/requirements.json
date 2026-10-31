@@ -17476,15 +17476,15 @@
       "text": "The `setdefaultversionid` flag MAY be used on any write operation directed to a single Resource, its `meta` sub-object or its Versions. The primary use case is one in which the current default Version is being deleted and the client wishes to choose a new default Version at the same time - to avoid an incorrect one being chosen temporarily.",
       "review": {
         "status": "reviewed",
-        "note": "Current flag parsing/finalization implements one-Resource scope, case-sensitive selected IDs, null/newest, request/new-Version, route/error checks and body override. The reviewed assertion set proves generated request selection, not this row's independent route/error/zero-or-many-created/explicit override/null cases; each stays pending rather than promoting the whole flag family.",
+        "note": "The flag selects an exact Version on Resource, Meta, Version and Versions writes; the test also verifies atomic replacement of a deleted default and persistence after restart.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "ServerChosenVersionIdsContinueAfterDeletionAndRespectSetVersionId"
+          "DefaultSelectionFlagOverridesMetaAndAtomicallyReplacesDeletedDefault"
         ],
         "nativeEvidence": []
       }
@@ -17505,15 +17505,15 @@
       "text": "Use of this flag on an operation that allows for modifying multiple Resources MUST generate an error ([bad_flag](#bad_flag)).",
       "review": {
         "status": "reviewed",
-        "note": "Current flag parsing/finalization implements one-Resource scope, case-sensitive selected IDs, null/newest, request/new-Version, route/error checks and body override. The reviewed assertion set proves generated request selection, not this row's independent route/error/zero-or-many-created/explicit override/null cases; each stays pending rather than promoting the whole flag family.",
+        "note": "Registry, Group, Group-collection and Resource-collection writes reject the flag with bad_flag before mutation; the test checks unchanged export and event count.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "ServerChosenVersionIdsContinueAfterDeletionAndRespectSetVersionId"
+          "DefaultSelectionFlagRejectsInvalidUsesWithoutPersistingMutations"
         ],
         "nativeEvidence": []
       }
@@ -17534,15 +17534,16 @@
       "text": "This flag MUST include a single parameter, a string containing the case-sensitive `versionid` of the Version that is to become the new default Version.",
       "review": {
         "status": "reviewed",
-        "note": "Current flag parsing/finalization implements one-Resource scope, case-sensitive selected IDs, null/newest, request/new-Version, route/error checks and body override. The reviewed assertion set proves generated request selection, not this row's independent route/error/zero-or-many-created/explicit override/null cases; each stays pending rather than promoting the whole flag family.",
+        "note": "A duplicate parameter rejects with bad_flag; a single exact-case target succeeds, while a wrong-case target rejects with unknown_id.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "ServerChosenVersionIdsContinueAfterDeletionAndRespectSetVersionId"
+          "DefaultSelectionFlagRejectsInvalidUsesWithoutPersistingMutations",
+          "DefaultSelectionFlagOverridesMetaAndAtomicallyReplacesDeletedDefault"
         ],
         "nativeEvidence": []
       }
@@ -17563,15 +17564,15 @@
       "text": "- A value of `null` indicates that the client wishes to switch to the [\"default = newest\" algorithm](#default-version-of-a-resource). In other words, the \"sticky\" aspect of the current default Version will be removed and `meta.defaultversionsticky` MUST be set to `false`.",
       "review": {
         "status": "reviewed",
-        "note": "Current flag parsing/finalization implements one-Resource scope, case-sensitive selected IDs, null/newest, request/new-Version, route/error checks and body override. The reviewed assertion set proves generated request selection, not this row's independent route/error/zero-or-many-created/explicit override/null cases; each stays pending rather than promoting the whole flag family.",
+        "note": "The null flag overrides an older pointer and sticky true in Meta input, selects the newest Version, sets sticky false and preserves the result after restart.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "ServerChosenVersionIdsContinueAfterDeletionAndRespectSetVersionId"
+          "DefaultSelectionFlagOverridesMetaAndAtomicallyReplacesDeletedDefault"
         ],
         "nativeEvidence": []
       }
@@ -17600,7 +17601,7 @@
       "implementation": {
         "status": "implemented",
         "testIds": [
-          "ServerChosenVersionIdsContinueAfterDeletionAndRespectSetVersionId"
+          "DefaultSelectionRequestFlagSelectsOnlyNewAssignedVersionAndPersists"
         ],
         "nativeEvidence": []
       }
@@ -17621,7 +17622,7 @@
       "text": "- A value of `request` MUST only be used on APIs that allow the creation of only a single new Version. In the case of HTTP, that is the `POST` API directed to a Resource. This is because no other operation allows for the creation of a single Version without specifying its `versionid`. Using it when more than one Version is created MUST generate an error ([too_many_versions](#too_many_versions)).  Other uses of this value on an inappropriate API MUST generate an error ([bad_flag](#bad_flag)).",
       "review": {
         "status": "reviewed",
-        "note": "Current flag parsing/finalization implements one-Resource scope, case-sensitive selected IDs, null/newest, request/new-Version, route/error checks and body override. The reviewed assertion set proves generated request selection, not this row's independent route/error/zero-or-many-created/explicit override/null cases; each stays pending rather than promoting the whole flag family.",
+        "note": "Only Resource POST supports request; unsupported API uses reject with bad_flag, and request with no created Version rejects with defaultversionid_request. The exposed HTTP routes do not permit multiple Version creation with request, so the too_many_versions case has no direct evidence and this combined obligation remains pending.",
         "roles": [
           "server"
         ]
@@ -17629,7 +17630,8 @@
       "implementation": {
         "status": "pending",
         "testIds": [
-          "ServerChosenVersionIdsContinueAfterDeletionAndRespectSetVersionId"
+          "DefaultSelectionRequestFlagSelectsOnlyNewAssignedVersionAndPersists",
+          "DefaultSelectionFlagRejectsInvalidUsesWithoutPersistingMutations"
         ],
         "nativeEvidence": []
       }
@@ -17650,15 +17652,15 @@
       "text": "- If a value of `request` was used but no Version was created for the request, then an error ([defaultversionid_request](#defaultversionid_request)) MUST be generated.",
       "review": {
         "status": "reviewed",
-        "note": "Current flag parsing/finalization implements one-Resource scope, case-sensitive selected IDs, null/newest, request/new-Version, route/error checks and body override. The reviewed assertion set proves generated request selection, not this row's independent route/error/zero-or-many-created/explicit override/null cases; each stays pending rather than promoting the whole flag family.",
+        "note": "A Resource POST using request when the body supplies a Version ID and creates no new Version rejects with defaultversionid_request; state and event count remain unchanged.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "ServerChosenVersionIdsContinueAfterDeletionAndRespectSetVersionId"
+          "DefaultSelectionFlagRejectsInvalidUsesWithoutPersistingMutations"
         ],
         "nativeEvidence": []
       }
@@ -17679,15 +17681,15 @@
       "text": "- If a non-`null` and non-`request` value does not reference an existing Version of the Resource, after all Version processing is completed, then an error ([unknown_id](#unknown_id)) MUST be generated.",
       "review": {
         "status": "reviewed",
-        "note": "Current flag parsing/finalization implements one-Resource scope, case-sensitive selected IDs, null/newest, request/new-Version, route/error checks and body override. The reviewed assertion set proves generated request selection, not this row's independent route/error/zero-or-many-created/explicit override/null cases; each stays pending rather than promoting the whole flag family.",
+        "note": "A missing or wrong-case target rejects with unknown_id after attempted updates; the export and event count remain unchanged.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "ServerChosenVersionIdsContinueAfterDeletionAndRespectSetVersionId"
+          "DefaultSelectionFlagRejectsInvalidUsesWithoutPersistingMutations"
         ],
         "nativeEvidence": []
       }
@@ -17708,15 +17710,16 @@
       "text": "- Setting the `meta.defaultversionid` to a non-empty value via this flag MUST also set the `meta.defaultversionsticky` attribute to `true`.",
       "review": {
         "status": "reviewed",
-        "note": "Current flag parsing/finalization implements one-Resource scope, case-sensitive selected IDs, null/newest, request/new-Version, route/error checks and body override. The reviewed assertion set proves generated request selection, not this row's independent route/error/zero-or-many-created/explicit override/null cases; each stays pending rather than promoting the whole flag family.",
+        "note": "An explicit non-null target sets defaultversionsticky to true even when Meta input supplies false; the test covers Meta, Resource, Version and Versions writes.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "ServerChosenVersionIdsContinueAfterDeletionAndRespectSetVersionId"
+          "DefaultSelectionFlagOverridesMetaAndAtomicallyReplacesDeletedDefault",
+          "DefaultSelectionRequestFlagSelectsOnlyNewAssignedVersionAndPersists"
         ],
         "nativeEvidence": []
       }
@@ -17737,15 +17740,15 @@
       "text": "- Use on a request that updates more than one Resource MUST generate an error ([bad_flag](#bad_flag)).",
       "review": {
         "status": "reviewed",
-        "note": "Current flag parsing/finalization implements one-Resource scope, case-sensitive selected IDs, null/newest, request/new-Version, route/error checks and body override. The reviewed assertion set proves generated request selection, not this row's independent route/error/zero-or-many-created/explicit override/null cases; each stays pending rather than promoting the whole flag family.",
+        "note": "Registry-, Group- and collection-level writes that can modify multiple Resources reject the flag with bad_flag before mutation.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "ServerChosenVersionIdsContinueAfterDeletionAndRespectSetVersionId"
+          "DefaultSelectionFlagRejectsInvalidUsesWithoutPersistingMutations"
         ],
         "nativeEvidence": []
       }
@@ -17766,15 +17769,15 @@
       "text": "- Use of this flag MUST override any `meta.defaultversionid` and `meta.defaultversionsticky` values that are present in the request.",
       "review": {
         "status": "reviewed",
-        "note": "Current flag parsing/finalization implements one-Resource scope, case-sensitive selected IDs, null/newest, request/new-Version, route/error checks and body override. The reviewed assertion set proves generated request selection, not this row's independent route/error/zero-or-many-created/explicit override/null cases; each stays pending rather than promoting the whole flag family.",
+        "note": "The flag overrides supplied Meta defaultversionid and defaultversionsticky values for explicit and null selections.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "ServerChosenVersionIdsContinueAfterDeletionAndRespectSetVersionId"
+          "DefaultSelectionFlagOverridesMetaAndAtomicallyReplacesDeletedDefault"
         ],
         "nativeEvidence": []
       }
@@ -17795,15 +17798,15 @@
       "text": "Any other invalid usage of this flag MUST generate an error ([bad_defaultversionid](#bad_defaultversionid)).",
       "review": {
         "status": "reviewed",
-        "note": "Current flag parsing/finalization implements one-Resource scope, case-sensitive selected IDs, null/newest, request/new-Version, route/error checks and body override. The reviewed assertion set proves generated request selection, not this row's independent route/error/zero-or-many-created/explicit override/null cases; each stays pending rather than promoting the whole flag family.",
+        "note": "Missing, empty and malformed values reject with bad_defaultversionid; duplicate parameters reject with bad_flag under the single-parameter rule.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "ServerChosenVersionIdsContinueAfterDeletionAndRespectSetVersionId"
+          "DefaultSelectionFlagRejectsInvalidUsesWithoutPersistingMutations"
         ],
         "nativeEvidence": []
       }
