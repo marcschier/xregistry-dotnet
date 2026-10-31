@@ -60640,13 +60640,19 @@
       ],
       "text": "- Some serializations, such as JSON, allow for a `null` value to appear in an array (e.g. `[ null, 2, 3 ]` in an array of integers). In these cases, while it is valid for the serialization being used, it is not valid for xRegistry since `null` is not a valid `integer`. Meaning, the serialization of an array that is syntactically valid for the format being used, but not semantically valid per the [xRegistry model](./model.md#registry-model) definition, MUST NOT be accepted and MUST generate an error ([invalid_attribute](#invalid_attribute)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Typed array traversal rejects a null item as `invalid_attribute` at its index; `CollectionAndNestedErrorsRetainPrecisePointers` asserts the error code and pointer for `[1,null]`. The validator also rejects mismatched non-null items with the same code.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CollectionAndNestedErrorsRetainPrecisePointers"
+        ],
         "nativeEvidence": []
       }
     },

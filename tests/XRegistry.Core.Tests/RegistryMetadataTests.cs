@@ -91,12 +91,12 @@ public class RegistryMetadataTests
     }
 
     [Test]
-    [Arguments("""{"items":[1,null]}""", "/items/1")]
-    [Arguments("""{"items":[1,"2"]}""", "/items/1")]
-    [Arguments("""{"labels":{"Bad":"value"}}""", "/labels/Bad")]
-    [Arguments("""{"labels":{"valid":null}}""", "/labels/valid")]
-    [Arguments("""{"nested":{"unknown":1}}""", "/nested/unknown")]
-    public async Task CollectionAndNestedErrorsRetainPrecisePointers(string metadata, string expectedPath)
+    [Arguments("""{"items":[1,null]}""", "invalid_attribute", "/items/1")]
+    [Arguments("""{"items":[1,"2"]}""", "invalid_attribute", "/items/1")]
+    [Arguments("""{"labels":{"Bad":"value"}}""", "invalid_attribute", "/labels/Bad")]
+    [Arguments("""{"labels":{"valid":null}}""", "invalid_attribute", "/labels/valid")]
+    [Arguments("""{"nested":{"unknown":1}}""", "unknown_attribute", "/nested/unknown")]
+    public async Task CollectionAndNestedErrorsRetainPrecisePointers(string metadata, string expectedCode, string expectedPath)
     {
         var definitions = Shape("""
             {"items":{"type":"array","item":{"type":"integer"}},
@@ -104,6 +104,7 @@ public class RegistryMetadataTests
              "nested":{"type":"object","attributes":{"known":"integer"}}}
             """);
         var diagnostic = TestErrors.Capture(() => RegistryMetadataValidator.Validate(RegistryJson.Parse(metadata), definitions));
+        await Assert.That(diagnostic.Code).IsEqualTo(expectedCode);
         await Assert.That(diagnostic.Path).IsEqualTo(expectedPath);
     }
 
