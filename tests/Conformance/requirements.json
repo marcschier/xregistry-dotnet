@@ -29540,17 +29540,18 @@
       "text": "- OPTIONAL, and MUST ONLY be used when `item.type` is `object`.",
       "review": {
         "status": "reviewed",
-        "note": "Item.attributes is recursively compiled only for object item types. Positive array/map object-item structure and conditional metadata are asserted, but a direct scalar item carrying attributes rejection is missing; the top-level aspect rejection is not an item-specific assertion.",
+        "note": "RejectsInvalidModelAspectsWithExactPointers verifies that scalar item attributes fail at /attributes/a/item/attributes. CompilesNestedItemsAndStaticVersionMatchObligations verifies object item attributes.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "CompilesNestedItemsAndStaticVersionMatchObligations",
-          "ConditionalMapsWithObjectItemsStillRequireTheMetadataBody"
+          "ConditionalMapsWithObjectItemsStillRequireTheMetadataBody",
+          "RejectsInvalidModelAspectsWithExactPointers"
         ],
         "nativeEvidence": []
       }
