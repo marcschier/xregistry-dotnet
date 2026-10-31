@@ -79,7 +79,7 @@ public class ValidationIntegrationTests
             ResourceValidator = validator
         }, new InMemoryRegistryPersistence(), new PermitPolicy());
         await Send(engine, RegistryAction.Replace, "/teams/g/files/f$details", """
-            {"versionid":"v1","filebase64":"AA=="}
+            {"versionid":"v1","filebase64":"AA==","meta":{"compatibility":"full"}}
             """);
         await Send(engine, RegistryAction.Patch, "/teams/g/files/f/versions/v1$details", """
             {"filebase64":"/wA="}
@@ -96,6 +96,8 @@ public class ValidationIntegrationTests
             }
         }
         await Assert.That(validator.Calls).IsEqualTo(0);
+        var meta = await Send(engine, RegistryAction.Read, "/teams/g/files/f/meta");
+        await Assert.That(meta.Metadata!.RootElement.GetProperty("compatibility").GetString()).IsEqualTo("full");
         var first = await Send(engine, RegistryAction.Read, "/teams/g/files/f/versions/v1");
         using var firstBytes = first.Document!.OpenRead();
         await Assert.That(firstBytes.ReadByte()).IsEqualTo(255);

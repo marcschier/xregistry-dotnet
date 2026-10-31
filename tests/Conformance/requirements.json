@@ -13535,16 +13535,19 @@
       "text": "- MUST NOT be present if the Resource model's `validatecompatibility` attribute is `false`, or the Version's `format` value is absent, or the Resource's `meta.compatibility` attribute is absent.",
       "review": {
         "status": "reviewed",
-        "note": "Code removes compatibility outcomes when its prerequisite is absent/disabled. Syntax-only assertions prove the missing-Meta-compatibility branch, but disabled validatecompatibility and missing-format branches remain independent direct-evidence gaps.",
+        "note": "Direct tests isolate each prerequisite: disabled model compatibility with a format and mode present, missing format with a mode present, and missing mode with format and model validation enabled. Dependency counts distinguish syntax-only acquisition from enabled compatibility passes. Removing a previously checked mode clears results for every Version while preserving syntax validation and exact bytes.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "UnsupportedVariantsRemainUncheckedWithReasonsAndStrictModeRejects",
-          "AllQualifiedSyntaxFamiliesProduceValidatedMetadata"
+          "AllQualifiedSyntaxFamiliesProduceValidatedMetadata",
+          "DisabledCompatibilityAvoidsDependencyRechecksWhileFormatValidationRemainsEnabled",
+          "VersionsWithoutFormatSkipValidatorCallsAndValidationFlags",
+          "AbsentCompatibilityModeSkipsRechecksAndRemovingItClearsPriorResults"
         ],
         "nativeEvidence": []
       }

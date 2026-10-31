@@ -70,6 +70,63 @@ public class BuiltInValidationAdapterTests
     }
 
     [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task AbsentCompatibilityModeSkipsRechecksAndRemovingItClearsPriorResults(bool strict)
+    {
+        var calls = 0;
+        var engine = ValidatingEngine(strict: strict, validationOptions: new()
+        {
+            ResolveReference = (reference, _) =>
+            {
+                if (reference != "https://schemas.example/item") { throw new InvalidOperationException("An unexpected dependency was requested."); }
+                calls++;
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes("""{"type":"string"}"""));
+            }
+        });
+        await Send(engine, RegistryAction.Replace, "/sets/g/schemas/s$details", """
+            {"versionid":"v1","format":"JsonSchema/draft-07","schema":{"$ref":"https://schemas.example/item"}}
+            """);
+        await Assert.That(calls).IsEqualTo(1);
+        await AssertVersionsAsync(false, "v1");
+        await Send(engine, RegistryAction.Post, "/sets/g/schemas/s$details", """
+            {"versionid":"v2","format":"JsonSchema/draft-07","schema":{"$ref":"https://schemas.example/item"}}
+            """);
+        await Assert.That(calls).IsEqualTo(3);
+        await AssertVersionsAsync(false, "v1", "v2");
+        await Send(engine, RegistryAction.Patch, "/sets/g/schemas/s/meta", """{"compatibility":"full"}""");
+        await Assert.That(calls).IsEqualTo(7);
+        await AssertVersionsAsync(true, "v1", "v2");
+        await Send(engine, RegistryAction.Patch, "/sets/g/schemas/s/meta", """{"compatibility":null}""");
+        await Assert.That(calls).IsEqualTo(9);
+        await AssertVersionsAsync(false, "v1", "v2");
+        await Assert.That(calls).IsEqualTo(9);
+
+        async Task AssertVersionsAsync(bool compatibilityRequested, params string[] versions)
+        {
+            var meta = await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/meta");
+            await Assert.That(meta.Metadata!.RootElement.TryGetProperty("compatibility", out var mode))
+                .IsEqualTo(compatibilityRequested);
+            if (compatibilityRequested) { await Assert.That(mode.GetString()).IsEqualTo("full"); }
+            foreach (var version in versions)
+            {
+                var result = await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/versions/" + version + "$details");
+                await Assert.That(result.Metadata!.RootElement.GetProperty("format").GetString()).IsEqualTo("JsonSchema/draft-07");
+                await Assert.That(result.Metadata.RootElement.GetProperty("formatvalidated").GetBoolean()).IsTrue();
+                await Assert.That(result.Metadata.RootElement.TryGetProperty("formatvalidatedreason", out _)).IsFalse();
+                await Assert.That(result.Metadata.RootElement.TryGetProperty("compatibilityvalidated", out var flag))
+                    .IsEqualTo(compatibilityRequested);
+                if (compatibilityRequested) { await Assert.That(flag.GetBoolean()).IsTrue(); }
+                await Assert.That(result.Metadata.RootElement.TryGetProperty("compatibilityvalidatedreason", out _)).IsFalse();
+                var stored = await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/versions/" + version);
+                using var bytes = stored.Document!.OpenRead();
+                using var reader = new StreamReader(bytes, Encoding.UTF8);
+                await Assert.That(await reader.ReadToEndAsync()).IsEqualTo("""{"$ref":"https://schemas.example/item"}""");
+            }
+        }
+    }
+
+    [Test]
     public async Task InvalidSyntaxRejectsPublicationInsteadOfBecomingAValidationFlag()
     {
         var engine = ValidatingEngine();
