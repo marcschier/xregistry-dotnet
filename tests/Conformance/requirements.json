@@ -71803,13 +71803,17 @@
       ],
       "text": "The `ancestorid` attribute MUST be set to the case-sensitive `versionid` of this Version's ancestor. If this Version is a root of an ancestor hierarchy tree then it MUST be set to its own `versionid` value.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Server-assigned and explicit roots use their own exact Version identity. Child points to Root; lowercase root does not resolve that distinct identity. Root and child relationships persist across restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ManualAncestryUsesAssignedRootIdentityAndExactCaseReferences"
+        ],
         "nativeEvidence": []
       }
     },
@@ -71834,13 +71838,17 @@
       ],
       "text": "If a create operation asks the server to choose the `versionid` when creating a root Version, the `versionid` is not yet known and therefore cannot be specified in the `ancestorid` attribute as part of the request. In those cases a value of `request` MUST be used as a way to reference itself.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Creating a Resource without a chosen versionid and with ancestorid=request assigns a non-empty Version identity, replaces request with that same identity, and persists the self-root relationship across restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ManualAncestryUsesAssignedRootIdentityAndExactCaseReferences"
+        ],
         "nativeEvidence": []
       }
     },
@@ -71865,13 +71873,18 @@
       ],
       "text": "- REQUIRED.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Assigned roots and explicitly linked child Versions expose ancestorid; reparented and deletion-repaired roots retain the required field across restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ManualAncestryUsesAssignedRootIdentityAndExactCaseReferences",
+          "ExplicitAndDeletionRepairedAncestryUpdateEpochAndModifiedTime"
+        ],
         "nativeEvidence": []
       }
     },
@@ -71897,13 +71910,18 @@
       ],
       "text": "- The `ancestorid` attribute MUST NOT be set to a value that creates circular references between Versions and it is STRONGLY RECOMMENDED that the server generate an error ([ancestor_circular_reference](#ancestor_circular_reference)) if a request attempts to do so. For example, an operation that makes Version A's ancestor B, and Version B's ancestor A, would generate an error.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Root-to-child back edge rejects ancestor_circular_reference and preserves exact Version collection metadata and event count. Existing multiple-root controls remain separate.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ManualAncestryUsesAssignedRootIdentityAndExactCaseReferences",
+          "InvalidAncestryAndMultipleRootsRollBack"
+        ],
         "nativeEvidence": []
       }
     },
@@ -71928,13 +71946,17 @@
       ],
       "text": "- When absent in an update operation request, it MUST be interpreted as the same as if it were present with its existing value.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "PATCH and full Version replacement omit ancestorid while changing name; both retain the exact existing Root relationship, including after persisted restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ManualAncestryUsesAssignedRootIdentityAndExactCaseReferences"
+        ],
         "nativeEvidence": []
       }
     },
@@ -71959,13 +71981,17 @@
       ],
       "text": "- Any attempt to set an `ancestorid` attribute to a non-existing `versionid` MUST generate an error ([unknown_id](#unknown_id)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Missing ancestor and wrong-case spelling of an existing Root both reject unknown_id without changing Version collection metadata or events.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ManualAncestryUsesAssignedRootIdentityAndExactCaseReferences"
+        ],
         "nativeEvidence": []
       }
     },
@@ -71990,13 +72016,17 @@
       ],
       "text": "- Any modification to the `ancestorid` attribute MUST result in the owning Version's `epoch` and `modifiedat` attributes be updated appropriately, regardless of whether the change to `ancestorid` was explicitly part of a request or indirectly changed due to changes to other Versions.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Explicit reparenting to self and indirect repair after ancestor deletion each increment Child epoch exactly once and set modifiedat to the advanced deterministic clock while preserving createdat. Exact resulting metadata persists across restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ExplicitAndDeletionRepairedAncestryUpdateEpochAndModifiedTime"
+        ],
         "nativeEvidence": []
       }
     },

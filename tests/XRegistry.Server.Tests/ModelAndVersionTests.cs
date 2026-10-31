@@ -12,6 +12,88 @@ namespace XRegistry.Server.Tests;
 public class ModelAndVersionTests
 {
     [Test]
+    public async Task ManualAncestryUsesAssignedRootIdentityAndExactCaseReferences()
+    {
+        var store = new InMemoryRegistryPersistence();
+        var engine = Create(persistence: store);
+        var root = await Send(engine, RegistryAction.Replace, "/teams/g/notes/n", """{"ancestorid":"request"}""");
+        var assigned = root.Metadata!.RootElement.GetProperty("versionid").GetString();
+        await Assert.That(assigned).IsNotNullOrEmpty();
+        await Assert.That(assigned).IsNotEqualTo("request");
+        await Assert.That(root.Metadata.RootElement.GetProperty("ancestorid").GetString()).IsEqualTo(assigned);
+        await Send(engine, RegistryAction.Post, "/teams/g/notes/n", """{"versionid":"Root","ancestorid":"Root"}""");
+        await Send(engine, RegistryAction.Post, "/teams/g/notes/n", """{"versionid":"Child","ancestorid":"Root"}""");
+        var before = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n/versions")).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        foreach (var ancestor in new[] { "root", "missing" })
+        {
+            await ExpectCode(() => Send(engine, RegistryAction.Patch, "/teams/g/notes/n/versions/Child",
+                "{\"ancestorid\":\"" + ancestor + "\"}"), "unknown_id");
+            await Assert.That((await Send(engine, RegistryAction.Read, "/teams/g/notes/n/versions")).Metadata!.RootElement.GetRawText())
+                .IsEqualTo(before);
+            await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        }
+        await ExpectCode(() => Send(engine, RegistryAction.Patch, "/teams/g/notes/n/versions/Root",
+            """{"ancestorid":"Child"}"""), "ancestor_circular_reference");
+        await Assert.That((await Send(engine, RegistryAction.Read, "/teams/g/notes/n/versions")).Metadata!.RootElement.GetRawText())
+            .IsEqualTo(before);
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        await Send(engine, RegistryAction.Patch, "/teams/g/notes/n/versions/Child", """{"name":"updated"}""");
+        await Assert.That((await Send(engine, RegistryAction.Read, "/teams/g/notes/n/versions/Child")).Metadata!.RootElement
+            .GetProperty("ancestorid").GetString()).IsEqualTo("Root");
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n/versions/Child", """{"name":"replaced"}""");
+        var restarted = Create(persistence: store);
+        var retained = (await Send(restarted, RegistryAction.Read, "/teams/g/notes/n/versions/Child")).Metadata!.RootElement;
+        await Assert.That(retained.GetProperty("ancestorid").GetString()).IsEqualTo("Root");
+        await Assert.That(retained.GetProperty("name").GetString()).IsEqualTo("replaced");
+        var restoredRoot = await Send(restarted, RegistryAction.Read, "/teams/g/notes/n/versions/" + assigned);
+        await Assert.That(restoredRoot.Metadata!.RootElement.GetProperty("ancestorid").GetString()).IsEqualTo(assigned);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task ExplicitAndDeletionRepairedAncestryUpdateEpochAndModifiedTime(bool deleteAncestor)
+    {
+        var clock = new AncestryClock();
+        var store = new InMemoryRegistryPersistence();
+        var options = new RegistryEngineOptions
+        {
+            RegistryId = "ancestry-time",
+            PublicRoot = new Uri("https://registry.example"),
+            TimeProvider = clock,
+            Model = RegistryModel.Compile(RegistryJson.Parse("""
+                {"groups":{"teams":{"singular":"team","resources":{"notes":{
+                  "singular":"note","hasdocument":false,"versionmode":"manual"
+                }}}}}
+                """))
+        };
+        var engine = new RegistryEngine(options, store, new PermitPolicy());
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n/versions/Root", """{"ancestorid":"Root"}""");
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n/versions/Child", """{"ancestorid":"Root"}""");
+        var before = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n/versions/Child")).Metadata!.RootElement;
+        clock.Now = clock.Now.AddMinutes(1);
+        if (deleteAncestor)
+        {
+            await Send(engine, RegistryAction.Delete, "/teams/g/notes/n/versions/Root");
+        }
+        else
+        {
+            await Send(engine, RegistryAction.Patch, "/teams/g/notes/n/versions/Child", """{"ancestorid":"Child"}""");
+        }
+        var after = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n/versions/Child")).Metadata!.RootElement;
+        await Assert.That(after.GetProperty("ancestorid").GetString()).IsEqualTo("Child");
+        await Assert.That(RegistryNumber.Parse(after.GetProperty("epoch").GetRawText()).ToBigInteger())
+            .IsEqualTo(RegistryNumber.Parse(before.GetProperty("epoch").GetRawText()).ToBigInteger() + 1);
+        await Assert.That(after.GetProperty("createdat").GetString()).IsEqualTo(before.GetProperty("createdat").GetString());
+        await Assert.That(after.GetProperty("modifiedat").GetDateTimeOffset()).IsEqualTo(clock.Now);
+        var restarted = new RegistryEngine(options, store, new PermitPolicy());
+        await Assert.That((await Send(restarted, RegistryAction.Read, "/teams/g/notes/n/versions/Child")).Metadata!.RootElement.GetRawText())
+            .IsEqualTo(after.GetRawText());
+        await Assert.That((await restarted.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(3);
+    }
+
+    [Test]
     public async Task ModifiedAtOrderingReachesAStableAncestryAfterIndirectTimestampTouches()
     {
         var engine = new RegistryEngine(new()
@@ -271,5 +353,11 @@ public class ModelAndVersionTests
     private sealed class OrderingClock : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => new(2040, 1, 1, 0, 0, 0, TimeSpan.Zero);
+    }
+
+    private sealed class AncestryClock : TimeProvider
+    {
+        internal DateTimeOffset Now { get; set; } = new(2040, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        public override DateTimeOffset GetUtcNow() => Now;
     }
 }
