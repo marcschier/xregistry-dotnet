@@ -169,6 +169,77 @@ public class BuiltInValidationAdapterTests
     }
 
     [Test]
+    [Arguments("valid", false)]
+    [Arguments("valid", true)]
+    [Arguments("unsupported", false)]
+    [Arguments("unsupported", true)]
+    [Arguments("absent", false)]
+    [Arguments("absent", true)]
+    public async Task ClientValidationOverridesCannotChangeAuthoritativeResults(string state, bool exactVersion)
+    {
+        var store = new InMemoryRegistryPersistence();
+        var engine = ValidatingEngine(persistence: store);
+        var format = state switch
+        {
+            "valid" => ",\"format\":\"Avro/1.11.0\"",
+            "unsupported" => ",\"format\":\"unknown/v1\"",
+            _ => ""
+        };
+        var path = "/sets/g/schemas/s" + (exactVersion ? "/versions/v1" : "") + "$details";
+        await Send(engine, RegistryAction.Replace, path,
+            "{\"versionid\":\"v1\",\"schema\":\"int\"" + (exactVersion ? "" : ",\"meta\":{\"compatibility\":\"full\"}") + format + """
+            ,"formatvalidated":{"forged":true},"compatibilityvalidated":"forged",
+            "formatvalidatedreason":false,"compatibilityvalidatedreason":[]}
+            """);
+        if (exactVersion)
+        {
+            var created = (await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement;
+            await Assert.That(created.TryGetProperty("formatvalidated", out var formatFlag)).IsEqualTo(state != "absent");
+            await Assert.That(created.TryGetProperty("formatvalidatedreason", out var formatReason)).IsEqualTo(state == "unsupported");
+            if (state != "absent") { await Assert.That(formatFlag.GetBoolean()).IsEqualTo(state == "valid"); }
+            if (state == "unsupported") { await Assert.That(formatReason.GetString()).IsNotNullOrEmpty(); }
+            await Assert.That(created.TryGetProperty("compatibilityvalidated", out _)).IsFalse();
+            await Assert.That(created.TryGetProperty("compatibilityvalidatedreason", out _)).IsFalse();
+            await Send(engine, RegistryAction.Patch, "/sets/g/schemas/s/meta", """{"compatibility":"full"}""");
+        }
+        var before = (await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/versions/v1$details")).Metadata!.RootElement;
+        foreach (var aspect in new[] { "format", "compatibility" })
+        {
+            await Assert.That(before.TryGetProperty(aspect + "validated", out var flag)).IsEqualTo(state != "absent");
+            await Assert.That(before.TryGetProperty(aspect + "validatedreason", out var reason)).IsEqualTo(state == "unsupported");
+            if (state != "absent") { await Assert.That(flag.GetBoolean()).IsEqualTo(state == "valid"); }
+            if (state == "unsupported") { await Assert.That(reason.GetString()).IsNotNullOrEmpty(); }
+        }
+        var fields = new[] { "formatvalidated", "compatibilityvalidated", "formatvalidatedreason", "compatibilityvalidatedreason" };
+        foreach (var field in fields)
+        {
+            foreach (var forged in new[] { "null", """{"forged":true}""", field.EndsWith("reason", StringComparison.Ordinal) ? "\"forged\"" : state == "valid" ? "false" : "true" })
+            {
+                await Send(engine, RegistryAction.Patch, path, "{\"" + field + "\":" + forged + "}");
+                var result = (await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/versions/v1$details")).Metadata!.RootElement;
+                foreach (var output in fields)
+                {
+                    var present = before.TryGetProperty(output, out var original);
+                    await Assert.That(result.TryGetProperty(output, out var current)).IsEqualTo(present);
+                    if (present) { await Assert.That(current.GetRawText()).IsEqualTo(original.GetRawText()); }
+                }
+            }
+        }
+        var restarted = ValidatingEngine(persistence: store);
+        var persisted = (await Send(restarted, RegistryAction.Read, "/sets/g/schemas/s/versions/v1$details")).Metadata!.RootElement;
+        foreach (var field in fields)
+        {
+            var present = before.TryGetProperty(field, out var original);
+            await Assert.That(persisted.TryGetProperty(field, out var current)).IsEqualTo(present);
+            if (present) { await Assert.That(current.GetRawText()).IsEqualTo(original.GetRawText()); }
+        }
+        var stored = await Send(restarted, RegistryAction.Read, "/sets/g/schemas/s/versions/v1");
+        using var bytes = stored.Document!.OpenRead();
+        using var reader = new StreamReader(bytes, Encoding.UTF8);
+        await Assert.That(await reader.ReadToEndAsync()).IsEqualTo("\"int\"");
+    }
+
+    [Test]
     public async Task InvalidSyntaxRejectsPublicationInsteadOfBecomingAValidationFlag()
     {
         var engine = ValidatingEngine();

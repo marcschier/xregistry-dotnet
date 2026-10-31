@@ -72498,13 +72498,17 @@
       ],
       "text": "- MUST be a [read-only](#read-only-changed) attribute.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Default-Resource and exact-Version creation/PATCH ignore forged validation flags, including null, invalid types and opposite outcomes. Valid, unsupported and absent-format cases retain authoritative results and exact bytes after restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ClientValidationOverridesCannotChangeAuthoritativeResults"
+        ],
         "nativeEvidence": []
       }
     },
@@ -72684,13 +72688,17 @@
       ],
       "text": "- MUST be a [read-only](#read-only-changed) attribute.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Forged format-validation reasons at creation and PATCH cannot replace server explanations or survive when the flag is true or absent. Both default-Resource and exact-Version paths retain the authoritative reason state across restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ClientValidationOverridesCannotChangeAuthoritativeResults"
+        ],
         "nativeEvidence": []
       }
     },
@@ -72933,13 +72941,17 @@
       ],
       "text": "- MUST be a [read-only](#read-only-changed) attribute.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Forged compatibility flags cannot certify unchecked Versions, erase successful results or create a flag without required format/mode. Creation and PATCH through default-Resource and exact-Version surfaces preserve server outcomes and exact bytes after restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ClientValidationOverridesCannotChangeAuthoritativeResults"
+        ],
         "nativeEvidence": []
       }
     },
@@ -73119,13 +73131,17 @@
       ],
       "text": "- MUST be a [read-only](#read-only-changed) attribute.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Forged compatibility reasons at creation and PATCH cannot replace server explanations or survive when the flag is true or absent. Both default-Resource and exact-Version paths retain authoritative values through restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ClientValidationOverridesCannotChangeAuthoritativeResults"
+        ],
         "nativeEvidence": []
       }
     },
