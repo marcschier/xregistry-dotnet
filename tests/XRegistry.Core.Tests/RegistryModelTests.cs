@@ -66,6 +66,46 @@ public class RegistryModelTests
     }
 
     [Test]
+    public async Task RootDescriptionAndLabelsAreOptionalAndEmptyLabelsAreValid()
+    {
+        var omitted = RegistryModel.Compile(RegistryJson.Parse("{}"));
+        var empty = RegistryModel.Compile(RegistryJson.Parse("""{"description":"Root model","labels":{}}"""));
+
+        await Assert.That(omitted.Annotations.Description).IsNull();
+        await Assert.That(omitted.Annotations.Labels.Count).IsEqualTo(0);
+        await Assert.That(empty.Annotations.Description).IsEqualTo("Root model");
+        await Assert.That(empty.Annotations.Labels.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task RootLabelsAcceptNonemptyKeysAndEmptyStringValues()
+    {
+        var model = RegistryModel.Compile(RegistryJson.Parse(
+            """{"labels":{"empty":"","display name":"Registry"} }"""));
+
+        await Assert.That(model.Annotations.Labels.Count).IsEqualTo(2);
+        await Assert.That(model.Annotations.Labels["empty"]).IsEqualTo("");
+        await Assert.That(model.Annotations.Labels["display name"]).IsEqualTo("Registry");
+    }
+
+    [Test]
+    public async Task InvalidRootLabelMapsFailAtTheirModelPaths()
+    {
+        foreach (var (labels, path) in new[]
+        {
+            ("[]", "/labels"),
+            ("""{"":"value"}""", "/labels/"),
+            ("""{"owner":1}""", "/labels/owner")
+        })
+        {
+            var error = TestErrors.Capture(() => RegistryModel.Compile(
+                RegistryJson.Parse("{\"labels\":" + labels + "}")));
+            await Assert.That(error.Code).IsEqualTo("model_error");
+            await Assert.That(error.Path).IsEqualTo(path);
+        }
+    }
+
+    [Test]
     public async Task PreservesSourceAndOwnsEffectiveDefinitions()
     {
         RegistryModel model;

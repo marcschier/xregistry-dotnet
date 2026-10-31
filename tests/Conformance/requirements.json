@@ -27288,15 +27288,17 @@
       "text": "- OPTIONAL",
       "review": {
         "status": "reviewed",
-        "note": "ModelCompiler.Annotations accepts an omitted description and preserves a supplied string through ModelWriter. This root-model annotation has no direct omission/preservation assertion in the inspected tests; that is an evidence gap, not missing implementation.",
+        "note": "RootDescriptionAndLabelsAreOptionalAndEmptyLabelsAreValid asserts that the root model description may be omitted and is retained when supplied.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "RootDescriptionAndLabelsAreOptionalAndEmptyLabelsAreValid"
+        ],
         "nativeEvidence": []
       }
     },
@@ -27316,15 +27318,17 @@
       "text": "- OPTIONAL.",
       "review": {
         "status": "reviewed",
-        "note": "Model labels are optional: OptionalObject treats omission/null as absent and Annotations constructs an empty label dictionary. No direct model-label optionality assertion was found; entity/header label tests are not substituted for model annotations.",
+        "note": "The root annotation test confirms that model labels may be omitted or supplied as an empty map, producing an empty label dictionary.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "RootDescriptionAndLabelsAreOptionalAndEmptyLabelsAreValid"
+        ],
         "nativeEvidence": []
       }
     },
@@ -27344,15 +27348,19 @@
       "text": "- If present, MUST be a map of zero or more name/value string pairs. See [Attributes and Extensions](./spec.md#attributes-and-extensions) for more information.",
       "review": {
         "status": "reviewed",
-        "note": "Annotations requires an object and string-valued label entries, accepts an empty map, and ModelWriter omits empty effective labels while Source retains them. Direct assertions for valid/invalid model-label value kinds and the referenced naming rules are missing.",
+        "note": "Root model labels accept an empty map and nonempty string keys with string values; invalid map and value kinds fail at their model paths.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "RootDescriptionAndLabelsAreOptionalAndEmptyLabelsAreValid",
+          "RootLabelsAcceptNonemptyKeysAndEmptyStringValues",
+          "InvalidRootLabelMapsFailAtTheirModelPaths"
+        ],
         "nativeEvidence": []
       }
     },
@@ -27372,15 +27380,17 @@
       "text": "- Keys MUST be non-empty strings.",
       "review": {
         "status": "reviewed",
-        "note": "Annotations explicitly rejects an empty model-label key with model_error at that key. The inspected label tests exercise entity/header maps, not this compiler branch; a direct empty model-label-key assertion is absent.",
+        "note": "InvalidRootLabelMapsFailAtTheirModelPaths verifies that an empty root model label key fails with model_error at its JSON pointer.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "InvalidRootLabelMapsFailAtTheirModelPaths"
+        ],
         "nativeEvidence": []
       }
     },
@@ -27400,15 +27410,17 @@
       "text": "- Values MAY be empty strings.",
       "review": {
         "status": "reviewed",
-        "note": "An empty label value remains a present string: Annotations checks ValueKind.String, not string length, and WriteAnnotations writes it unchanged. No direct model-label empty-string assertion was found; absence/null must not be inferred equivalent to this value.",
+        "note": "RootLabelsAcceptNonemptyKeysAndEmptyStringValues asserts that an empty string remains a present value in the root model label map.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "RootLabelsAcceptNonemptyKeysAndEmptyStringValues"
+        ],
         "nativeEvidence": []
       }
     },
