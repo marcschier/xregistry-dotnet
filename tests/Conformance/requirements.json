@@ -83910,13 +83910,17 @@
       ],
       "text": "- When not specified, the default value MUST be `manual`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "ManualNewestUsesOnlyLeavesThenTimestampAndCaseInsensitiveId compiles an omitted versionmode to manual and proves explicit branching ancestry, newest-leaf selection, normalized timestamp ties and restart without a mode override.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ManualNewestUsesOnlyLeavesThenTimestampAndCaseInsensitiveId"
+        ],
         "nativeEvidence": []
       }
     },
@@ -83941,13 +83945,18 @@
       ],
       "text": "- Implementations MUST support at least `manual`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Explicit manual mode preserves a root and two authored child branches, selects only leaves by timestamp or case-insensitive ID, and survives restart. ManualRetentionUsesRootTimestampsThenCaseInsensitiveIds proves root selection and sticky-default exclusion for tied and distinct timestamps. These tests demonstrate manual support without treating all mode-specific ordering clauses as complete.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ManualNewestUsesOnlyLeavesThenTimestampAndCaseInsensitiveId",
+          "ManualRetentionUsesRootTimestampsThenCaseInsensitiveIds"
+        ],
         "nativeEvidence": []
       }
     },
@@ -83972,13 +83981,17 @@
       ],
       "text": "- The value of this attribute MUST be case-insensitive.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "MaNuAl compiles to manual and executes the same branching and tie behavior as the omitted/default mode in ManualNewestUsesOnlyLeavesThenTimestampAndCaseInsensitiveId. Mixed-case admission and behavior for the other supported modes remain unasserted, so this general clause remains pending.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "ManualNewestUsesOnlyLeavesThenTimestampAndCaseInsensitiveId"
+        ],
         "nativeEvidence": []
       }
     },
@@ -84003,13 +84016,17 @@
       ],
       "text": "- The \"newest\" Version MUST be determined by finding all \"leaf\" Versions (ones that are not referenced as an ancestor of any other Version), and choosing the one with the newest `createdat` timestamp. If there is more than one, then the one with the highest alphabetically case-insensitive `versionid` value MUST be chosen.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "ManualNewestUsesOnlyLeavesThenTimestampAndCaseInsensitiveId excludes a root whose createdat is newer than both leaves, selects b over Z when b has the later timestamp, and selects Z over b when normalized timestamps tie. It proves authoritative default membership, unchanged authored ancestry and restart. The general obligation applies regardless of mode; nonmanual leaf-selection evidence remains incomplete.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "ManualNewestUsesOnlyLeavesThenTimestampAndCaseInsensitiveId"
+        ],
         "nativeEvidence": []
       }
     },
@@ -84034,13 +84051,18 @@
       ],
       "text": "- The \"oldest\" Version MUST be determined by finding all \"root\" Versions (ones that have an `ancestorid` value that points to itself), and then choosing the one with the oldest `createdat` timestamp. If there is more than one, then the one with the lowest alphabetically case-insensitive `versionid` value MUST be chosen.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "ManualRetentionUsesRootTimestampsThenCaseInsensitiveIds chooses Z over b when Z is older and b over Z when their timestamps tie, both for independent roots and roots recalculated after excluding an older sticky default. Retained ancestry and default metadata remain unchanged through restart. Existing sole-root tests distinguish root selection from descendant ID order. General mode-specific root selection remains pending.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "ManualRetentionUsesRootTimestampsThenCaseInsensitiveIds",
+          "RetentionRecalculatesRootsWhenOldestVersionIsStickyDefault"
+        ],
         "nativeEvidence": []
       }
     },

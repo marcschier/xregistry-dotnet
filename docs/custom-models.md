@@ -69,6 +69,11 @@ because only one Version can remain.
 
 ## Limit retained Versions
 
+The default `versionmode` is `manual`. In that mode, newest selection considers
+only leaves and oldest selection considers only roots; a nonleaf does not become
+the default merely because it has a newer `createdat` timestamp. Timestamp ties
+use case-insensitive Version IDs: highest for newest, lowest for oldest.
+
 For a `maxversions` above one, the Server prunes the oldest root according to
 the Resource's `versionmode`. If that Version is the current default, the
 Server recalculates eligible roots as if the default had been removed. That
