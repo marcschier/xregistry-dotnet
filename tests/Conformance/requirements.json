@@ -2896,7 +2896,7 @@
       "text": "- Description: A numeric value used to determine whether an entity has been modified. Each time the associated entity is updated, this value MUST be set to a new value that is greater than the current one. This attribute MUST be updated for every update operation, even if no attributes were explicitly updated, such as a \"patch\" type of operation when no attributes are specified. This then acts like a `touch` type of operation.",
       "review": {
         "status": "reviewed",
-        "note": "Guarded and empty PATCH operations advance the local epoch, stale/nonmatching values reject, null/missing bypass the guard, and huge unsigned epochs increment without narrowing. An epoch is not a global generation or a recursively incremented parent marker.",
+        "note": "Epochs use arbitrary-precision unsigned values and advance on entity updates, including no-op PATCH/REPLACE operations; tests verify monotonic changes and large values.",
         "roles": [
           "server"
         ]
@@ -2927,15 +2927,15 @@
       "text": "During a create operation, if this attribute is present in the request, then it MUST be silently ignored by the server.",
       "review": {
         "status": "reviewed",
-        "note": "Guard skips new entities and ClientInput discards their epoch. No direct create assertion supplies an invalid/stale epoch and verifies the generated value and all implicit-parent state; a nested overridden Version epoch is not that case.",
+        "note": "Creation ignores submitted epoch values, including invalid shapes; newly created Groups, Resources, and Versions receive a generated epoch of zero.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "NestedVersionsOverrideResourceAttributes"
+          "EpochCreationIgnoresSubmittedValuesAndCollectionChangesTouchOnlyTheirOwner"
         ],
         "nativeEvidence": []
       }
@@ -2957,7 +2957,7 @@
       "text": "During an update, or delete, operation, if this attribute is present in the request, then an error ([mismatched_epoch](#mismatched_epoch)) MUST be generated if the request includes a non-null value that differs from the existing value. This allows for the detection of concurrent, but conflicting, updates to the same entity to be detected. A value of `null` MUST be treated the same as a request with no `epoch` attribute at all, in which case a check MUST NOT be performed.",
       "review": {
         "status": "reviewed",
-        "note": "Update and selected-deletion assertions exercise exact stale/huge epoch errors, null/missing bypass, and rollback when another selected entity has a mismatch. Meta's error subject and large arguments remain exact.",
+        "note": "Non-null update and delete guards must match the stored epoch; null or absent values skip the guard, invalid values fail, and guarded deletion is atomic.",
         "roles": [
           "server"
         ]
@@ -2966,8 +2966,8 @@
         "status": "implemented",
         "testIds": [
           "EpochZeroNullMissingAndHugeGuardsAreExact",
+          "EpochGuardsRejectValuesOutsideUnsignedIntegerRange",
           "PostCollectionsReturnsOnlyProcessedChildrenAndDeleteGuardsAreAtomic",
-          "EngineErrorsRetainTheCorrectSubjectAndRequiredCatalogArgumentsWithoutPublication",
           "MetaEpochFailuresIdentifyTheMetaEntityAndKeepExactLargeGuardValues"
         ],
         "nativeEvidence": []
@@ -2990,20 +2990,16 @@
       "text": "If an entity has a nested xRegistry collection, its `epoch` value MUST be updated each time an entity in that collection is added or removed. However, its `epoch` value MUST NOT be updated solely due to modifications of an existing entity in the collection.",
       "review": {
         "status": "reviewed",
-        "note": "Code touches immediate parents for membership changes, not descendant edits; assertions verify unchanged ancestor epochs on edits and exact changed-event field names. Direct parent epoch-value assertions for both addition and removal at every hierarchy level remain missing.",
+        "note": "Adding or removing Groups, Resources, and Versions advances the owning Registry, Group, or Resource Metadata epoch; updating an existing child does not advance its parent.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "IdenticalWritesTouchOnlyTheEntity",
-          "AttributeEventsMatchTheChangedEntityAndItsDefaultProjection",
-          "DeletionEventsCoverDescendantsAndOnlyTheImmediateParentCollection",
-          "CommittedEventsUseCoreStructuredIdsAndOneCanonicalInteractionTime",
-          "CorrelationReservationAndOutboxShareTheAtomicPublicationQuota",
-          "ImplicitParentsDefaultVersionAndRetentionAreAtomic"
+          "EpochCreationIgnoresSubmittedValuesAndCollectionChangesTouchOnlyTheirOwner",
+          "IdenticalWritesTouchOnlyTheEntity"
         ],
         "nativeEvidence": []
       }
@@ -3024,20 +3020,16 @@
       "text": "- REQUIRED.",
       "review": {
         "status": "reviewed",
-        "note": "Code touches immediate parents for membership changes, not descendant edits; assertions verify unchanged ancestor epochs on edits and exact changed-event field names. Direct parent epoch-value assertions for both addition and removal at every hierarchy level remain missing.",
+        "note": "The Core model requires epoch on Registry, Group, Resource Metadata, and Version entities, and server responses provide the generated value.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "IdenticalWritesTouchOnlyTheEntity",
-          "AttributeEventsMatchTheChangedEntityAndItsDefaultProjection",
-          "DeletionEventsCoverDescendantsAndOnlyTheImmediateParentCollection",
-          "CommittedEventsUseCoreStructuredIdsAndOneCanonicalInteractionTime",
-          "CorrelationReservationAndOutboxShareTheAtomicPublicationQuota",
-          "ImplicitParentsDefaultVersionAndRetentionAreAtomic"
+          "CoreEpochAttributesAreRequiredReadonlyUnsignedIntegersAcrossEntityKinds",
+          "EpochCreationIgnoresSubmittedValuesAndCollectionChangesTouchOnlyTheirOwner"
         ],
         "nativeEvidence": []
       }
@@ -3058,7 +3050,7 @@
       "text": "- MUST be a [read-only](#read-only-changed) attribute.",
       "review": {
         "status": "reviewed",
-        "note": "Guarded and empty PATCH operations advance the local epoch, stale/nonmatching values reject, null/missing bypass the guard, and huge unsigned epochs increment without narrowing. An epoch is not a global generation or a recursively incremented parent marker.",
+        "note": "The Core model declares epoch read-only; incoming values serve as update/delete guards and are ignored during entity creation.",
         "roles": [
           "server"
         ]
@@ -3066,9 +3058,10 @@
       "implementation": {
         "status": "implemented",
         "testIds": [
+          "CoreEpochAttributesAreRequiredReadonlyUnsignedIntegersAcrossEntityKinds",
           "EpochZeroNullMissingAndHugeGuardsAreExact",
-          "HugeValidEpochGuardAdvancesWithoutNarrowing",
-          "IdenticalWritesTouchOnlyTheEntity"
+          "EpochGuardsRejectValuesOutsideUnsignedIntegerRange",
+          "EpochCreationIgnoresSubmittedValuesAndCollectionChangesTouchOnlyTheirOwner"
         ],
         "nativeEvidence": []
       }
@@ -3089,7 +3082,7 @@
       "text": "- MUST be an unsigned integer equal to or greater than zero.",
       "review": {
         "status": "reviewed",
-        "note": "Guarded and empty PATCH operations advance the local epoch, stale/nonmatching values reject, null/missing bypass the guard, and huge unsigned epochs increment without narrowing. An epoch is not a global generation or a recursively incremented parent marker.",
+        "note": "The Core model defines epoch as UInteger; tests cover zero, huge non-negative values, negative, fractional, and non-integer guards.",
         "roles": [
           "server"
         ]
@@ -3097,9 +3090,10 @@
       "implementation": {
         "status": "implemented",
         "testIds": [
+          "CoreEpochAttributesAreRequiredReadonlyUnsignedIntegersAcrossEntityKinds",
+          "EpochGuardsRejectValuesOutsideUnsignedIntegerRange",
           "EpochZeroNullMissingAndHugeGuardsAreExact",
-          "HugeValidEpochGuardAdvancesWithoutNarrowing",
-          "IdenticalWritesTouchOnlyTheEntity"
+          "HugeValidEpochGuardAdvancesWithoutNarrowing"
         ],
         "nativeEvidence": []
       }
@@ -3120,7 +3114,7 @@
       "text": "- MUST increase in value each time the entity is updated.",
       "review": {
         "status": "reviewed",
-        "note": "Guarded and empty PATCH operations advance the local epoch, stale/nonmatching values reject, null/missing bypass the guard, and huge unsigned epochs increment without narrowing. An epoch is not a global generation or a recursively incremented parent marker.",
+        "note": "Each update advances its entity epoch, including no-op writes; arbitrary-precision values increment without narrowing.",
         "roles": [
           "server"
         ]
@@ -62881,13 +62875,19 @@
       ],
       "text": "- Description: A numeric value used to determine whether an entity has been modified. Each time the associated entity is updated, this value MUST be set to a new value that is greater than the current one. This attribute MUST be updated for every update operation, even if no attributes were explicitly updated, such as a \"patch\" type of operation when no attributes are specified. This then acts like a `touch` type of operation.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Epochs use arbitrary-precision unsigned values and advance on entity updates, including no-op PATCH/REPLACE operations; tests verify monotonic changes and large values.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EpochZeroNullMissingAndHugeGuardsAreExact",
+          "HugeValidEpochGuardAdvancesWithoutNarrowing",
+          "IdenticalWritesTouchOnlyTheEntity"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62912,13 +62912,17 @@
       ],
       "text": "During a create operation, if this attribute is present in the request, then it MUST be silently ignored by the server.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Creation ignores submitted epoch values, including invalid shapes; newly created Groups, Resources, and Versions receive a generated epoch of zero.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EpochCreationIgnoresSubmittedValuesAndCollectionChangesTouchOnlyTheirOwner"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62944,13 +62948,20 @@
       ],
       "text": "During an update, or delete, operation, if this attribute is present in the request, then an error ([mismatched_epoch](#mismatched_epoch)) MUST be generated if the request includes a non-null value that differs from the existing value. This allows for the detection of concurrent, but conflicting, updates to the same entity to be detected. A value of `null` MUST be treated the same as a request with no `epoch` attribute at all, in which case a check MUST NOT be performed.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Non-null update and delete guards must match the stored epoch; null or absent values skip the guard, invalid values fail, and guarded deletion is atomic.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EpochZeroNullMissingAndHugeGuardsAreExact",
+          "EpochGuardsRejectValuesOutsideUnsignedIntegerRange",
+          "PostCollectionsReturnsOnlyProcessedChildrenAndDeleteGuardsAreAtomic",
+          "MetaEpochFailuresIdentifyTheMetaEntityAndKeepExactLargeGuardValues"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62976,13 +62987,18 @@
       ],
       "text": "If an entity has a nested xRegistry collection, its `epoch` value MUST be updated each time an entity in that collection is added or removed. However, its `epoch` value MUST NOT be updated solely due to modifications of an existing entity in the collection.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Adding or removing Groups, Resources, and Versions advances the owning Registry, Group, or Resource Metadata epoch; updating an existing child does not advance its parent.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EpochCreationIgnoresSubmittedValuesAndCollectionChangesTouchOnlyTheirOwner",
+          "IdenticalWritesTouchOnlyTheEntity"
+        ],
         "nativeEvidence": []
       }
     },
@@ -63007,13 +63023,18 @@
       ],
       "text": "- REQUIRED.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The Core model requires epoch on Registry, Group, Resource Metadata, and Version entities, and server responses provide the generated value.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CoreEpochAttributesAreRequiredReadonlyUnsignedIntegersAcrossEntityKinds",
+          "EpochCreationIgnoresSubmittedValuesAndCollectionChangesTouchOnlyTheirOwner"
+        ],
         "nativeEvidence": []
       }
     },
@@ -63038,13 +63059,20 @@
       ],
       "text": "- MUST be a [read-only](#read-only-changed) attribute.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The Core model declares epoch read-only; incoming values serve as update/delete guards and are ignored during entity creation.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CoreEpochAttributesAreRequiredReadonlyUnsignedIntegersAcrossEntityKinds",
+          "EpochZeroNullMissingAndHugeGuardsAreExact",
+          "EpochGuardsRejectValuesOutsideUnsignedIntegerRange",
+          "EpochCreationIgnoresSubmittedValuesAndCollectionChangesTouchOnlyTheirOwner"
+        ],
         "nativeEvidence": []
       }
     },
@@ -63069,13 +63097,20 @@
       ],
       "text": "- MUST be an unsigned integer equal to or greater than zero.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The Core model defines epoch as UInteger; tests cover zero, huge non-negative values, negative, fractional, and non-integer guards.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CoreEpochAttributesAreRequiredReadonlyUnsignedIntegersAcrossEntityKinds",
+          "EpochGuardsRejectValuesOutsideUnsignedIntegerRange",
+          "EpochZeroNullMissingAndHugeGuardsAreExact",
+          "HugeValidEpochGuardAdvancesWithoutNarrowing"
+        ],
         "nativeEvidence": []
       }
     },
@@ -63100,13 +63135,19 @@
       ],
       "text": "- MUST increase in value each time the entity is updated.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Each update advances its entity epoch, including no-op writes; arbitrary-precision values increment without narrowing.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EpochZeroNullMissingAndHugeGuardsAreExact",
+          "HugeValidEpochGuardAdvancesWithoutNarrowing",
+          "IdenticalWritesTouchOnlyTheEntity"
+        ],
         "nativeEvidence": []
       }
     },

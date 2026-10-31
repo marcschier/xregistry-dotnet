@@ -121,6 +121,29 @@ public class RegistryModelTests
     }
 
     [Test]
+    public async Task CoreEpochAttributesAreRequiredReadonlyUnsignedIntegersAcrossEntityKinds()
+    {
+        var model = RegistryModel.Compile(RegistryJson.Parse("""
+            {"groups":{"teams":{"singular":"team","resources":{"notes":{"singular":"note","hasdocument":false}}}}}
+            """));
+        var resource = model.Groups["teams"].Resources["notes"];
+        var epochs = new[]
+        {
+            model.Attributes["epoch"],
+            model.Groups["teams"].Attributes["epoch"],
+            resource.Attributes["epoch"],
+            resource.MetaAttributes["epoch"]
+        };
+
+        foreach (var epoch in epochs)
+        {
+            await Assert.That(epoch.Type).IsEqualTo(RegistryValueType.UInteger);
+            await Assert.That(epoch.Required).IsTrue();
+            await Assert.That(epoch.ReadOnly).IsTrue();
+        }
+    }
+
+    [Test]
     public async Task CoreShortSelfAttributesAreImmutableReadonlyUrlsAcrossEntityPlanes()
     {
         var model = RegistryModel.Compile(RegistryJson.Parse("""

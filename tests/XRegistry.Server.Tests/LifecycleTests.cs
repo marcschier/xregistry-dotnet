@@ -85,6 +85,69 @@ public class LifecycleTests
     }
 
     [Test]
+    public async Task EpochCreationIgnoresSubmittedValuesAndCollectionChangesTouchOnlyTheirOwner()
+    {
+        var engine = Create();
+        async Task<int> EpochAt(string path) =>
+            (await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetProperty("epoch").GetInt32();
+
+        var rootBefore = await EpochAt("/");
+        var groupCreated = await Send(engine, RegistryAction.Replace, "/teams/g", """{"epoch":{"invalid":true}}""");
+        await Assert.That(groupCreated.Metadata!.RootElement.GetProperty("epoch").GetInt32()).IsEqualTo(0);
+        var rootAfterGroup = await EpochAt("/");
+        await Assert.That(rootAfterGroup).IsGreaterThan(rootBefore);
+
+        var groupBeforeResource = await EpochAt("/teams/g");
+        var resourceCreated = await Send(engine, RegistryAction.Replace, "/teams/g/notes/n", """{"epoch":-1,"name":"first"}""");
+        await Assert.That(resourceCreated.Metadata!.RootElement.GetProperty("epoch").GetInt32()).IsEqualTo(0);
+        var groupAfterResource = await EpochAt("/teams/g");
+        await Assert.That(groupAfterResource).IsGreaterThan(groupBeforeResource);
+        await Assert.That(await EpochAt("/")).IsEqualTo(rootAfterGroup);
+
+        var resourceEpochBeforeVersion = await EpochAt("/teams/g/notes/n/meta");
+        await Send(engine, RegistryAction.Post, "/teams/g/notes/n", """{"versionid":"v2","name":"second","epoch":99}""");
+        await Assert.That(await EpochAt("/teams/g/notes/n/versions/v2")).IsEqualTo(0);
+        var resourceEpochAfterVersion = await EpochAt("/teams/g/notes/n/meta");
+        await Assert.That(resourceEpochAfterVersion).IsGreaterThan(resourceEpochBeforeVersion);
+        await Assert.That(await EpochAt("/teams/g")).IsEqualTo(groupAfterResource);
+
+        var versionBeforeUpdate = await EpochAt("/teams/g/notes/n/versions/v2");
+        await Send(engine, RegistryAction.Patch, "/teams/g/notes/n/versions/v2", """{"name":"updated"}""");
+        await Assert.That(await EpochAt("/teams/g/notes/n/versions/v2")).IsGreaterThan(versionBeforeUpdate);
+        await Assert.That(await EpochAt("/teams/g/notes/n/meta")).IsEqualTo(resourceEpochAfterVersion);
+        await Assert.That(await EpochAt("/teams/g")).IsEqualTo(groupAfterResource);
+
+        await Send(engine, RegistryAction.Delete, "/teams/g/notes/n/versions/1");
+        var resourceEpochAfterVersionRemoval = await EpochAt("/teams/g/notes/n/meta");
+        await Assert.That(resourceEpochAfterVersionRemoval).IsGreaterThan(resourceEpochAfterVersion);
+        await Assert.That(await EpochAt("/teams/g")).IsEqualTo(groupAfterResource);
+
+        await Send(engine, RegistryAction.Delete, "/teams/g/notes/n");
+        var groupAfterResourceRemoval = await EpochAt("/teams/g");
+        await Assert.That(groupAfterResourceRemoval).IsGreaterThan(groupAfterResource);
+        await Assert.That(await EpochAt("/")).IsEqualTo(rootAfterGroup);
+
+        await Send(engine, RegistryAction.Delete, "/teams/g");
+        await Assert.That(await EpochAt("/")).IsGreaterThan(rootAfterGroup);
+    }
+
+    [Test]
+    [Arguments("-1")]
+    [Arguments("1.5")]
+    [Arguments("\"1\"")]
+    [Arguments("true")]
+    [Arguments("{}")]
+    [Arguments("[]")]
+    public async Task EpochGuardsRejectValuesOutsideUnsignedIntegerRange(string value)
+    {
+        var engine = Create();
+        await Send(engine, RegistryAction.Replace, "/teams/g", "{}");
+        await ExpectCode(() => Send(engine, RegistryAction.Patch, "/teams/g", "{\"epoch\":" + value + "}"), "invalid_attribute");
+        await Assert.That((await Send(engine, RegistryAction.Read, "/teams/g")).Metadata!.RootElement
+            .GetProperty("epoch").GetInt32()).IsEqualTo(0);
+    }
+
+    [Test]
     public async Task IdenticalWritesTouchOnlyTheEntity()
     {
         var engine = Create();
