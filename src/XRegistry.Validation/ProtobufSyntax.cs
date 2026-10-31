@@ -908,14 +908,15 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                 Expect("rpc");
                 var method = Identifier();
                 Require(methods.Add(method), "protobuf.duplicate", "RPC names must be unique.");
+                owner.RegisterSymbol(method, service);
                 Expect("(");
                 var clientStreaming = Take("stream");
                 var request = TypeName();
-                Reference(request, _package, true);
+                Reference(request, service, true);
                 Expect(")"); Expect("returns"); Expect("(");
                 var serverStreaming = Take("stream");
                 var response = TypeName();
-                Reference(response, _package, true);
+                Reference(response, service, true);
                 Expect(")");
                 if (Take("{"))
                 {
@@ -930,7 +931,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                 else { Expect(";"); }
                 if (isRoot)
                 {
-                    owner._rootMethods.Add((service, method), new(request, response, _package, clientStreaming, serverStreaming));
+                    owner._rootMethods.Add((service, method), new(request, response, service, clientStreaming, serverStreaming));
                 }
             }
         }

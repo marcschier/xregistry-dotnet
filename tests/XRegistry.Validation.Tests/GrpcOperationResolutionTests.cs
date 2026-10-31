@@ -11,6 +11,29 @@ namespace XRegistry.Validation.Tests;
 public class GrpcOperationResolutionTests
 {
     [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task GrpcSelectionUsesServiceScopeForResolvedRpcMessageTypes(bool absolute)
+    {
+        var type = absolute ? ".p.Owner.Child" : "Owner.Child";
+        var result = ApiOperationDocumentResolver.Resolve("gRPC/proto3", "text/plain",
+            Encoding.UTF8.GetBytes("syntax='proto3'; package p; message Row {} message Owner { message Child {} } " +
+                "service S { rpc Owner(Row) returns(Row); rpc Get(" + type + ") returns(" + type + "); }"),
+            Reference());
+        await Assert.That(result.Status).IsEqualTo(absolute ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (absolute)
+        {
+            await Assert.That(result.GrpcOperation!.RequestType).IsEqualTo("p.Owner.Child");
+            await Assert.That(result.GrpcOperation.ResponseType).IsEqualTo("p.Owner.Child");
+        }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("protobuf.type");
+            await Assert.That(result.GrpcOperation).IsNull();
+        }
+    }
+
+    [Test]
     [Arguments("has space.proto")]
     [Arguments("has\\tcontrol.proto")]
     [Arguments("has\\ncontrol.proto")]

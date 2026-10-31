@@ -289,6 +289,10 @@ message names and both streaming flags. `Operation` remains undefined and
 Relative imports require an absolute `documentUri`; only the caller's resolver
 can retrieve dependencies. Imported services are not selectable through the
 entry source's locator. Descriptor-set selection remains unsupported.
+RPC request and response types resolve from their containing service scope.
+A nearer RPC name owns the first component of a relative compound type name,
+so a missing child cannot fall back to an outer declaration. A leading dot
+selects an absolute type name; methods in another service do not affect lookup.
 Import URI spellings are checked before URI normalization or retrieval, including
 imports in dependency documents. Raw whitespace, controls and malformed percent
 escapes report `Invalid` with `dependency.uri`; valid percent-encoded paths remain

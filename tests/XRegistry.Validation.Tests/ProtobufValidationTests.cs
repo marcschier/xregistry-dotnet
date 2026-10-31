@@ -10,6 +10,44 @@ namespace XRegistry.Validation.Tests;
 public class ProtobufValidationTests
 {
     [Test]
+    [Arguments(false, false)]
+    [Arguments(false, true)]
+    [Arguments(true, false)]
+    [Arguments(true, true)]
+    public async Task RpcCompoundTypeLookupHonorsServiceMethodOwnership(bool absolute, bool ownerFirst)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var type = absolute ? ".p.Owner.Child" : "Owner.Child";
+            var owner = "rpc Owner(Row) returns(Row);";
+            var selected = "rpc Get(" + type + ") returns(" + type + ");";
+            var source = "syntax='proto" + syntax + "'; package p; message Row {} " +
+                "message Owner { message Child {} } service S { " +
+                (ownerFirst ? owner + selected : selected + owner) + " }";
+            var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/" + syntax,
+                Encoding.UTF8.GetBytes(source));
+            await Assert.That(result.Status).IsEqualTo(absolute ? DocumentValidationStatus.Valid : DocumentValidationStatus.Invalid);
+            if (!absolute)
+            {
+                await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.type");
+            }
+        }
+    }
+
+    [Test]
+    public async Task RpcMethodNamesAreScopedToTheirOwnService()
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("gRPC/proto3",
+            Encoding.UTF8.GetBytes("""
+                syntax='proto3'; package p; message Row {} message Owner { message Child {} }
+                service First { rpc Owner(Row) returns(Row); }
+                service Second { rpc Get(Owner.Child) returns(Owner.Child); }
+                """));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
     [Arguments("has space.proto")]
     [Arguments("bad%.proto")]
     public async Task GrpcDocumentValidationChecksImportSpellingBeforeResolvingAgainstABase(string import)
