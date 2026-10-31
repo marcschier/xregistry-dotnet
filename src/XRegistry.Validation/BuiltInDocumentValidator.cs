@@ -37,6 +37,10 @@ public sealed class BuiltInDocumentValidator : IDocumentValidator
             {
                 await new ProtobufSyntax(context).ValidateAsync(document, format[^1] - '0').ConfigureAwait(false);
             }
+            else if (format.Equals("gRPC/proto3", StringComparison.OrdinalIgnoreCase))
+            {
+                await new ProtobufSyntax(context).ValidateAsync(document, 3, requireRootService: true).ConfigureAwait(false);
+            }
             else if (format.Equals("JsonStructure", StringComparison.OrdinalIgnoreCase) ||
                 format.Equals("JsonStructure/draft-04", StringComparison.OrdinalIgnoreCase))
             {

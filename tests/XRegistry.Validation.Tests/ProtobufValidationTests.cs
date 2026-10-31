@@ -10,6 +10,97 @@ namespace XRegistry.Validation.Tests;
 public class ProtobufValidationTests
 {
     [Test]
+    [Arguments("service S {}")]
+    [Arguments("message Request {} message Response {} service S { rpc Get(Request) returns (Response); }")]
+    [Arguments("package example.api; message M {} service S { rpc Get(stream M) returns (M); rpc Put(M) returns (stream M); rpc Both(stream M) returns (stream M); }")]
+    [Arguments("service S { option deprecated=true; } service Other {}")]
+    public async Task GrpcProto3ValidatesRootServicesAndStreamingDeclarations(string body)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("gRPC/proto3",
+            Encoding.UTF8.GetBytes("syntax='proto3'; " + body));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("syntax='proto3';", "grpc.service")]
+    [Arguments("syntax='proto3'; message S {}", "grpc.service")]
+    [Arguments("syntax='proto3'; // service S {}\n message M {}", "grpc.service")]
+    [Arguments("syntax='proto3'; option java_package='service S {}';", "grpc.service")]
+    [Arguments("syntax='proto2'; service S {}", "protobuf.syntax")]
+    [Arguments("edition='2023'; service S {}", "protobuf.syntax")]
+    [Arguments("service S {}", "protobuf.syntax")]
+    [Arguments("syntax='proto3'; service S { rpc Get(Missing) returns (Missing); }", "protobuf.type")]
+    [Arguments("syntax='proto3'; enum E { ZERO=0; } service S { rpc Get(E) returns (E); }", "protobuf.type")]
+    [Arguments("syntax='proto3'; message M {} service S { rpc Get(M) returns(M); rpc Get(M) returns(M); }", "protobuf.duplicate")]
+    public async Task GrpcProto3RejectsWrongProfileMissingServicesAndInvalidRpcTypes(string document, string code)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("gRPC/proto3",
+            Encoding.UTF8.GetBytes(document));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo(code);
+        await Assert.That(result.Diagnostics[0].Path).IsEqualTo("$");
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task GrpcProto3RequiresARootServiceRatherThanAnImportedService(bool rootService)
+    {
+        var calls = new List<string>();
+        var result = await new BuiltInDocumentValidator().ValidateAsync("gRPC/proto3",
+            Encoding.UTF8.GetBytes("syntax='proto3'; import 'dep.proto'; " +
+                (rootService ? "service Root { rpc Get(dep.M) returns(dep.M); }" : "message Root {}")),
+            new()
+            {
+                ResolveReference = (name, _) =>
+                {
+                    calls.Add(name);
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+                        "syntax='proto2'; package dep; message M {} service Imported {}"u8.ToArray());
+                }
+            });
+        await Assert.That(calls.Count).IsEqualTo(1);
+        await Assert.That(calls[0]).IsEqualTo("dep.proto");
+        await Assert.That(result.Status).IsEqualTo(rootService ? DocumentValidationStatus.Valid : DocumentValidationStatus.Invalid);
+        if (rootService) { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+        else { await Assert.That(result.Diagnostics[0].Code).IsEqualTo("grpc.service"); }
+    }
+
+    [Test]
+    public async Task GrpcProto3KeepsUnresolvedImportsAndUnsupportedOptionsExplicit()
+    {
+        var missing = await new BuiltInDocumentValidator().ValidateAsync("gRPC/proto3",
+            "syntax='proto3'; import 'dep.proto'; service S {}"u8.ToArray());
+        await Assert.That(missing.Status).IsEqualTo(DocumentValidationStatus.Indeterminate);
+        await Assert.That(missing.Diagnostics[0].Code).IsEqualTo("reference.unresolved");
+        var unsupported = await new BuiltInDocumentValidator().ValidateAsync("gRPC/proto3",
+            "syntax='proto3'; service S { option (custom.flag)=true; }"u8.ToArray());
+        await Assert.That(unsupported.Status).IsEqualTo(DocumentValidationStatus.Unsupported);
+        await Assert.That(unsupported.Diagnostics[0].Code).IsEqualTo("protobuf.unsupported");
+        var limited = await new BuiltInDocumentValidator().ValidateAsync("gRPC/proto3",
+            "syntax='proto3'; service S {}"u8.ToArray(), new() { MaxWork = 1 });
+        await Assert.That(limited.Status).IsEqualTo(DocumentValidationStatus.Indeterminate);
+        await Assert.That(limited.Diagnostics[0].Code).IsEqualTo("limit.work");
+    }
+
+    [Test]
+    [Arguments("syntax='proto3'; message M { Missing value=1; }", "protobuf.type")]
+    [Arguments("edition='2023'; message M {}", "protobuf.syntax")]
+    [Arguments("syntax='proto3'; service S { option (custom.flag)=true; }", "protobuf.unsupported")]
+    public async Task GrpcProto3DoesNotHideInvalidOrUnsupportedImportedDeclarations(string dependency, string code)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("gRPC/proto3",
+            "syntax='proto3'; import 'dep.proto'; service Root {}"u8.ToArray(), new()
+            {
+                ResolveReference = (_, _) => ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes(dependency))
+            });
+        await Assert.That(result.Status).IsEqualTo(code == "protobuf.unsupported"
+            ? DocumentValidationStatus.Unsupported : DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo(code);
+    }
+
+    [Test]
     [Arguments("""syntax = "proto3"; package telemetry; message Sample { int64 id = 1; optional string name = 2; repeated double values = 3 [packed = true]; }""", DocumentValidationStatus.Valid)]
     [Arguments("""syntax="proto3"; message M { message Child { string name=1; } Child child=1; map<string,Child> children=2; oneof value { string text=3; int32 count=4; } reserved 5 to 8, 10; reserved "old"; }""", DocumentValidationStatus.Valid)]
     [Arguments("""syntax="proto3"; enum State { UNKNOWN=0; OPEN=1; } message M { State state=1; } service S { rpc Get(M) returns (stream M); }""", DocumentValidationStatus.Valid)]

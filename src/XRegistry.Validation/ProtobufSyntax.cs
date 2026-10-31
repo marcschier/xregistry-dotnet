@@ -19,12 +19,14 @@ internal sealed class ProtobufSyntax(ValidationContext context)
     private readonly HashSet<string> _symbols = new(StringComparer.Ordinal);
     private readonly List<(string Type, string Scope, bool MessageOnly, string Document, int Syntax)> _references = [];
     private readonly List<Field> _fields = [];
+    private bool _hasRootService;
     private readonly HashSet<string> _documents = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<(string Document, bool IsPublic)>> _imports = new(StringComparer.Ordinal);
     internal IEnumerable<(string Name, bool Selectable)> RootDeclarations
         => _definitions.Where(p => p.Value.IsRoot).Select(p => (p.Key, !p.Value.IsEnum));
 
-    internal async ValueTask ValidateAsync(ReadOnlyMemory<byte> document, int syntax, string? rootReference = null)
+    internal async ValueTask ValidateAsync(ReadOnlyMemory<byte> document, int syntax, string? rootReference = null,
+        bool requireRootService = false)
     {
         var resolveUris = rootReference is not null && context.Options.DocumentUri is not null;
         var rootName = resolveUris ? context.Options.DocumentUri!.AbsoluteUri : rootReference ?? "root.proto";
@@ -48,6 +50,9 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                 }
             }
         }
+
+        Require(!requireRootService || _hasRootService, "grpc.service",
+            "A gRPC source document must declare at least one service in the root document.");
 
         var visibility = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
         foreach (var reference in _references)
@@ -808,6 +813,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
         private void Service()
         {
             owner.RegisterSymbol(Identifier(), _package);
+            if (isRoot) { owner._hasRootService = true; }
             Expect("{");
             var methods = new HashSet<string>(StringComparer.Ordinal);
             var options = new HashSet<string>(StringComparer.Ordinal);

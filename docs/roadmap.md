@@ -244,6 +244,11 @@ vocabulary/source mapping. It does not supply their implementation.
   enum-value duplicate checks and token-kind checks remain enforced.
   Editions and custom extensions remain unsupported. This does not add gRPC
   API operation selection.
+  The document validator now accepts `gRPC/proto3` under the same bounded
+  declaration policy and requires at least one root service. Imported services
+  cannot satisfy the root requirement; imported types retain syntax and
+  visibility checks. Descriptor-set validation and gRPC operation selection
+  remain unsupported.
 - Add full API format validators and the remaining language resolvers. The
   OpenAPI/Swagger, OpenRPC, Avro Protocol and assembled Smithy JSON selectors
   do not establish full format validation, YAML support, or gRPC, Thrift,

@@ -15,6 +15,9 @@ public class DocumentValidationTests
     [Arguments("JsonSchema/draft-2020-12")]
     [Arguments("Avro/99")]
     [Arguments("Protobuf/2023")]
+    [Arguments("gRPC/proto2")]
+    [Arguments("gRPC/descriptor-set")]
+    [Arguments("gRPC/editions")]
     [Arguments("JsonStructure/rfc-0000")]
     [Arguments("XSD/1.1")]
     public async Task UnknownOrUnimplementedFormatNeverValidates(string format)

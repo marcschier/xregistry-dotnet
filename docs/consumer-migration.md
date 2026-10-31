@@ -241,6 +241,16 @@ parentheses cannot stand in for custom-option syntax.
 Editions, custom extensions, complete weak-import semantics and gRPC API
 selection remain unsupported.
 
+`BuiltInDocumentValidator` accepts `gRPC/proto3` source under the same bounded
+Proto3 declaration policy, with an additional requirement for at least one
+service in the supplied root document. An imported service alone does not
+satisfy that requirement; imported message types remain available according to
+normal import visibility, including types declared in Proto2 dependencies.
+The root must explicitly declare Proto3 syntax. Missing dependencies remain
+`Indeterminate`, while unsupported constructs remain `Unsupported`.
+This profile does not add binary descriptor validation, operation selection
+or a gRPC transport.
+
 `ApiOperationDocumentResolver.Capabilities` advertises finite parser and retrieval
 budgets: 1 MiB per document, 4 MiB total, 100,000 parsed JSON values, JSON nesting
 and reference-chain limits of 64, at most 32 external documents, and a 30-second

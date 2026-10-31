@@ -1,6 +1,6 @@
 # Document validation
 
-`IDocumentValidator` checks schema source documents, not xRegistry metadata or
+`IDocumentValidator` checks schema source documents and the declared gRPC source profile, not xRegistry metadata or
 application data instances. `BuiltInDocumentValidator` returns `Valid`,
 `Invalid`, `Unsupported` or `Indeterminate` with owned diagnostics. It never
 turns an unsupported construct, exhausted budget or unresolved reference into
@@ -12,6 +12,7 @@ successful validation.
 | XML Schema | XSD 1.0 through hardened, preflight-bounded `XmlSchemaSet`; no DTD/external resolver. XSD 1.1 and unqualified constructs are unsupported. |
 | Avro | 1.8.2 and 1.11.0 grammar, names/references, unions, records, enum/fixed and defaults. Logical-type policies are explicitly unqualified. |
 | Protobuf | Proto2/3 lexer and declaration/type/field/default/enum/reserved/service checks, with explicit imports. Custom options, groups and extensions are unsupported. No protoc subprocess. |
+| gRPC | `gRPC/proto3` uses the Proto3 policy and requires at least one service declared in the supplied root document. Imported source uses its declared syntax. Descriptor sets and operation selection are unsupported. |
 | JSON Structure | Draft-04 Core document/type/namespace/reference/union/compound grammar and bounded primitive restrictions. Required extensions, inheritance and unqualified extended primitive const/enum rules are unsupported. |
 
 These are declared policies, not claims of universal equivalence to every
