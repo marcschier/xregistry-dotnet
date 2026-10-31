@@ -164,10 +164,12 @@ public class RegistryMetadataTests
     {
         var definitions = Shape("""{"labels":{"type":"map","item":{"type":"string"}}}""");
         var boundaryKey = new string('a', 63);
+        var empty = RegistryMetadataValidator.Validate(RegistryJson.Parse("""{"labels":{}}"""), definitions);
         var accepted = RegistryMetadataValidator.Validate(RegistryJson.Parse(
-            "{\"labels\":{\"a\":\"single\",\"0-leading\":\"digit\",\"a-b\":\"hyphen\",\"a:b_0.c\":\"value\",\"" +
+            "{\"labels\":{\"a\":\"single\",\"0-leading\":\"digit\",\"a-b\":\"hyphen\",\"a:b_0.c\":\"value\",\"empty\":\"\",\"" +
             boundaryKey + "\":\"boundary\"}}"), definitions);
 
+        await Assert.That(empty.Metadata.RootElement.GetProperty("labels").EnumerateObject().Count()).IsEqualTo(0);
         await Assert.That(accepted.Metadata.RootElement.GetProperty("labels").GetProperty("a").GetString()).IsEqualTo("single");
         await Assert.That(accepted.Metadata.RootElement.GetProperty("labels").GetProperty("0-leading").GetString()).IsEqualTo("digit");
         await Assert.That(accepted.Metadata.RootElement.GetProperty("labels").GetProperty("a-b").GetString()).IsEqualTo("hyphen");
@@ -175,6 +177,8 @@ public class RegistryMetadataTests
             .IsEqualTo("value");
         await Assert.That(accepted.Metadata.RootElement.GetProperty("labels").GetProperty(boundaryKey).GetString())
             .IsEqualTo("boundary");
+        await Assert.That(accepted.Metadata.RootElement.GetProperty("labels").GetProperty("empty").GetString())
+            .IsEqualTo("");
 
         foreach (var key in new[] { "", "_leading", "-leading", "Upper", "bad?key", new string('a', 64) })
         {

@@ -3588,17 +3588,18 @@
       "text": "- If present, MUST be a map of zero or more name/value string pairs. See [Attributes and Extensions](#attributes-and-extensions) for more information.",
       "review": {
         "status": "reviewed",
-        "note": "Labels use a string-valued map and invalid typed/null values are rejected. No complete direct assertion set here establishes empty map, empty key rejection and every map-key constraint together.",
+        "note": "The labels map accepts zero entries and string values, including the empty string. Tests reject null or non-string values and exercise map-key boundaries and allowed characters.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
+          "MapKeysFollowCoreCharacterAndLengthRules",
           "CollectionAndNestedErrorsRetainPrecisePointers",
-          "ScalarAndMapHeadersUseIndependentEscapedWireValues"
+          "SameNamedCustomFieldsAndLongMapItemsRetainTheirOwnContracts"
         ],
         "nativeEvidence": []
       }
@@ -3619,17 +3620,17 @@
       "text": "- Keys MUST be non-empty strings.",
       "review": {
         "status": "reviewed",
-        "note": "Labels use a string-valued map and invalid typed/null values are rejected. No complete direct assertion set here establishes empty map, empty key rejection and every map-key constraint together.",
+        "note": "The labels map rejects empty keys and accepts nonempty keys. Map-key tests also cover the general Core grammar and length boundaries.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "CollectionAndNestedErrorsRetainPrecisePointers",
-          "ScalarAndMapHeadersUseIndependentEscapedWireValues"
+          "MapKeysFollowCoreCharacterAndLengthRules",
+          "SameNamedCustomFieldsAndLongMapItemsRetainTheirOwnContracts"
         ],
         "nativeEvidence": []
       }
@@ -3650,7 +3651,7 @@
       "text": "- Values MAY be empty strings.",
       "review": {
         "status": "reviewed",
-        "note": "Label values use Core's ordinary string item validator, which accepts and preserves the empty string rather than treating it as null or absence. No nonempty restriction is applied to label values.",
+        "note": "Entity label serialization preserves an empty string value without converting it to null or absence.",
         "roles": [
           "server",
           "producer"
@@ -3659,6 +3660,7 @@
       "implementation": {
         "status": "implemented",
         "testIds": [
+          "SameNamedCustomFieldsAndLongMapItemsRetainTheirOwnContracts",
           "ScalarValuesPreserveTypePrecisionAndNormalizeTimestamps",
           "InvalidScalarsReturnExactFieldDiagnostics",
           "OwnsInputAndPreservesExactNumbersAndPresence"
@@ -63645,13 +63647,20 @@
       ],
       "text": "- If present, MUST be a map of zero or more name/value string pairs. See [Attributes and Extensions](#attributes-and-extensions) for more information.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The labels map accepts zero entries and string values, including the empty string. Tests reject null or non-string values and exercise map-key boundaries and allowed characters.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "MapKeysFollowCoreCharacterAndLengthRules",
+          "CollectionAndNestedErrorsRetainPrecisePointers",
+          "SameNamedCustomFieldsAndLongMapItemsRetainTheirOwnContracts"
+        ],
         "nativeEvidence": []
       }
     },
@@ -63676,13 +63685,19 @@
       ],
       "text": "- Keys MUST be non-empty strings.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The labels map rejects empty keys and accepts nonempty keys. Map-key tests also cover the general Core grammar and length boundaries.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "MapKeysFollowCoreCharacterAndLengthRules",
+          "SameNamedCustomFieldsAndLongMapItemsRetainTheirOwnContracts"
+        ],
         "nativeEvidence": []
       }
     },
@@ -63707,13 +63722,19 @@
       ],
       "text": "- Values MAY be empty strings.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Entity label serialization preserves an empty string value without converting it to null or absence.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SameNamedCustomFieldsAndLongMapItemsRetainTheirOwnContracts",
+          "ScalarValuesPreserveTypePrecisionAndNormalizeTimestamps"
+        ],
         "nativeEvidence": []
       }
     },
