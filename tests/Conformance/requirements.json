@@ -70395,13 +70395,17 @@
       ],
       "text": "- REQUIRED.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Meta exposes defaultversionid at initial creation and after select, clear, nonsticky, full replacement and freeze transitions; the required pointer survives restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultPointerTransitionsChangeOnlyMetaAndPersist"
+        ],
         "nativeEvidence": []
       }
     },
@@ -70426,13 +70430,17 @@
       ],
       "text": "- MUST be the `versionid` of the default Version of the Resource.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "For all six pointer transitions, Meta defaultversionid matches the Resource's projected Version identity/name and exactly one Version's computed isdefault state before and after restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultPointerTransitionsChangeOnlyMetaAndPersist"
+        ],
         "nativeEvidence": []
       }
     },
@@ -70457,13 +70465,17 @@
       ],
       "text": "- A non-`null` value MUST set `defaultversionsticky` to `true`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "PATCH with only a non-null older defaultversionid implicitly sets sticky true; the selection remains unchanged when a newer Version is added or an unrelated Version removed.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultPointerTransitionsChangeOnlyMetaAndPersist"
+        ],
         "nativeEvidence": []
       }
     },
@@ -70488,13 +70500,17 @@
       ],
       "text": "- A `null` value MUST set `defaultversionsticky` to `false`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "PATCH with defaultversionid null and sticky omitted clears an established sticky selection, chooses newest semver and remains automatic after newer publication.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultPointerTransitionsChangeOnlyMetaAndPersist"
+        ],
         "nativeEvidence": []
       }
     },
@@ -70519,13 +70535,17 @@
       ],
       "text": "At the end of an update operation, this attribute MUST be set according to the [`versionmode`](./model.md#groupsstringresourcesstringversionmode) value of the Resource in any of the following situations:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Semver default selection is checked for nonsticky output, full Meta replacement with sticky true and omitted ID, and PATCH false-to-true sticky with null ID. Sticky-only PATCH retains the prior default. All branches persist across restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultPointerTransitionsChangeOnlyMetaAndPersist"
+        ],
         "nativeEvidence": []
       }
     },
@@ -70551,13 +70571,17 @@
       ],
       "text": "Regardless of the reason for `defaultversionid` or `defaultversionsticky` being modified, those changes alone MUST NOT change any attributes in any Version of the Resource. For example, attributes such as `modifiedat` and `epoch` of the previous or current default Version remain unchanged. However, the Resource's `meta` sub-object's `modifiedat` and `epoch` attributes MUST be updated.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Six pointer-only transitions preserve every Version attribute except the computed isdefault projection; Meta epoch increments exactly once, modifiedat uses an advanced clock and createdat remains unchanged. Exact Version snapshots and pointers survive restart; each operation emits only a Resource update.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultPointerTransitionsChangeOnlyMetaAndPersist"
+        ],
         "nativeEvidence": []
       }
     },
@@ -70582,13 +70606,17 @@
       ],
       "text": "For clarity, when processing a request that results in `defaultversionsticky` being `false`, then any existing `defaultversionid` value, or value specified in the request, MUST be ignored for the purpose of setting its final value.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "An explicit old defaultversionid with sticky false is not selected; output uses newest semver. Null-pointer clearing and later publication independently verify automatic selection.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultPointerTransitionsChangeOnlyMetaAndPersist"
+        ],
         "nativeEvidence": []
       }
     },
@@ -70613,13 +70641,17 @@
       ],
       "text": "Any attempt to set `defaultversionid` to a non-existing Version, after all Version processing for the current operation is completed, MUST generate an error ([unknown_id](#unknown_id)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "PATCH and full Meta replacement reject unknown_id for missing and wrong-case target IDs. Exact Meta/Version state and event count remain unchanged through rejection and restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "UnknownDefaultPointerRejectsWithoutChangingMetaVersionsOrEvents"
+        ],
         "nativeEvidence": []
       }
     },
@@ -70862,13 +70894,18 @@
       ],
       "text": "- Description: A value of `true` means that `defaultversionid` has been explicitly set and its value MUST NOT automatically change if other Versions are added or removed. A value of `false` means the default Version MUST be the newest Version, as defined by the Resource's [`versionmode`](./model.md#groupsstringresourcesstringversionmode) algorithm.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Sticky selections remain fixed after newer publication and unrelated Version deletion; nonsticky selections follow newest semver. Existing deletion-of-default control clears sticky and selects newest remaining Version.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultPointerTransitionsChangeOnlyMetaAndPersist",
+          "StickyDefaultAndDeletingItsVersionSelectNewest"
+        ],
         "nativeEvidence": []
       }
     },
@@ -70893,13 +70930,17 @@
       ],
       "text": "- REQUIRED.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Meta always exposes the sticky Boolean at initial publication and after every pointer transition, including after persisted restart and null clearing.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultPointerTransitionsChangeOnlyMetaAndPersist"
+        ],
         "nativeEvidence": []
       }
     },
@@ -70924,13 +70965,17 @@
       ],
       "text": "- When not specified, the default value MUST be `false`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Creating two semver Versions with no sticky input yields false and selects the newest. Subsequent branches independently establish and clear sticky without changing this default policy.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultPointerTransitionsChangeOnlyMetaAndPersist"
+        ],
         "nativeEvidence": []
       }
     },
@@ -70986,13 +71031,17 @@
       ],
       "text": "- When specified in a request, a value of `null` MUST be interpreted as a request to delete the attribute, implicitly setting it to `false`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Null sticky input clears an established sticky value, restores false and selects newest semver; resulting Meta state survives restart for all six transition origins.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultPointerTransitionsChangeOnlyMetaAndPersist"
+        ],
         "nativeEvidence": []
       }
     },
