@@ -43878,6 +43878,7 @@
           "LazyOptionsRetainImportedTypeIdentityAndKind",
           "LazyOptionsKeepNativeBooleanAndDuplicateChecks",
           "LazyMessageFieldsRetainPublicImportVisibility",
+          "LazyAndUnverifiedLazyRemainIndependentFieldOptions",
           "JsTypeOptionsAcceptEveryDeclared64BitIntegralType",
           "JsTypeOptionsRejectTypesOutsideTheDeclaredIntegralSet",
           "JsTypeOptionsRequireNativeDeclaredEnumConstants",

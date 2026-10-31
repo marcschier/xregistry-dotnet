@@ -78,7 +78,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             if (field.HasLazyOption)
             {
                 Require(field.Type != "map" && resolved is { IsEnum: false },
-                    "protobuf.lazy", "The lazy option is only valid on message-type fields.");
+                    "protobuf.lazy", "Lazy options are only valid on message-type fields.");
             }
 
             if (field.Default is { } value)
@@ -429,7 +429,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             "py_generic_services" or "cc_enable_arenas" or "optimize_for" or "php_class_prefix" or
             "swift_prefix" or "java_string_check_utf8" or "java_generate_equals_and_hash" => target == OptionTarget.File,
             "no_standard_descriptor_accessor" => target == OptionTarget.Message,
-            "packed" or "lazy" or "jstype" or "json_name" or "weak" or "default" => target == OptionTarget.Field,
+            "packed" or "lazy" or "unverified_lazy" or "jstype" or "json_name" or "weak" or "default" => target == OptionTarget.Field,
             "allow_alias" => target == OptionTarget.Enum,
             "idempotency_level" => target == OptionTarget.Method,
             "debug_redact" => target is OptionTarget.Field or OptionTarget.EnumValue,
@@ -677,7 +677,8 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                             Require(IsBoolean(value), "protobuf.option", "This field option must be boolean.");
                             break;
                         case "lazy":
-                            Require(IsBoolean(value), "protobuf.option", "lazy must be boolean.");
+                        case "unverified_lazy":
+                            Require(IsBoolean(value), "protobuf.option", "Lazy options must be boolean.");
                             hasLazyOption = true;
                             break;
                         case "jstype":

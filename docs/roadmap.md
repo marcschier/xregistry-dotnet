@@ -205,10 +205,11 @@ vocabulary/source mapping. It does not supply their implementation.
   Explicit `packed` options require repeated packable scalar or enum fields,
   including when set to `false`; omission remains distinct from an explicit
   setting.
-  Explicit `lazy` settings require resolved message-type fields, including
+  Explicit `lazy` and `unverified_lazy` settings require resolved message-type fields, including
   when false. Scalar, enum and map fields fail; native Boolean, duplicate-option
   and import-visibility checks remain enforced. This validates the declared
-  hint without adding lazy runtime parsing or `unverified_lazy` support.
+  hints without adding lazy runtime parsing or changing wire verification.
+  The options remain independently assignable within each field.
   The `jstype` policy checks the three native declared constants and restricts
   them to the five 64-bit integral types, including repeated and oneof fields.
   Quoted/unknown constants and duplicate options fail; JavaScript code

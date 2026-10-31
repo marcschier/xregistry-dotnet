@@ -563,7 +563,7 @@ public class ProtobufValidationTests
     {
         foreach (var syntax in new[] { 2, 3 })
         {
-            foreach (var option in new[] { "", "[lazy=false]", "[lazy=true]" })
+            foreach (var option in new[] { "", "[lazy=false]", "[lazy=true]", "[unverified_lazy=false]", "[unverified_lazy=true]" })
             {
                 var label = type.StartsWith("map", StringComparison.Ordinal) ? "" : "optional ";
                 var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
@@ -588,7 +588,10 @@ public class ProtobufValidationTests
             {
                 $"optional Child value=1 [lazy={value}];",
                 $"repeated Child value=1 [lazy={value}];",
-                $"oneof choice {{ Child value=1 [lazy={value}]; }}"
+                $"oneof choice {{ Child value=1 [lazy={value}]; }}",
+                $"optional Child value=1 [unverified_lazy={value}];",
+                $"repeated Child value=1 [unverified_lazy={value}];",
+                $"oneof choice {{ Child value=1 [unverified_lazy={value}]; }}"
             })
             {
                 var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
@@ -606,11 +609,11 @@ public class ProtobufValidationTests
     public async Task LazyOptionsRetainImportedTypeIdentityAndKind(
         string type, DocumentValidationStatus expected, string code)
     {
-        foreach (var value in new[] { "true", "false" })
+        foreach (var option in new[] { "lazy=true", "lazy=false", "unverified_lazy=true", "unverified_lazy=false" })
         {
             var requests = new List<string>();
             var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
-                Encoding.UTF8.GetBytes($"syntax='proto3'; import 'dep.proto'; message Root {{ {type} value=1 [lazy={value}]; }}"),
+                Encoding.UTF8.GetBytes($"syntax='proto3'; import 'dep.proto'; message Root {{ {type} value=1 [{option}]; }}"),
                 new()
                 {
                     ResolveReference = (name, _) =>
@@ -634,6 +637,11 @@ public class ProtobufValidationTests
     [Arguments("lazy=1")]
     [Arguments("lazy=false,lazy=true")]
     [Arguments("lazy=true,lazy=false")]
+    [Arguments("unverified_lazy='false'")]
+    [Arguments("unverified_lazy='fa' 'lse'")]
+    [Arguments("unverified_lazy=1")]
+    [Arguments("unverified_lazy=false,unverified_lazy=true")]
+    [Arguments("unverified_lazy=true,unverified_lazy=false")]
     public async Task LazyOptionsKeepNativeBooleanAndDuplicateChecks(string options)
     {
         var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
@@ -643,12 +651,14 @@ public class ProtobufValidationTests
     }
 
     [Test]
-    [Arguments(false)]
-    [Arguments(true)]
-    public async Task LazyMessageFieldsRetainPublicImportVisibility(bool forwarded)
+    [Arguments(false, "lazy")]
+    [Arguments(true, "lazy")]
+    [Arguments(false, "unverified_lazy")]
+    [Arguments(true, "unverified_lazy")]
+    public async Task LazyMessageFieldsRetainPublicImportVisibility(bool forwarded, string option)
     {
         var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
-            """syntax="proto3"; import "bridge.proto"; message Root { dep.Child value=1 [lazy=false]; }"""u8.ToArray(),
+            Encoding.UTF8.GetBytes($"syntax='proto3'; import 'bridge.proto'; message Root {{ dep.Child value=1 [{option}=false]; }}"),
             new()
             {
                 ResolveReference = (name, _) => ValueTask.FromResult<ReadOnlyMemory<byte>?>(
@@ -663,6 +673,24 @@ public class ProtobufValidationTests
             ? DocumentValidationStatus.Valid : DocumentValidationStatus.Invalid);
         if (forwarded) { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
         else { await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.type"); }
+    }
+
+    [Test]
+    [Arguments("true", "true")]
+    [Arguments("true", "false")]
+    [Arguments("false", "true")]
+    [Arguments("false", "false")]
+    public async Task LazyAndUnverifiedLazyRemainIndependentFieldOptions(string lazy, string unverified)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                Encoding.UTF8.GetBytes($"syntax='proto{syntax}'; message Child {{}} message Root {{ " +
+                    $"optional Child first=1 [lazy={lazy},unverified_lazy={unverified}]; " +
+                    $"optional Child second=2 [unverified_lazy={lazy},lazy={unverified}]; }}"));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+            await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+        }
     }
 
     [Test]
@@ -1147,6 +1175,7 @@ public class ProtobufValidationTests
     [Arguments("allow_alias=true", "enum")]
     [Arguments("packed=false", "field")]
     [Arguments("lazy=false", "field")]
+    [Arguments("unverified_lazy=false", "field")]
     [Arguments("jstype=JS_NORMAL", "field")]
     [Arguments("json_name='value'", "field")]
     [Arguments("weak=false", "field")]
@@ -1160,7 +1189,8 @@ public class ProtobufValidationTests
         {
             var option = $"option {assignment};";
             var label = assignment.StartsWith("packed=", StringComparison.Ordinal) ? "repeated " : "optional ";
-            var type = assignment.StartsWith("lazy=", StringComparison.Ordinal) ? "Child" : "int64";
+            var type = assignment.StartsWith("lazy=", StringComparison.Ordinal) ||
+                assignment.StartsWith("unverified_lazy=", StringComparison.Ordinal) ? "Child" : "int64";
             var field = $"{label}{type} value=1 [{assignment}];";
             foreach (var (target, body) in new[]
             {

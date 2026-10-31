@@ -166,12 +166,13 @@ string, bytes, message, map or oneof field therefore reports `Invalid` with
 `protobuf.packed`; omitting the option does not impose that restriction.
 The [publisher's option guidance](https://protobuf.dev/programming-guides/proto3/#options)
 defines packed and unpacked encoding for repeated basic numeric fields.
-An explicit `lazy` option requires a resolved message-type field, whether
+An explicit `lazy` or `unverified_lazy` option requires a resolved message-type field, whether
 its value is `true` or `false`. Scalar, enum and map fields report `Invalid`
 with `protobuf.lazy`; omitted options impose no such restriction. Imported
 message fields retain their normal type-visibility checks. The publisher's
-descriptor schema defines this message-only hint; validation does not implement
-lazy runtime parsing or assign a policy to `unverified_lazy`.
+descriptor schema defines these message-parsing hints. Each accepts a native
+boolean and may appear once per field; the two options remain independent.
+Validation does not implement lazy runtime parsing or change wire verification.
 The `jstype` option accepts native `JS_NORMAL`, `JS_STRING` and `JS_NUMBER`
 constants only on `int64`, `uint64`, `sint64`, `fixed64` and `sfixed64`
 fields. Other types report `protobuf.jstype`; quoted, unknown or duplicate
