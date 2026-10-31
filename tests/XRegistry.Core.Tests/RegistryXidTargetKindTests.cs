@@ -43,6 +43,7 @@ public class RegistryXidTargetKindTests
     [Arguments("/gs/rs/versions", "/gs/g/rs/r")]
     [Arguments("/gs/rs/versions", "/gs/g/rs/r/meta")]
     [Arguments("/gs", "/gs/g/rs/r")]
+    [Arguments("/gs", "/GS/g")]
     [Arguments("/gs", "/other/g")]
     [Arguments("/gs/rs", "/other/g/rs/r")]
     [Arguments("/gs/rs", "/gs/g/others/r")]
@@ -85,6 +86,19 @@ public class RegistryXidTargetKindTests
 
         await Assert.That(result.Metadata.RootElement.GetProperty("ref").GetString()).IsEqualTo(xid);
         await Assert.That(result.Obligations.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task XidsPreserveCaseSensitiveEntityIds()
+    {
+        var model = Model(null);
+        var upper = RegistryMetadataValidator.Validate(RegistryJson.Parse("""{"ref":"/gs/Entity"}"""),
+            model.Attributes["body"].Attributes, new() { Model = model });
+        var lower = RegistryMetadataValidator.Validate(RegistryJson.Parse("""{"ref":"/gs/entity"}"""),
+            model.Attributes["body"].Attributes, new() { Model = model });
+
+        await Assert.That(upper.Metadata.RootElement.GetProperty("ref").GetString()).IsEqualTo("/gs/Entity");
+        await Assert.That(lower.Metadata.RootElement.GetProperty("ref").GetString()).IsEqualTo("/gs/entity");
     }
 
     [Test]

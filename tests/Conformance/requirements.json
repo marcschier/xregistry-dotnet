@@ -60794,13 +60794,23 @@
       ],
       "text": "- `xid` - MUST be a case-sensitive URL (xid) reference to another entity defined within the Registry. The actual entity attribute value MAY reference a non-existing entity (i.e. be a dangling pointer), but the syntax MUST reference a defined/valid type in the Registry. This type of attribute is used in place of `url` so that the Registry can do \"type checking\" to ensure the value references the correct type of Registry entity. See the definition of the [`target` model attribute](./model.md#attributesstringtarget) for more information. Its value MUST start with a `/`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "`RegistryPath.Parse` requires root-relative XIDs and preserves their path spelling. `CheckXidTarget` checks the referenced model type and target kind without checking entity existence, so dangling IDs remain valid. Tests cover case-preserving IDs, wrong types, absolute URL rejection, and dangling targets.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DeclaredTargetsAcceptDanglingEntityIdsWithoutExistenceChecks",
+          "TargetsRejectTheWrongEntityKindOrDeclaredModelType",
+          "XidsPreserveCaseSensitiveEntityIds",
+          "TheAbsoluteExemptionDoesNotRelaxUriOrXidSyntax",
+          "TargetlessXidsKeepTheirUnrestrictedEntityKinds"
+        ],
         "nativeEvidence": []
       }
     },
