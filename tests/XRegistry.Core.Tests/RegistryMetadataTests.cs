@@ -25,6 +25,22 @@ public class RegistryMetadataTests
     }
 
     [Test]
+    [Arguments("\"text\"")]
+    [Arguments("false")]
+    [Arguments("-1")]
+    [Arguments("1.25")]
+    [Arguments("[1,2]")]
+    [Arguments("{\"key\":\"value\"}")]
+    public async Task AnyAttributesPreserveConcreteRuntimeJsonKinds(string value)
+    {
+        var definitions = Shape("""{"value":"any"}""");
+        var result = RegistryMetadataValidator.Validate(
+            RegistryJson.Parse("{\"value\":" + value + "}"), definitions);
+
+        await Assert.That(result.Metadata.RootElement.GetProperty("value").GetRawText()).IsEqualTo(value);
+    }
+
+    [Test]
     [Arguments("integer", "1.1")]
     [Arguments("uinteger", "-1")]
     [Arguments("boolean", "\"true\"")]
