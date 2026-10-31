@@ -31662,14 +31662,16 @@
       "text": "- An attempt to change `maxversions` to `1` when there are existing Resource instances that have their `defaultversionsticky` attribute set to `true` MUST generate an error ([setdefaultversionsticky_false](spec.md#setdefaultversionsticky_false)). See [`defaultversionsticky` Attribute](spec.md#defaultversionsticky-attribute) for additional information.",
       "review": {
         "status": "reviewed",
-        "note": "Model replacement schedules existing Resources, and FinalizeResource rejects sticky defaults with MaxVersions==1 using setdefaultversionsticky_false. No direct test changes an existing sticky Resource's model limit to one and checks model/data rollback.",
+        "note": "Model replacement rejects maxversions=1 when any existing Resource has a sticky default. ReducingMaxVersionsToOneRejectsAnyStickyResourceAtomically tests either of two existing Resources as sticky, asserts the error and unchanged persistence generation, model, export and events, then clears stickiness and verifies successful pruning.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ReducingMaxVersionsToOneRejectsAnyStickyResourceAtomically"
+        ],
         "nativeEvidence": []
       }
     },
