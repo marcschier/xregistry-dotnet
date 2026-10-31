@@ -31323,17 +31323,18 @@
       "text": "- REQUIRED.",
       "review": {
         "status": "reviewed",
-        "note": "A supplied valid Resource singular is required; it is never inferred by trimming the plural. Positive identity and maximum length are directly asserted, but missing/null/non-string Resource singular cases are not direct test rows.",
+        "note": "RejectsInvalidModelAspectsWithExactPointers verifies that a Resource definition without singular fails at /groups/dirs/resources/files/singular. CompilesIndependentMinimalSpecModel verifies the supplied name.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "CompilesIndependentMinimalSpecModel",
-          "UsesNormativeNameLengthsRatherThanDerivedSchemaLengths"
+          "UsesNormativeNameLengthsRatherThanDerivedSchemaLengths",
+          "RejectsInvalidModelAspectsWithExactPointers"
         ],
         "nativeEvidence": []
       }
