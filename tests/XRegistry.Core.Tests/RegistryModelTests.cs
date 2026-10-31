@@ -333,6 +333,64 @@ public class RegistryModelTests
     }
 
     [Test]
+    public async Task EveryCoreDataTypeCompilesAsMutableByDefault()
+    {
+        var model = RegistryModel.Compile(RegistryJson.Parse("""
+            {"attributes":{
+              "anyvalue":"any",
+              "arrayvalue":{"type":"array","item":{"type":"string"}},
+              "booleanvalue":"boolean",
+              "decimalvalue":"decimal",
+              "integervalue":"integer",
+              "mapvalue":{"type":"map","item":{"type":"string"}},
+              "objectvalue":{"type":"object","attributes":{}},
+              "stringvalue":"string",
+              "timestampvalue":"timestamp",
+              "uintegervalue":"uinteger",
+              "urivalue":"uri",
+              "uriabsolutevalue":"uriabsolute",
+              "urirelativevalue":"urirelative",
+              "uritemplatevalue":"uritemplate",
+              "urlvalue":"url",
+              "urlabsolutevalue":"urlabsolute",
+              "urlrelativevalue":"urlrelative",
+              "xidvalue":"xid",
+              "xidtypevalue":"xidtype"
+            }}
+            """));
+        var expected = new Dictionary<string, RegistryValueType>(StringComparer.Ordinal)
+        {
+            ["anyvalue"] = RegistryValueType.Any,
+            ["arrayvalue"] = RegistryValueType.Array,
+            ["booleanvalue"] = RegistryValueType.Boolean,
+            ["decimalvalue"] = RegistryValueType.Decimal,
+            ["integervalue"] = RegistryValueType.Integer,
+            ["mapvalue"] = RegistryValueType.Map,
+            ["objectvalue"] = RegistryValueType.Object,
+            ["stringvalue"] = RegistryValueType.String,
+            ["timestampvalue"] = RegistryValueType.Timestamp,
+            ["uintegervalue"] = RegistryValueType.UInteger,
+            ["urivalue"] = RegistryValueType.Uri,
+            ["uriabsolutevalue"] = RegistryValueType.UriAbsolute,
+            ["urirelativevalue"] = RegistryValueType.UriRelative,
+            ["uritemplatevalue"] = RegistryValueType.UriTemplate,
+            ["urlvalue"] = RegistryValueType.Url,
+            ["urlabsolutevalue"] = RegistryValueType.UrlAbsolute,
+            ["urlrelativevalue"] = RegistryValueType.UrlRelative,
+            ["xidvalue"] = RegistryValueType.Xid,
+            ["xidtypevalue"] = RegistryValueType.XidType
+        };
+
+        foreach (var (name, type) in expected)
+        {
+            var attribute = model.Attributes[name];
+            await Assert.That(attribute.Type).IsEqualTo(type);
+            await Assert.That(attribute.ReadOnly).IsFalse();
+            await Assert.That(attribute.Immutable).IsFalse();
+        }
+    }
+
+    [Test]
     public async Task ScalarAttributeAspectsUseNormativeDefaults()
     {
         var model = RegistryModel.Compile(RegistryJson.Parse("""

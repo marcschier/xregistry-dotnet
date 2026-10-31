@@ -60564,13 +60564,19 @@
       ],
       "text": "Unless otherwise noted, all attributes and extensions MUST be mutable and MUST be one of the following data types:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "All 19 Core data types compile. The focused test checks each type and confirms that omitted `readonly` and `immutable` values default to `false` for custom attributes; the shared compiler applies these defaults at every declaration site.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EveryCoreDataTypeCompilesAsMutableByDefault"
+        ],
         "nativeEvidence": []
       }
     },
