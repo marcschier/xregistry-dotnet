@@ -31058,16 +31058,18 @@
       "text": "This attribute MUST reference a statically defined Group attribute. In other words, it can not reference an attribute defined by an `ifvalues` clause or a `*` extension definition. Nor can it reference an attribute within an array.",
       "review": {
         "status": "reviewed",
-        "note": "Equals resolves only statically declared Group dictionaries through objects; it cannot use ifvalues, wildcard lookup or array traversal. The nested region.code positive test exists, but direct dynamic/array/map-path rejection assertions are missing.",
+        "note": "ConstraintEqualsRejectsWildcardConditionalAndArrayGroupPaths verifies those Group paths fail at equals. ConstraintEqualsResolvesNestedStaticGroupAttributes verifies nested static-object resolution.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "UnrelatedGroupMetadataDoesNotTouchVersionsButNestedEqualsChangesRevalidateUntouchedResources"
+          "UnrelatedGroupMetadataDoesNotTouchVersionsButNestedEqualsChangesRevalidateUntouchedResources",
+          "ConstraintEqualsRejectsWildcardConditionalAndArrayGroupPaths",
+          "ConstraintEqualsResolvesNestedStaticGroupAttributes"
         ],
         "nativeEvidence": []
       }

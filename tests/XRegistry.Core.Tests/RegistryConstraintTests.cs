@@ -36,6 +36,28 @@ public class RegistryConstraintTests
     }
 
     [Test]
+    [Arguments("""{"groups":{"gs":{"singular":"g","attributes":{"*":"string"},"constraints":{"rs.value":{"equals":"extra"}},"resources":{"rs":{"singular":"r","attributes":{"value":"string"}}}}}}""")]
+    [Arguments("""{"groups":{"gs":{"singular":"g","attributes":{"mode":{"type":"string","ifvalues":{"on":{"siblingattributes":{"dynamic":"string"}}}}},"constraints":{"rs.value":{"equals":"dynamic"}},"resources":{"rs":{"singular":"r","attributes":{"value":"string"}}}}}}""")]
+    [Arguments("""{"groups":{"gs":{"singular":"g","attributes":{"items":{"type":"array","item":{"type":"string"}}},"constraints":{"rs.value":{"equals":"items[0]"}},"resources":{"rs":{"singular":"r","attributes":{"value":"string"}}}}}}""")]
+    public async Task ConstraintEqualsRejectsWildcardConditionalAndArrayGroupPaths(string json)
+    {
+        var error = TestErrors.Capture(() => RegistryModel.Compile(RegistryJson.Parse(json)));
+        await Assert.That(error.Code).IsEqualTo("model_error");
+        await Assert.That(error.Path).IsEqualTo("/groups/gs/constraints/rs.value/equals");
+    }
+
+    [Test]
+    public async Task ConstraintEqualsResolvesNestedStaticGroupAttributes()
+    {
+        var model = RegistryModel.Compile(RegistryJson.Parse(
+            """{"groups":{"gs":{"singular":"g","attributes":{"metadata":{"type":"object","attributes":{"owner":"string"}}},"constraints":{"rs.value":{"equals":"metadata.owner"}},"resources":{"rs":{"singular":"r","attributes":{"value":"string"}}}}}}"""));
+        var constraint = model.Groups["gs"].Constraints["rs.value"];
+        await Assert.That(constraint.EqualsPath.Count).IsEqualTo(2);
+        await Assert.That(constraint.EqualsPath[0]).IsEqualTo("metadata");
+        await Assert.That(constraint.EqualsPath[1]).IsEqualTo("owner");
+    }
+
+    [Test]
     public async Task EnforcesConstraintSubsetsAndDefaults()
     {
         var model = RegistryModel.Compile(RegistryJson.Parse("""
