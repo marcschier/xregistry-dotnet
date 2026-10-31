@@ -260,7 +260,10 @@ vocabulary/source mapping. It does not supply their implementation.
   them to valid names. Resolved aliases and canonical names now require unique
   ownership across distinct named types in the whole protocol, including
   embedded schemas in unselected messages and either declaration order.
-  Alias-based protocol evolution and field-alias ownership remain open.
+  Field names and aliases require unique ownership within each record or
+  anonymous request, including unselected messages. Field aliases retain their
+  authored spelling without namespace expansion, and unrelated records and
+  requests can reuse them. Alias-based protocol evolution remains open.
   Protocol logical-type annotations retain their
   authored representation while selection checks the underlying wire schema
   and defaults, including unknown or invalid logical annotations. No logical

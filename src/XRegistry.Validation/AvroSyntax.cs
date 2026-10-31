@@ -204,6 +204,7 @@ internal sealed class AvroSyntax(string format, ValidationContext context)
     private void ReadFields(AvroType type, JsonElement fields, string ns, string path)
     {
         SchemaJson.Array(fields, path);
+        var owners = _protocol ? new Dictionary<string, AvroField>(StringComparer.Ordinal) : null;
         foreach (var fieldValue in fields.EnumerateArray())
         {
             context.Work(path: path);
@@ -214,6 +215,7 @@ internal sealed class AvroSyntax(string format, ValidationContext context)
             var fieldType = Read(SchemaJson.Member(fieldValue, "type", fieldPath), ns, fieldPath + "/type");
             var field = new AvroField(name, fieldType, fieldValue.TryGetProperty("default", out var defaultValue));
             ValidationContext.Require(type.Fields.TryAdd(name, field), fieldPath, "avro.duplicate_field", "Record field names must be unique.");
+            RegisterName(name, field, fieldPath + "/name");
             if (field.HasDefault)
             {
                 _defaults.Add(field, (defaultValue, fieldPath + "/default"));
@@ -221,6 +223,13 @@ internal sealed class AvroSyntax(string format, ValidationContext context)
             if (fieldValue.TryGetProperty("aliases", out var aliases))
             {
                 field.Aliases.AddRange(SchemaJson.Strings(aliases, fieldPath + "/aliases"));
+                if (owners is not null)
+                {
+                    foreach (var alias in field.Aliases)
+                    {
+                        RegisterName(alias, field, fieldPath + "/aliases");
+                    }
+                }
             }
             if (fieldValue.TryGetProperty("doc", out var doc))
             {
@@ -231,6 +240,19 @@ internal sealed class AvroSyntax(string format, ValidationContext context)
                 ValidationContext.Require(SchemaJson.String(order, fieldPath + "/order") is "ascending" or "descending" or "ignore",
                     fieldPath + "/order", "avro.order", "Unknown field ordering.");
             }
+
+        }
+
+        void RegisterName(string name, AvroField field, string namePath)
+        {
+            if (owners is null)
+            {
+                return;
+            }
+            context.Work(name.Length + 1, namePath);
+            ValidationContext.Require(!owners.TryGetValue(name, out var owner) || ReferenceEquals(owner, field),
+                namePath, "avro.alias", "Field names and aliases must have unique owners within a record.");
+            owners.TryAdd(name, field);
         }
     }
 

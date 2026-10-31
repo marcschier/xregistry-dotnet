@@ -436,8 +436,12 @@ regardless of declaration order. These ownership checks cover all protocol
 types and named schemas embedded in messages, including unselected messages;
 conflicts report `avro.alias` at the conflicting declaration. Namespace and
 case distinctions remain significant, and aliases still do not resolve authored
-type references. Alias-based protocol evolution and field-alias ownership
-checks remain outside this implementation.
+type references. Within each record or anonymous request, field names and
+aliases likewise require unique ownership. Aliases are compared as authored
+strings, without namespace expansion; unrelated records and requests can reuse
+them. A field can retain its own name as an alias. Repeated aliases on one
+field report `schema.duplicate`; conflicts between fields report `avro.alias`.
+Alias-based protocol evolution remains outside this implementation.
 Request parameters follow the anonymous-record field form: each is an object
 with a valid, unique field name and a type schema value. Optional documentation
 is a string, `order` is `ascending`, `descending` or `ignore`, and aliases are
