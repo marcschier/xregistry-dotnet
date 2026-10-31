@@ -45,6 +45,47 @@ public class RegistryCapabilityTests
     }
 
     [Test]
+    [Arguments("1.0-RC4")]
+    [Arguments("1.0.7-rC4")]
+    public async Task SpecVersionFlagIsCaseInsensitiveAndIgnoresPatch(string requested)
+    {
+        var engine = MutableEngine();
+        var current = await Send(engine, RegistryAction.Read, "/capabilities");
+        var selected = await Send(engine, RegistryAction.Read, "/capabilities", null,
+            new KeyValuePair<string, string?>("specversion", requested));
+
+        await Assert.That(selected.Metadata!.RootElement.GetRawText())
+            .IsEqualTo(current.Metadata!.RootElement.GetRawText());
+    }
+
+    [Test]
+    [Arguments("1.0-rc3")]
+    [Arguments("1.1-rc4")]
+    [Arguments("1.0.7-rc5")]
+    [Arguments("1.0.7")]
+    public async Task SpecVersionFlagRejectsUnsupportedMajorMinorOrSuffix(string requested)
+    {
+        var engine = MutableEngine();
+        await ExpectCode(() => Send(engine, RegistryAction.Read, "/capabilities", null,
+            new KeyValuePair<string, string?>("specversion", requested)), "unsupported_specversion");
+    }
+
+    [Test]
+    public async Task UnspecifiedSpecVersionUsesTheNewestSupportedVersion()
+    {
+        var engine = MutableEngine();
+        var defaultResponse = await Send(engine, RegistryAction.Read, "/capabilities");
+        var latestResponse = await Send(engine, RegistryAction.Read, "/capabilities", null,
+            new KeyValuePair<string, string?>("specversion", "1.0-rc4"));
+
+        await Assert.That(defaultResponse.Metadata!.RootElement.GetProperty("specversions").EnumerateArray()
+                .Select(static version => version.GetString()!))
+            .IsEquivalentTo(["1.0-rc4"], StringComparer.Ordinal);
+        await Assert.That(defaultResponse.Metadata.RootElement.GetRawText())
+            .IsEqualTo(latestResponse.Metadata!.RootElement.GetRawText());
+    }
+
+    [Test]
     [Arguments("""{"flags":["filter","*"]}""", "capability_wildcard")]
     [Arguments("""{"flags":["invented"]}""", "capability_value")]
     [Arguments("""{"flags":["filter","FILTER"]}""", "capability_value")]

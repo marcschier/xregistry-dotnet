@@ -18085,14 +18085,17 @@
       "text": "The SpecVersion flag MAY be used to indicate the xRegistry specification version that the response MUST adhere to. The parameter value of this flag MUST be a case-insensitive string.",
       "review": {
         "status": "reviewed",
-        "note": "RequestFlags explicitly supports 1.0-rc4, folds the suffix, ignores a numeric patch component and rejects other suffixes/versions. No reviewed direct boundary/case/default/patch/suffix assertion set establishes these four independent flag contracts; administrative route success is not specversion comparison evidence.",
+        "note": "The flag accepts case variations of 1.0-rc4 and ignores numeric patch components; other major/minor values and suffixes reject with unsupported_specversion.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SpecVersionFlagIsCaseInsensitiveAndIgnoresPatch",
+          "SpecVersionFlagRejectsUnsupportedMajorMinorOrSuffix"
+        ],
         "nativeEvidence": []
       }
     },
@@ -18112,14 +18115,17 @@
       "text": "If the specified version is not supported, then an error ([unsupported_specversion](#unsupported_specversion)) MUST be generated. When not specified, the default value MUST be the newest version of this specification supported by the server.",
       "review": {
         "status": "reviewed",
-        "note": "RequestFlags explicitly supports 1.0-rc4, folds the suffix, ignores a numeric patch component and rejects other suffixes/versions. No reviewed direct boundary/case/default/patch/suffix assertion set establishes these four independent flag contracts; administrative route success is not specversion comparison evidence.",
+        "note": "Unsupported major/minor or suffix values reject; when omitted, the response matches the server's only supported and newest version, 1.0-rc4.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SpecVersionFlagRejectsUnsupportedMajorMinorOrSuffix",
+          "UnspecifiedSpecVersionUsesTheNewestSupportedVersion"
+        ],
         "nativeEvidence": []
       }
     },
@@ -18139,14 +18145,16 @@
       "text": "When comparing `specversion` strings, the server MUST silently ignore the \"patch\" version number and only consider the \"major.minor\" version numbers. This is because any \"patch\" version updates will only contain clarifications and ought not require any code changes for server implementations. Therefore, all patch versions of the same \"major.minor\" version MUST be forwards and backwards compatible.",
       "review": {
         "status": "reviewed",
-        "note": "RequestFlags explicitly supports 1.0-rc4, folds the suffix, ignores a numeric patch component and rejects other suffixes/versions. No reviewed direct boundary/case/default/patch/suffix assertion set establishes these four independent flag contracts; administrative route success is not specversion comparison evidence.",
+        "note": "Requests using different numeric patch components of 1.0-rc4 produce the same response, verifying that the patch component is ignored by version comparison.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SpecVersionFlagIsCaseInsensitiveAndIgnoresPatch"
+        ],
         "nativeEvidence": []
       }
     },
@@ -18166,14 +18174,17 @@
       "text": "However, due to the potential for semantics changes of versions with suffix values (e.g. `v2.0.0-rc1`), the suffix value MUST be part of the comparison checking.",
       "review": {
         "status": "reviewed",
-        "note": "RequestFlags explicitly supports 1.0-rc4, folds the suffix, ignores a numeric patch component and rejects other suffixes/versions. No reviewed direct boundary/case/default/patch/suffix assertion set establishes these four independent flag contracts; administrative route success is not specversion comparison evidence.",
+        "note": "The rc4 suffix is accepted case-insensitively; rc3 and rc5 are rejected as unsupported_specversion, so suffix changes affect the comparison.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SpecVersionFlagIsCaseInsensitiveAndIgnoresPatch",
+          "SpecVersionFlagRejectsUnsupportedMajorMinorOrSuffix"
+        ],
         "nativeEvidence": []
       }
     },
