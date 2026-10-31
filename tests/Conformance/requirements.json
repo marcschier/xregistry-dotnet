@@ -60347,13 +60347,19 @@
       ],
       "text": "To reduce the number of interactions needed when creating an entity, if any of its parent entities do not exist, then they MUST be implicitly created. Each of those entities MUST be created with the appropriate `<SINGULAR>id` as specified by the protocol-specific mechanism by which the nested entity is identified. For example, in HTTP the `<PATH>` would include the `<SINGULAR>id` values of the parent entities. If any of those entities have REQUIRED attributes whose values cannot be populated by the server or by defaults, then they cannot be implicitly created, and would need to be created directly. This also means that the creation of the original entity would fail and generate an error ([required_attribute_missing](./spec.md#required_attribute_missing)) for the appropriate parent entity.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Nested creation stages missing parents with path-derived identifiers. Tests cover a complete nested creation, rejection and rollback when the implicit Group has an unsatisfied required attribute (including the Group error subject), and successful creation when its default supplies that attribute.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ImplicitParentsDefaultVersionAndRetentionAreAtomic",
+          "ImplicitParentWithUnsatisfiedRequiredAttributeFailsAtThatParentAndRollsBack",
+          "DefaultSatisfiesRequiredAttributeForImplicitParentCreation"
+        ],
         "nativeEvidence": []
       }
     },
