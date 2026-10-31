@@ -18,7 +18,7 @@ public sealed class BuiltInRegistryResourceValidator : IRegistryResourceValidato
     private static readonly IReadOnlyList<string> s_formats = Array.AsReadOnly(new[]
     {
         "JsonSchema/draft-07", "JsonSchema/draft/2019-09", "JsonSchema/draft/2020-12",
-        "XSD/1.0", "Avro/1.8.2", "Avro/1.11.0", "Protobuf/2", "Protobuf/3",
+        "XSD/1.0", "Avro/1.8.2", "Avro/1.11.0", "Protobuf/2", "Protobuf/3", "gRPC/proto3",
         "JsonStructure", "JsonStructure/draft-04"
     });
     private static readonly IReadOnlyList<string> s_modes = Array.AsReadOnly(new[]

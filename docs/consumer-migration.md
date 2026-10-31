@@ -272,6 +272,11 @@ The root must explicitly declare Proto3 syntax. Missing dependencies remain
 `Indeterminate`, while unsupported constructs remain `Unsupported`.
 This profile does not add binary descriptor validation, operation selection
 or a gRPC transport.
+The opt-in `BuiltInRegistryResourceValidator` also advertises this profile.
+Successful source checks produce `formatvalidated: true`; invalid source
+rejects publication without adding a Version or event. Compatibility retains
+the conservative exact-byte identity policy: changed source is unchecked in
+non-strict mode and rejected in strict mode, even when only whitespace changes.
 
 `ApiOperationDocumentResolver.Capabilities` advertises finite parser and retrieval
 budgets: 1 MiB per document, 4 MiB total, 100,000 parsed JSON values, JSON nesting

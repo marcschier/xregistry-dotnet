@@ -1054,13 +1054,17 @@ var options = new RegistryEngineOptions
 ```
 
 It uses `BuiltInDocumentValidator.ValidateAsync` for the qualified JSON Schema,
-XSD 1.0, Avro, Protobuf and JSON Structure variants, and
+XSD 1.0, Avro, Protobuf, `gRPC/proto3` and JSON Structure variants, and
 `BuiltInDocumentCompatibilityValidator.CheckAsync` with the actual nearest-first
 `ancestorid` chain captured before retention. Direct modes compare the immediate
 ancestor; transitive modes require the complete candidate ancestor history.
 History exhaustion never silently truncates a transitive check into a direct
 one. Cross-format or externally unavailable history remains explicitly
 unsupported/indeterminate, without fetching it.
+The adapter advertises `gRPC/proto3` only for bounded source validation under
+the Proto3 policy with a root-service requirement. Invalid source rejects
+publication in either strictness mode. Descriptor sets and RPC operation
+selection are not advertised.
 
 Avro uses the supplied reader/writer resolution for all six directional and
 transitive modes. **Other formats implement validated exact-byte identity only.**

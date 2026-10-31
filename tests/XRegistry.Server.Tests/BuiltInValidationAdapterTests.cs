@@ -108,6 +108,7 @@ public class BuiltInValidationAdapterTests
     [Arguments("Avro/1.11.0", "\"int\"")]
     [Arguments("Protobuf/2", """syntax = "proto2"; message Row { optional int32 id = 1; }""")]
     [Arguments("Protobuf/3", """syntax = "proto3"; message Row { int32 id = 1; }""")]
+    [Arguments("gRPC/proto3", """syntax = "proto3"; message Row {} service S { rpc Get(Row) returns(Row); }""")]
     [Arguments("JsonStructure", """{"$schema":"https://json-structure.org/meta/core/v0/#","$id":"urn:test:row","name":"Row","type":"string"}""")]
     [Arguments("JsonStructure/draft-04", """{"$schema":"https://json-structure.org/meta/core/v0/#","$id":"urn:test:row","name":"Row","type":"string"}""")]
     public async Task AllQualifiedSyntaxFamiliesProduceValidatedMetadata(string format, string document)
@@ -118,6 +119,72 @@ public class BuiltInValidationAdapterTests
         await Assert.That(result.Metadata!.RootElement.GetProperty("formatvalidated").GetBoolean()).IsTrue();
         await Assert.That(result.Metadata.RootElement.TryGetProperty("formatvalidatedreason", out _)).IsFalse();
         await Assert.That(result.Metadata.RootElement.TryGetProperty("compatibilityvalidated", out _)).IsFalse();
+    }
+
+    [Test]
+    public async Task GrpcSourceValidationIsAdvertisedByTheOptInAdapter()
+    {
+        var adapter = new BuiltInRegistryResourceValidator();
+        await Assert.That(adapter.Formats.Contains("gRPC/proto3")).IsTrue();
+        await Assert.That(adapter.Compatibilities.ContainsKey("gRPC/proto3")).IsTrue();
+        await Assert.That(adapter.Compatibilities["gRPC/proto3"].Contains("full")).IsTrue();
+        await Assert.That(adapter.Formats.Contains("gRPC/descriptor-set")).IsFalse();
+        await Assert.That(adapter.Formats.Contains("gRPC/proto2")).IsFalse();
+        await Assert.That(adapter.Formats.Contains("gRPC/editions")).IsFalse();
+    }
+
+    [Test]
+    [Arguments("""syntax='proto3'; message Row {}""")]
+    [Arguments("""syntax='proto2'; service S {}""")]
+    [Arguments("""syntax='proto3'; service S { rpc Get(Missing) returns(Missing); }""")]
+    public async Task InvalidGrpcSourceRejectsWithoutPublishingMetadataOrEvents(string document)
+    {
+        foreach (var strict in new[] { false, true })
+        {
+            var engine = ValidatingEngine(strict: strict);
+            var metadata = "{\"format\":\"gRPC/proto3\",\"schemabase64\":\"" +
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(document)) + "\"}";
+            await ExpectCode(() => Send(engine, RegistryAction.Replace, "/sets/g/schemas/s$details", metadata),
+                "format_violation");
+            await Assert.That((await Send(engine, RegistryAction.Read, "/")).Metadata!.RootElement
+                .GetProperty("setscount").GetInt32()).IsEqualTo(0);
+            await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(0);
+        }
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task GrpcCompatibilityProvesOnlyExactBytesAndPreservesFailedPublication(bool strict)
+    {
+        const string original = "syntax='proto3'; service S {}";
+        const string changed = "syntax='proto3'; service S { }";
+        var engine = ValidatingEngine(strict: strict);
+        string Metadata(string version, string source, bool meta = false) =>
+            "{\"versionid\":\"" + version + "\",\"format\":\"gRPC/proto3\",\"schemabase64\":\"" +
+            Convert.ToBase64String(Encoding.UTF8.GetBytes(source)) + "\"" +
+            (meta ? ",\"meta\":{\"compatibility\":\"full\"}" : "") + "}";
+        await Send(engine, RegistryAction.Replace, "/sets/g/schemas/s$details", Metadata("v1", original, true));
+        var same = await Send(engine, RegistryAction.Post, "/sets/g/schemas/s$details", Metadata("v2", original));
+        await Assert.That(same.Metadata!.RootElement.GetProperty("formatvalidated").GetBoolean()).IsTrue();
+        await Assert.That(same.Metadata.RootElement.GetProperty("compatibilityvalidated").GetBoolean()).IsTrue();
+        if (strict)
+        {
+            await ExpectCode(() => Send(engine, RegistryAction.Post, "/sets/g/schemas/s$details",
+                Metadata("v3", changed)), "compatibility_unknown");
+            var retained = (await Send(engine, RegistryAction.Read, "/sets/g/schemas/s$details")).Metadata!.RootElement;
+            await Assert.That(retained.GetProperty("versionid").GetString()).IsEqualTo("v2");
+            await Assert.That(retained.GetProperty("versionscount").GetInt32()).IsEqualTo(2);
+            await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(2);
+        }
+        else
+        {
+            var accepted = await Send(engine, RegistryAction.Post, "/sets/g/schemas/s$details", Metadata("v3", changed));
+            await Assert.That(accepted.Metadata!.RootElement.GetProperty("formatvalidated").GetBoolean()).IsTrue();
+            await Assert.That(accepted.Metadata.RootElement.GetProperty("compatibilityvalidated").GetBoolean()).IsFalse();
+            await Assert.That(accepted.Metadata.RootElement.GetProperty("compatibilityvalidatedreason").GetString()!)
+                .Contains("compatibility.policy");
+        }
     }
 
     [Test]

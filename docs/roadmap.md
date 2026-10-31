@@ -261,6 +261,10 @@ vocabulary/source mapping. It does not supply their implementation.
   cannot satisfy the root requirement; imported types retain syntax and
   visibility checks. Descriptor-set validation and gRPC operation selection
   remain unsupported.
+  The opt-in server adapter advertises the source profile and validates
+  publication through the same parser. Its compatibility evaluator proves only
+  exact-byte identity; changed source remains unchecked or rejected according
+  to strictness.
 - Add full API format validators and the remaining language resolvers. The
   OpenAPI/Swagger, OpenRPC, Avro Protocol and assembled Smithy JSON selectors
   do not establish full format validation, YAML support, or gRPC, Thrift,

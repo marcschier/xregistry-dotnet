@@ -10815,7 +10815,9 @@
           "UppercaseTransitiveModeStillChecksEveryActualAncestor",
           "DisabledFormatsAndCompatibilityModesDoNotBecomeSuccessfulValidation",
           "NonAvroCompatibilityEstablishesOnlyValidatedByteIdentity",
-          "StrictNonAvroChangesAreUnsupportedRatherThanReportedAsCompatible"
+          "StrictNonAvroChangesAreUnsupportedRatherThanReportedAsCompatible",
+          "GrpcSourceValidationIsAdvertisedByTheOptInAdapter",
+          "GrpcCompatibilityProvesOnlyExactBytesAndPreservesFailedPublication"
         ],
         "nativeEvidence": []
       }
@@ -12864,7 +12866,8 @@
         "testIds": [
           "InvalidSyntaxRejectsPublicationInsteadOfBecomingAValidationFlag",
           "UnsupportedVariantsRemainUncheckedWithReasonsAndStrictModeRejects",
-          "AllQualifiedSyntaxFamiliesProduceValidatedMetadata"
+          "AllQualifiedSyntaxFamiliesProduceValidatedMetadata",
+          "InvalidGrpcSourceRejectsWithoutPublishingMetadataOrEvents"
         ],
         "nativeEvidence": []
       }
