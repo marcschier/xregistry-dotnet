@@ -26,6 +26,8 @@ public class RegistryModelTests
         await Assert.That(resource.MaxVersions).IsEqualTo(BigInteger.Zero);
         await Assert.That(resource.HasDocument).IsTrue();
         await Assert.That(resource.SetVersionId).IsTrue();
+        await Assert.That(resource.ValidateFormat).IsFalse();
+        await Assert.That(resource.ValidateCompatibility).IsFalse();
         await Assert.That(resource.Annotations.Description).IsNull();
         await Assert.That(resource.Annotations.ModelVersion).IsNull();
         await Assert.That(resource.Annotations.Labels.Count).IsEqualTo(0);

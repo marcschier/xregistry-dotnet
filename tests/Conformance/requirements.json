@@ -32461,16 +32461,17 @@
       "text": "- OPTIONAL.",
       "review": {
         "status": "reviewed",
-        "note": "Validateformat is an optional Boolean. The compiler supports explicit true and ordinary models omit it; however the minimal model test does not directly assert the omitted flag or an engine no-validation call count.",
+        "note": "CompilesIndependentMinimalSpecModel asserts validateformat defaults to false. EnforcesVersionAndDocumentControls covers the enabled setting.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "EnforcesVersionAndDocumentControls"
+          "EnforcesVersionAndDocumentControls",
+          "CompilesIndependentMinimalSpecModel"
         ],
         "nativeEvidence": []
       }
@@ -32671,16 +32672,17 @@
       "text": "- OPTIONAL.",
       "review": {
         "status": "reviewed",
-        "note": "Validatecompatibility is optional and false unless supplied. Explicit true is directly asserted with validateformat:true; the inspected compiler tests do not directly observe the omitted ValidateCompatibility value.",
+        "note": "CompilesIndependentMinimalSpecModel asserts validatecompatibility defaults to false. EnforcesVersionAndDocumentControls covers the enabled setting.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "EnforcesVersionAndDocumentControls"
+          "EnforcesVersionAndDocumentControls",
+          "CompilesIndependentMinimalSpecModel"
         ],
         "nativeEvidence": []
       }
