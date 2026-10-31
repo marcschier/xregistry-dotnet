@@ -60525,13 +60525,21 @@
       ],
       "text": "Implementations MAY (but are NOT REQUIRED) to validate cross-entity constraints that might be violated due to changes in a referenced entity. For example, [Endpoint's `envelope`](../endpoint/spec.md#envelope) attribute mandates that all Messages in that Endpoint use that same `envelope` value. One of those Messages might have a `basemessage` value that points to a Message that breaks that rule. For a variety of reasons (e.g. authorization constraints), server implementations might not be able to verify this constraint. Likewise, the same situation might occur via the use of `xref`. Clients need to be aware of these possibilities.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Cross-entity constraint validation is optional. This implementation elects to enforce reverse Group constraints on referenced targets; the tests exercise invalidating writes, authorization limits, atomic final-state evaluation, and cancellation rollback. The optional spec language does not require every implementation to provide this behavior.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "TargetMutationsCannotInvalidateAReferringGroupsConstraints",
+          "ReferringGroupChangesCannotInvalidateItsExistingAlias",
+          "CreatingConstrainedAliasesRequiresReadAccessBeforeEvaluatingTargetValues",
+          "AtomicTargetAndReferringGroupUpdatesValidateTheirFinalValues",
+          "CancellationDuringAliasAuthorizationPublishesNeitherAliasNorEvents"
+        ],
         "nativeEvidence": []
       }
     },
