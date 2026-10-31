@@ -84186,13 +84186,17 @@
       ],
       "text": "- `semver` - Ancestor Processing: The `ancestorid` value of each Version MUST either be its `versionid` value (if it is the oldest Version), or the `versionid` of the next oldest Version per the [Semantic Versioning](https://semver.org/) specification's \"precedence\" ordering rules. - When this `versionmode` is used, the `singleversionroot` aspect MUST be set to `true`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "SemverAncestryUsesPrecedenceThroughBatchDeletionRetentionAndRestart asserts compiled singleversionroot true and every predecessor in a reverse-authored fifteen-Version batch: numeric prerelease ordering, numeric before nonnumeric, ASCII lexical ordering, longer prerelease lists, release precedence, patch/minor/major and arbitrary-precision components. Authored self-root ancestors are replaced by the SemVer chain. Invalid numeric components and prerelease syntax reject without changing export/events. Middle deletion reconnects the chain; reducing retention to three preserves the oldest sticky default and the two greatest Versions. Exact ancestry, default membership and event counts persist through restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SemverAncestryUsesPrecedenceThroughBatchDeletionRetentionAndRestart"
+        ],
         "nativeEvidence": []
       }
     },
