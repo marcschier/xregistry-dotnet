@@ -32765,14 +32765,16 @@
       "text": "- A value of `false` indicates that the server MUST NOT perform any `compatibility` checking for instances of this Resource type.",
       "review": {
         "status": "reviewed",
-        "note": "The adapter avoids compatibility checks when ValidateCompatibility is false, and ApplyValidation removes unrequested compatibility flags. No direct engine test with validateformat:true, validatecompatibility:false and a counting compatibility validator proves this prohibition independently.",
+        "note": "Engine tests count real dependency retrievals through the built-in adapter: disabling compatibility retains syntax-only acquisition counts across publication, a new Version and document replacement. Enabled controls perform the additional compatibility acquisitions. Both strictness modes preserve exact bytes and the declared compatibility mode; disabled compatibility produces no result flags or reasons.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DisabledCompatibilityAvoidsDependencyRechecksWhileFormatValidationRemainsEnabled"
+        ],
         "nativeEvidence": []
       }
     },

@@ -19,6 +19,57 @@ public class BuiltInValidationAdapterTests
         """;
 
     [Test]
+    [Arguments(false, false)]
+    [Arguments(false, true)]
+    [Arguments(true, false)]
+    [Arguments(true, true)]
+    public async Task DisabledCompatibilityAvoidsDependencyRechecksWhileFormatValidationRemainsEnabled(
+        bool validateCompatibility, bool strict)
+    {
+        const string reference = "https://schemas.example/item";
+        var calls = 0;
+        var engine = ValidatingEngine(strict: strict, validateCompatibility: validateCompatibility, validationOptions: new()
+        {
+            ResolveReference = (uri, _) =>
+            {
+                if (uri != reference) { throw new InvalidOperationException("An unexpected dependency was requested."); }
+                calls++;
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes("""{"type":"string"}"""));
+            }
+        });
+        await Send(engine, RegistryAction.Replace, "/sets/g/schemas/s$details", """
+            {"versionid":"v1","format":"JsonSchema/draft-07","schema":{"$ref":"https://schemas.example/item"},
+             "meta":{"compatibility":"full"}}
+            """);
+        await Assert.That(calls).IsEqualTo(validateCompatibility ? 2 : 1);
+        await Send(engine, RegistryAction.Post, "/sets/g/schemas/s$details", """
+            {"versionid":"v2","format":"JsonSchema/draft-07","schema":{"$ref":"https://schemas.example/item"}}
+            """);
+        await Assert.That(calls).IsEqualTo(validateCompatibility ? 6 : 3);
+        await Send(engine, RegistryAction.Patch, "/sets/g/schemas/s/versions/v1$details", """
+            {"schema":{"$ref":"https://schemas.example/item"}}
+            """);
+        await Assert.That(calls).IsEqualTo(validateCompatibility ? 10 : 5);
+        foreach (var version in new[] { "v1", "v2" })
+        {
+            var result = await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/versions/" + version + "$details");
+            await Assert.That(result.Metadata!.RootElement.GetProperty("formatvalidated").GetBoolean()).IsTrue();
+            await Assert.That(result.Metadata.RootElement.TryGetProperty("formatvalidatedreason", out _)).IsFalse();
+            await Assert.That(result.Metadata.RootElement.TryGetProperty("compatibilityvalidated", out var flag))
+                .IsEqualTo(validateCompatibility);
+            if (validateCompatibility) { await Assert.That(flag.GetBoolean()).IsTrue(); }
+            await Assert.That(result.Metadata.RootElement.TryGetProperty("compatibilityvalidatedreason", out _)).IsFalse();
+            var stored = await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/versions/" + version);
+            using var bytes = stored.Document!.OpenRead();
+            using var reader = new StreamReader(bytes, Encoding.UTF8);
+            await Assert.That(await reader.ReadToEndAsync()).IsEqualTo("""{"$ref":"https://schemas.example/item"}""");
+        }
+        var meta = await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/meta");
+        await Assert.That(meta.Metadata!.RootElement.GetProperty("compatibility").GetString()).IsEqualTo("full");
+        await Assert.That(calls).IsEqualTo(validateCompatibility ? 10 : 5);
+    }
+
+    [Test]
     public async Task InvalidSyntaxRejectsPublicationInsteadOfBecomingAValidationFlag()
     {
         var engine = ValidatingEngine();
@@ -436,9 +487,14 @@ public class BuiltInValidationAdapterTests
 
     internal static RegistryEngine ValidatingEngine(bool strict = false, RegistryLimits? limits = null,
         DocumentValidationOptions? validationOptions = null, IRegistryPersistence? persistence = null,
-        bool hasDocument = true, int maxVersions = 0)
+        bool hasDocument = true, int maxVersions = 0, bool validateCompatibility = true)
     {
         var model = strict ? ValidatedModel.Replace("\"strictvalidation\":false", "\"strictvalidation\":true", StringComparison.Ordinal) : ValidatedModel;
+        if (!validateCompatibility)
+        {
+            model = model.Replace("\"validatecompatibility\":true", "\"validatecompatibility\":false", StringComparison.Ordinal);
+        }
+
         if (!hasDocument)
         {
             model = model.Replace("\"singular\":\"schema\"", "\"singular\":\"schema\",\"hasdocument\":false", StringComparison.Ordinal);
