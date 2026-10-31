@@ -83327,13 +83327,17 @@
       ],
       "text": "- OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "RetentionBoundariesPreserveExactNewestChainAcrossVersionModes omits maxversions from authored manual, createdat, modifiedat and semver models. Compilation accepts each omission with effective zero; three successive publications retain all Versions and exact ancestry/default membership through restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "RetentionBoundariesPreserveExactNewestChainAcrossVersionModes"
+        ],
         "nativeEvidence": []
       }
     },
@@ -83358,13 +83362,17 @@
       ],
       "text": "- When not specified, the default value MUST be zero (`0`).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The retention boundary test directly asserts compiled BigInteger zero for omitted maxversions in all four supported modes, alongside explicit zero/one/two controls. Omission behaves like explicit zero through first, second and third publications and restart; all Version identities, names, ancestry, membership, export and event counts are checked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "RetentionBoundariesPreserveExactNewestChainAcrossVersionModes"
+        ],
         "nativeEvidence": []
       }
     },

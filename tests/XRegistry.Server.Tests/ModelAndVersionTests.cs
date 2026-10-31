@@ -12,15 +12,19 @@ namespace XRegistry.Server.Tests;
 public class ModelAndVersionTests
 {
     [Test]
+    [Arguments("manual", -1)]
     [Arguments("manual", 0)]
     [Arguments("manual", 1)]
     [Arguments("manual", 2)]
+    [Arguments("createdat", -1)]
     [Arguments("createdat", 0)]
     [Arguments("createdat", 1)]
     [Arguments("createdat", 2)]
+    [Arguments("modifiedat", -1)]
     [Arguments("modifiedat", 0)]
     [Arguments("modifiedat", 1)]
     [Arguments("modifiedat", 2)]
+    [Arguments("semver", -1)]
     [Arguments("semver", 0)]
     [Arguments("semver", 1)]
     [Arguments("semver", 2)]
@@ -28,10 +32,13 @@ public class ModelAndVersionTests
     {
         var model = """
             {"groups":{"teams":{"singular":"team","resources":{"notes":{
-              "singular":"note","hasdocument":false,"maxversions":LIMIT,"versionmode":"MODE"
+              "singular":"note","hasdocument":false,"versionmode":"MODE" LIMIT
             }}}}}
-            """.Replace("LIMIT", limit.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal)
+            """.Replace("LIMIT", limit < 0 ? "" : ",\"maxversions\":" +
+                    limit.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal)
                 .Replace("MODE", mode, StringComparison.Ordinal);
+        await Assert.That(RegistryModel.Compile(RegistryJson.Parse(model)).Groups["teams"].Resources["notes"].MaxVersions)
+            .IsEqualTo(new System.Numerics.BigInteger(Math.Max(0, limit)));
         var store = new InMemoryRegistryPersistence();
         var options = new RegistryEngineOptions
         {
@@ -47,7 +54,7 @@ public class ModelAndVersionTests
             await Send(engine, RegistryAction.Replace, "/teams/g/notes/n/versions/" + id,
                 "{\"name\":\"" + id + "\",\"createdat\":\"2040-01-0" + published +
                 "T00:00:00Z\",\"modifiedat\":\"2040-01-0" + published + "T00:00:00Z\"}");
-            var first = limit == 0 ? 1 : Math.Max(1, published - limit + 1);
+            var first = limit <= 0 ? 1 : Math.Max(1, published - limit + 1);
             var exported = (await Send(engine, RegistryAction.Read, "/export")).Metadata!.RootElement.GetRawText();
             foreach (var current in new[] { engine, new RegistryEngine(options, store, new PermitPolicy()) })
             {
