@@ -22,7 +22,7 @@ public class BridgeViewTests
         using var response = await client.GetAsync("/registry?doc&inline=dirs.files.versions.file,dirs.files.meta");
         await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
         var root = await BridgeFixture.Json(response);
-        await Assert.That(root.GetProperty("self").GetString()).IsEqualTo("#/");
+        await Assert.That(root.GetProperty("self").GetString()).IsEqualTo("#");
         await Assert.That(root.GetProperty("dirsurl").GetString()).IsEqualTo("#/dirs");
         await Assert.That(root.GetProperty("dirscount").GetInt32()).IsEqualTo(1);
         var resource = root.GetProperty("dirs").GetProperty("g").GetProperty("files").GetProperty("shared");
@@ -76,7 +76,7 @@ public class BridgeViewTests
         using var response = await client.GetAsync("/registry/dirs/g/files/alias?doc&inline=*");
         await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
         var alias = await BridgeFixture.Json(response);
-        await Assert.That(alias.GetProperty("self").GetString()).IsEqualTo("#/");
+        await Assert.That(alias.GetProperty("self").GetString()).IsEqualTo("#");
         await Assert.That(alias.GetProperty("meta").GetProperty("self").GetString()).IsEqualTo("#/meta");
         await Assert.That(alias.GetProperty("meta").GetProperty("xref").GetString()).IsEqualTo("/dirs/g/files/real");
         await Assert.That(alias.TryGetProperty("versions", out _)).IsFalse();
@@ -91,10 +91,10 @@ public class BridgeViewTests
     [Arguments("/dirs?doc&inline=files.meta,files.versions", "g", "#/g")]
     [Arguments("/dirs/g?doc&inline=files.meta,files.versions", "files/shared", "#/files/shared")]
     [Arguments("/dirs/g/files?doc&inline=meta,versions", "shared", "#/shared")]
-    [Arguments("/dirs/g/files/shared?doc&inline=meta,versions", "", "#/")]
-    [Arguments("/dirs/g/files/shared/meta?doc", "", "#/")]
+    [Arguments("/dirs/g/files/shared?doc&inline=meta,versions", "", "#")]
+    [Arguments("/dirs/g/files/shared/meta?doc", "", "#")]
     [Arguments("/dirs/g/files/shared/versions?doc", "v1", "#/v1")]
-    [Arguments("/dirs/g/files/shared/versions/v1?doc", "", "#/")]
+    [Arguments("/dirs/g/files/shared/versions/v1?doc", "", "#")]
     public async Task EveryEntityAndCollectionUsesItsActualResponseRoot(string path, string location, string expected)
     {
         var source = new ControlledSource("local", "v1", ["shared"]);

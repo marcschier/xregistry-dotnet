@@ -78,7 +78,7 @@ public class ProducerRepresentationTests
         }
 
         await Assert.That(result.Metadata.GetProperty("self").GetString())
-            .IsEqualTo(doc ? "#/" : "https://view.example/registry");
+            .IsEqualTo(doc ? "#" : "https://view.example/registry");
         var shallow = await view.ReadAsync(RegistryPath.Parse("/"));
         await Assert.That(shallow.Metadata.TryGetProperty("model", out _)).IsFalse();
         await Assert.That(shallow.Metadata.TryGetProperty("modelsource", out _)).IsFalse();

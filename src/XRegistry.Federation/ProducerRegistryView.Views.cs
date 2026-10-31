@@ -302,7 +302,7 @@ public sealed partial class ProducerRegistryView
 
         private static bool IsCollection(RegistryPath path) =>
             path.Kind is RegistryPathKind.GroupCollection or RegistryPathKind.ResourceCollection or RegistryPathKind.VersionCollection;
-        private static string Relative(string pointer) => pointer.Length == 0 ? "#/" : "#" + pointer;
+        private static string Relative(string pointer) => "#" + pointer;
         private static string PointerToken(string value) => Uri.EscapeDataString(value.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal));
         private static FederationException CannotDocAlias() => new(FederationErrorCode.UnsupportedOperation,
             "An alias has no local Version hierarchy in Core document view.", "cannot_doc_xref");

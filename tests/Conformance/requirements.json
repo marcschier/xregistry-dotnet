@@ -75985,13 +75985,22 @@
       ],
       "text": "When a relative URL references the root of the response, it MUST be `#`, which represents an empty JSON Pointer selecting the whole document, not `#/`, which selects an object member with an empty name.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The empty JSON Pointer is `#`; `#/` denotes a different target. Verified root self links for Registry, Group, Resource, Meta, Version, and alias document views against the pinned wording.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
+          "DocumentAliasStaysUnresolvedAndAliasVersionViewsHaveSpecificCoreError",
+          "EveryEntityAndCollectionUsesItsActualResponseRoot",
+          "GroupRequiredMetadataUsesCanonicalEntityValuesInBothViews",
+          "DocVersionOmitsValidationReasonsButApiRetainsThem"
+        ],
         "nativeEvidence": []
       }
     },

@@ -618,7 +618,7 @@ public sealed partial class RegistryEngine
         }
 
         private static string Pointer(string segment) => segment.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal);
-        private static string Relative(string pointer) => pointer.Length == 0 ? "#/" : "#" + pointer;
+        private static string Relative(string pointer) => "#" + pointer;
 
         private long ResponseSize(JsonNode? node)
         {

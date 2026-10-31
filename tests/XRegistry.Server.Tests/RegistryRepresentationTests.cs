@@ -73,7 +73,7 @@ public class RegistryRepresentationTests
         var doc = (await Send(engine, RegistryAction.Read, "/teams/g", null,
             new KeyValuePair<string, string?>("doc", null))).Metadata!.RootElement;
         await Assert.That(doc.GetProperty("teamid").GetString()).IsEqualTo("g");
-        await Assert.That(doc.GetProperty("self").GetString()).IsEqualTo("#/");
+        await Assert.That(doc.GetProperty("self").GetString()).IsEqualTo("#");
         await Assert.That(doc.TryGetProperty("shortself", out _)).IsFalse();
         await Assert.That(doc.GetProperty("xid").GetString()).IsEqualTo("/teams/g");
         await Assert.That(doc.GetProperty("epoch").GetInt32()).IsEqualTo(0);
@@ -142,7 +142,7 @@ public class RegistryRepresentationTests
         await Assert.That(doc.TryGetProperty("formatvalidatedreason", out _)).IsFalse();
         await Assert.That(doc.TryGetProperty("compatibilityvalidatedreason", out _)).IsFalse();
         await Assert.That(doc.GetProperty("versionid").GetString()).IsEqualTo("1");
-        await Assert.That(doc.GetProperty("self").GetString()).IsEqualTo("#/");
+        await Assert.That(doc.GetProperty("self").GetString()).IsEqualTo("#");
         await Assert.That((await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText())
             .IsEqualTo(api.GetRawText());
     }
