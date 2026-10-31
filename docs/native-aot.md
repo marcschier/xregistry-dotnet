@@ -139,8 +139,8 @@ development cell, not requirement-level release qualification.
 
 ## Current evidence and uncovered cells
 
-The complete Validation suite at `78411b589838f1ccce945df9d45dafed194636dd`
-passed on Windows x64 under .NET 8 and .NET 10: 5,516 cases and 949 methods per
+The complete Validation suite at `cec0d03dd3ce180d8e66a2e0d40b9171ee18479f`
+passed on Windows x64 under .NET 8 and .NET 10: 5,665 cases and 978 methods per
 framework. The runs include the Protobuf declaration-scope, import-visibility,
 cross-syntax enum, adjacent-literal, typed-constant, reserved-range,
 option-target and leading-decimal corrections, RPC empty statements, grammar
@@ -148,14 +148,17 @@ token-kind checks, file-wide package scope, explicit unpacked-field constraints
 and enum option policy outcomes, floating-default radix checks, character and
 Unicode scalar decoding, and byte-preserving hexadecimal/octal escape decoding.
 Text consumers check UTF-8 after adjacent literals are combined; bytes defaults
-retain arbitrary octets. These cases ran alongside the earlier API,
+retain arbitrary octets. The refreshed runs also include message-only `lazy`,
+64-bit integral `jstype`, singular declaration options, shared option-name
+grammar, decoded NUL rejection in `json_name`, RPC `idempotency_level` and
+field/enum-value `debug_redact` checks. These cases ran alongside the earlier API,
 Smithy and Avro checks. Both publications ran ILC without
 IL diagnostics. Native executable, managed control, report, proof and receipt
 hashes match; regenerated receipts and complete native/managed case inventories
 agree. Both managed proofs were rejected, and source inventories remained
 unchanged. Evidence is retained at
-`D:\temp\xregistry-validation-78411b5-net8\native-suites-cmbqssw4` and
-`D:\temp\xregistry-validation-78411b5-net10\native-suites-peen6yzs`.
+`D:\temp\xregistry-validation-cec0d03-net8\native-suites-3zfh9ljf` and
+`D:\temp\xregistry-validation-cec0d03-net10\native-suites-gfi3d1u1`.
 These selected-project runs do not refresh other platforms or complete
 thirteen-suite cells, or promote requirement-level qualification.
 
