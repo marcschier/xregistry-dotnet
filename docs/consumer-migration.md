@@ -34,6 +34,20 @@ Legacy prepare/replay/incarnation/generation extensions are not standard
 xRegistry HTTP. The in-process persistence/response preparation methods do not
 imply proprietary wire endpoints.
 
+For `Protobuf/2` and `Protobuf/3`, schema validation checks declaration names
+in their containing scope. Fields, oneofs, nested types and enum values cannot
+reuse a name in the same message; enum values share their enum's containing
+scope. Package-level types, services and enum values are also checked across
+caller-supplied imports. Collisions report `Invalid` with `protobuf.duplicate`,
+regardless of declaration order. Names remain case-sensitive, and reuse in
+different containing messages or packages is valid. Registering a service name
+does not make it a message type. These checks do not implement Editions,
+custom extensions, complete import-visibility rules or gRPC API selection.
+The [Proto2](https://protobuf.dev/reference/protobuf/proto2-spec/#message-definition)
+and [Proto3](https://protobuf.dev/reference/protobuf/proto3-spec/#message-definition)
+specifications define the message-name rules; the publisher also explains
+[enum-value scoping](https://protobuf.dev/programming-guides/style/#enum-value-prefixing).
+
 `ApiOperationDocumentResolver.Capabilities` advertises finite parser and retrieval
 budgets: 1 MiB per document, 4 MiB total, 100,000 parsed JSON values, JSON nesting
 and reference-chain limits of 64, at most 32 external documents, and a 30-second

@@ -43792,7 +43792,7 @@
       "text": "A URI, like the Message Registry's [`dataschemauri`](../message/spec.md#dataschemauri), that points to a Protobuf Schema document MUST reference a Protobuf `message` declaration contained in the schema document using a URI fragment suffix `[:]{message-name}`. The ':' character is used as a separator when the URI already contains a fragment.",
       "review": {
         "status": "reviewed",
-        "note": "The schema syntax validator checks Protobuf message declarations, but no direct public-domain test proves enforcement or resolution of the required message-name suffix on Message dataschemauri references. A valid standalone Protobuf document or generic URI is not sufficient evidence. This obligation remains open rather than being inferred from the protocol parser. No all-platform or whole-domain qualification is claimed.",
+        "note": "The schema syntax validator checks Protobuf message declarations and exact-case declaration-scope collisions across fields, oneofs, nested types, enum values, services and supplied imports. These syntax checks do not prove enforcement or resolution of the required message-name suffix on Message dataschemauri references. A valid standalone Protobuf document or generic URI is not sufficient evidence. This obligation remains open rather than being inferred from the protocol parser. No all-platform or whole-domain qualification is claimed.",
         "roles": [
           "client",
           "producer"
@@ -43802,7 +43802,12 @@
         "status": "pending",
         "testIds": [
           "EveryPublishedProtobufSchemaExampleIsValid",
-          "SuppliedImportBindsTheDeclaredMessageNotArbitraryText"
+          "SuppliedImportBindsTheDeclaredMessageNotArbitraryText",
+          "MessageSymbolsRejectCrossKindNameCollisionsInBothSyntaxProfiles",
+          "PackageSymbolsRejectServiceTypeAndEnumValueNameCollisions",
+          "SymbolsPreserveContainingScopeCaseAndMessageTypeResolution",
+          "ServiceSymbolsDoNotBindAsMessageTypes",
+          "ImportedSymbolsUseTheDeclaredPackageScope"
         ],
         "nativeEvidence": []
       }

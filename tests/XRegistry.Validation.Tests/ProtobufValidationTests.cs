@@ -60,6 +60,103 @@ public class ProtobufValidationTests
     }
 
     [Test]
+    [Arguments("optional string foo=1; message foo {}")]
+    [Arguments("message foo {} optional string foo=1;")]
+    [Arguments("optional string foo=1; enum foo { ZERO=0; }")]
+    [Arguments("enum foo { ZERO=0; } optional string foo=1;")]
+    [Arguments("optional string foo=1; enum E { foo=0; }")]
+    [Arguments("enum E { foo=0; } optional string foo=1;")]
+    [Arguments("oneof foo { string bar=1; } message foo {}")]
+    [Arguments("message foo {} oneof foo { string bar=1; }")]
+    [Arguments("oneof foo { string bar=1; } enum foo { ZERO=0; }")]
+    [Arguments("enum foo { ZERO=0; } oneof foo { string bar=1; }")]
+    [Arguments("oneof foo { string bar=1; } enum E { foo=0; }")]
+    [Arguments("enum E { foo=0; } oneof foo { string bar=1; }")]
+    [Arguments("message foo {} enum E { foo=0; }")]
+    [Arguments("enum E { foo=0; } message foo {}")]
+    [Arguments("enum E { foo=0; } enum Other { foo=0; }")]
+    [Arguments("oneof first { string foo=1; } enum E { foo=0; }")]
+    [Arguments("map<string,string> foo=1; message foo {}")]
+    [Arguments("enum E { foo=0; } map<string,string> foo=1;")]
+    [Arguments("enum E { option allow_alias=true; foo=0; bar=0; } enum Other { foo=0; }")]
+    public async Task MessageSymbolsRejectCrossKindNameCollisionsInBothSyntaxProfiles(string body)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var schema = $"syntax=\"proto{syntax}\"; message M {{ {body} }}";
+            var result = await new BuiltInDocumentValidator().ValidateAsync(
+                $"Protobuf/{syntax}", Encoding.UTF8.GetBytes(schema));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.duplicate");
+        }
+    }
+
+    [Test]
+    [Arguments("service S {} service S {}")]
+    [Arguments("service S {} message S {}")]
+    [Arguments("message S {} service S {}")]
+    [Arguments("service S {} enum S { ZERO=0; }")]
+    [Arguments("enum S { ZERO=0; } service S {}")]
+    [Arguments("enum E { S=0; } service S {}")]
+    [Arguments("service S {} enum E { S=0; }")]
+    public async Task PackageSymbolsRejectServiceTypeAndEnumValueNameCollisions(string declarations)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                Encoding.UTF8.GetBytes($"syntax=\"proto{syntax}\"; package example; {declarations}"));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.duplicate");
+        }
+    }
+
+    [Test]
+    public async Task SymbolsPreserveContainingScopeCaseAndMessageTypeResolution()
+    {
+        const string schema = """
+            syntax="proto3"; package example;
+            message First { message Value {} Value value=1; enum E { ZERO=0; } }
+            message Second { message Value {} Value value=1; enum E { ZERO=0; } }
+            service S { rpc Get(First) returns (Second); }
+            service s { rpc Get(Second) returns (First); }
+            """;
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3", Encoding.UTF8.GetBytes(schema));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("message M { S value=1; }")]
+    [Arguments("message M {} service Other { rpc Get(S) returns (M); }")]
+    public async Task ServiceSymbolsDoNotBindAsMessageTypes(string declarations)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            Encoding.UTF8.GetBytes($"syntax=\"proto3\"; service S {{}} {declarations}"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.type");
+    }
+
+    [Test]
+    [Arguments("example", DocumentValidationStatus.Invalid)]
+    [Arguments("other", DocumentValidationStatus.Valid)]
+    public async Task ImportedSymbolsUseTheDeclaredPackageScope(string importedPackage, DocumentValidationStatus expected)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            """syntax="proto3"; package example; import "other.proto"; message M {} service S {}"""u8.ToArray(),
+            new DocumentValidationOptions
+            {
+                ResolveReference = (name, _) => ValueTask.FromResult<ReadOnlyMemory<byte>?>(name == "other.proto"
+                    ? Encoding.UTF8.GetBytes($"syntax=\"proto3\"; package {importedPackage}; service S {{}}") : null)
+            });
+        await Assert.That(result.Status).IsEqualTo(expected);
+        if (expected == DocumentValidationStatus.Invalid)
+        {
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.duplicate");
+        }
+        else { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+    }
+
+    [Test]
     public async Task SuppliedImportBindsTheDeclaredMessageNotArbitraryText()
     {
         var source = Encoding.UTF8.GetBytes("""syntax="proto3"; import "child.proto"; message Parent { Child child=1; }""");

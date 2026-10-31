@@ -16,6 +16,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
         "fixed32", "fixed64", "sfixed32", "sfixed64", "bool", "string", "bytes"
     };
     private readonly Dictionary<string, Definition> _definitions = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _symbols = new(StringComparer.Ordinal);
     private readonly List<(string Type, string Scope, bool MessageOnly)> _references = [];
     private readonly List<Field> _fields = [];
     private readonly HashSet<string> _documents = new(StringComparer.Ordinal);
@@ -66,6 +67,13 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                 ValidateDefault(field, value, resolved);
             }
         }
+    }
+
+    private void RegisterSymbol(string name, string scope)
+    {
+        context.Work(name.Length + scope.Length + 1);
+        Require(_symbols.Add(scope.Length == 0 ? name : scope + "." + name),
+            "protobuf.duplicate", "Declaration names must be unique in their containing scope.");
     }
 
     private Definition? Resolve(string type, string scope)
@@ -354,11 +362,11 @@ internal sealed class ProtobufSyntax(ValidationContext context)
         private void Message(string scope)
         {
             var name = Identifier();
+            owner.RegisterSymbol(name, scope);
             var full = scope.Length == 0 ? name : scope + "." + name;
             Require(owner._definitions.TryAdd(full, new(false, isRoot)), "protobuf.duplicate", "The type name is duplicated.");
             Expect("{");
             var fields = new List<Field>();
-            var names = new HashSet<string>(StringComparer.Ordinal);
             var numbers = new HashSet<int>();
             var reservedNames = new HashSet<string>(StringComparer.Ordinal);
             var reservedNumbers = new List<(int First, int Last)>();
@@ -376,7 +384,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                 else if (Take("oneof"))
                 {
                     var oneof = Identifier();
-                    Require(names.Add(oneof), "protobuf.duplicate", "Oneof and field names must be unique.");
+                    owner.RegisterSymbol(oneof, full);
                     Expect("{");
                     while (!Take("}"))
                     {
@@ -396,8 +404,8 @@ internal sealed class ProtobufSyntax(ValidationContext context)
 
             void AddField(Field field)
             {
-                Require(names.Add(field.Name) && numbers.Add(field.Number),
-                    "protobuf.duplicate", "Message field names and numbers must be unique.");
+                owner.RegisterSymbol(field.Name, full);
+                Require(numbers.Add(field.Number), "protobuf.duplicate", "Message field numbers must be unique.");
                 fields.Add(field);
                 owner._fields.Add(field);
             }
@@ -484,6 +492,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
         private void Enumeration(string scope)
         {
             var name = Identifier();
+            owner.RegisterSymbol(name, scope);
             var definition = new Definition(true, isRoot);
             Require(owner._definitions.TryAdd(scope.Length == 0 ? name : scope + "." + name, definition),
                 "protobuf.duplicate", "An enum type name is duplicated.");
@@ -509,6 +518,8 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                 else
                 {
                     var member = Identifier();
+                    // Enum values occupy the enum's containing scope, not a scope named after the enum.
+                    owner.RegisterSymbol(member, scope);
                     Expect("=");
                     var number = Integer(Constant());
                     Require(number >= int.MinValue && number <= int.MaxValue, "protobuf.enum", "Enum values must be Int32.");
@@ -565,7 +576,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
 
         private void Service()
         {
-            Identifier();
+            owner.RegisterSymbol(Identifier(), _package);
             Expect("{");
             var methods = new HashSet<string>(StringComparer.Ordinal);
             while (!Take("}"))

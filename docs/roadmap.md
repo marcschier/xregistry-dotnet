@@ -150,6 +150,13 @@ vocabulary/source mapping. It does not supply their implementation.
   structured host logging after successful commit, without adding wire metadata.
   Other adapters need their own advisory delivery. WoT publication closure needs
   the four contracts above; do not substitute live targets for captured closure.
+- Complete Protobuf schema language coverage and import-visibility rules.
+  Proto2/Proto3 validation now checks exact-case name collisions across fields,
+  oneofs, nested types, enum values and services in their containing scopes,
+  including caller-supplied imports. Enum values occupy their enum's containing
+  scope; declarations in different messages or packages can reuse names.
+  Editions and custom extensions remain unsupported. This does not add gRPC
+  API operation selection.
 - Add full API format validators and the remaining language resolvers. The
   OpenAPI/Swagger, OpenRPC, Avro Protocol and assembled Smithy JSON selectors
   do not establish full format validation, YAML support, or gRPC, Thrift,
