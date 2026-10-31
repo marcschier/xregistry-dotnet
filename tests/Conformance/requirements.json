@@ -30280,15 +30280,18 @@
       "text": "- OPTIONAL.",
       "review": {
         "status": "reviewed",
-        "note": "Group labels use the same optional annotation map parser as root model labels, including nonempty keys and string values. Source/effective handling is implemented, but no Group-label assertion covers omission, empty map, empty value and rejection separately.",
+        "note": "GroupLabelsAreOptionalAndPreserveEmptyStringValues verifies omission, empty values and effective-model serialization. InvalidGroupLabelMapsFailAtTheirModelPaths checks empty keys and invalid map/value types.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "GroupLabelsAreOptionalAndPreserveEmptyStringValues",
+          "InvalidGroupLabelMapsFailAtTheirModelPaths"
+        ],
         "nativeEvidence": []
       }
     },

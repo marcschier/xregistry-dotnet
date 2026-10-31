@@ -71,6 +71,39 @@ public class RegistryModelTests
     }
 
     [Test]
+    public async Task GroupLabelsAreOptionalAndPreserveEmptyStringValues()
+    {
+        var omitted = RegistryModel.Compile(RegistryJson.Parse(
+            """{"groups":{"dirs":{"singular":"dir"}}}"""));
+        var labeled = RegistryModel.Compile(RegistryJson.Parse(
+            """{"groups":{"dirs":{"singular":"dir","labels":{"empty":"","owner":"team"}}}}"""));
+
+        await Assert.That(omitted.Groups["dirs"].Annotations.Labels.Count).IsEqualTo(0);
+        await Assert.That(labeled.Groups["dirs"].Annotations.Labels.Count).IsEqualTo(2);
+        await Assert.That(labeled.Groups["dirs"].Annotations.Labels["empty"]).IsEqualTo("");
+        var effective = labeled.EffectiveModel.RootElement.GetProperty("groups").GetProperty("dirs");
+        await Assert.That(effective.GetProperty("labels").GetProperty("empty").GetString()).IsEqualTo("");
+        await Assert.That(effective.GetProperty("labels").GetProperty("owner").GetString()).IsEqualTo("team");
+    }
+
+    [Test]
+    public async Task InvalidGroupLabelMapsFailAtTheirModelPaths()
+    {
+        foreach (var (labels, path) in new[]
+        {
+            ("[]", "/groups/dirs/labels"),
+            ("""{"":"value"}""", "/groups/dirs/labels/"),
+            ("""{"owner":1}""", "/groups/dirs/labels/owner")
+        })
+        {
+            var error = TestErrors.Capture(() => RegistryModel.Compile(
+                RegistryJson.Parse("{\"groups\":{\"dirs\":{\"singular\":\"dir\",\"labels\":" + labels + "}}}")));
+            await Assert.That(error.Code).IsEqualTo("model_error");
+            await Assert.That(error.Path).IsEqualTo(path);
+        }
+    }
+
+    [Test]
     public async Task RootDescriptionAndLabelsAreOptionalAndEmptyLabelsAreValid()
     {
         var omitted = RegistryModel.Compile(RegistryJson.Parse("{}"));
