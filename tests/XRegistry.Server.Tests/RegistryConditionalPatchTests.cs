@@ -193,9 +193,7 @@ public class RegistryConditionalPatchTests
     }
 
     [Test]
-    [Arguments("""{"name":"changed","extra":2}""")]
-    [Arguments("""{"name":null,"extra":2}""")]
-    public async Task RetainedContextPreservesSystemImmutableGuard(string patch)
+    public async Task ImmutableValuesIgnorePatchAndReplaceChangesAfterTheyAreSet()
     {
         var engine = Create("""
             {"groups":{"gs":{"singular":"g","attributes":{
@@ -205,10 +203,17 @@ public class RegistryConditionalPatchTests
             """);
         await Send(engine, RegistryAction.Replace, "/gs/g", """{"name":"original","kind":"on","extra":1}""");
 
-        await RejectPatch(engine, patch, "invalid_attribute");
-        var unchanged = await Send(engine, RegistryAction.Patch, "/gs/g", """{"name":"original","extra":2}""");
-        await Assert.That(unchanged.Metadata!.RootElement.GetProperty("name").GetString()).IsEqualTo("original");
-        await Assert.That(unchanged.Metadata.RootElement.GetProperty("extra").GetInt32()).IsEqualTo(2);
+        var patched = await Send(engine, RegistryAction.Patch, "/gs/g", """{"name":"changed","extra":2}""");
+        await Assert.That(patched.Metadata!.RootElement.GetProperty("name").GetString()).IsEqualTo("original");
+        await Assert.That(patched.Metadata.RootElement.GetProperty("extra").GetInt32()).IsEqualTo(2);
+
+        var replaced = await Send(engine, RegistryAction.Replace, "/gs/g", """{"kind":"on","extra":3}""");
+        await Assert.That(replaced.Metadata!.RootElement.GetProperty("name").GetString()).IsEqualTo("original");
+        await Assert.That(replaced.Metadata.RootElement.GetProperty("extra").GetInt32()).IsEqualTo(3);
+
+        var deleted = await Send(engine, RegistryAction.Patch, "/gs/g", """{"name":null,"extra":4}""");
+        await Assert.That(deleted.Metadata!.RootElement.GetProperty("name").GetString()).IsEqualTo("original");
+        await Assert.That(deleted.Metadata.RootElement.GetProperty("extra").GetInt32()).IsEqualTo(4);
     }
 
     private static RegistryEngine ConditionalGroup(string extra) => Create(

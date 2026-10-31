@@ -28786,7 +28786,7 @@
       "text": "- Indicates whether this attribute's value can be changed once it is set. This MUST ONLY be used for server-controlled specification-defined attributes, such as `specversion` and `<SINGULAR>id`, and MUST NOT be used for extension attributes. As such, it is only for informational purposes for clients.",
       "review": {
         "status": "reviewed",
-        "note": "The compiler rejects immutable:true when there is no specification baseline, directly covering extension prohibition. It tests baseline presence rather than an explicit server-control classification. The client-informational meaning and all admissible system-only uses are not directly established by that negative test.",
+        "note": "The compiler rejects immutable on extension attributes; tests also verify inherited system immutable flags survive model compilation and appear in effective-model output.",
         "roles": [
           "client",
           "server",
@@ -28794,9 +28794,11 @@
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "RejectsInvalidModelAspectsWithExactPointers"
+          "RejectsInvalidModelAspectsWithExactPointers",
+          "ImportedSystemOverlaysRetainImmutableAndSharedTypeIdentity",
+          "DelayedImportBaselinesDoNotAuthorizeExtensionImmutable"
         ],
         "nativeEvidence": []
       }
@@ -28817,15 +28819,15 @@
       "text": "Once set, any attempt to update the value MUST be silently ignored by the server.",
       "review": {
         "status": "reviewed",
-        "note": "Readonly system values are ignored/retained; IDs are deliberately inspected under the Core mismatch exception. Merge's residual immutable-change branch throws invalid_attribute rather than ignoring a change. No direct non-ID, non-readonly immutable update case establishes this general silent-ignore rule.",
+        "note": "A non-readonly immutable value is retained across changed and null PATCH values and across a replacement that omits it; other writable fields in those operations still change.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "PatchNullDeletesWhileMissingPreservesAndReadonlyInputIsIgnored"
+          "ImmutableValuesIgnorePatchAndReplaceChangesAfterTheyAreSet"
         ],
         "nativeEvidence": []
       }

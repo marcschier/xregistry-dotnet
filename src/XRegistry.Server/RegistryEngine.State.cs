@@ -373,7 +373,8 @@ public sealed partial class RegistryEngine
             var output = patch ? (JsonObject)entity.Attributes.DeepClone() : new JsonObject();
             foreach (var definition in definitions.Values)
             {
-                if (definition.ReadOnly && entity.Attributes.TryGetPropertyValue(definition.Name, out var retained))
+                if ((definition.ReadOnly || definition.Immutable) &&
+                    entity.Attributes.TryGetPropertyValue(definition.Name, out var retained))
                 {
                     output[definition.Name] = retained?.DeepClone();
                 }
@@ -382,10 +383,9 @@ public sealed partial class RegistryEngine
             foreach (var property in submitted)
             {
                 if (definitions.TryGetValue(property.Key, out var definition) && definition.Immutable &&
-                    entity.Original.TryGetPropertyValue(property.Key, out var previous) && previous is not null &&
-                    !JsonNode.DeepEquals(previous, property.Value))
+                    entity.Original.TryGetPropertyValue(property.Key, out var previous) && previous is not null)
                 {
-                    throw ServerErrors.With("invalid_attribute", subject, "An immutable attribute cannot change.", ("name", property.Key));
+                    continue;
                 }
 
                 output[property.Key] = property.Value?.DeepClone();
