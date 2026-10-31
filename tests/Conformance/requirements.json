@@ -70189,13 +70189,18 @@
       ],
       "text": "For `compatibility` strategies that require understanding the lineage relationship between the Versions, the [`ancestorid`](#ancestorid-attribute) attribute on each Version MUST be used to determine that information.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Independent root Versions are accepted without comparing against unrelated collection neighbors. Reparenting the existing int-to-long lineage to a string root fails compatibility_violation; rejected ancestry changes preserve exact metadata, bytes and events across restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "IncompatibleAvroMutationsPreserveAllVersionsAndPolicy",
+          "AvroCompatibilityUsesTheDeclaredDirectionAndAncestry"
+        ],
         "nativeEvidence": []
       }
     },
@@ -70251,13 +70256,17 @@
       ],
       "text": "When not specified, there is no statement being made as to the compatibility relationship between the Resource's Versions and the server MUST NOT perform any `compatibility` checking.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "With format validation enabled, independently absent compatibility mode performs only syntax checks. Adding/removing mode changes real reference acquisition counts and creates/clears results for both Versions under both strictness settings.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AbsentCompatibilityModeSkipsRechecksAndRemovingItClearsPriorResults"
+        ],
         "nativeEvidence": []
       }
     },
@@ -70344,13 +70353,18 @@
       ],
       "text": "- When changing the value of this attribute, it MUST be applied to all Versions of the Resource, and an error ([compatibility_violation](#compatibility_violation)) MUST be generated if any Version can not conform to the requirements of the specified compatibility value.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Changing backward to forward rejects an incompatible older non-default int-to-long lineage even when the default Version is an independent string root. Mode and all Version metadata, bytes and events survive rejection and restart under both strictness settings. Enabling/removing mode separately creates/clears results for both existing Versions.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "IncompatibleAvroMutationsPreserveAllVersionsAndPolicy",
+          "AbsentCompatibilityModeSkipsRechecksAndRemovingItClearsPriorResults"
+        ],
         "nativeEvidence": []
       }
     },
@@ -72916,7 +72930,7 @@
       "text": "Note that `false` MUST NOT be used for validation failure. In those cases the write operation MUST generate an error ([compatibility_violation](#compatibility_violation)) and reject the request regardless of the value of the [`strictvalidation`](model.md#groupsstringresourcesstringstrictvalidation)` model aspect.",
       "review": {
         "status": "reviewed",
-        "note": "Proven Avro incompatibility rejects a new Version with compatibility_violation under both strictness settings. Existing Version identity/count, exact bytes, true validation flags, absent reasons and event count remain unchanged.",
+        "note": "Proven Avro incompatibility rejects new Versions, candidate/ancestor replacements, lineage reparenting and policy reversal with compatibility_violation under both strictness settings. Existing policy, Version metadata/count, exact bytes, true validation flags, absent reasons and event count survive rejection and restart.",
         "roles": [
           "server"
         ]
@@ -72924,7 +72938,8 @@
       "implementation": {
         "status": "implemented",
         "testIds": [
-          "IncompatibleAvroRejectsWithoutAddingVersionsEvenWhenStrictValidationIsFalse"
+          "IncompatibleAvroRejectsWithoutAddingVersionsEvenWhenStrictValidationIsFalse",
+          "IncompatibleAvroMutationsPreserveAllVersionsAndPolicy"
         ],
         "nativeEvidence": []
       }

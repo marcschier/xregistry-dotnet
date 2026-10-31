@@ -346,6 +346,79 @@ public class BuiltInValidationAdapterTests
     }
 
     [Test]
+    [Arguments(false, "candidate")]
+    [Arguments(true, "candidate")]
+    [Arguments(false, "ancestor")]
+    [Arguments(true, "ancestor")]
+    [Arguments(false, "policy")]
+    [Arguments(true, "policy")]
+    [Arguments(false, "ancestry")]
+    [Arguments(true, "ancestry")]
+    public async Task IncompatibleAvroMutationsPreserveAllVersionsAndPolicy(bool strict, string mutation)
+    {
+        var persistence = new InMemoryRegistryPersistence();
+        var engine = ValidatingEngine(strict: strict, persistence: persistence);
+        await Send(engine, RegistryAction.Replace, "/sets/g/schemas/s$details", """
+            {"versionid":"v1","format":"Avro/1.11.0","schema":"int","meta":{"compatibility":"backward"}}
+            """);
+        await Send(engine, RegistryAction.Post, "/sets/g/schemas/s$details", """
+            {"versionid":"v2","format":"Avro/1.11.0","schema":"long"}
+            """);
+        var independentRoot = mutation is "ancestry" or "policy";
+        if (independentRoot)
+        {
+            await Send(engine, RegistryAction.Post, "/sets/g/schemas/s$details", """
+                {"versionid":"v3","ancestorid":"v3","format":"Avro/1.11.0","schema":"string"}
+                """);
+        }
+        var versions = independentRoot ? new[] { "v1", "v2", "v3" } : new[] { "v1", "v2" };
+        var originalMeta = (await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/meta")).Metadata!.RootElement.GetRawText();
+        var snapshots = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var version in versions)
+        {
+            var details = await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/versions/" + version + "$details");
+            await Assert.That(details.Metadata!.RootElement.GetProperty("formatvalidated").GetBoolean()).IsTrue();
+            await Assert.That(details.Metadata.RootElement.GetProperty("compatibilityvalidated").GetBoolean()).IsTrue();
+            snapshots.Add(version, details.Metadata.RootElement.GetRawText());
+        }
+        var path = mutation == "policy" ? "/sets/g/schemas/s/meta" :
+            "/sets/g/schemas/s/versions/" + (mutation == "ancestor" ? "v1" : "v2") + "$details";
+        var update = mutation switch
+        {
+            "policy" => """{"compatibility":"forward"}""",
+            "ancestry" => """{"ancestorid":"v3"}""",
+            _ => """{"schema":"string"}"""
+        };
+        await ExpectCode(() => Send(engine, RegistryAction.Patch, path, update), "compatibility_violation");
+        await AssertRetainedAsync(engine);
+        await AssertRetainedAsync(ValidatingEngine(strict: strict, persistence: persistence));
+
+        async Task AssertRetainedAsync(RegistryEngine current)
+        {
+            var meta = await Send(current, RegistryAction.Read, "/sets/g/schemas/s/meta");
+            await Assert.That(meta.Metadata!.RootElement.GetRawText()).IsEqualTo(originalMeta);
+            var resource = await Send(current, RegistryAction.Read, "/sets/g/schemas/s$details");
+            await Assert.That(resource.Metadata!.RootElement.GetProperty("versionid").GetString()).IsEqualTo(versions[^1]);
+            await Assert.That(resource.Metadata.RootElement.GetProperty("versionscount").GetInt32()).IsEqualTo(versions.Length);
+            foreach (var version in versions)
+            {
+                var details = await Send(current, RegistryAction.Read, "/sets/g/schemas/s/versions/" + version + "$details");
+                await Assert.That(details.Metadata!.RootElement.GetRawText()).IsEqualTo(snapshots[version]);
+                var stored = await Send(current, RegistryAction.Read, "/sets/g/schemas/s/versions/" + version);
+                using var bytes = stored.Document!.OpenRead();
+                using var reader = new StreamReader(bytes, Encoding.UTF8);
+                await Assert.That(await reader.ReadToEndAsync()).IsEqualTo(version switch
+                {
+                    "v1" => "\"int\"",
+                    "v2" => "\"long\"",
+                    _ => "\"string\""
+                });
+            }
+            await Assert.That((await current.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(versions.Length);
+        }
+    }
+
+    [Test]
     public async Task RetentionCannotEraseAnAncestorBeforeCompatibilityIsChecked()
     {
         var engine = ValidatingEngine(maxVersions: 1);
