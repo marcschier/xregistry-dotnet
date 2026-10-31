@@ -397,6 +397,94 @@ public class ProtobufValidationTests
     }
 
     [Test]
+    [Arguments("""option java_package="com." 'example'; message Root {}""")]
+    [Arguments("""option java_package="" 'example' ""; message Root {}""")]
+    [Arguments("""message Root { optional string value=1 [json_name="my" 'Value']; }""")]
+    [Arguments("""message Root { reserved "old" 'Name'; optional string value=1; }""")]
+    public async Task AdjacentStringLiteralsAreAcceptedInBothSyntaxProfiles(string declarations)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                Encoding.UTF8.GetBytes($"syntax=\"proto{syntax}\"; {declarations}"));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+            await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+        }
+    }
+
+    [Test]
+    public async Task AdjacentImportLiteralsResolveTheCombinedAuthoredPathOnce()
+    {
+        var requests = new List<string>();
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            """
+            syntax="proto3"; import "child" /* concatenation */ '.proto';
+            message Root { Child value=1; }
+            """u8.ToArray(), new DocumentValidationOptions
+            {
+                ResolveReference = (name, _) =>
+                {
+                    requests.Add(name);
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(name == "child.proto"
+                        ? """syntax="proto3"; message Child {}"""u8.ToArray() : null);
+                }
+            });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(requests.Count).IsEqualTo(1);
+        await Assert.That(requests[0]).IsEqualTo("child.proto");
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task AdjacentReservedNameLiteralsRejectTheCombinedFieldName()
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            """syntax="proto3"; message Root { reserved "old" 'Name'; string oldName=1; }"""u8.ToArray());
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.reserved");
+    }
+
+    [Test]
+    [Arguments("""syntax="proto3"; import "." "./child.proto"; message Root {}""", "protobuf.import")]
+    [Arguments("""syntax="proto3"; message Root { reserved "old" 'Name', "oldName"; }""", "protobuf.reserved")]
+    [Arguments("""syntax="proto3"; option java_package=+"a" 'b'; message Root {}""", "protobuf.constant")]
+    public async Task AdjacentStringLiteralsKeepCombinedValueConstraints(string source, string code)
+    {
+        var requests = 0;
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3", Encoding.UTF8.GetBytes(source),
+            new DocumentValidationOptions
+            {
+                ResolveReference = (_, _) =>
+                {
+                    requests++;
+                    throw new InvalidOperationException("Invalid import must fail before acquisition.");
+                }
+            });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo(code);
+        await Assert.That(requests).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task ProtoTwoStringDefaultsAcceptAdjacentLiterals()
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/2",
+            """syntax="proto2"; message Root { optional string value=1 [default="a" 'b']; }"""u8.ToArray());
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("""syntax="proto" '3'; message Root {}""")]
+    [Arguments("""syntax="proto3" ''; message Root {}""")]
+    public async Task SyntaxDiscriminatorDoesNotAcceptAdjacentLiterals(string source)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3", Encoding.UTF8.GetBytes(source));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.syntax");
+    }
+
+    [Test]
     public async Task SuppliedImportBindsTheDeclaredMessageNotArbitraryText()
     {
         var source = Encoding.UTF8.GetBytes("""syntax="proto3"; import "child.proto"; message Parent { Child child=1; }""");

@@ -161,6 +161,9 @@ vocabulary/source mapping. It does not supply their implementation.
   separately for each referring document, including during message selection.
   Cross-syntax checks reject direct Proto2 enum use in Proto3 fields while
   allowing imported messages to retain their own syntax and enum fields.
+  Adjacent string literals are combined before supported option, default,
+  import-path and reserved-name checks. Escape decoding remains incomplete;
+  syntax discriminators do not accept concatenated literals.
   Editions and custom extensions remain unsupported. This does not add gRPC
   API operation selection.
 - Add full API format validators and the remaining language resolvers. The

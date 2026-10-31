@@ -356,7 +356,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             if (Take("syntax"))
             {
                 Expect("=");
-                var syntax = Literal();
+                var syntax = Literal(concatenate: false);
                 Require(syntax.Text is "proto2" or "proto3", "protobuf.syntax", "Unsupported syntax discriminator.");
                 _syntax = syntax.Text == "proto3" ? 3 : 2;
                 Expect(";");
@@ -691,10 +691,19 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             return tokens[_index++].Text;
         }
 
-        private Token Literal()
+        private Token Literal(bool concatenate = true)
         {
             Require(Current.Kind == TokenKind.String, "protobuf.string", "A quoted string literal is required.");
-            return tokens[_index++];
+            var first = tokens[_index++];
+            if (!concatenate || Current.Kind != TokenKind.String) { return first; }
+            var content = new StringBuilder(first.Text);
+            while (Current.Kind == TokenKind.String)
+            {
+                owner.Context.Work(Current.Text.Length + 1);
+                content.Append(tokens[_index++].Text);
+            }
+
+            return first with { Text = content.ToString() };
         }
 
         private Token Constant()
@@ -702,8 +711,13 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             var sign = Take("-") ? "-" : Take("+") ? "+" : "";
             Require(Current.Kind is TokenKind.String or TokenKind.Identifier or TokenKind.Number,
                 "protobuf.constant", "An option or numeric value is required.");
+            if (Current.Kind == TokenKind.String)
+            {
+                Require(sign.Length == 0, "protobuf.constant", "A string cannot have a numeric sign.");
+                return Literal();
+            }
+
             var token = tokens[_index++];
-            Require(sign.Length == 0 || token.Kind != TokenKind.String, "protobuf.constant", "A string cannot have a numeric sign.");
             return sign.Length == 0 ? token : token with { Text = sign + token.Text };
         }
 

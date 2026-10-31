@@ -43814,7 +43814,13 @@
           "SelectionAppliesImportVisibilityAfterResolvingDependencyDocumentUris",
           "ImportedEnumSyntaxIsCheckedForEveryFieldForm",
           "ImportedMessagesMayContainEnumsFromTheirOwnSyntax",
-          "PubliclyForwardedEnumsRetainExplicitOrImplicitProtoTwoSyntax"
+          "PubliclyForwardedEnumsRetainExplicitOrImplicitProtoTwoSyntax",
+          "AdjacentStringLiteralsAreAcceptedInBothSyntaxProfiles",
+          "AdjacentImportLiteralsResolveTheCombinedAuthoredPathOnce",
+          "AdjacentReservedNameLiteralsRejectTheCombinedFieldName",
+          "AdjacentStringLiteralsKeepCombinedValueConstraints",
+          "ProtoTwoStringDefaultsAcceptAdjacentLiterals",
+          "SyntaxDiscriminatorDoesNotAcceptAdjacentLiterals"
         ],
         "nativeEvidence": []
       }

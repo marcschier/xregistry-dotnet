@@ -61,6 +61,12 @@ Proto2 enum, including through a public import; this reports `Invalid` with
 Messages can cross either syntax boundary and retain their own enum fields.
 These checks follow the publisher's
 [cross-syntax rules](https://protobuf.dev/programming-guides/proto3/#using-proto2-message-types).
+Adjacent quoted literals are concatenated for imports, reserved names and
+supported string-valued options or defaults, as defined by the
+[string-literal grammar](https://protobuf.dev/reference/protobuf/proto3-spec/#string-literals).
+Path and duplicate-name checks use the combined value before acquisition.
+The `syntax` discriminator still requires one literal; concatenation does not
+add escape decoding or unsupported option policies.
 Editions, custom extensions, complete weak-import semantics and gRPC API
 selection remain unsupported.
 
