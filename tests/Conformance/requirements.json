@@ -28753,7 +28753,7 @@
       "text": "- OPTIONAL.",
       "review": {
         "status": "reviewed",
-        "note": "Immutable is optional and defaults false for extensions; known system definitions carry their own values. The direct extension-immutable rejection test establishes the forbidden explicit case, but does not assert omission or the complete effective immutable flags.",
+        "note": "A direct model test omits immutable on an extension attribute and confirms the aspect is accepted.",
         "roles": [
           "client",
           "server",
@@ -28761,9 +28761,10 @@
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "RejectsInvalidModelAspectsWithExactPointers"
+          "RejectsInvalidModelAspectsWithExactPointers",
+          "ScalarAttributeAspectsUseNormativeDefaults"
         ],
         "nativeEvidence": []
       }
@@ -28845,7 +28846,7 @@
       "text": "- When not specified, the default value MUST be `false`.",
       "review": {
         "status": "reviewed",
-        "note": "Immutable has a false record/compiler fallback for new attributes, while inherited system flags remain intact. No direct assertion checks this default independently of readonly or system overlay behavior.",
+        "note": "A direct model test asserts immutable is false in both the compiled model and effective-model output when omitted.",
         "roles": [
           "client",
           "server",
@@ -28853,8 +28854,10 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ScalarAttributeAspectsUseNormativeDefaults"
+        ],
         "nativeEvidence": []
       }
     },

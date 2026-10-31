@@ -209,11 +209,15 @@ public class RegistryModelTests
         var tag = model.Groups["dirs"].Resources["files"].Attributes["tag"];
 
         await Assert.That(suggested.Strict).IsTrue();
+        await Assert.That(suggested.ReadOnly).IsFalse();
+        await Assert.That(suggested.Immutable).IsFalse();
         await Assert.That(tag.MatchVersions).IsFalse();
 
         var effective = model.EffectiveModel.RootElement;
-        await Assert.That(effective.GetProperty("attributes").GetProperty("suggested").GetProperty("strict").GetBoolean())
-            .IsTrue();
+        var effectiveSuggested = effective.GetProperty("attributes").GetProperty("suggested");
+        await Assert.That(effectiveSuggested.GetProperty("strict").GetBoolean()).IsTrue();
+        await Assert.That(effectiveSuggested.GetProperty("readonly").GetBoolean()).IsFalse();
+        await Assert.That(effectiveSuggested.GetProperty("immutable").GetBoolean()).IsFalse();
         await Assert.That(effective.GetProperty("groups").GetProperty("dirs").GetProperty("resources")
             .GetProperty("files").GetProperty("attributes").GetProperty("tag").GetProperty("matchversions").GetBoolean())
             .IsFalse();
