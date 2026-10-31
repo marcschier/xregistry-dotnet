@@ -78,7 +78,16 @@ and backslashes retain their decoded values. Import acquisition receives the
 decoded, concatenated path; `child\n.proto` does not resolve `childn.proto`.
 The caller still owns acquisition policy, and backslashes remain invalid in
 import paths. Raw line breaks/NUL and unknown escapes remain lexical errors.
-Hexadecimal, octal and Unicode value decoding remains incomplete.
+Unicode escapes decode their four/eight hexadecimal digits to Unicode scalar
+values, including supplementary characters, before concatenation, reserved-name
+comparison and import-path validation. Surrogates and values above U+10FFFF
+report `protobuf.string`; separate surrogate escapes cannot form a scalar pair.
+Decoded values are not Unicode-normalized and remain string tokens, so escaped
+text cannot satisfy Boolean or enum constants. The `syntax` discriminator still
+requires literal `proto2` or `proto3` text without escapes. These rules use the
+publisher's string-literal grammar and
+[Unicode interpretation](https://protobuf.dev/reference/protobuf/textformat-spec/#string-literals).
+Hexadecimal and octal byte-value decoding remains incomplete.
 Option and default checks distinguish quoted strings from native constants.
 For example, `"true"` cannot satisfy a boolean option, and `"ZERO"` cannot
 satisfy an enum default. This also applies when adjacent literals produce the

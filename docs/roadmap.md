@@ -169,8 +169,11 @@ vocabulary/source mapping. It does not supply their implementation.
   remain incomplete.
   Named character escapes now decode to ASCII controls before string-value
   use and import acquisition, including adjacent literals. Escaped quotes and
-  backslashes retain their decoded values; hexadecimal, octal and Unicode
-  value decoding remains open.
+  backslashes retain their decoded values. Unicode escapes now decode scalar
+  values before concatenation, reserved-name comparison and import validation;
+  surrogate escapes and values above U+10FFFF fail. No Unicode normalization
+  occurs, and decoded strings cannot replace native constants or the literal
+  syntax discriminator. Hexadecimal and octal byte-value decoding remains open.
   Option and default validation checks token kinds before values, so quoted
   strings cannot satisfy boolean, floating-point or enum constant requirements.
   Reserved-number checks reject overlapping intervals and duplicate singletons

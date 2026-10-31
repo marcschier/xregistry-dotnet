@@ -236,6 +236,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             {
                 var content = new StringBuilder();
                 var closed = false;
+                var hasEscapes = false;
                 while (index < text.Length)
                 {
                     var character = text[index++];
@@ -248,6 +249,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                     Require(character is not ('\r' or '\n' or '\0'), "protobuf.string", "A string literal contains a raw line break or NUL.");
                     if (character == '\\')
                     {
+                        hasEscapes = true;
                         Require(index < text.Length, "protobuf.string", "A string escape is truncated.");
                         character = text[index++];
                         Require(character is 'a' or 'b' or 'f' or 'n' or 'r' or 't' or 'v' or '\\' or '\'' or '"' ||
@@ -262,7 +264,15 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                             }
                             Require(index + digits <= text.Length && text.AsSpan(index, digits).ToArray().All(char.IsAsciiHexDigit),
                                 "protobuf.string", "The string hexadecimal escape is malformed.");
-                            content.Append('\\').Append(character).Append(text.AsSpan(index, digits));
+                            if (character is 'u' or 'U')
+                            {
+                                var scalar = uint.Parse(text.AsSpan(index, digits), NumberStyles.AllowHexSpecifier,
+                                    CultureInfo.InvariantCulture);
+                                Require(scalar <= 0x10FFFF && scalar is not (>= 0xD800 and <= 0xDFFF),
+                                    "protobuf.string", "A Unicode escape must identify a Unicode scalar value.");
+                                content.Append(char.ConvertFromUtf32((int)scalar));
+                            }
+                            else { content.Append('\\').Append(character).Append(text.AsSpan(index, digits)); }
                             index += digits;
                             continue;
                         }
@@ -284,7 +294,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                 }
 
                 Require(closed, "protobuf.string", "The string literal is unterminated.");
-                token = new(TokenKind.String, content.ToString());
+                token = new(TokenKind.String, content.ToString(), hasEscapes);
             }
             else if (char.IsAsciiLetter(value) || value == '_')
             {
@@ -370,7 +380,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
 
     private enum TokenKind { Identifier, Number, String, Symbol, End }
     private enum OptionTarget { File, Message, Oneof, Service, Method }
-    private sealed record Token(TokenKind Kind, string Text);
+    private sealed record Token(TokenKind Kind, string Text, bool HasEscapes = false);
     private sealed record Field(string Name, int Number, string Type, string Scope, string Label, bool HasPackedOption, Token? Default);
     private sealed class Definition(bool isEnum, bool isRoot, string document, int syntax)
     {
@@ -395,7 +405,8 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             {
                 Expect("=");
                 var syntax = Literal(concatenate: false);
-                Require(syntax.Text is "proto2" or "proto3", "protobuf.syntax", "Unsupported syntax discriminator.");
+                Require(!syntax.HasEscapes && syntax.Text is "proto2" or "proto3",
+                    "protobuf.syntax", "The syntax discriminator must be a literal proto2 or proto3 string.");
                 _syntax = syntax.Text == "proto3" ? 3 : 2;
                 Expect(";");
             }
@@ -811,13 +822,15 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             var first = tokens[_index++];
             if (!concatenate || Current.Kind != TokenKind.String) { return first; }
             var content = new StringBuilder(first.Text);
+            var hasEscapes = first.HasEscapes;
             while (Current.Kind == TokenKind.String)
             {
                 owner.Context.Work(Current.Text.Length + 1);
+                hasEscapes |= Current.HasEscapes;
                 content.Append(tokens[_index++].Text);
             }
 
-            return first with { Text = content.ToString() };
+            return first with { Text = content.ToString(), HasEscapes = hasEscapes };
         }
 
         private Token Constant()

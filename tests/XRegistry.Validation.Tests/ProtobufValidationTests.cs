@@ -1407,6 +1407,168 @@ public class ProtobufValidationTests
     }
 
     [Test]
+    [Arguments("\\u0041", "A")]
+    [Arguments("\\u00e9", "\u00e9")]
+    [Arguments("\\uD7FF", "\uD7FF")]
+    [Arguments("\\uE000", "\uE000")]
+    [Arguments("\\uFFFF", "\uFFFF")]
+    [Arguments("\\U00000041", "A")]
+    [Arguments("\\U0000d7ff", "\uD7FF")]
+    [Arguments("\\U0000e000", "\uE000")]
+    [Arguments("\\U00010000", "\U00010000")]
+    [Arguments("\\U0001F600", "\U0001F600")]
+    [Arguments("\\U000FFFFF", "\U000FFFFF")]
+    [Arguments("\\U00100000", "\U00100000")]
+    [Arguments("\\U0010FFFF", "\U0010FFFF")]
+    public async Task UnicodeEscapesResolveExactScalarImportPaths(string escaped, string decoded)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            foreach (var quote in new[] { '"', '\'' })
+            {
+                var requests = new List<string>();
+                var expected = $"child{decoded}.proto";
+                var source = $"syntax=\"proto{syntax}\"; import {quote}child{escaped}{quote} {quote}.proto{quote}; " +
+                    $"message Root {{ optional Child value=1; }}";
+                var result = await new BuiltInDocumentValidator().ValidateAsync(
+                    $"Protobuf/{syntax}", Encoding.UTF8.GetBytes(source), new()
+                    {
+                        ResolveReference = (name, _) =>
+                        {
+                            requests.Add(name);
+                            return ValueTask.FromResult<ReadOnlyMemory<byte>?>(name == expected
+                                ? Encoding.UTF8.GetBytes($"syntax=\"proto{syntax}\"; message Child {{}}")
+                                : (ReadOnlyMemory<byte>?)null);
+                        }
+                    });
+                await Assert.That(requests.Count).IsEqualTo(1);
+                await Assert.That(requests[0]).IsEqualTo(expected);
+                await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+                await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("\\uD800")]
+    [Arguments("\\uDBFF")]
+    [Arguments("\\uDC00")]
+    [Arguments("\\uDFFF")]
+    [Arguments("\\uD83D\\uDE00")]
+    [Arguments("\\U0000D800")]
+    [Arguments("\\U0000DFFF")]
+    [Arguments("\\U00110000")]
+    [Arguments("\\U01000000")]
+    [Arguments("\\UFFFFFFFF")]
+    public async Task UnicodeEscapesRejectNonScalarValuesBeforeAcquisition(string escaped)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            foreach (var quote in new[] { '"', '\'' })
+            {
+                var requests = 0;
+                var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                    Encoding.UTF8.GetBytes($"syntax=\"proto{syntax}\"; import {quote}{escaped}.proto{quote}; message Root {{}}"),
+                    new()
+                    {
+                        ResolveReference = (_, _) =>
+                        {
+                            requests++;
+                            throw new InvalidOperationException("A non-scalar escape must fail before acquisition.");
+                        }
+                    });
+                await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+                await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.string");
+                await Assert.That(requests).IsEqualTo(0);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("\\u006f", "oldName")]
+    [Arguments("\\U0000006F", "oldName")]
+    [Arguments("e\\u0301", "\u00e9ldName")]
+    public async Task UnicodeReservedNamesUseDecodedOrdinalValues(string prefix, string name)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                Encoding.UTF8.GetBytes($"syntax=\"proto{syntax}\"; message Root {{ reserved \"{prefix}\" \"ldName\", \"{name}\"; }}"));
+            var equivalent = prefix != "e\\u0301";
+            await Assert.That(result.Status).IsEqualTo(equivalent
+                ? DocumentValidationStatus.Invalid : DocumentValidationStatus.Valid);
+            if (equivalent) { await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.reserved"); }
+            else { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+        }
+    }
+
+    [Test]
+    [Arguments("\\u0000")]
+    [Arguments("\\u000A")]
+    [Arguments("\\U0000000D")]
+    [Arguments("\\uFFFF")]
+    [Arguments("\\U0010FFFF")]
+    public async Task UnicodeEscapesRemainQuotedStringAndBytesDefaults(string escaped)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/2",
+            Encoding.UTF8.GetBytes($"syntax=\"proto2\"; message Root {{ " +
+                $"optional string text=1 [default=\"{escaped}\"]; optional bytes data=2 [default='{escaped}']; }}"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("\\u0070roto")]
+    [Arguments("\\U00000070roto")]
+    [Arguments("proto\\u003")]
+    public async Task UnicodeEscapesCannotReplaceLiteralSyntaxDiscriminator(string prefix)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                Encoding.UTF8.GetBytes($"syntax=\"{prefix}{syntax}\"; message Root {{}}"));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.syntax");
+        }
+    }
+
+    [Test]
+    [Arguments("\\u002Fchild.proto")]
+    [Arguments("\\u005Cchild.proto")]
+    [Arguments("\\u002E/child.proto")]
+    [Arguments("\\u002E\\u002E/child.proto")]
+    [Arguments("child\\U0000002F\\U0000002Fother.proto")]
+    public async Task UnicodeImportEscapesRetainDecodedPathConstraints(string path)
+    {
+        var requests = 0;
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            Encoding.UTF8.GetBytes($"syntax=\"proto3\"; import \"{path}\"; message Root {{}}"), new()
+            {
+                ResolveReference = (_, _) =>
+                {
+                    requests++;
+                    throw new InvalidOperationException("Invalid decoded paths must fail before acquisition.");
+                }
+            });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.import");
+        await Assert.That(requests).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("option deprecated=\"\\u0074rue\"; message Root {}", "protobuf.option")]
+    [Arguments("message Root { reserved \"\\u006F\" \"ldName\"; optional string oldName=1; }", "protobuf.reserved")]
+    [Arguments("message Root { optional bool flag=1 [default=\"\\U00000074rue\"]; }", "protobuf.default")]
+    [Arguments("enum E { ZERO=0; } message Root { optional E value=1 [default=\"\\u005AERO\"]; }", "protobuf.default")]
+    public async Task UnicodeDecodedValuesPreserveTokenKindsAndReservedFields(string body, string code)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/2",
+            Encoding.UTF8.GetBytes($"syntax=\"proto2\"; {body}"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo(code);
+    }
+
+    [Test]
     [Arguments("0")]
     [Arguments("-0")]
     [Arguments("+0")]
