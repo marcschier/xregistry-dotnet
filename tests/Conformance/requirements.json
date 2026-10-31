@@ -31901,14 +31901,16 @@
       "text": "Attempts to change this value from `true` to `false` when there are existing Versions with domain-specific documents MUST generate an error ([hasdocument_violation](./spec.md#hasdocument_violation)).",
       "review": {
         "status": "reviewed",
-        "note": "ApplyModelAsync checks persisted Version HadDocument before allowing a true-to-false change and raises hasdocument_violation. There is no direct model-update regression for nonempty, present-empty and external-only Versions; ordinary rejection of a Document on a metadata-only Resource is not that transition test.",
+        "note": "ApplyModelAsync checks persisted HadDocument and raises hasdocument_violation when a true-to-false change would disable it. ModelCannotDisableDocumentsForExistingVersions asserts rejection and rollback for nonempty and present-empty documents. External URL-only references are not covered.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ModelCannotDisableDocumentsForExistingVersions"
+        ],
         "nativeEvidence": []
       }
     },

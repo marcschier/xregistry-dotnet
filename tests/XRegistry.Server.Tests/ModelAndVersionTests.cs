@@ -1595,6 +1595,41 @@ public class ModelAndVersionTests
     }
 
     [Test]
+    [Arguments("AAE=")]
+    [Arguments("")]
+    public async Task ModelCannotDisableDocumentsForExistingVersions(string documentBase64)
+    {
+        const string model = """
+            {"groups":{"teams":{"singular":"team","resources":{"files":{"singular":"file","hasdocument":true}}}}}
+            """;
+        const string replacement = """
+            {"groups":{"teams":{"singular":"team","resources":{"files":{"singular":"file","hasdocument":false}}}}}
+            """;
+        var store = new InMemoryRegistryPersistence();
+        var engine = Create(model, persistence: store);
+        await Send(engine, RegistryAction.Replace, "/teams/g/files/f$details",
+            """{"filebase64":"BASE64"}""".Replace("BASE64", documentBase64, StringComparison.Ordinal));
+        var before = (await Send(engine, RegistryAction.Read, "/export")).Metadata!.RootElement.GetRawText();
+        var source = (await Send(engine, RegistryAction.Read, "/modelsource")).Metadata!.RootElement.GetRawText();
+        var compiled = (await Send(engine, RegistryAction.Read, "/model")).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        using var snapshot = await store.ReadSnapshotAsync();
+
+        await ExpectCode(() => Send(engine, RegistryAction.Replace, "/modelsource", replacement), "hasdocument_violation");
+
+        using var after = await store.ReadSnapshotAsync();
+        await Assert.That(after.Generation).IsEqualTo(snapshot.Generation);
+        await Assert.That((await Send(engine, RegistryAction.Read, "/export")).Metadata!.RootElement.GetRawText()).IsEqualTo(before);
+        await Assert.That((await Send(engine, RegistryAction.Read, "/modelsource")).Metadata!.RootElement.GetRawText()).IsEqualTo(source);
+        await Assert.That((await Send(engine, RegistryAction.Read, "/model")).Metadata!.RootElement.GetRawText()).IsEqualTo(compiled);
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        using var document = (await Send(engine, RegistryAction.Read, "/teams/g/files/f")).Document!.OpenRead();
+        using var bytes = new MemoryStream();
+        await document.CopyToAsync(bytes);
+        await Assert.That(Convert.ToBase64String(bytes.ToArray())).IsEqualTo(documentBase64);
+    }
+
+    [Test]
     public async Task ServerChosenVersionIdsContinueAfterDeletionAndRespectSetVersionId()
     {
         var engine = Create("""{"groups":{"teams":{"singular":"team","resources":{"notes":{"singular":"note","hasdocument":false,"setversionid":false}}}}}""");
