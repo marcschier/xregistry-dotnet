@@ -28973,7 +28973,7 @@
       "text": "- When set to `true`, this specification does not mandate how this attribute's value is populated (i.e. by a client, the server or via a default value), just that by the end of the server's processing of any request it MUST have a non-null value, and generate an error ([invalid_attribute](./spec.md#invalid_attribute)) if not. Note that this implies that a REQUIRED attribute does not mean that clients are mandated to include that attribute in their requests. If the attribute will automatically be populated by the server (e.g. it has a default value defined) the client MAY omit it.",
       "review": {
         "status": "reviewed",
-        "note": "ClientInput permits omission until server completion/defaulting. The parent's current diagnostic fix now reports invalid_attribute for explicit null deletion of an existing required value; direct tests verify no publication. Creation/replacement omissions still report required_attribute_missing, and defaults still reset successfully. The earlier claim that all required failures are normalized alike is withdrawn.",
+        "note": "Core model.md:374-382 requires invalid_attribute when a required value remains null. Core HTTP Binding http.md:232-235 and 253-255 requires required_attribute_missing for the same condition after PUT/PATCH. Current HTTP behavior and tests follow the binding clause; this model requirement remains pending until the conflicting MUSTs are resolved. Implicit-parent creation separately requires required_attribute_missing.",
         "roles": [
           "client",
           "server"
