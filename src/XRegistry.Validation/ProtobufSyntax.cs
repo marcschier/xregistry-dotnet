@@ -641,7 +641,12 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                 Expect(")");
                 if (Take("{"))
                 {
-                    while (!Take("}")) { Expect("option"); Option(OptionTarget.Method); }
+                    while (!Take("}"))
+                    {
+                        if (Current.Kind == TokenKind.Symbol && Take(";")) { continue; }
+                        Expect("option");
+                        Option(OptionTarget.Method);
+                    }
                 }
                 else { Expect(";"); }
             }

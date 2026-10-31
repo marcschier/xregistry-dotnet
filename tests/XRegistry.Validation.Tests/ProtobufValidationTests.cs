@@ -60,6 +60,74 @@ public class ProtobufValidationTests
     }
 
     [Test]
+    [Arguments("")]
+    [Arguments(";")]
+    [Arguments(";;;")]
+    [Arguments("; /* before */ option deprecated=true; ; // after\n ;")]
+    [Arguments("option deprecated=false; ;")]
+    [Arguments("; option deprecated=false;")]
+    public async Task RpcMethodBodiesAcceptEmptyStatements(string body)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            foreach (var input in new[] { "M", "stream M" })
+            {
+                foreach (var output in new[] { "M", "stream M" })
+                {
+                    var schema = $"syntax=\"proto{syntax}\"; message M {{}} service S {{ " +
+                        $"rpc Get({input}) returns ({output}) {{ {body} }} ; rpc Other(M) returns (M); }}";
+                    var result = await new BuiltInDocumentValidator().ValidateAsync(
+                        $"Protobuf/{syntax}", Encoding.UTF8.GetBytes(schema));
+                    await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+                    await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+                }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("; nonsense; ;", "M", "", DocumentValidationStatus.Invalid, "protobuf.syntax")]
+    [Arguments("; message Nested {} ;", "M", "", DocumentValidationStatus.Invalid, "protobuf.syntax")]
+    [Arguments("; int32 value=1; ;", "M", "", DocumentValidationStatus.Invalid, "protobuf.syntax")]
+    [Arguments("\";\"", "M", "", DocumentValidationStatus.Invalid, "protobuf.syntax")]
+    [Arguments("; option deprecated=true ;", "Missing", "", DocumentValidationStatus.Invalid, "protobuf.type")]
+    [Arguments(";;", "int32", "", DocumentValidationStatus.Invalid, "protobuf.type")]
+    [Arguments(";;", "M", "rpc Get(M) returns (M);", DocumentValidationStatus.Invalid, "protobuf.duplicate")]
+    [Arguments("; option deprecated=\"true\"; ;", "M", "", DocumentValidationStatus.Invalid, "protobuf.option")]
+    [Arguments("; option java_package=\"example\"; ;", "M", "", DocumentValidationStatus.Invalid, "protobuf.option_scope")]
+    [Arguments("; option unknown=true; ;", "M", "", DocumentValidationStatus.Unsupported, "protobuf.unsupported")]
+    [Arguments("; option (custom.flag)=true; ;", "M", "", DocumentValidationStatus.Unsupported, "protobuf.unsupported")]
+    public async Task RpcEmptyStatementsPreserveContentTypeAndOptionChecks(
+        string body, string input, string nextMethod, DocumentValidationStatus expected, string code)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var schema = $"syntax=\"proto{syntax}\"; message M {{}} service S {{ " +
+                $"rpc Get({input}) returns (M) {{ {body} }} {nextMethod} }}";
+            var result = await new BuiltInDocumentValidator().ValidateAsync(
+                $"Protobuf/{syntax}", Encoding.UTF8.GetBytes(schema));
+            await Assert.That(result.Status).IsEqualTo(expected);
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo(code);
+        }
+    }
+
+    [Test]
+    public async Task RpcEmptyStatementsRespectTheCumulativeWorkBudget()
+    {
+        var schema = Encoding.UTF8.GetBytes(
+            "syntax=\"proto3\"; message M {} service S { rpc Get(M) returns (M) {" + new string(';', 256) + "} }");
+        var validator = new BuiltInDocumentValidator();
+        var limited = await validator.ValidateAsync("Protobuf/3", schema,
+            new DocumentValidationOptions { MaxWork = 500 });
+        await Assert.That(limited.Status).IsEqualTo(DocumentValidationStatus.Indeterminate);
+        await Assert.That(limited.Diagnostics[0].Code).IsEqualTo("limit.work");
+        var sufficient = await validator.ValidateAsync("Protobuf/3", schema,
+            new DocumentValidationOptions { MaxWork = 10_000 });
+        await Assert.That(sufficient.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(sufficient.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
     [Arguments("optional string foo=1; message foo {}")]
     [Arguments("message foo {} optional string foo=1;")]
     [Arguments("optional string foo=1; enum foo { ZERO=0; }")]

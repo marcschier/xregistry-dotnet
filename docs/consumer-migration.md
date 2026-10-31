@@ -89,6 +89,13 @@ Proto2 floating defaults accept leading-decimal forms such as `.5` and
 [floating-point grammar](https://protobuf.dev/reference/protobuf/proto2-spec/#floating-point-literals).
 Malformed decimal neighbors remain invalid, and leading-decimal tokens cannot
 satisfy field numbers, enum numbers, reservations or integer defaults.
+RPC method bodies accept empty semicolon statements before, after or between
+supported options in both syntax profiles, as specified by the
+[Proto2](https://protobuf.dev/reference/protobuf/proto2-spec/#service-definition)
+and [Proto3](https://protobuf.dev/reference/protobuf/proto3-spec/#service-definition)
+service grammars. This applies to unary and streaming declarations without
+relaxing method-name, message-type or option-policy checks; each empty statement
+consumes validation work.
 Editions, custom extensions, complete weak-import semantics and gRPC API
 selection remain unsupported.
 

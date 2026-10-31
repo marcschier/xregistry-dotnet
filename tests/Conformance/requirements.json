@@ -43832,7 +43832,10 @@
           "UnknownAndCustomOptionsKeepTheirUnsupportedPolicyAtEveryTarget",
           "FloatingDefaultsAcceptLeadingDecimalAndExponentForms",
           "FloatingDefaultsRejectMalformedDecimalNeighbors",
-          "LeadingDecimalTokensNeverSatisfyIntegerContexts"
+          "LeadingDecimalTokensNeverSatisfyIntegerContexts",
+          "RpcMethodBodiesAcceptEmptyStatements",
+          "RpcEmptyStatementsPreserveContentTypeAndOptionChecks",
+          "RpcEmptyStatementsRespectTheCumulativeWorkBudget"
         ],
         "nativeEvidence": []
       }
