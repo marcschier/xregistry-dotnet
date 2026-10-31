@@ -63,6 +63,27 @@ public class RegistryDeprecationLifecycleTests
     }
 
     [Test]
+    public async Task EffectiveMayBeAbsentPastOrFutureAndDoesNotPromiseRemoval()
+    {
+        var engine = Clocked(new InMemoryRegistryPersistence(), new());
+        var created = await Send(engine, RegistryAction.Replace, "/teams/g", """{"deprecated":{}}""");
+        var emptyDeprecation = created.Metadata!.RootElement.GetProperty("deprecated");
+        await Assert.That(emptyDeprecation.TryGetProperty("effective", out _)).IsFalse();
+
+        var past = await Send(engine, RegistryAction.Patch, "/teams/g",
+            """{"deprecated":{"effective":"2000-01-01T00:00:00Z"}}""");
+        await Assert.That(past.Metadata!.RootElement.GetProperty("deprecated").GetProperty("effective").GetString())
+            .IsEqualTo("2000-01-01T00:00:00Z");
+        var future = await Send(engine, RegistryAction.Patch, "/teams/g",
+            """{"deprecated":{"effective":"2050-01-01T00:00:00Z"}}""");
+        await Assert.That(future.Metadata!.RootElement.GetProperty("deprecated").GetProperty("effective").GetString())
+            .IsEqualTo("2050-01-01T00:00:00Z");
+
+        await Send(engine, RegistryAction.Delete, "/teams/g");
+        await ExpectCode(() => Send(engine, RegistryAction.Read, "/teams/g"), "not_found");
+    }
+
+    [Test]
     [Arguments("2030-01-01T02:00:00+02:00", "2030-01-01T00:00:00Z")]
     [Arguments("2030-01-01T00:00:00.123456788Z", "2030-01-01T00:00:00.123456789Z")]
     public async Task DeprecationOrderingUsesNormalizedInstantsAndFullFractionPrecision(string effective, string removal)

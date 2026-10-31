@@ -166,6 +166,38 @@ public class RegistryModelTests
     }
 
     [Test]
+    public async Task CoreDeprecationFieldsAreOptionalAndRestrictedToGroupsAndResourceMetadata()
+    {
+        var model = RegistryModel.Compile(RegistryJson.Parse("""
+            {"groups":{"teams":{"singular":"team","resources":{"notes":{"singular":"note","hasdocument":false}}}}}
+            """));
+        var resource = model.Groups["teams"].Resources["notes"];
+        var groupDeprecated = model.Groups["teams"].Attributes["deprecated"];
+        var resourceDeprecated = resource.MetaAttributes["deprecated"];
+
+        foreach (var deprecated in new[] { groupDeprecated, resourceDeprecated })
+        {
+            await Assert.That(deprecated.Type).IsEqualTo(RegistryValueType.Object);
+            await Assert.That(deprecated.Required).IsFalse();
+            foreach (var (name, type) in new[]
+            {
+                ("effective", RegistryValueType.Timestamp),
+                ("removal", RegistryValueType.Timestamp),
+                ("alternative", RegistryValueType.Url),
+                ("documentation", RegistryValueType.Url)
+            })
+            {
+                await Assert.That(deprecated.Attributes[name].Type).IsEqualTo(type);
+                await Assert.That(deprecated.Attributes[name].Required).IsFalse();
+            }
+        }
+
+        await Assert.That(model.Attributes.ContainsKey("deprecated")).IsFalse();
+        await Assert.That(resource.ResourceAttributes.ContainsKey("deprecated")).IsFalse();
+        await Assert.That(resource.Attributes.ContainsKey("deprecated")).IsFalse();
+    }
+
+    [Test]
     public async Task CoreShortSelfAttributesAreImmutableReadonlyUrlsAcrossEntityPlanes()
     {
         var model = RegistryModel.Compile(RegistryJson.Parse("""

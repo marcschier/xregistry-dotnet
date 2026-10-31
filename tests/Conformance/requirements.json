@@ -4097,14 +4097,16 @@
       "text": "- `effective`<br> An OPTIONAL property indicating the time when the entity entered, or will enter, a deprecated state. The date MAY be in the past or future. If this property is not present the entity is already in a deprecated state. If present, this MUST be an [RFC3339][rfc3339] timestamp.",
       "review": {
         "status": "reviewed",
-        "note": "Deprecated.effective is an optional timestamp and the event path preserves the deprecation object. Direct event changed-name assertions do not establish all optional/past/future/absent-effective semantics on returned Group and Meta data.",
+        "note": "The model test verifies optional Timestamp fields on Group and Resource Meta. Server cases cover absent, past, and future effective values and confirm that a future effective date without removal does not block deletion; scalar cases verify RFC3339 handling.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
+          "CoreDeprecationFieldsAreOptionalAndRestrictedToGroupsAndResourceMetadata",
+          "EffectiveMayBeAbsentPastOrFutureAndDoesNotPromiseRemoval",
           "DeprecationChangesAndRemovalHaveSeparateObjectAndEntityChangedLists",
           "ScalarValuesPreserveTypePrecisionAndNormalizeTimestamps",
           "InvalidScalarsReturnExactFieldDiagnostics"
@@ -4131,7 +4133,7 @@
       "text": "- `removal`<br> An OPTIONAL property indicating the time when the entity MAY be removed. The entity MUST NOT be removed before this time. If this property is not present, the client cannot make any assumptions as to when the entity might be removed. Note: as with most properties, this property is mutable. If present, this MUST be an [RFC3339][rfc3339] timestamp and MUST NOT be sooner than the `effective` time if present.",
       "review": {
         "status": "reviewed",
-        "note": "RESOLVED CORE-PROTOCOL-003: Completed Group and Resource Meta deprecation values reject removal before effective with invalid_attribute at deprecated.removal. Comparison uses normalized UTC instants and full fractional precision; equal instants in different offsets are allowed. RESOLVED CORE-PROTOCOL-004: An entity with a future removal promise cannot be deleted directly, by parent cascade, or indirectly through deletion of its last Version. Rejection preserves all data and outbox state. At the promised instant normal deletion resumes; the promise stays mutable and nanosecond values are not rounded down. These are implementation/evidence mappings, not release or all-platform qualification.",
+        "note": "Completed Group and Resource Meta deprecation values reject removal before effective with invalid_attribute at deprecated.removal. Comparison uses normalized UTC instants and full fractional precision; equal instants in different offsets are allowed. A future removal promise blocks direct deletion, parent cascade, and deletion of the last Version without changing stored data or outbox state. Deletion resumes at the promised instant, the promise remains mutable, and nanosecond values are not rounded down. Without a removal value, a future effective value does not block deletion. These are implementation/evidence mappings, not release or all-platform qualification.",
         "roles": [
           "server"
         ]
@@ -4145,7 +4147,8 @@
           "DeletionAtThePromisedInstantSucceeds",
           "RemovalPromiseRemainsMutableAndDeletingAnUnprotectedVersionDoesNotRemoveItsResource",
           "SubtickRemovalPromisesAreNotRoundedDownToTheCurrentTime",
-          "RemovalPromisesDoNotBypassIdentityGuardsOrBecomeReadonlyIgnore"
+          "RemovalPromisesDoNotBypassIdentityGuardsOrBecomeReadonlyIgnore",
+          "EffectiveMayBeAbsentPastOrFutureAndDoesNotPromiseRemoval"
         ],
         "nativeEvidence": []
       }
@@ -4253,15 +4256,17 @@
       ],
       "text": "- OPTIONAL",
       "review": {
-        "status": "informative",
-        "note": "Optional-presence/index row only. Its linked definition and subordinate constraints were read; this row is not used as implementation or test evidence.",
+        "status": "reviewed",
+        "note": "The model test asserts that deprecated and each of its defined fields are optional on Group and Resource Meta, and absent from the Registry, Resource, and Version planes.",
         "roles": [
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CoreDeprecationFieldsAreOptionalAndRestrictedToGroupsAndResourceMetadata"
+        ],
         "nativeEvidence": []
       }
     },
@@ -64171,13 +64176,21 @@
       ],
       "text": "- `effective`<br> An OPTIONAL property indicating the time when the entity entered, or will enter, a deprecated state. The date MAY be in the past or future. If this property is not present the entity is already in a deprecated state. If present, this MUST be an [RFC3339][rfc3339] timestamp.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The model test verifies optional Timestamp fields on Group and Resource Meta. Server cases cover absent, past, and future effective values and confirm that a future effective date without removal does not block deletion; scalar cases verify RFC3339 handling.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CoreDeprecationFieldsAreOptionalAndRestrictedToGroupsAndResourceMetadata",
+          "EffectiveMayBeAbsentPastOrFutureAndDoesNotPromiseRemoval",
+          "DeprecationChangesAndRemovalHaveSeparateObjectAndEntityChangedLists",
+          "ScalarValuesPreserveTypePrecisionAndNormalizeTimestamps",
+          "InvalidScalarsReturnExactFieldDiagnostics"
+        ],
         "nativeEvidence": []
       }
     },
@@ -64205,13 +64218,24 @@
       ],
       "text": "- `removal`<br> An OPTIONAL property indicating the time when the entity MAY be removed. The entity MUST NOT be removed before this time. If this property is not present, the client cannot make any assumptions as to when the entity might be removed. Note: as with most properties, this property is mutable. If present, this MUST be an [RFC3339][rfc3339] timestamp and MUST NOT be sooner than the `effective` time if present.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Completed Group and Resource Meta deprecation values reject removal before effective with invalid_attribute at deprecated.removal. Comparison uses normalized UTC instants and full fractional precision; equal instants in different offsets are allowed. A future removal promise blocks direct deletion, parent cascade, and deletion of the last Version without changing stored data or outbox state. Deletion resumes at the promised instant, the promise remains mutable, and nanosecond values are not rounded down. Without a removal value, a future effective value does not block deletion. These are implementation/evidence mappings, not release or all-platform qualification.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "RemovalBeforeEffectiveIsRejectedWithoutPublishingAnyEntities",
+          "DeprecationOrderingUsesNormalizedInstantsAndFullFractionPrecision",
+          "FutureRemovalPromisesPreventDirectCascadeAndLastVersionDeletion",
+          "DeletionAtThePromisedInstantSucceeds",
+          "RemovalPromiseRemainsMutableAndDeletingAnUnprotectedVersionDoesNotRemoveItsResource",
+          "SubtickRemovalPromisesAreNotRoundedDownToTheCurrentTime",
+          "RemovalPromisesDoNotBypassIdentityGuardsOrBecomeReadonlyIgnore",
+          "EffectiveMayBeAbsentPastOrFutureAndDoesNotPromiseRemoval"
+        ],
         "nativeEvidence": []
       }
     },
@@ -64330,13 +64354,17 @@
       ],
       "text": "- OPTIONAL",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The model test asserts that deprecated and each of its defined fields are optional on Group and Resource Meta, and absent from the Registry, Resource, and Version planes.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CoreDeprecationFieldsAreOptionalAndRestrictedToGroupsAndResourceMetadata"
+        ],
         "nativeEvidence": []
       }
     },
