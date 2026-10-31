@@ -65,9 +65,16 @@ public class DocumentTests
         var export = (await Send(engine, RegistryAction.Read, "/export")).Metadata!.RootElement;
         var resource = export.GetProperty("teams").GetProperty("g").GetProperty("files").GetProperty("f");
         await Assert.That(resource.TryGetProperty("name", out _)).IsFalse();
-        await Assert.That(resource.GetProperty("self").GetString()).IsEqualTo("#/teams/g/files/f");
+        var resourceSelf = resource.GetProperty("self").GetString()!;
+        var resourceXid = resource.GetProperty("xid").GetString()!;
+        await Assert.That(resourceSelf).IsEqualTo("#/teams/g/files/f");
+        await Assert.That(resourceSelf.EndsWith(resourceXid, StringComparison.Ordinal)).IsTrue();
         await Assert.That(resource.GetProperty("meta").GetProperty("defaultversionurl").GetString()).IsEqualTo("#/teams/g/files/f/versions/1");
-        await Assert.That(resource.GetProperty("versions").GetProperty("1").GetProperty("filebase64").GetString()).IsEqualTo("AAE=");
+        var version = resource.GetProperty("versions").GetProperty("1");
+        await Assert.That(version.GetProperty("filebase64").GetString()).IsEqualTo("AAE=");
+        var versionSelf = version.GetProperty("self").GetString()!;
+        var versionXid = version.GetProperty("xid").GetString()!;
+        await Assert.That(versionSelf.EndsWith(versionXid, StringComparison.Ordinal)).IsTrue();
         await Assert.That(export.TryGetProperty("modelsource", out _)).IsTrue();
         await Assert.That(export.TryGetProperty("capabilities", out _)).IsTrue();
     }

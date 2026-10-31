@@ -32,6 +32,31 @@ public class EngineTests
     }
 
     [Test]
+    public async Task SelfUrlsAreUniquePublicHierarchyLocationsForEveryEntityPlane()
+    {
+        var engine = Create();
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n", """{"name":"note"}""");
+        var expected = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["/"] = "https://registry.example/catalog",
+            ["/teams/g"] = "https://registry.example/catalog/teams/g",
+            ["/teams/g/notes/n"] = "https://registry.example/catalog/teams/g/notes/n",
+            ["/teams/g/notes/n/meta"] = "https://registry.example/catalog/teams/g/notes/n/meta",
+            ["/teams/g/notes/n/versions/1"] = "https://registry.example/catalog/teams/g/notes/n/versions/1"
+        };
+        var selfUrls = new List<string>();
+        foreach (var (path, expectedUrl) in expected)
+        {
+            var result = await Send(engine, RegistryAction.Read, path);
+            var self = result.Metadata!.RootElement.GetProperty("self").GetString()!;
+            await Assert.That(self).IsEqualTo(expectedUrl);
+            selfUrls.Add(self);
+        }
+
+        await Assert.That(selfUrls.Distinct(StringComparer.Ordinal).Count()).IsEqualTo(expected.Count);
+    }
+
+    [Test]
     public async Task NestedFailureRollsBackEveryEntity()
     {
         var engine = Create();

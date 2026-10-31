@@ -61544,13 +61544,19 @@
       ],
       "text": "- Description: An immutable unique identifier of the owning entity. The actual name of this attribute will vary based on the model entity it identifies. For example, a `schema` Resource would use an attribute name of `schemaid`. This attribute MUST be named `registryid` for the Registry itself, and MUST be named `versionid` for all Version entities.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The effective model uses registryid at the Registry, each Group/Resource uses its declared singular plus id, and each Version also has versionid; verified for required immutable model attributes.",
+        "roles": [
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CoreEntityIdsUseRequiredImmutableAttributeNames",
+          "CompilesIndependentMinimalSpecModel"
+        ],
         "nativeEvidence": []
       }
     },
@@ -61575,13 +61581,18 @@
       ],
       "text": "- REQUIRED.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The Core entity ID attributes are required in the compiled Registry, Group, Resource, and Version models.",
+        "roles": [
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CoreEntityIdsUseRequiredImmutableAttributeNames"
+        ],
         "nativeEvidence": []
       }
     },
@@ -61606,13 +61617,19 @@
       ],
       "text": "- MUST be immutable.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The compiled Core entity ID attributes are immutable, and server updates reject a changed nested ID.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CoreEntityIdsUseRequiredImmutableAttributeNames",
+          "IgnoreFlagsPermitEntityImportWithoutSuppressingNestedIdentityGuards"
+        ],
         "nativeEvidence": []
       }
     },
@@ -61637,13 +61654,20 @@
       ],
       "text": "- MUST be a non-empty string consisting of [RFC3986 `unreserved` characters](https://datatracker.ietf.org/doc/html/rfc3986#section-2.3) (ALPHA / DIGIT / `-` / `.` / `_` / `~`), `:` or `@`, MUST start with ALPHA, DIGIT or `_` and MUST be between 1 and 128 characters in length. Otherwise, an error ([malformed_id](#malformed_id)) MUST be generated.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The RegistryId parser enforces the specified starting characters, allowed set, and 1-128 character range with malformed_id on rejection.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AcceptsExactRegistryIdentifierGrammar",
+          "RejectsInvalidIdentifierGrammar",
+          "IdentifierLengthAndUniquenessAreIndependentOfLookupCase"
+        ],
         "nativeEvidence": []
       }
     },
@@ -61668,13 +61692,18 @@
       ],
       "text": "- MUST be unique (case-insensitively) within the scope of the entity's parent.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Sibling IDs with case-only differences conflict, while encoded path IDs resolve to the same entity identity.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "IdentifierLengthAndUniquenessAreIndependentOfLookupCase",
+          "EncodedIdsShareIdentityAndSiblingIdsAreCaseInsensitiveUnique"
+        ],
         "nativeEvidence": []
       }
     },
@@ -61699,13 +61728,17 @@
       ],
       "text": "- This attribute MUST be treated as case-sensitive for look-up purposes. For example, an HTTP request URL to an entity with the wrong case for its `<SINGULAR>id` MUST be treated as \"not found\".",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A lookup using the exact stored ID succeeds, while a case-only variant returns not_found.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EncodedIdsShareIdentityAndSiblingIdsAreCaseInsensitiveUnique"
+        ],
         "nativeEvidence": []
       }
     },
@@ -61731,13 +61764,19 @@
       ],
       "text": "- In cases where an entity's `<SINGULAR>id` is specified outside of the serialization of the entity (e.g. part of a request  URL, or a map key), its presence within the serialization of the entity is OPTIONAL. However, if present, it MUST be the same as any other specification of the `<SINGULAR>id` outside of the entity, and it MUST be the same as the entity's existing `<SINGULAR>id` if one exists, otherwise an error ([mismatched_id](#mismatched_id)) MUST be generated.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Path/map identity suffices when the body omits the ID; a conflicting supplied nested ID is rejected with mismatched_id.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EncodedIdsShareIdentityAndSiblingIdsAreCaseInsensitiveUnique",
+          "IgnoreFlagsPermitEntityImportWithoutSuppressingNestedIdentityGuards"
+        ],
         "nativeEvidence": []
       }
     },
@@ -61762,8 +61801,8 @@
       ],
       "text": "While `<SINGULAR>id` can be something like a UUID, when possible, it is RECOMMENDED that it be human friendly as these values will often appear in user-facing situations such as URLs or as command-line parameters. Additionally, In cases where [`name`](#name-attribute) is absent, the `<SINGULAR>id` might be used as the display name.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
+        "status": "informative",
+        "note": "This is producer guidance rather than a server-enforceable constraint; the implementation accepts identifiers allowed by the normative grammar.",
         "roles": []
       },
       "implementation": {
@@ -61793,13 +61832,17 @@
       ],
       "text": "- Each entity in the Registry MUST have a unique `self` URL value that locates the entity in the Registry hierarchy and from where the entity can be retrieved.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The server emits distinct self URLs matching the Registry, Group, Resource, metadata, and Version retrieval paths.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SelfUrlsAreUniquePublicHierarchyLocationsForEveryEntityPlane"
+        ],
         "nativeEvidence": []
       }
     },
@@ -61824,13 +61867,18 @@
       ],
       "text": "- When specified as an absolute URL, it MUST be based on the URL of the Registry root appended with the hierarchy path of the Registry entities/collections leading to the entity (its `xid` value).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Absolute self values use the configured public Registry root followed by the entity hierarchy path.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SelfUrlsAreUniquePublicHierarchyLocationsForEveryEntityPlane",
+          "RootCapabilitiesAndDiscoveryUseConfiguredPublicRoot"
+        ],
         "nativeEvidence": []
       }
     },
@@ -61855,13 +61903,17 @@
       ],
       "text": "- When specified as a relative URL, it MUST end with the entity's `xid` value.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Document-view self pointers are checked to end with the corresponding entity xid for Resources and Versions.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ExportUsesRelativePointersAndNoDefaultProjection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -61886,13 +61938,18 @@
       ],
       "text": "- REQUIRED.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The compiled Registry, Group, Resource, Version, and Resource metadata models all require self.",
+        "roles": [
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CoreSelfAttributesAreRequiredImmutableUrlsAcrossEntityPlanes"
+        ],
         "nativeEvidence": []
       }
     },
@@ -61917,13 +61974,18 @@
       ],
       "text": "- MUST be immutable.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The compiled self attribute is immutable across Registry, Group, Resource, Version, and Resource metadata planes.",
+        "roles": [
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CoreSelfAttributesAreRequiredImmutableUrlsAcrossEntityPlanes"
+        ],
         "nativeEvidence": []
       }
     },
@@ -61948,13 +62010,17 @@
       ],
       "text": "- MUST be a non-empty absolute URL based on the URL of the Registry.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "API-view self values are non-empty absolute URLs rooted at the configured public Registry URL.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SelfUrlsAreUniquePublicHierarchyLocationsForEveryEntityPlane"
+        ],
         "nativeEvidence": []
       }
     },
@@ -61979,13 +62045,18 @@
       ],
       "text": "- MUST be a read-only attribute.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The compiled self attribute is marked read-only across Registry, Group, Resource, Version, and Resource metadata planes.",
+        "roles": [
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CoreSelfAttributesAreRequiredImmutableUrlsAcrossEntityPlanes"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62010,13 +62081,18 @@
       ],
       "text": "- REQUIRED.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Document-view serializations include self pointers for the represented Resource and Version entities.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ExportUsesRelativePointersAndNoDefaultProjection",
+          "DocVersionOmitsValidationReasonsButApiRetainsThem"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62041,13 +62117,19 @@
       ],
       "text": "- MUST be immutable.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The compiled self attribute is immutable across all entity planes, including the document-view representation.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CoreSelfAttributesAreRequiredImmutableUrlsAcrossEntityPlanes",
+          "ExportUsesRelativePointersAndNoDefaultProjection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62072,13 +62154,18 @@
       ],
       "text": "- MUST be a relative URL of the form `#JSON-POINTER` where the `JSON-POINTER` locates this entity within the current document. See [Doc Flag](#doc-flag) for more information.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Document-view self values use fragment JSON Pointers locating the entity in the current export/document.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ExportUsesRelativePointersAndNoDefaultProjection",
+          "DocVersionOmitsValidationReasonsButApiRetainsThem"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62103,13 +62190,18 @@
       ],
       "text": "- This URL MUST NOT include any indicator signifying the entity's xRegistry metadata rather than its domain-specific document (e.g. `$details` in the [HTTP binding](./http.md) case).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Document-view self pointers are fragment references and do not carry the HTTP $details marker.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ExportUsesRelativePointersAndNoDefaultProjection",
+          "DocVersionOmitsValidationReasonsButApiRetainsThem"
+        ],
         "nativeEvidence": []
       }
     },

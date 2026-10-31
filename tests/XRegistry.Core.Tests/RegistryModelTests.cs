@@ -48,6 +48,54 @@ public class RegistryModelTests
     }
 
     [Test]
+    public async Task CoreEntityIdsUseRequiredImmutableAttributeNames()
+    {
+        var model = RegistryModel.Compile(RegistryJson.Parse("""
+            {"groups":{"teams":{"singular":"team","resources":{"notes":{"singular":"note","hasdocument":false}}}}}
+            """));
+        var resource = model.Groups["teams"].Resources["notes"];
+        var identifiers = new[]
+        {
+            model.Attributes["registryid"],
+            model.Groups["teams"].Attributes["teamid"],
+            resource.ResourceAttributes["noteid"],
+            resource.Attributes["versionid"],
+            resource.Attributes["noteid"]
+        };
+
+        foreach (var identifier in identifiers)
+        {
+            await Assert.That(identifier.Required).IsTrue();
+            await Assert.That(identifier.Immutable).IsTrue();
+        }
+    }
+
+    [Test]
+    public async Task CoreSelfAttributesAreRequiredImmutableUrlsAcrossEntityPlanes()
+    {
+        var model = RegistryModel.Compile(RegistryJson.Parse("""
+            {"groups":{"teams":{"singular":"team","resources":{"notes":{"singular":"note","hasdocument":false}}}}}
+            """));
+        var resource = model.Groups["teams"].Resources["notes"];
+        var selfAttributes = new[]
+        {
+            model.Attributes["self"],
+            model.Groups["teams"].Attributes["self"],
+            resource.ResourceAttributes["self"],
+            resource.Attributes["self"],
+            resource.MetaAttributes["self"]
+        };
+
+        foreach (var self in selfAttributes)
+        {
+            await Assert.That(self.Type).IsEqualTo(RegistryValueType.Url);
+            await Assert.That(self.Required).IsTrue();
+            await Assert.That(self.Immutable).IsTrue();
+            await Assert.That(self.ReadOnly).IsTrue();
+        }
+    }
+
+    [Test]
     public async Task ResourceAnnotationsPreserveModelVersionAndEmptyLabelValues()
     {
         var model = RegistryModel.Compile(RegistryJson.Parse("""
