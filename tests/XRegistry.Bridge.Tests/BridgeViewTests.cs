@@ -113,6 +113,43 @@ public class BridgeViewTests
     }
 
     [Test]
+    public async Task DocumentLinksAreRelativeOnlyWhenTheirTargetsAreIncluded()
+    {
+        var source = new ControlledSource("local", "v1", ["shared"]);
+        await using var app = await BridgeFixture.StartAsync([source.Registration()]);
+        using var client = BridgeFixture.Client(app);
+
+        using var apiRootResponse = await client.GetAsync("/registry");
+        var apiRoot = await BridgeFixture.Json(apiRootResponse);
+        using var docRootResponse = await client.GetAsync("/registry?doc");
+        var docRoot = await BridgeFixture.Json(docRootResponse);
+        await Assert.That(docRoot.GetProperty("dirsurl").GetString()).IsEqualTo(apiRoot.GetProperty("dirsurl").GetString());
+        using var inlineRootResponse = await client.GetAsync("/registry?doc&inline=dirs");
+        var inlineRoot = await BridgeFixture.Json(inlineRootResponse);
+        await Assert.That(inlineRoot.GetProperty("dirsurl").GetString()).IsEqualTo("#/dirs");
+
+        using var apiResourceResponse = await client.GetAsync("/registry/dirs/g/files/shared$details?inline=meta,versions");
+        var apiResource = await BridgeFixture.Json(apiResourceResponse);
+        using var docResourceResponse = await client.GetAsync("/registry/dirs/g/files/shared$details?doc");
+        var docResource = await BridgeFixture.Json(docResourceResponse);
+        await Assert.That(docResource.GetProperty("metaurl").GetString()).IsEqualTo(apiResource.GetProperty("metaurl").GetString());
+        await Assert.That(docResource.GetProperty("versionsurl").GetString()).IsEqualTo(apiResource.GetProperty("versionsurl").GetString());
+
+        using var metaInlineResponse = await client.GetAsync("/registry/dirs/g/files/shared$details?doc&inline=meta");
+        var metaInline = await BridgeFixture.Json(metaInlineResponse);
+        await Assert.That(metaInline.GetProperty("metaurl").GetString()).IsEqualTo("#/meta");
+        await Assert.That(metaInline.GetProperty("versionsurl").GetString()).IsEqualTo(apiResource.GetProperty("versionsurl").GetString());
+        await Assert.That(metaInline.GetProperty("meta").GetProperty("defaultversionurl").GetString())
+            .IsEqualTo(apiResource.GetProperty("meta").GetProperty("defaultversionurl").GetString());
+
+        using var fullyInlineResponse = await client.GetAsync("/registry/dirs/g/files/shared$details?doc&inline=meta,versions");
+        var fullyInline = await BridgeFixture.Json(fullyInlineResponse);
+        await Assert.That(fullyInline.GetProperty("metaurl").GetString()).IsEqualTo("#/meta");
+        await Assert.That(fullyInline.GetProperty("versionsurl").GetString()).IsEqualTo("#/versions");
+        await Assert.That(fullyInline.GetProperty("meta").GetProperty("defaultversionurl").GetString()).IsEqualTo("#/versions/v1");
+    }
+
+    [Test]
     public async Task CollectionsViewOmitsOnlyTheTopEntityAndKeepsNestedMetadataAndPointers()
     {
         var source = new ControlledSource("local", "v1", ["shared"]);

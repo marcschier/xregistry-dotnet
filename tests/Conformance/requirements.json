@@ -15366,18 +15366,20 @@
       "text": "- MUST convert the following attributes into relative URLs if, and only if, the entities that they reference are included in the response output: `self`, `<COLLECTION>url`, `metaurl`, `defaultversionurl`.",
       "review": {
         "status": "reviewed",
-        "note": "Exact tests establish response-local self/defaultversionurl and filtered-out default preservation; not every collection/metaurl included-versus-excluded branch is directly asserted. The compound four-link iff rule remains pending.",
+        "note": "Server and bridge tests cover included and excluded targets for collection URLs, metaurl and defaultversionurl, plus response-local self links; included targets become JSON Pointers and excluded targets retain absolute URLs.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
           "EveryEntityAndCollectionUsesItsActualResponseRoot",
           "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks",
+          "DocumentLinksAreRelativeOnlyWhenTheirTargetsAreIncluded",
+          "DefaultVersionUrlsUseAuthoritativeMetadataAndDocumentPointers",
           "MetadataAndDocumentQueriesUseLogicalValuesBeforeProjection",
           "DocumentViewDoesNotCreateRelativePointersToFilteredOutDefaultVersions",
           "XrefFiltersUseLogicalVersionsButDocumentViewStillHidesTheTargetProjection"
@@ -15402,7 +15404,7 @@
       "text": "All of the relative URLs mentioned in the last bullet above MUST begin with `#` and be followed by a [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) reference to the entity within the response, e.g. `#/endpoints/e1`. This means that they are relative to the root of the document (response) generated, and not necessarily relative to the root of the Registry. Additionally, when those URLs are relative and reference a Resource or Version, any protocol-specific modifications to the URLs (e.g. the HTTP `$details` suffix) MUST NOT be present despite the semantics of the suffix being applied (as noted below).",
       "review": {
         "status": "reviewed",
-        "note": "Document self pointers use # plus response-root-relative paths, including #/ for directly requested entities, without $details. Exact root/Group/Resource/Meta/Version request variants are asserted and opaque domain references remain untouched.",
+        "note": "Document self pointers use # plus response-root-relative paths, encode the response root as #, and omit $details. Exact root/Group/Resource/Meta/Version request variants are asserted and opaque domain references remain untouched.",
         "roles": [
           "server",
           "producer"
@@ -75960,13 +75962,22 @@
       ],
       "text": "- MUST convert the following attributes into relative URLs if, and only if, the entities that they reference are included in the response output: `self`, `<COLLECTION>url`, `metaurl`, `defaultversionurl`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Server and bridge tests cover included and excluded targets for collection URLs, metaurl and defaultversionurl, plus response-local self links; included targets become JSON Pointers and excluded targets retain absolute URLs.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
+          "EveryEntityAndCollectionUsesItsActualResponseRoot",
+          "DocumentLinksAreRelativeOnlyWhenTheirTargetsAreIncluded",
+          "DefaultVersionUrlsUseAuthoritativeMetadataAndDocumentPointers",
+          "DocumentViewDoesNotCreateRelativePointersToFilteredOutDefaultVersions"
+        ],
         "nativeEvidence": []
       }
     },

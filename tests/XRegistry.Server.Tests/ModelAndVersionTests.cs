@@ -1184,10 +1184,30 @@ public class ModelAndVersionTests
         await Assert.That(exportedResource.GetProperty("meta").GetProperty("defaultversionurl").GetString()).IsEqualTo(pointer);
         await Assert.That(exportedResource.GetProperty("versions").GetProperty(versionId).GetProperty("self").GetString())
             .IsEqualTo(pointer);
+        var apiResource = (await Send(restarted, RegistryAction.Read, resource + detailsSuffix)).Metadata!.RootElement;
+        var documentWithoutInline = (await Send(restarted, RegistryAction.Read, resource + detailsSuffix, null,
+            new KeyValuePair<string, string?>("doc", null))).Metadata!.RootElement;
+        await Assert.That(documentWithoutInline.GetProperty("metaurl").GetString())
+            .IsEqualTo(apiResource.GetProperty("metaurl").GetString());
+        await Assert.That(documentWithoutInline.GetProperty("versionsurl").GetString())
+            .IsEqualTo(apiResource.GetProperty("versionsurl").GetString());
         var unexpanded = (await Send(restarted, RegistryAction.Read, resource + detailsSuffix, null,
             new("doc", null), new("inline", "meta"))).Metadata!.RootElement;
         await Assert.That(unexpanded.TryGetProperty("versions", out _)).IsFalse();
+        await Assert.That(unexpanded.GetProperty("metaurl").GetString()).IsEqualTo("#/meta");
+        await Assert.That(unexpanded.GetProperty("versionsurl").GetString())
+            .IsEqualTo(apiResource.GetProperty("versionsurl").GetString());
         await Assert.That(unexpanded.GetProperty("meta").GetProperty("defaultversionurl").GetString()).IsEqualTo(expectedUrl);
+        var expanded = (await Send(restarted, RegistryAction.Read, resource + detailsSuffix, null,
+            new("doc", null), new("inline", "meta,versions"))).Metadata!.RootElement;
+        await Assert.That(expanded.GetProperty("metaurl").GetString()).IsEqualTo("#/meta");
+        await Assert.That(expanded.GetProperty("versionsurl").GetString()).IsEqualTo("#/versions");
+        await Assert.That(expanded.GetProperty("meta").GetProperty("defaultversionurl").GetString())
+            .IsEqualTo("#/versions/" + versionId.Replace("~", "~0", StringComparison.Ordinal));
+        var metaOnly = (await Send(restarted, RegistryAction.Read, resource + "/meta", null,
+            new KeyValuePair<string, string?>("doc", null)))
+            .Metadata!.RootElement;
+        await Assert.That(metaOnly.GetProperty("defaultversionurl").GetString()).IsEqualTo(expectedUrl);
         await Send(restarted, RegistryAction.Post, resource + detailsSuffix,
             hasDocument ? """{"versionid":"next","filebase64":"Ag=="}""" : """{"versionid":"next","name":"newer"}""");
         versionId = "next";
