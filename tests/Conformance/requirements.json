@@ -70322,13 +70322,19 @@
       ],
       "text": "- If present, MUST be a case-insensitive non-empty value from the Registry's [`capabilities.compatibilities`](#compatibilities-capability) values for the set of `format` values used by the Versions of the Resource.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "System Meta compatibility modes use case-insensitive model enum admission; selected validator capabilities are checked separately. The unconditional capabilities-membership requirement conflicts with Model strictvalidation permitting unsupported modes to remain unchecked when false. Live Core still contains both rules; xregistry/spec#721 W27 proposes distinguishing model admission from validator support. Keep this clause pending until the conflict is resolved.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "AllSystemCompatibilityCasingsReachTheAdvertisedRules",
+          "AdvertisedCompatibilityCasingDoesNotEnableAnUnselectedMode",
+          "UnsupportedCompatibilityModeIsUnknownRatherThanAnEstablishedViolation"
+        ],
         "nativeEvidence": []
       }
     },
