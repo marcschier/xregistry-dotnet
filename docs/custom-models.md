@@ -77,6 +77,10 @@ only leaves and oldest selection considers only roots; a nonleaf does not become
 the default merely because it has a newer `createdat` timestamp. Timestamp ties
 use case-insensitive Version IDs: highest for newest, lowest for oldest.
 
+`singleversionroot` defaults to `false`. A Resource using `createdat`,
+`modifiedat`, or `semver` must set it explicitly to `true`; omission or `false`
+makes the model invalid. `manual` mode can omit it and retain multiple roots.
+
 When a batch creates manual Versions without `ancestorid`, the Server processes
 their IDs in case-insensitive ascending order. Each new Version points to the
 current newest leaf; the first Version points to itself if none exists. Newest
