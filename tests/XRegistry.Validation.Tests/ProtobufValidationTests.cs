@@ -1256,6 +1256,67 @@ public class ProtobufValidationTests
     }
 
     [Test]
+    [Arguments("0")]
+    [Arguments("-0")]
+    [Arguments("+0")]
+    [Arguments("123")]
+    [Arguments("-123")]
+    [Arguments("+123")]
+    [Arguments("077")]
+    [Arguments("-077")]
+    [Arguments("+077")]
+    [Arguments("0x1f")]
+    [Arguments("0X1E")]
+    [Arguments("-0x1f")]
+    [Arguments("+0X1E")]
+    [Arguments("inf")]
+    [Arguments("-inf")]
+    [Arguments("+inf")]
+    [Arguments("nan")]
+    [Arguments("-nan")]
+    [Arguments("+nan")]
+    [Arguments("09.0")]
+    [Arguments("09e1")]
+    [Arguments("+09e-1")]
+    public async Task FloatingDefaultsAcceptIntegerRadicesAndSignedSpecials(string value)
+    {
+        foreach (var type in new[] { "float", "double" })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/2",
+                Encoding.UTF8.GetBytes($"syntax=\"proto2\"; message M {{ optional {type} value=1 [default={value}]; }}"));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+            await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+        }
+    }
+
+    [Test]
+    [Arguments("09")]
+    [Arguments("-09")]
+    [Arguments("+09")]
+    [Arguments("078")]
+    [Arguments("0x")]
+    [Arguments("0x1g")]
+    [Arguments("0x1.0")]
+    [Arguments("0x1p2")]
+    [Arguments("0x1e+2")]
+    [Arguments("INF")]
+    [Arguments("NaN")]
+    [Arguments("Infinity")]
+    [Arguments("\"0x1f\"")]
+    [Arguments("\"+inf\"")]
+    [Arguments("'nan'")]
+    public async Task FloatingDefaultsRejectMalformedRadicesAndNonNativeSpecials(string value)
+    {
+        foreach (var type in new[] { "float", "double" })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/2",
+                Encoding.UTF8.GetBytes($"syntax=\"proto2\"; message M {{ optional {type} value=1 [default={value}]; }}"));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+            await Assert.That(result.Diagnostics.Count).IsEqualTo(1);
+        }
+    }
+
+    [Test]
     [Arguments(".5")]
     [Arguments("-.5")]
     [Arguments("+.5")]

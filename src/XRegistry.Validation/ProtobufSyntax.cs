@@ -147,9 +147,27 @@ internal sealed class ProtobufSyntax(ValidationContext context)
         }
         else if (field.Type is "float" or "double")
         {
-            Require((value.Kind == TokenKind.Identifier && value.Text is "inf" or "-inf" or "nan") ||
-                (value.Kind == TokenKind.Number && double.TryParse(value.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out _)),
-                "protobuf.default", "A floating-point default is malformed.");
+            if (value.Kind == TokenKind.Number)
+            {
+                var text = value.Text.AsSpan();
+                if (text[0] is '+' or '-') { text = text[1..]; }
+                if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ||
+                    text.IndexOfAny('.', 'e', 'E') < 0)
+                {
+                    _ = Integer(value);
+                }
+                else
+                {
+                    Require(double.TryParse(value.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out _),
+                        "protobuf.default", "A floating-point default is malformed.");
+                }
+            }
+            else
+            {
+                Require(value.Kind == TokenKind.Identifier &&
+                    value.Text is "inf" or "-inf" or "+inf" or "nan" or "-nan" or "+nan",
+                    "protobuf.default", "A floating-point default is malformed.");
+            }
         }
         else if (Scalars.Contains(field.Type))
         {

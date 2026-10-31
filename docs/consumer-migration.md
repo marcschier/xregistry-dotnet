@@ -89,6 +89,12 @@ Proto2 floating defaults accept leading-decimal forms such as `.5` and
 [floating-point grammar](https://protobuf.dev/reference/protobuf/proto2-spec/#floating-point-literals).
 Malformed decimal neighbors remain invalid, and leading-decimal tokens cannot
 satisfy field numbers, enum numbers, reservations or integer defaults.
+Floating defaults also accept decimal, octal and hexadecimal integer literals
+and the case-sensitive `inf` and `nan` constants with an optional unary sign.
+Integer spellings retain their radix rules, so `09` is invalid while `09.0`
+and `09e1` are decimal floating literals. Hexadecimal floating notation and
+quoted numeric or special constants remain invalid. These distinctions follow
+the publisher's integer, floating-point and constant grammars.
 RPC method bodies accept empty semicolon statements before, after or between
 supported options in both syntax profiles, as specified by the
 [Proto2](https://protobuf.dev/reference/protobuf/proto2-spec/#service-definition)

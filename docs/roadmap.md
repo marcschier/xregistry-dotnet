@@ -172,6 +172,8 @@ vocabulary/source mapping. It does not supply their implementation.
   `deprecated` is rejected on oneofs. Unknown/custom options remain unsupported.
   Floating defaults accept leading-decimal/exponent forms without allowing
   decimal fractions in integer-only contexts.
+  Floating defaults distinguish integer radix syntax from decimal floating
+  syntax and accept signed native `inf`/`nan` constants.
   RPC method bodies accept empty semicolon statements mixed with supported
   options, including streaming declarations, within the validation work budget.
   Grammar matching retains token kinds: quoted keywords, labels and separators

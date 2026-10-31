@@ -43832,6 +43832,8 @@
           "UnknownAndCustomOptionsKeepTheirUnsupportedPolicyAtEveryTarget",
           "FloatingDefaultsAcceptLeadingDecimalAndExponentForms",
           "FloatingDefaultsRejectMalformedDecimalNeighbors",
+          "FloatingDefaultsAcceptIntegerRadicesAndSignedSpecials",
+          "FloatingDefaultsRejectMalformedRadicesAndNonNativeSpecials",
           "LeadingDecimalTokensNeverSatisfyIntegerContexts",
           "RpcMethodBodiesAcceptEmptyStatements",
           "RpcEmptyStatementsPreserveContentTypeAndOptionChecks",
