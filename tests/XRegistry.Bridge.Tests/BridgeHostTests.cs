@@ -123,6 +123,30 @@ public class BridgeHostTests
     }
 
     [Test]
+    public async Task OversizedInlineDocumentResponseCanBeReadByIndividualCollection()
+    {
+        var source = new ControlledSource("large", "v1", ["shared", "other"]);
+        var payload = new byte[700];
+        source.Override = (request, _) => request.Operation == FederationOperation.Document
+            ? ValueTask.FromResult(FederationReadResult.FromDocument(request.Target, source.Context,
+                new FederationDocument(payload, "application/octet-stream")))
+            : source.ReadDefault(request);
+        await using var app = await BridgeFixture.StartAsync([source.Registration()],
+            BridgeFixture.Options with { MaxResponseBytes = 1536 });
+        using var client = BridgeFixture.Client(app);
+
+        using var tooLarge = await client.GetAsync("/registry?doc&inline=dirs.files.versions.file");
+        await Assert.That(tooLarge.StatusCode).IsEqualTo(HttpStatusCode.RequestEntityTooLarge);
+        await Assert.That((await BridgeFixture.Json(tooLarge)).GetProperty("code").GetString()).IsEqualTo("too_large");
+
+        using var individualCollection = await client.GetAsync("/registry/dirs/g/files/shared/versions?doc&inline=file");
+        await Assert.That(individualCollection.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        await Assert.That((await BridgeFixture.Json(individualCollection)).GetProperty("v1").GetProperty("filebase64").GetString())
+            .IsEqualTo(Convert.ToBase64String(payload));
+        await Assert.That(source.Opens).IsEqualTo(source.Closes);
+    }
+
+    [Test]
     public async Task AdmissionIsBoundedWithoutQueuingOrOverlappingNativeSessions()
     {
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

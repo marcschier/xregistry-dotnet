@@ -17085,16 +17085,16 @@
       "text": "The `inline` flag MAY be used on requests to indicate whether nested collections/objects, or certain (potentially large) attributes, are to be included in the response message.",
       "review": {
         "status": "reviewed",
-        "note": "Engine and producer support model-relative inline collections, Meta, Documents and explicit configuration. The whole supported-attribute set and all independent nested/authorization/empty cases are not promoted from representative exports, especially with the producer default-output finding.",
+        "note": "Bridge tests directly exercise model-relative collections, Meta, Documents and explicit Registry configuration in server responses. This establishes server support only; producer and client behavior are not qualified here.",
         "roles": [
-          "server",
-          "producer"
+          "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "qualified",
         "testIds": [
-          "ExportUsesRelativePointersAndNoDefaultProjection",
+          "BridgeRootInlineIsExplicitAndDoesNotAddSourceRequests",
+          "DocumentViewIncludesSelectedEmptyCollectionsAsRelativeMaps",
           "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
           "EveryEntityAndCollectionUsesItsActualResponseRoot",
           "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks",
@@ -17121,16 +17121,16 @@
       "text": "The `inline` flag on a request indicates that the response MUST include the contents of all specified inlineable attributes. Inlineable attributes include:",
       "review": {
         "status": "reviewed",
-        "note": "Engine and producer support model-relative inline collections, Meta, Documents and explicit configuration. The whole supported-attribute set and all independent nested/authorization/empty cases are not promoted from representative exports, especially with the producer default-output finding.",
+        "note": "The server tests exercise each listed inlineable category: Registry configuration, Registry collections, Resource and Version documents, and Resource metadata. Producer and client behavior are not qualified by these tests.",
         "roles": [
-          "server",
-          "producer"
+          "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "qualified",
         "testIds": [
-          "ExportUsesRelativePointersAndNoDefaultProjection",
+          "BridgeRootInlineIsExplicitAndDoesNotAddSourceRequests",
+          "DocumentViewIncludesSelectedEmptyCollectionsAsRelativeMaps",
           "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
           "EveryEntityAndCollectionUsesItsActualResponseRoot",
           "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks",
@@ -17442,15 +17442,15 @@
       "text": "Note: If the Registry cannot return all expected data in one response because it is too large then it MUST generate an error ([too_large](#too_large)). In those cases, the client will need to query the individual inlineable collection attributes in isolation so the Registry can leverage a pagination type of feature to iteratively retrieve the entities.",
       "review": {
         "status": "reviewed",
-        "note": "Server rendering checks response byte budgets before commit, with exact too_large/406 assertions; it does not silently truncate nested data. Producer enforces a bounded result budget but exposes its own failure contract. The unrestricted all-role size-error and follow-up individual-collection behavior is not fully established here.",
+        "note": "OversizedInlineDocumentResponseCanBeReadByIndividualCollection verifies too_large for the aggregate inline document response and successful retrieval of an individual Versions collection. The client paging loop and producer behavior are not qualified here.",
         "roles": [
-          "server",
-          "producer"
+          "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "qualified",
         "testIds": [
+          "OversizedInlineDocumentResponseCanBeReadByIndividualCollection",
           "ResponseBudgetRejectsBeforeCommitAndWorkingSetIsBounded",
           "ResponseHeaderPreparationFailureRejectsTheWholeWriteWithoutACorrelationOrPartialState",
           "ResourceShadowOwnsEveryVersionAndDocumentWithoutOpeningLaterSources",
@@ -77796,13 +77796,20 @@
       ],
       "text": "The `inline` flag MAY be used on requests to indicate whether nested collections/objects, or certain (potentially large) attributes, are to be included in the response message.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Bridge tests directly exercise model-relative collections, Meta, Documents and explicit Registry configuration in server responses. This establishes server support only; producer and client behavior are not qualified here.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "qualified",
+        "testIds": [
+          "BridgeRootInlineIsExplicitAndDoesNotAddSourceRequests",
+          "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
+          "EveryEntityAndCollectionUsesItsActualResponseRoot",
+          "BinaryChangesOnlyRequestedDocumentEncodingAndJsonDomainValuesRemainUntouched"
+        ],
         "nativeEvidence": []
       }
     },
@@ -77827,13 +77834,24 @@
       ],
       "text": "The `inline` flag on a request indicates that the response MUST include the contents of all specified inlineable attributes. Inlineable attributes include:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The server tests exercise each listed inlineable category: Registry configuration, Registry collections, Resource and Version documents, and Resource metadata. Producer and client behavior are not qualified by these tests.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "qualified",
+        "testIds": [
+          "BridgeRootInlineIsExplicitAndDoesNotAddSourceRequests",
+          "DocumentViewIncludesSelectedEmptyCollectionsAsRelativeMaps",
+          "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
+          "EveryEntityAndCollectionUsesItsActualResponseRoot",
+          "ApiInlineKeepsItsDefaultProjectionAndAbsoluteModelAwareMetadataLinks",
+          "BinaryChangesOnlyRequestedDocumentEncodingAndJsonDomainValuesRemainUntouched",
+          "EmptyAndInvalidJsonDocumentsUseExactBase64Fallback",
+          "ExternalInlineDescriptorRemainsAUrlRatherThanEmptyOrFetchedBytes"
+        ],
         "nativeEvidence": []
       }
     },
@@ -78148,13 +78166,17 @@
       ],
       "text": "Note: If the Registry cannot return all expected data in one response because it is too large then it MUST generate an error ([too_large](#too_large)). In those cases, the client will need to query the individual inlineable collection attributes in isolation so the Registry can leverage a pagination type of feature to iteratively retrieve the entities.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "OversizedInlineDocumentResponseCanBeReadByIndividualCollection verifies too_large for the aggregate inline document response and successful retrieval of an individual Versions collection. The client paging loop and producer behavior are not qualified here.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "qualified",
+        "testIds": [
+          "OversizedInlineDocumentResponseCanBeReadByIndividualCollection"
+        ],
         "nativeEvidence": []
       }
     },
