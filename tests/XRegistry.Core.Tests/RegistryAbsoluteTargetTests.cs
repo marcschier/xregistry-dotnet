@@ -40,6 +40,74 @@ public class RegistryAbsoluteTargetTests
     }
 
     [Test]
+    [Arguments("uri", "//outside.invalid/path")]
+    [Arguments("url", "/gs/g/rs")]
+    [Arguments("uri", "/gs/g/rs/r")]
+    [Arguments("url", "/other/g/rs/r/versions/v1")]
+    public async Task SlashRelativeTargetsMustBeXidsOfTheDeclaredModelType(string type, string value)
+    {
+        var model = Model(type);
+        var error = TestErrors.Capture(() => RegistryMetadataValidator.Validate(
+            RegistryJson.Parse("{\"reference\":\"" + value + "\"}"), model.Attributes["body"].Attributes,
+            new() { Model = model }));
+
+        await Assert.That(error.Code).IsEqualTo("invalid_attribute");
+        await Assert.That(error.Path).IsEqualTo("/reference");
+    }
+
+    [Test]
+    [Arguments("uri")]
+    [Arguments("url")]
+    public async Task NonSlashRelativeValuesAreNotConstrainedByAnXidTarget(string type)
+    {
+        var model = Model(type);
+        var result = RegistryMetadataValidator.Validate(
+            RegistryJson.Parse("""{"reference":"relative/path"}"""), model.Attributes["body"].Attributes,
+            new() { Model = model });
+
+        await Assert.That(result.Metadata.RootElement.GetProperty("reference").GetString()).IsEqualTo("relative/path");
+        await Assert.That(result.Obligations.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("uri")]
+    [Arguments("url")]
+    public async Task SlashRelativeValuesWithoutATargetDefinitionRemainUnconstrained(string type)
+    {
+        var model = ModelWithoutTarget(type);
+        const string value = "/not-an-xid?query";
+        var result = RegistryMetadataValidator.Validate(
+            RegistryJson.Parse("{\"reference\":\"" + value + "\"}"), model.Attributes["body"].Attributes,
+            new() { Model = model });
+
+        await Assert.That(result.Metadata.RootElement.GetProperty("reference").GetString()).IsEqualTo(value);
+        await Assert.That(result.Obligations.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task SlashRelativeTargetSyntaxIsCheckedWithoutModelContext()
+    {
+        var model = Model("url");
+        var error = TestErrors.Capture(() => RegistryMetadataValidator.Validate(
+            RegistryJson.Parse("""{"reference":"//outside.invalid/path"}"""), model.Attributes["body"].Attributes));
+
+        await Assert.That(error.Code).IsEqualTo("invalid_attribute");
+        await Assert.That(error.Path).IsEqualTo("/reference");
+    }
+
+    [Test]
+    public async Task ValidSlashRelativeTargetWithoutModelContextRetainsHostObligation()
+    {
+        var model = Model("url");
+        var result = RegistryMetadataValidator.Validate(
+            RegistryJson.Parse("""{"reference":"/gs/g/rs/r/versions/v1"}"""), model.Attributes["body"].Attributes);
+
+        await Assert.That(result.Obligations.Count).IsEqualTo(1);
+        await Assert.That(result.Obligations[0].Kind).IsEqualTo("target");
+        await Assert.That(result.Obligations[0].Path).IsEqualTo("/reference");
+    }
+
+    [Test]
     [Arguments("uri", "https://bad host/")]
     [Arguments("url", "https://bad host/")]
     [Arguments("xid", "https://outside.invalid/gs/g/rs/r/versions/v1")]
@@ -55,6 +123,11 @@ public class RegistryAbsoluteTargetTests
 
     private static RegistryModel Model(string type) => RegistryModel.Compile(RegistryJson.Parse("""
         {"attributes":{"body":{"type":"object","attributes":{"reference":{"type":"$TYPE","target":"/gs/rs/versions"}}}},
+         "groups":{"gs":{"singular":"g","resources":{"rs":{"singular":"r","hasdocument":false}}}}}
+        """.Replace("$TYPE", type, StringComparison.Ordinal)));
+
+    private static RegistryModel ModelWithoutTarget(string type) => RegistryModel.Compile(RegistryJson.Parse("""
+        {"attributes":{"body":{"type":"object","attributes":{"reference":{"type":"$TYPE"}}}},
          "groups":{"gs":{"singular":"g","resources":{"rs":{"singular":"r","hasdocument":false}}}}}
         """.Replace("$TYPE", type, StringComparison.Ordinal)));
 }

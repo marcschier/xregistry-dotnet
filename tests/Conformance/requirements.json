@@ -28038,16 +28038,22 @@
       "text": "- A URI/URL entity attribute MAY include `target` as part of its definition. If so, then any runtime value that is a relative URI/URL (begins with `/`) MUST be an `xid` and MUST adhere to the `target` entity type specified, if specified. Absolute URIs/URLs are not constrained by the presence of a `target` value.",
       "review": {
         "status": "reviewed",
-        "note": "URI/URL target handling is delegated as a host obligation, including absolute values; the engine fails closed without an explicit policy. The existing callback test proves authorization and rollback, not slash-relative XID/type enforcement or the normative absolute-URI exemption from target constraints.",
+        "note": "Slash-rooted URI/URL values with a declared target are parsed as XIDs and checked against the effective model and target type. Absolute and non-slash-relative values bypass target constraints; valid slash-rooted values retain the explicit host policy obligation.",
         "roles": [
           "client",
           "server"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
-          "UriTargetObligationsRequireAnExplicitValidatorAndFailuresRollBack"
+          "AbsoluteUriAndUrlValuesAreExemptFromTargetObligations",
+          "NonSlashRelativeValuesAreNotConstrainedByAnXidTarget",
+          "SlashRelativeTargetSyntaxIsCheckedWithoutModelContext",
+          "SlashRelativeTargetsMustBeXidsOfTheDeclaredModelType",
+          "SlashRelativeValuesWithoutATargetDefinitionRemainUnconstrained",
+          "UriTargetObligationsRequireAnExplicitValidatorAndFailuresRollBack",
+          "ValidSlashRelativeTargetWithoutModelContextRetainsHostObligation"
         ],
         "nativeEvidence": []
       }

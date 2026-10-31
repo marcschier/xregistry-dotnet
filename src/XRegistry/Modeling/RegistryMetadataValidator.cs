@@ -419,10 +419,28 @@ public static class RegistryMetadataValidator
         {
             if (definition.Type is not (RegistryValueType.Xid or RegistryValueType.XidType))
             {
-                if (definition.Target is not null &&
-                    UriSyntax.IsReference(value.GetString()!, out var absolute) && !absolute)
+                if (definition.Target is null)
                 {
-                    Obligations.Add(new("target", path, "The host must verify the URI target under its authorized Registry context."));
+                    return;
+                }
+
+                var uriText = value.GetString()!;
+                if (UriSyntax.IsReference(uriText, out var absolute) && !absolute &&
+                    uriText.StartsWith('/'))
+                {
+                    if (!ScalarValues.Matches(RegistryValueType.Xid, value))
+                    {
+                        throw Diagnostics.Error("invalid_attribute", path, "A relative URI target must be a valid XID.");
+                    }
+
+                    if (options.Model is not null)
+                    {
+                        CheckXidTarget(uriText, definition.Target, path);
+                    }
+
+                    Obligations.Add(new("target", path, options.Model is null
+                        ? "The host must verify the XID target against its model and authorized Registry context."
+                        : "The host must verify the XID target under its authorized Registry context."));
                 }
 
                 return;
@@ -442,21 +460,34 @@ public static class RegistryMetadataValidator
                 return;
             }
 
+            CheckXidTarget(text, definition.Target, path);
+        }
+
+        private void CheckXidTarget(string text, string? targetTemplate, string path)
+        {
+            if (options.Model is null)
+            {
+                Obligations.Add(new("target", path, "An effective model is required to check the referenced type."));
+                return;
+            }
+
             var xid = RegistryPath.Parse(text);
             CheckModelType(xid.GroupType, xid.ResourceType, path);
-            if (definition.Target is { } template)
+            if (targetTemplate is null)
             {
-                var target = ModelPaths.ParseType(template, path, true);
-                var matchesKind = target.Versions switch
-                {
-                    "required" => xid.Kind == RegistryPathKind.Version,
-                    "optional" => xid.Kind is RegistryPathKind.Resource or RegistryPathKind.Version,
-                    _ => xid.Kind == (target.Resource is null ? RegistryPathKind.Group : RegistryPathKind.Resource)
-                };
-                if (xid.GroupType != target.Group || xid.ResourceType != target.Resource || !matchesKind)
-                {
-                    throw Diagnostics.Error("invalid_attribute", path, "The XID points at a different model type.");
-                }
+                return;
+            }
+
+            var target = ModelPaths.ParseType(targetTemplate, path, true);
+            var matchesKind = target.Versions switch
+            {
+                "required" => xid.Kind == RegistryPathKind.Version,
+                "optional" => xid.Kind is RegistryPathKind.Resource or RegistryPathKind.Version,
+                _ => xid.Kind == (target.Resource is null ? RegistryPathKind.Group : RegistryPathKind.Resource)
+            };
+            if (xid.GroupType != target.Group || xid.ResourceType != target.Resource || !matchesKind)
+            {
+                throw Diagnostics.Error("invalid_attribute", path, "The XID points at a different model type.");
             }
         }
 
