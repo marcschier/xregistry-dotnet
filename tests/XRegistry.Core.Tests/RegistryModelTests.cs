@@ -87,6 +87,20 @@ public class RegistryModelTests
     }
 
     [Test]
+    public async Task GroupModelVersionIsAnOptionalOpaqueString()
+    {
+        var omitted = RegistryModel.Compile(RegistryJson.Parse(
+            """{"groups":{"dirs":{"singular":"dir"}}}"""));
+        var authored = RegistryModel.Compile(RegistryJson.Parse(
+            """{"groups":{"dirs":{"singular":"dir","modelversion":"vendor build / rC"}}}"""));
+
+        await Assert.That(omitted.Groups["dirs"].Annotations.ModelVersion).IsNull();
+        await Assert.That(authored.Groups["dirs"].Annotations.ModelVersion).IsEqualTo("vendor build / rC");
+        await Assert.That(authored.EffectiveModel.RootElement.GetProperty("groups").GetProperty("dirs")
+            .GetProperty("modelversion").GetString()).IsEqualTo("vendor build / rC");
+    }
+
+    [Test]
     public async Task InvalidGroupLabelMapsFailAtTheirModelPaths()
     {
         foreach (var (labels, path) in new[]

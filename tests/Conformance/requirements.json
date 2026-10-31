@@ -30311,15 +30311,17 @@
       "text": "- OPTIONAL.",
       "review": {
         "status": "reviewed",
-        "note": "Group modelversion is an optional string, not an enforced semantic-version number; the major/minor example is descriptive. Annotations and ModelWriter preserve it without interpretation. No direct arbitrary-string, omitted and roundtrip modelversion assertions were found.",
+        "note": "GroupModelVersionIsAnOptionalOpaqueString verifies omission and preserves a non-semver value in the compiled definition and effective model.",
         "roles": [
           "server",
           "producer"
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "GroupModelVersionIsAnOptionalOpaqueString"
+        ],
         "nativeEvidence": []
       }
     },
