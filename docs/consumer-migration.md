@@ -72,6 +72,13 @@ following characters remain literal content. A missing first hexadecimal digit
 still reports `protobuf.string`, and `\u`/`\U` retain their fixed four/eight-digit
 checks. This lexical-width correction does not complete decoded string or bytes
 semantics.
+Character escapes `\a`, `\b`, `\f`, `\n`, `\r`, `\t` and `\v` now produce
+their ASCII control characters rather than their escape letters. Escaped quotes
+and backslashes retain their decoded values. Import acquisition receives the
+decoded, concatenated path; `child\n.proto` does not resolve `childn.proto`.
+The caller still owns acquisition policy, and backslashes remain invalid in
+import paths. Raw line breaks/NUL and unknown escapes remain lexical errors.
+Hexadecimal, octal and Unicode value decoding remains incomplete.
 Option and default checks distinguish quoted strings from native constants.
 For example, `"true"` cannot satisfy a boolean option, and `"ZERO"` cannot
 satisfy an enum default. This also applies when adjacent literals produce the

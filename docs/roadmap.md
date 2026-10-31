@@ -167,6 +167,10 @@ vocabulary/source mapping. It does not supply their implementation.
   Hexadecimal escapes accept the publisher-defined one/two-digit widths;
   Unicode escapes retain fixed-width checks. Decoded string/byte semantics
   remain incomplete.
+  Named character escapes now decode to ASCII controls before string-value
+  use and import acquisition, including adjacent literals. Escaped quotes and
+  backslashes retain their decoded values; hexadecimal, octal and Unicode
+  value decoding remains open.
   Option and default validation checks token kinds before values, so quoted
   strings cannot satisfy boolean, floating-point or enum constant requirements.
   Reserved-number checks reject overlapping intervals and duplicate singletons

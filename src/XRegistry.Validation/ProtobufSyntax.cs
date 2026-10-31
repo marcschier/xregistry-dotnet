@@ -266,6 +266,18 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                             index += digits;
                             continue;
                         }
+
+                        character = character switch
+                        {
+                            'a' => '\a',
+                            'b' => '\b',
+                            'f' => '\f',
+                            'n' => '\n',
+                            'r' => '\r',
+                            't' => '\t',
+                            'v' => '\v',
+                            _ => character
+                        };
                     }
 
                     content.Append(character);

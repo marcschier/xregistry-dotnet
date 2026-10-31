@@ -1305,6 +1305,108 @@ public class ProtobufValidationTests
     }
 
     [Test]
+    [Arguments("\\a", "\a")]
+    [Arguments("\\b", "\b")]
+    [Arguments("\\f", "\f")]
+    [Arguments("\\n", "\n")]
+    [Arguments("\\r", "\r")]
+    [Arguments("\\t", "\t")]
+    [Arguments("\\v", "\v")]
+    [Arguments("\\'", "'")]
+    [Arguments("\\\"", "\"")]
+    public async Task CharacterEscapesResolveTheirDecodedImportPath(string escaped, string decoded)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            foreach (var quote in new[] { '"', '\'' })
+            {
+                foreach (var adjacent in new[] { false, true })
+                {
+                    var requests = new List<string>();
+                    var expected = $"child{decoded}.proto";
+                    var path = adjacent
+                        ? $"{quote}child{escaped}{quote} /* join */ {quote}.proto{quote}"
+                        : $"{quote}child{escaped}.proto{quote}";
+                    var source = $"syntax=\"proto{syntax}\"; import {path}; " +
+                        $"message Root {{ optional Child value=1; }}";
+                    var result = await new BuiltInDocumentValidator().ValidateAsync(
+                        $"Protobuf/{syntax}", Encoding.UTF8.GetBytes(source), new()
+                        {
+                            ResolveReference = (name, _) =>
+                            {
+                                requests.Add(name);
+                                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(name == expected
+                                    ? Encoding.UTF8.GetBytes($"syntax=\"proto{syntax}\"; message Child {{}}")
+                                    : (ReadOnlyMemory<byte>?)null);
+                            }
+                        });
+                    await Assert.That(requests.Count).IsEqualTo(1);
+                    await Assert.That(requests[0]).IsEqualTo(expected);
+                    await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+                    await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+                }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("\\a", "a")]
+    [Arguments("\\b", "b")]
+    [Arguments("\\f", "f")]
+    [Arguments("\\n", "n")]
+    [Arguments("\\r", "r")]
+    [Arguments("\\t", "t")]
+    [Arguments("\\v", "v")]
+    public async Task CharacterEscapesNeverAliasTheirUnescapedLetterImport(string escaped, string letter)
+    {
+        var requests = new List<string>();
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            Encoding.UTF8.GetBytes($"syntax=\"proto3\"; import \"child{escaped}.proto\"; message Root {{}}"),
+            new()
+            {
+                ResolveReference = (name, _) =>
+                {
+                    requests.Add(name);
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(name == $"child{letter}.proto"
+                        ? """syntax="proto3"; message Child {}"""u8.ToArray() : (ReadOnlyMemory<byte>?)null);
+                }
+            });
+        await Assert.That(requests.Count).IsEqualTo(1);
+        await Assert.That(requests[0]).IsNotEqualTo($"child{letter}.proto");
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Indeterminate);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("reference.unresolved");
+    }
+
+    [Test]
+    [Arguments("\n", "protobuf.string")]
+    [Arguments("\r", "protobuf.string")]
+    [Arguments("\0", "protobuf.string")]
+    [Arguments("\\q", "protobuf.string")]
+    [Arguments("\\?", "protobuf.string")]
+    [Arguments("\\", "protobuf.string")]
+    [Arguments("\\\\", "protobuf.import")]
+    public async Task CharacterEscapeDecodingPreservesLiteralAndImportFailures(string value, string code)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var requests = 0;
+            var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                Encoding.UTF8.GetBytes($"syntax=\"proto{syntax}\"; import \"{value}\"; message Root {{}}"),
+                new()
+                {
+                    ResolveReference = (_, _) =>
+                    {
+                        requests++;
+                        throw new InvalidOperationException("Invalid literals must fail before acquisition.");
+                    }
+                });
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo(code);
+            await Assert.That(requests).IsEqualTo(0);
+        }
+    }
+
+    [Test]
     [Arguments("0")]
     [Arguments("-0")]
     [Arguments("+0")]
