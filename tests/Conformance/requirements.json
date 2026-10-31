@@ -114078,7 +114078,11 @@
           "GrpcDocumentValidationDetectsDirectAndTransitiveImportCycles",
           "GrpcDocumentValidationAllowsSharedAcyclicDependencies",
           "GrpcImportCyclesRemainUncheckedOrRejectStrictPublication",
-          "GrpcDetectsDirectAndTransitiveImportCyclesWithoutRefetchingTheRoot"
+          "GrpcDetectsDirectAndTransitiveImportCyclesWithoutRefetchingTheRoot",
+          "GrpcDocumentValidationResolvesImportsAgainstEachSuppliedDocumentBase",
+          "GrpcDocumentValidationDoesNotRefetchItsConfiguredRootUri",
+          "GrpcDocumentValidationChecksImportSpellingBeforeResolvingAgainstABase",
+          "GrpcPublicationUsesTheConfiguredSourceBaseForAuthorizedImports"
         ],
         "nativeEvidence": []
       }

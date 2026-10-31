@@ -10,6 +10,76 @@ namespace XRegistry.Validation.Tests;
 public class ProtobufValidationTests
 {
     [Test]
+    [Arguments("has space.proto")]
+    [Arguments("bad%.proto")]
+    public async Task GrpcDocumentValidationChecksImportSpellingBeforeResolvingAgainstABase(string import)
+    {
+        var calls = 0;
+        var result = await new BuiltInDocumentValidator().ValidateAsync("gRPC/proto3",
+            Encoding.UTF8.GetBytes("syntax='proto3'; import '" + import + "'; service S {}"),
+            new DocumentValidationOptions
+            {
+                DocumentUri = new Uri("https://example.test/root.proto"),
+                ResolveReference = (_, _) =>
+                {
+                    calls++;
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(null);
+                }
+            });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("dependency.uri");
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task GrpcDocumentValidationResolvesImportsAgainstEachSuppliedDocumentBase(bool withBase)
+    {
+        var calls = new List<string>();
+        var bridge = withBase ? "https://example.test/apis/sub/bridge.proto" : "sub/bridge.proto";
+        var types = withBase ? "https://example.test/apis/sub/types.proto" : "types.proto";
+        var result = await new BuiltInDocumentValidator().ValidateAsync("gRPC/proto3",
+            Encoding.UTF8.GetBytes("""
+                syntax='proto3'; import 'sub/bridge.proto'; service S { rpc Get(p.Row) returns(p.Row); }
+                """), new DocumentValidationOptions
+            {
+                DocumentUri = withBase ? new Uri("https://example.test/apis/root.proto") : null,
+                ResolveReference = (name, _) =>
+                {
+                    calls.Add(name);
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(name == bridge
+                        ? Encoding.UTF8.GetBytes("syntax='proto3'; import public 'types.proto';")
+                        : name == types ? Encoding.UTF8.GetBytes("syntax='proto3'; package p; message Row {}")
+                        : null);
+                }
+            });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+        await Assert.That(calls.SequenceEqual([bridge, types])).IsTrue();
+    }
+
+    [Test]
+    public async Task GrpcDocumentValidationDoesNotRefetchItsConfiguredRootUri()
+    {
+        var calls = 0;
+        var result = await new BuiltInDocumentValidator().ValidateAsync("gRPC/proto3",
+            Encoding.UTF8.GetBytes("syntax='proto3'; import 'root.proto'; service S {}"),
+            new DocumentValidationOptions
+            {
+                DocumentUri = new Uri("https://example.test/apis/root.proto"),
+                ResolveReference = (_, _) =>
+                {
+                    calls++;
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(null);
+                }
+            });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Indeterminate);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("dependency.cycle");
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
     [Arguments(false)]
     [Arguments(true)]
     public async Task GrpcDocumentValidationDetectsDirectAndTransitiveImportCycles(bool transitive)

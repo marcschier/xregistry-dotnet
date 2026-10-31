@@ -282,7 +282,7 @@ public static partial class ApiOperationDocumentResolver
             {
                 var parser = new ProtobufSyntax(budget);
                 await parser.ValidateAsync(document, 3, rootReference: "root.proto",
-                    requireRootService: true, validateImport: ValidateGrpcImport).ConfigureAwait(false);
+                    requireRootService: true, requireImportUris: true).ConfigureAwait(false);
                 var method = parser.SelectRootRpc(reference.Selector.Tokens[1], reference.Selector.Tokens[3]);
                 return method is null
                     ? Failure(ApiOperationResolutionStatus.NotFound, "selection.not_found",
@@ -394,14 +394,6 @@ public static partial class ApiOperationDocumentResolver
             }
             return resolveReference is null ? null :
                 await resolveReference(uri, token).AsTask().WaitAsync(token).ConfigureAwait(false);
-        }
-
-        void ValidateGrpcImport(string import)
-        {
-            budget.Work(import.Length, "$/import");
-            ValidationContext.Require(!HasRawUriWhitespaceOrControls(import) &&
-                Uri.IsWellFormedUriString(import, UriKind.RelativeOrAbsolute),
-                "$/import", "dependency.uri", "The gRPC import is not a valid document URI reference.");
         }
     }
 

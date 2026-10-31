@@ -68,7 +68,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
     }
 
     internal async ValueTask ValidateAsync(ReadOnlyMemory<byte> document, int syntax, string? rootReference = null,
-        bool requireRootService = false, Action<string>? validateImport = null)
+        bool requireRootService = false, bool requireImportUris = false)
     {
         var resolveUris = rootReference is not null && context.Options.DocumentUri is not null;
         var rootName = resolveUris ? context.Options.DocumentUri!.AbsoluteUri : rootReference ?? "root.proto";
@@ -84,7 +84,14 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             foreach (var import in imports)
             {
                 context.Work();
-                validateImport?.Invoke(import.Name);
+                if (requireImportUris)
+                {
+                    context.Work(import.Name.Length, "$/import");
+                    ValidationContext.Require(!import.Name.Any(static character =>
+                        char.IsWhiteSpace(character) || char.IsControl(character)) &&
+                        Uri.IsWellFormedUriString(import.Name, UriKind.RelativeOrAbsolute),
+                        "$/import", "dependency.uri", "The gRPC import is not a valid document URI reference.");
+                }
                 var key = resolveUris ? new Uri(new Uri(item.Name, UriKind.Absolute), import.Name).AbsoluteUri : import.Name;
                 dependencies.Add((key, import.IsPublic));
                 if (_documents.Add(key))

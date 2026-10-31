@@ -134,6 +134,29 @@ public class BuiltInValidationAdapterTests
     }
 
     [Test]
+    public async Task GrpcPublicationUsesTheConfiguredSourceBaseForAuthorizedImports()
+    {
+        var calls = new List<string>();
+        var engine = ValidatingEngine(strict: true, validationOptions: new()
+        {
+            DocumentUri = new Uri("https://example.test/apis/root.proto"),
+            ResolveReference = (name, _) =>
+            {
+                calls.Add(name);
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(name == "https://example.test/apis/types.proto"
+                    ? Encoding.UTF8.GetBytes("syntax='proto3'; package p; message Row {}") : null);
+            }
+        });
+        var metadata = "{\"format\":\"gRPC/proto3\",\"schemabase64\":\"" +
+            Convert.ToBase64String(Encoding.UTF8.GetBytes(
+                "syntax='proto3'; import 'types.proto'; service S { rpc Get(p.Row) returns(p.Row); }")) + "\"}";
+        var result = await Send(engine, RegistryAction.Replace, "/sets/g/schemas/s$details", metadata);
+        await Assert.That(result.Metadata!.RootElement.GetProperty("formatvalidated").GetBoolean()).IsTrue();
+        await Assert.That(result.Metadata.RootElement.TryGetProperty("formatvalidatedreason", out _)).IsFalse();
+        await Assert.That(calls.SequenceEqual(["https://example.test/apis/types.proto"])).IsTrue();
+    }
+
+    [Test]
     [Arguments(false)]
     [Arguments(true)]
     public async Task GrpcImportCyclesRemainUncheckedOrRejectStrictPublication(bool strict)

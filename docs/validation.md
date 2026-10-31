@@ -20,6 +20,12 @@ operation selection. A cycle reports `Indeterminate` with `dependency.cycle`,
 never successful validation. The server adapter leaves such a document unchecked
 in non-strict mode and rejects it in strict mode. Shared acyclic dependencies
 remain valid and are retrieved once per distinct document.
+When `DocumentValidationOptions.DocumentUri` is supplied for gRPC source,
+imports resolve against the URI of each importing document before the callback
+is invoked. Malformed URI spellings reject validation before normalization or
+retrieval. Without a base URI, the document validator retains named-reference
+lookup. The server adapter uses the same configured base and callback; it does
+not acquire dependencies independently.
 
 These are declared policies, not claims of universal equivalence to every
 upstream schema tool or version. All parsers share finite document, aggregate
