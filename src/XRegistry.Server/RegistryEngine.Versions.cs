@@ -93,8 +93,15 @@ public sealed partial class RegistryEngine
             while (definition.MaxVersions > 0 && versions.Count > definition.MaxVersions)
             {
                 var ordered = OldestFirst(versions, definition);
-                var oldest = definition.MaxVersions == BigInteger.One
-                    ? ordered[0] : ordered.First(version => Id(version) != selected);
+                var oldest = ordered[0];
+                if (definition.MaxVersions != BigInteger.One && Id(oldest) == selected)
+                {
+                    foreach (var version in versions)
+                    {
+                        Work();
+                    }
+                    oldest = OldestFirst(versions, definition, selected)[0];
+                }
                 DeleteEntity(oldest, new JsonObject());
                 versions.Remove(oldest);
                 RebuildAncestry(versions, definition);
@@ -269,12 +276,15 @@ public sealed partial class RegistryEngine
             return leaves[^1];
         }
 
-        private static List<Entity> OldestFirst(IReadOnlyList<Entity> versions, RegistryResourceDefinition definition)
+        private static List<Entity> OldestFirst(IReadOnlyList<Entity> versions, RegistryResourceDefinition definition,
+            string? excludedVersionId = null)
         {
-            var ordered = versions.ToList();
+            var ordered = versions.Where(version => Id(version) != excludedVersionId).ToList();
             if (definition.VersionMode == "manual")
             {
-                var roots = ordered.Where(version => Id(version) == ServerJson.Text(version.Attributes, "ancestorid")).ToList();
+                var roots = ordered.Where(version =>
+                    Id(version) == ServerJson.Text(version.Attributes, "ancestorid") ||
+                    excludedVersionId is not null && ServerJson.Text(version.Attributes, "ancestorid") == excludedVersionId).ToList();
                 if (roots.Count == 0)
                 {
                     throw ServerErrors.With("ancestor_circular_reference", ResourceKey(RegistryPath.Parse(versions[0].Key)),

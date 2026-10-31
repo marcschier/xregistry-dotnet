@@ -12,6 +12,130 @@ namespace XRegistry.Server.Tests;
 public class ModelAndVersionTests
 {
     [Test]
+    [Arguments("a")]
+    [Arguments("z")]
+    public async Task ReducingMaxVersionsToOneRejectsAnyStickyResourceAtomically(string stickyResource)
+    {
+        const string model = """
+            {"groups":{"teams":{"singular":"team","resources":{"notes":{
+              "singular":"note","hasdocument":false,"maxversions":0,"versionmode":"semver"
+            }}}}}
+            """;
+        var replacement = model.Replace("\"maxversions\":0", "\"maxversions\":1", StringComparison.Ordinal);
+        var store = new InMemoryRegistryPersistence();
+        var engine = Create(model, persistence: store);
+        foreach (var resource in new[] { "a", "z" })
+        {
+            await Send(engine, RegistryAction.Replace, "/teams/g/notes/" + resource + "/versions/1.0.0", """{"name":"old"}""");
+            await Send(engine, RegistryAction.Replace, "/teams/g/notes/" + resource + "/versions/2.0.0", """{"name":"new"}""");
+        }
+        await Send(engine, RegistryAction.Patch, "/teams/g/notes/" + stickyResource + "/meta",
+            """{"defaultversionid":"1.0.0"}""");
+        var before = (await Send(engine, RegistryAction.Read, "/export")).Metadata!.RootElement.GetRawText();
+        var sourceBefore = (await Send(engine, RegistryAction.Read, "/modelsource")).Metadata!.RootElement.GetRawText();
+        var compiledBefore = (await Send(engine, RegistryAction.Read, "/model")).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        foreach (var current in new[] { engine, Create(model, persistence: store) })
+        {
+            using var snapshot = await store.ReadSnapshotAsync();
+            await ExpectCode(() => Send(current, RegistryAction.Replace, "/modelsource", replacement), "setdefaultversionsticky_false");
+            using var after = await store.ReadSnapshotAsync();
+            await Assert.That(after.Generation).IsEqualTo(snapshot.Generation);
+            await Assert.That((await Send(current, RegistryAction.Read, "/export")).Metadata!.RootElement.GetRawText()).IsEqualTo(before);
+            await Assert.That((await Send(current, RegistryAction.Read, "/modelsource")).Metadata!.RootElement.GetRawText()).IsEqualTo(sourceBefore);
+            await Assert.That((await Send(current, RegistryAction.Read, "/model")).Metadata!.RootElement.GetRawText()).IsEqualTo(compiledBefore);
+            await Assert.That((await current.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        }
+        await Send(engine, RegistryAction.Patch, "/teams/g/notes/" + stickyResource + "/meta",
+            """{"defaultversionsticky":false}""");
+        await Send(engine, RegistryAction.Replace, "/modelsource", replacement);
+        foreach (var current in new[] { engine, Create(model, persistence: store) })
+        {
+            var compiled = (await Send(current, RegistryAction.Read, "/model")).Metadata!.RootElement;
+            await Assert.That(compiled.GetProperty("groups").GetProperty("teams").GetProperty("resources")
+                .GetProperty("notes").GetProperty("maxversions").GetInt32()).IsEqualTo(1);
+            foreach (var resource in new[] { "a", "z" })
+            {
+                var versions = (await Send(current, RegistryAction.Read, "/teams/g/notes/" + resource + "/versions")).Metadata!.RootElement;
+                await Assert.That(versions.EnumerateObject().Count()).IsEqualTo(1);
+                await Assert.That(versions.GetProperty("2.0.0").GetProperty("ancestorid").GetString()).IsEqualTo("2.0.0");
+                var meta = (await Send(current, RegistryAction.Read, "/teams/g/notes/" + resource + "/meta")).Metadata!.RootElement;
+                await Assert.That(meta.GetProperty("defaultversionid").GetString()).IsEqualTo("2.0.0");
+                await Assert.That(meta.GetProperty("defaultversionsticky").GetBoolean()).IsFalse();
+            }
+            await Assert.That((await current.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events + 2);
+        }
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task RetentionRecalculatesRootsWhenOldestVersionIsStickyDefault(bool independentRoot)
+    {
+        var store = new InMemoryRegistryPersistence();
+        var limit = independentRoot ? "4" : "3";
+        var model = """
+            {"groups":{"teams":{"singular":"team","resources":{"notes":{
+              "singular":"note","hasdocument":false,"maxversions":LIMIT,"versionmode":"manual"
+            }}}}}
+            """.Replace("LIMIT", limit, StringComparison.Ordinal);
+        var engine = Create(model, persistence: store);
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n/versions/A",
+            """{"ancestorid":"A","createdat":"2040-01-01T00:00:00Z","name":"default"}""");
+        if (independentRoot)
+        {
+            await Send(engine, RegistryAction.Replace, "/teams/g/notes/n/versions/R",
+                """{"ancestorid":"R","createdat":"2040-01-02T00:00:00Z","name":"other root"}""");
+        }
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n/versions/Z",
+            """{"ancestorid":"A","createdat":"2040-01-03T00:00:00Z","name":"child"}""");
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n/versions/B",
+            """{"ancestorid":"Z","createdat":"2040-01-04T00:00:00Z","name":"grandchild"}""");
+        await Send(engine, RegistryAction.Patch, "/teams/g/notes/n/meta", """{"defaultversionid":"A"}""");
+        var before = (await Send(engine, RegistryAction.Read, "/teams/g/notes/n/versions")).Metadata!.RootElement;
+        await Assert.That(before.EnumerateObject().Count()).IsEqualTo(independentRoot ? 4 : 3);
+        await Assert.That(before.GetProperty("Z").GetProperty("ancestorid").GetString()).IsEqualTo("A");
+        var defaultMetadata = before.GetProperty("A").GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n/versions/C",
+            """{"ancestorid":"B","createdat":"2040-01-05T00:00:00Z","name":"new leaf"}""");
+        await AssertRetainedAsync(engine);
+        await AssertRetainedAsync(Create(model, persistence: store));
+        await Send(engine, RegistryAction.Patch, "/teams/g/notes/n/versions", """
+            {"D":{"ancestorid":"C","createdat":"2040-01-06T00:00:00Z","name":"fourth"},
+             "E":{"ancestorid":"D","createdat":"2040-01-07T00:00:00Z","name":"fifth"}}
+            """);
+        foreach (var current in new[] { engine, Create(model, persistence: store) })
+        {
+            var versions = (await Send(current, RegistryAction.Read, "/teams/g/notes/n/versions")).Metadata!.RootElement;
+            await Assert.That(versions.EnumerateObject().Count()).IsEqualTo(independentRoot ? 4 : 3);
+            await Assert.That(versions.GetProperty("A").GetRawText()).IsEqualTo(defaultMetadata);
+            await Assert.That(versions.TryGetProperty("B", out _)).IsFalse();
+            await Assert.That(versions.TryGetProperty("Z", out _)).IsFalse();
+            await Assert.That(versions.TryGetProperty("C", out _)).IsEqualTo(independentRoot);
+            await Assert.That(versions.GetProperty("D").GetProperty("ancestorid").GetString()).IsEqualTo(independentRoot ? "C" : "D");
+            await Assert.That(versions.GetProperty("E").GetProperty("ancestorid").GetString()).IsEqualTo("D");
+            await Assert.That((await current.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events + 2);
+        }
+
+        async Task AssertRetainedAsync(RegistryEngine current)
+        {
+            var versions = (await Send(current, RegistryAction.Read, "/teams/g/notes/n/versions")).Metadata!.RootElement;
+            await Assert.That(versions.EnumerateObject().Count()).IsEqualTo(independentRoot ? 4 : 3);
+            await Assert.That(versions.TryGetProperty(independentRoot ? "R" : "Z", out _)).IsFalse();
+            await Assert.That(versions.GetProperty("A").GetRawText()).IsEqualTo(defaultMetadata);
+            await Assert.That(versions.GetProperty("B").GetProperty("ancestorid").GetString())
+                .IsEqualTo(independentRoot ? "Z" : "B");
+            await Assert.That(versions.GetProperty("C").GetProperty("ancestorid").GetString()).IsEqualTo("B");
+            await Assert.That(versions.GetProperty("B").GetProperty("name").GetString()).IsEqualTo("grandchild");
+            var meta = (await Send(current, RegistryAction.Read, "/teams/g/notes/n/meta")).Metadata!.RootElement;
+            await Assert.That(meta.GetProperty("defaultversionid").GetString()).IsEqualTo("A");
+            await Assert.That(meta.GetProperty("defaultversionsticky").GetBoolean()).IsTrue();
+            await Assert.That((await current.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events + 1);
+        }
+    }
+
+    [Test]
     [Arguments(false)]
     [Arguments(true)]
     public async Task DefaultAndExplicitSetVersionIdModelsAllowClientChosenVersionCreation(bool explicitPolicy)

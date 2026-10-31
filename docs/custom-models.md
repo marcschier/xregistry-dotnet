@@ -67,6 +67,20 @@ The Server uses the compiled model default during Resource creation and Meta
 completion. A Resource with `"maxversions": 1` still rejects sticky `true`,
 because only one Version can remain.
 
+## Limit retained Versions
+
+For a `maxversions` above one, the Server prunes the oldest root according to
+the Resource's `versionmode`. If that Version is the current default, the
+Server recalculates eligible roots as if the default had been removed. That
+selection step does not change the default's stored metadata or its children's
+ancestry; only deleting the chosen Version triggers ancestry repair. The
+Server repeats selection and deletion until the retained count meets the limit.
+
+Changing `maxversions` to `1` is rejected with `setdefaultversionsticky_false`
+if any existing Resource of that type has a sticky default. The rejected model
+update leaves the model and all Resources unchanged. Clear those sticky defaults
+before retrying; the accepted update retains each Resource's newest Version.
+
 ## Run the FileServer with the model
 
 From the repository root:

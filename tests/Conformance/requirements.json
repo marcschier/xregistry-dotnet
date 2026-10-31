@@ -83420,13 +83420,17 @@
       ],
       "text": "- When the limit is exceeded, implementations MUST prune Versions by deleting the oldest root Version first (see the [`versionmode`](#groupsstringresourcesstringversionmode) section for how oldest is determined). If the chosen Version is the current default Version, then for the purposes of determining which to delete, the default Version is removed from the collection of Versions, the list of \"root\" ancestors is recalculated and the \"oldest root Version\" algorithm is reapplied.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The successor requires root recalculation, not skipping the default in an already ordered list. A sole sticky root with child Z and descendant B reproduced incorrect pruning of B on both frameworks. FinalizeResource now excludes the selected default only while recalculating order; manual children of that default are eligible roots without metadata mutation. RetentionRecalculatesRootsWhenOldestVersionIsStickyDefault proves sole-root and independent older-root selection, repeated multi-Version pruning, actual deletion repair, unchanged default metadata, atomic event batches and restart. The full mode-specific pruning and tie matrix remains pending.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "RetentionRecalculatesRootsWhenOldestVersionIsStickyDefault"
+        ],
         "nativeEvidence": []
       }
     },
@@ -83451,13 +83455,17 @@
       ],
       "text": "- An attempt to change `maxversions` to `1` when there are existing Resource instances that have their `defaultversionsticky` attribute set to `true` MUST generate an error ([setdefaultversionsticky_false](spec.md#setdefaultversionsticky_false)). See [`defaultversionsticky` Attribute](spec.md#defaultversionsticky-attribute) for additional information.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "FinalizeResource rejects a modeled limit of one with setdefaultversionsticky_false before pruning a sticky Resource. ReducingMaxVersionsToOneRejectsAnyStickyResourceAtomically places the sticky Resource before and after a nonsticky Resource in traversal order, checks the exact diagnostic, unchanged authored/compiled models, full export, persistence generation and event count through restart, then clears sticky and proves accepted model replacement prunes both Resources to their newest Version with repaired ancestry and persisted state.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ReducingMaxVersionsToOneRejectsAnyStickyResourceAtomically"
+        ],
         "nativeEvidence": []
       }
     },
