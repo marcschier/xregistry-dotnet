@@ -252,6 +252,10 @@ vocabulary/source mapping. It does not supply their implementation.
   qualified name, independently of import order; multiple files can still
   contribute distinct declarations to one package. Fields, oneofs and enum values
   also prevent relative fallback, independently of declaration order.
+  Explicit decoded `json_name` values now reject collisions within a message,
+  including across oneofs and maps; imported declarations receive the same
+  check. Derived lower-camel names and the legacy JSON conflict option remain
+  outside this policy.
   The document validator now accepts `gRPC/proto3` under the same bounded
   declaration policy and requires at least one root service. Imported services
   cannot satisfy the root requirement; imported types retain syntax and

@@ -474,7 +474,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
         }
     }
     private sealed record Field(string Name, int Number, string Type, string Scope, string Label,
-        bool HasPackedOption, bool HasLazyOption, Token? Default);
+        bool HasPackedOption, bool HasLazyOption, Token? Default, string? JsonName);
     private sealed class Definition(bool isEnum, bool isRoot, string document, int syntax)
     {
         internal bool IsEnum { get; } = isEnum;
@@ -589,6 +589,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             Expect("{");
             var fields = new List<Field>();
             var numbers = new HashSet<int>();
+            var jsonNames = new HashSet<string>(StringComparer.Ordinal);
             var reservedNames = new HashSet<string>(StringComparer.Ordinal);
             var reservedNumbers = new List<(int First, int Last)>();
             var options = new HashSet<string>(StringComparer.Ordinal);
@@ -629,6 +630,12 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             {
                 owner.RegisterSymbol(field.Name, full);
                 Require(numbers.Add(field.Number), "protobuf.duplicate", "Message field numbers must be unique.");
+                if (field.JsonName is { } jsonName)
+                {
+                    owner.Context.Work(jsonName.Length + 1);
+                    Require(jsonNames.Add(jsonName), "protobuf.json_name",
+                        "Explicit JSON field names must be unique within a message.");
+                }
                 fields.Add(field);
                 owner._fields.Add(field);
             }
@@ -670,6 +677,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             Expect("=");
             var number = Tag();
             Token? defaultValue = null;
+            string? jsonName = null;
             var hasPackedOption = false;
             var hasLazyOption = false;
             if (Take("["))
@@ -695,6 +703,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
                         case "json_name":
                             Require(value.Kind == TokenKind.String, "protobuf.option", "json_name must be a string.");
                             Require(!value.Text.Contains('\0'), "protobuf.json_name", "json_name cannot contain NUL.");
+                            jsonName = value.Text;
                             break;
                         case "deprecated":
                         case "weak":
@@ -723,7 +732,7 @@ internal sealed class ProtobufSyntax(ValidationContext context)
             }
 
             Expect(";");
-            return new(name, number, type, scope, label, hasPackedOption, hasLazyOption, defaultValue);
+            return new(name, number, type, scope, label, hasPackedOption, hasLazyOption, defaultValue, jsonName);
         }
 
         private void Enumeration(string scope)

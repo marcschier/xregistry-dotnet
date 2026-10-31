@@ -224,6 +224,11 @@ violations report `Invalid` with `protobuf.json_name`, including in imported
 schemas. Other decoded characters and literal backslash spellings remain valid.
 NUL remains permitted in string and bytes defaults and other string-valued
 options. This does not implement ProtoJSON serialization or message parsing.
+Decoded explicit `json_name` values must also be unique within their message,
+including across ordinary fields, maps and separate oneofs. Collisions report
+`protobuf.json_name`; exact case and independent message scopes remain
+significant. This check does not yet compare explicit names against derived
+lower-camel names or implement the legacy conflict option.
 
 RPC method `idempotency_level` options accept the native `IDEMPOTENCY_UNKNOWN`,
 `NO_SIDE_EFFECTS` and `IDEMPOTENT` constants defined in the publisher's descriptor

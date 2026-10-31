@@ -10,6 +10,52 @@ namespace XRegistry.Validation.Tests;
 public class ProtobufValidationTests
 {
     [Test]
+    [Arguments("optional string first=1 [json_name='key']; optional string second=2 [json_name='key'];")]
+    [Arguments("optional string first=1 [json_name='k' 'ey']; oneof choice { string second=2 [json_name='key']; }")]
+    [Arguments("oneof first { string a=1 [json_name='key']; } oneof second { string b=2 [json_name='key']; }")]
+    [Arguments("map<string,int32> first=1 [json_name='key']; optional string second=2 [json_name='key'];")]
+    [Arguments("optional string first=1 [json_name='']; repeated string second=2 [json_name=''];")]
+    [Arguments("optional string first=1 [json_name='\\u006bey']; optional string second=2 [json_name='key'];")]
+    public async Task ExplicitJsonNamesMustBeUniqueAcrossMessageFields(string fields)
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                Encoding.UTF8.GetBytes($"syntax='proto{syntax}'; message Root {{ {fields} }}"));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.json_name");
+        }
+    }
+
+    [Test]
+    public async Task ExplicitJsonNameUniquenessPreservesCaseAndIndependentMessages()
+    {
+        foreach (var syntax in new[] { 2, 3 })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync($"Protobuf/{syntax}",
+                Encoding.UTF8.GetBytes($"syntax='proto{syntax}'; message Root {{ " +
+                    "optional string first=1 [json_name='key']; optional string second=2 [json_name='Key']; " +
+                    "message Child { optional string value=1 [json_name='key']; } } " +
+                    "message Other { optional string value=1 [json_name='key']; }"));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+            await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+        }
+    }
+
+    [Test]
+    public async Task ExplicitJsonNameCollisionsInImportedMessagesCannotBeIgnored()
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Protobuf/3",
+            "syntax='proto3'; import 'dep.proto'; message Root {}"u8.ToArray(), new()
+            {
+                ResolveReference = (_, _) => ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+                    "syntax='proto2'; message Imported { optional string a=1 [json_name='key']; optional string b=2 [json_name='key']; }"u8.ToArray())
+            });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("protobuf.json_name");
+    }
+
+    [Test]
     [Arguments("message Name {}")]
     [Arguments("enum Name { ZERO=0; }")]
     [Arguments("service Name {}")]
