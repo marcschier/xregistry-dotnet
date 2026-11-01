@@ -75,3 +75,25 @@ SPEC-020. A corrected source or passing independent oracle is evidence about
 that corpus only; it does not qualify package behavior, native platforms,
 interoperability, or release status. Current extracted requirement counts and
 qualification status are in [conformance evidence](conformance.md).
+
+## Active Message artifact differences
+
+The merged `upstream-d290b1ec` Message model still differs from the packaged
+model. The packaged bytes match the approved SPEC-020 correction, not the
+uncorrected merged artifact; `sync_models.py --check` verifies that distinction.
+These differences therefore need explicit disposition rather than a claim that
+the two models are identical.
+
+| Artifact difference | Current disposition |
+|---|---|
+| HTTP prose requires a query string map; the merged model and example use an array. The model also omits the prose's `status` property. | The approved correction supplies the map and status in the packaged model. Domain validation rejects query arrays. Proposed source correction: use a query string map in the model and example, and declare `status`. |
+| MQTT/5.0 prose describes binary `correlation_data`; the merged model calls it `uritemplate`. Its `content_type` also uses `uritemplate` rather than a media-type string. | SPEC-013 supplies canonical base64 and media-type string declarations, retained in SPEC-020. Proposed source correction: use the binary representation for correlation data and a string for content type. |
+| CloudEvents and AMQP declaration maps use ordinary Core object/map traversal in the merged model. | Approved corrections preserve literal nulls and protocol names through opaque boundaries, with mandatory domain validation. This is an implementation authoring boundary, not permission to ignore invalid declarations. |
+| HTTP/NATS headers, MQTT user properties and Kafka header items lack the complete common declaration fields in the merged model. | SPEC-020 retains opaque declaration items with domain checks and defaults. Their documentation belongs to the owning attribute because Core item shapes do not admit annotation fields. |
+| The HTTP heading lists HTTP/1.1, HTTP/2 and HTTP/3, while the body, model and example select `HTTP`. | The implementation uses the declared `HTTP` selector; it does not invent equivalence for versioned custom selectors. Proposed source clarification: distinguish wire versions from the Message protocol selector. |
+| Kafka prose calls topic/key strings and key_base64 binary; the model calls topic/key URI templates and key_base64 a string. | The domain preserves string values and Level-1 templates, and validates canonical base64 independently of Core shape. Whether the model's named types should be changed remains a source-artifact decision, not evidence of full Kafka wire qualification. |
+
+These observations do not change the frozen source composition or edit upstream
+text. Complete runnable example/schema comparison and imported protocol
+qualification remain open. Registry definition admission does not serialize an
+application message or prove that a broker accepts it.
