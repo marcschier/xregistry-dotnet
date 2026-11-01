@@ -176,6 +176,12 @@ internal static class AvroResolution
                 return reader.Branches.Any(branch => Visit(writer, branch, context, active, depth + 1));
             }
 
+            if (writer.DecimalPrecision is { } writerPrecision && reader.DecimalPrecision is { } readerPrecision &&
+                (writerPrecision != readerPrecision || writer.DecimalScale != reader.DecimalScale))
+            {
+                return false;
+            }
+
             if (writer.Kind != reader.Kind)
             {
                 return (writer.Kind, reader.Kind) is ("int", "long" or "float" or "double") or

@@ -62,15 +62,52 @@ public class AvroValidationTests
     [Arguments("""{"type":"bytes","logicalType":"decimal","precision":4,"scale":2}""")]
     [Arguments("""{"type":"bytes","logicalType":"decimal","precision":4,"scale":5}""")]
     [Arguments("""{"type":"fixed","name":"D","size":2,"logicalType":"decimal","precision":4}""")]
-    public async Task DecimalAnnotationsRemainExplicitlyUncheckedUntilResolutionIsQualified(string schema)
+    public async Task DecimalAnnotationsUseUnderlyingWireSchemasWithoutConvertingValues(string schema)
     {
         foreach (var format in new[] { "Avro/1.8.2", "Avro/1.11.0" })
         {
             var result = await new BuiltInDocumentValidator().ValidateAsync(format, Encoding.UTF8.GetBytes(schema));
-            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Unsupported);
-            await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("avro.logical_type");
-            await Assert.That(result.Diagnostics.Single().Path).IsEqualTo("$/logicalType");
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+            await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
         }
+    }
+
+    [Test]
+    [Arguments(1000)]
+    [Arguments(int.MaxValue)]
+    public async Task FixedDecimalCapacityCannotReachUnreservedIntegerExpansion(int size)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Avro/1.11.0",
+            Encoding.UTF8.GetBytes($$"""{"type":"fixed","name":"D","size":{{size}},"logicalType":"decimal","precision":1}"""));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Indeterminate);
+        await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("limit.work");
+    }
+
+    [Test]
+    public async Task DecimalDefaultsRemainUnderlyingBytesRatherThanHostDecimalValues()
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Avro/1.11.0", """
+            {"type":"record","name":"R","fields":[
+              {"name":"amount","type":{"type":"bytes","logicalType":"decimal","precision":1000,"scale":999},"default":"\u00ff"},
+              {"name":"fixed","type":{"type":"fixed","name":"D","size":2,"logicalType":"decimal","precision":4},"default":"\u0000\u0001"}]}
+            """u8.ToArray());
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(-1, DocumentValidationStatus.Indeterminate)]
+    [Arguments(0, DocumentValidationStatus.Valid)]
+    [Arguments(1, DocumentValidationStatus.Valid)]
+    public async Task FixedDecimalIntegerReservationsHonorTheExactCumulativeWorkBoundary(
+        int delta, DocumentValidationStatus status)
+    {
+        var bytes = """{"type":"fixed","name":"D","size":2,"logicalType":"decimal","precision":4}"""u8.ToArray();
+        var result = await new BuiltInDocumentValidator().ValidateAsync("Avro/1.11.0", bytes,
+            new() { MaxWork = bytes.Length + 1 + 4 + 9 + 25 + delta });
+        await Assert.That(result.Status).IsEqualTo(status);
+        if (status == DocumentValidationStatus.Valid) { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+        else { await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("limit.work"); }
     }
 
     [Test]
@@ -98,7 +135,7 @@ public class AvroValidationTests
     [Arguments("""{"type":"array"}""", DocumentValidationStatus.Invalid)]
     [Arguments("""{"type":"map","values":42}""", DocumentValidationStatus.Invalid)]
     [Arguments("""{"type":"record","name":"R","fields":[{"name":"x","type":"bytes","default":"\u0100"}]}""", DocumentValidationStatus.Invalid)]
-    [Arguments("""{"type":"bytes","logicalType":"decimal","precision":10,"scale":2}""", DocumentValidationStatus.Unsupported)]
+    [Arguments("""{"type":"bytes","logicalType":"decimal","precision":10,"scale":2}""", DocumentValidationStatus.Valid)]
     public async Task AvroSchemaGrammarNamesUnionsAndDefaultsAreChecked(string schema, DocumentValidationStatus expected)
     {
         var result = await new BuiltInDocumentValidator().ValidateAsync("Avro/1.11.0", Encoding.UTF8.GetBytes(schema));

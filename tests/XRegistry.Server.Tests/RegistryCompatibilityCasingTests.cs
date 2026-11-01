@@ -14,6 +14,34 @@ public class RegistryCompatibilityCasingTests
     [Test]
     [Arguments("Avro/1.8.2")]
     [Arguments("Avro/1.11.0")]
+    public async Task DecimalPublicationRejectsScaleChangesWithoutPartialStateAndPreservesAuthoredBytes(string format)
+    {
+        var engine = ValidatingEngine(strict: true);
+        const string schema = """{"type":"bytes","logicalType":"decimal","precision":4,"scale":2}""";
+        await Send(engine, RegistryAction.Replace, "/sets/g/schemas/s$details", $$$"""
+            {"versionid":"v1","format":"{{{format}}}","schema":{{{schema}}},"meta":{"compatibility":"full"}}
+            """);
+        var accepted = await Send(engine, RegistryAction.Post, "/sets/g/schemas/s$details", $$$"""
+            {"versionid":"v2","format":"{{{format}}}","schema":{{{schema}}}}
+            """);
+        await Assert.That(accepted.Metadata!.RootElement.GetProperty("formatvalidated").GetBoolean()).IsTrue();
+        await Assert.That(accepted.Metadata.RootElement.GetProperty("compatibilityvalidated").GetBoolean()).IsTrue();
+        var before = (await Send(engine, RegistryAction.Read, "/sets/g/schemas/s$details")).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        await ExpectCode(() => Send(engine, RegistryAction.Post, "/sets/g/schemas/s$details", $$$"""
+            {"versionid":"v3","format":"{{{format}}}","schema":{"type":"bytes","logicalType":"decimal","precision":4,"scale":1}}
+            """), "compatibility_violation");
+        await Assert.That((await Send(engine, RegistryAction.Read, "/sets/g/schemas/s$details")).Metadata!.RootElement.GetRawText())
+            .IsEqualTo(before);
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        using var bytes = (await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/versions/v2")).Document!.OpenRead();
+        using var reader = new StreamReader(bytes);
+        await Assert.That(await reader.ReadToEndAsync()).IsEqualTo(schema);
+    }
+
+    [Test]
+    [Arguments("Avro/1.8.2")]
+    [Arguments("Avro/1.11.0")]
     public async Task LogicalAnnotationsPublishWithUnderlyingCompatibilityWithoutRewritingSchema(string format)
     {
         var engine = ValidatingEngine(strict: true);

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Globalization;
+using System.Numerics;
 using System.Text.Json;
 
 namespace XRegistry.Validation;
@@ -110,12 +111,7 @@ internal sealed class AvroSyntax(string format, ValidationContext context)
         var kind = SchemaJson.String(SchemaJson.Member(schema, "type", path), path + "/type");
         if (schema.TryGetProperty("logicalType", out var logicalType))
         {
-            var logicalName = SchemaJson.String(logicalType, path + "/logicalType");
-            if (!_protocol && logicalName == "decimal")
-            {
-                ValidationContext.Fail(DocumentValidationStatus.Unsupported, path + "/logicalType", "avro.logical_type",
-                    "Decimal precision/scale validation and schema resolution are outside the implemented Avro policy.");
-            }
+            SchemaJson.String(logicalType, path + "/logicalType");
         }
         if (schema.TryGetProperty("doc", out var documentation))
         {
@@ -125,7 +121,9 @@ internal sealed class AvroSyntax(string format, ValidationContext context)
         if (isError) { kind = "record"; }
         if (kind is not ("record" or "enum" or "fixed" or "array" or "map"))
         {
-            return Reference(kind, ns, path + "/type");
+            var referenced = Reference(kind, ns, path + "/type");
+            if (Primitive(kind)) { ApplyDecimal(referenced, schema, path); }
+            return referenced;
         }
 
         var type = new AvroType(kind) { IsError = isError };
@@ -198,7 +196,65 @@ internal sealed class AvroSyntax(string format, ValidationContext context)
                 type.Item = Read(SchemaJson.Member(schema, "values", path), ns, path + "/values");
                 break;
         }
+        ApplyDecimal(type, schema, path);
         return type;
+    }
+
+    private void ApplyDecimal(AvroType type, JsonElement schema, string path)
+    {
+        if (_protocol || !schema.TryGetProperty("logicalType", out var logicalType) ||
+            logicalType.GetString() != "decimal" || type.Kind is not ("bytes" or "fixed"))
+        {
+            return;
+        }
+        if (!schema.TryGetProperty("precision", out var precisionValue) ||
+            !Integer(precisionValue, out var precision) || precision <= 0)
+        {
+            return;
+        }
+        var scale = BigInteger.Zero;
+        if (schema.TryGetProperty("scale", out var scaleValue) &&
+            (!Integer(scaleValue, out scale) || scale < 0 || scale > precision))
+        {
+            return;
+        }
+        if (type.Kind == "fixed")
+        {
+            if (type.Size == 0 || precision > (long)type.Size * 3) { return; }
+            var size = (long)type.Size + 1;
+            if (size > context.Options.MaxWork / size)
+            {
+                ValidationContext.Fail(DocumentValidationStatus.Indeterminate, path + "/precision", "limit.work",
+                    "Exact fixed decimal capacity checking exceeds the integer work budget.");
+            }
+            context.Work(size * size, path + "/precision");
+            var digits = precision + 1;
+            if (digits > context.Options.MaxWork / digits || type.Size > int.MaxValue / 8)
+            {
+                ValidationContext.Fail(DocumentValidationStatus.Indeterminate, path + "/precision", "limit.work",
+                    "Exact fixed decimal capacity checking exceeds the integer work budget.");
+            }
+            context.Work((long)(digits * digits), path + "/precision");
+            var maximum = (BigInteger.One << (type.Size * 8 - 1)) - 1;
+            if (BigInteger.Pow(10, (int)precision) > maximum) { return; }
+        }
+        type.DecimalPrecision = precision;
+        type.DecimalScale = scale;
+
+        bool Integer(JsonElement value, out BigInteger number)
+        {
+            number = default;
+            if (value.ValueKind != JsonValueKind.Number) { return false; }
+            var text = value.GetRawText();
+            var length = text.Length + 1L;
+            if (length > context.Options.MaxWork / length)
+            {
+                ValidationContext.Fail(DocumentValidationStatus.Indeterminate, path, "limit.work",
+                    "Decimal annotation integer parsing exceeds the text work budget.");
+            }
+            context.Work(length * length, path);
+            return BigInteger.TryParse(text, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out number);
+        }
     }
 
     private void ReadFields(AvroType type, JsonElement fields, string ns, string path)
@@ -361,6 +417,8 @@ internal sealed class AvroType(string kind)
     internal List<string> Aliases { get; } = [];
     internal string? EnumDefault { get; set; }
     internal int Size { get; set; }
+    internal BigInteger? DecimalPrecision { get; set; }
+    internal BigInteger DecimalScale { get; set; }
 }
 
 internal sealed class AvroField(string name, AvroType type, bool hasDefault)

@@ -22,9 +22,9 @@ public class DocumentCompatibilityTests
     [Arguments("full", """{"type":"fixed","name":"D","size":12,"logicalType":"duration"}""",
         """{"type":"fixed","name":"D","size":11}""", DocumentCompatibilityStatus.Incompatible)]
     [Arguments("full", """{"type":"bytes","logicalType":"decimal","precision":4,"scale":2}""", "\"bytes\"",
-        DocumentCompatibilityStatus.Unsupported)]
+        DocumentCompatibilityStatus.Compatible)]
     [Arguments("full", "\"bytes\"", """{"type":"bytes","logicalType":"decimal","precision":4,"scale":2}""",
-        DocumentCompatibilityStatus.Unsupported)]
+        DocumentCompatibilityStatus.Compatible)]
     public async Task AvroLogicalAnnotationsPreserveUnderlyingReaderWriterDirectionAndDecimalBoundary(
         string mode, string candidate, string ancestor, DocumentCompatibilityStatus expected)
     {
@@ -43,6 +43,112 @@ public class DocumentCompatibilityTests
                     expected == DocumentCompatibilityStatus.Unsupported ? "avro.logical_type" : "compatibility.avro");
             }
         }
+    }
+
+    [Test]
+    [Arguments("""{"type":"bytes","logicalType":"decimal","precision":4,"scale":2}""",
+        """{"type":"bytes","logicalType":"decimal","precision":4,"scale":2}""", DocumentCompatibilityStatus.Compatible)]
+    [Arguments("""{"type":"bytes","logicalType":"decimal","precision":4}""",
+        """{"type":"bytes","logicalType":"decimal","precision":4,"scale":0}""", DocumentCompatibilityStatus.Compatible)]
+    [Arguments("""{"type":"bytes","logicalType":"decimal","precision":5,"scale":2}""",
+        """{"type":"bytes","logicalType":"decimal","precision":4,"scale":2}""", DocumentCompatibilityStatus.Incompatible)]
+    [Arguments("""{"type":"bytes","logicalType":"decimal","precision":4,"scale":1}""",
+        """{"type":"bytes","logicalType":"decimal","precision":4,"scale":2}""", DocumentCompatibilityStatus.Incompatible)]
+    [Arguments("""{"type":"bytes","logicalType":"decimal","precision":1000000000000000000000000000000,"scale":999999999999999999999999999999}""",
+        """{"type":"bytes","logicalType":"decimal","precision":1000000000000000000000000000000,"scale":999999999999999999999999999999}""",
+        DocumentCompatibilityStatus.Compatible)]
+    [Arguments("""{"type":"bytes","logicalType":"decimal","precision":1000000000000000000000000000001}""",
+        """{"type":"bytes","logicalType":"decimal","precision":1000000000000000000000000000000}""",
+        DocumentCompatibilityStatus.Incompatible)]
+    [Arguments("""{"type":"fixed","name":"D","size":2,"logicalType":"decimal","precision":4}""",
+        """{"type":"fixed","name":"D","size":2,"logicalType":"decimal","precision":3}""", DocumentCompatibilityStatus.Incompatible)]
+    [Arguments("""{"type":"fixed","name":"D","size":2,"logicalType":"decimal","precision":5}""",
+        """{"type":"fixed","name":"D","size":2,"logicalType":"decimal","precision":3}""", DocumentCompatibilityStatus.Compatible)]
+    [Arguments("""{"type":"fixed","name":"D","size":1,"logicalType":"decimal","precision":2}""",
+        """{"type":"fixed","name":"D","size":1,"logicalType":"decimal","precision":1}""", DocumentCompatibilityStatus.Incompatible)]
+    [Arguments("""{"type":"fixed","name":"D","size":1,"logicalType":"decimal","precision":3}""",
+        """{"type":"fixed","name":"D","size":1,"logicalType":"decimal","precision":1}""", DocumentCompatibilityStatus.Compatible)]
+    public async Task ValidDecimalPrecisionAndScaleMustMatchInBothReaderWriterDirections(
+        string candidate, string ancestor, DocumentCompatibilityStatus expected)
+    {
+        foreach (var format in new[] { "Avro/1.8.2", "Avro/1.11.0" })
+        {
+            foreach (var mode in new[] { "backward", "forward", "full" })
+            {
+                var result = await new BuiltInDocumentCompatibilityValidator().CheckAsync(
+                    format, mode, Bytes(candidate), [Bytes(ancestor)]);
+                await Assert.That(result.Status).IsEqualTo(expected);
+                await Assert.That(result.Diagnostics.Count).IsEqualTo(
+                    expected == DocumentCompatibilityStatus.Compatible ? 0 : 1);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("""{}""")]
+    [Arguments("""{"precision":0}""")]
+    [Arguments("""{"precision":-1}""")]
+    [Arguments("""{"precision":4,"scale":-1}""")]
+    [Arguments("""{"precision":4,"scale":5}""")]
+    [Arguments("""{"precision":4,"scale":null}""")]
+    [Arguments("""{"precision":4,"scale":1.5}""")]
+    [Arguments("""{"precision":"4"}""")]
+    [Arguments("""{"precision":null}""")]
+    [Arguments("""{"precision":true}""")]
+    [Arguments("""{"precision":4.5}""")]
+    public async Task InvalidDecimalParametersFallBackToUnderlyingCompatibility(string parameters)
+    {
+        var members = parameters[1..^1];
+        var candidate = """{"type":"bytes","logicalType":"decimal" """ +
+            (members.Length == 0 ? "" : "," + members) + "}";
+        foreach (var format in new[] { "Avro/1.8.2", "Avro/1.11.0" })
+        {
+            var result = await new BuiltInDocumentCompatibilityValidator().CheckAsync(format, "full",
+                Bytes(candidate), [Bytes("""{"type":"bytes","logicalType":"decimal","precision":4,"scale":2}""")]);
+            await Assert.That(result.Status).IsEqualTo(DocumentCompatibilityStatus.Compatible);
+            await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+        }
+    }
+
+    [Test]
+    [Arguments(0, 1)]
+    [Arguments(1, 2)]
+    [Arguments(2, 4)]
+    [Arguments(4, 9)]
+    [Arguments(8, 18)]
+    [Arguments(16, 38)]
+    public async Task FixedDecimalCapacityUsesTheExactSignedByteBoundary(int size, int maximumPrecision)
+    {
+        foreach (var precision in new[] { maximumPrecision - 1, maximumPrecision, maximumPrecision + 1 })
+        {
+            if (precision < 1) { continue; }
+            var candidate = $$"""{"type":"fixed","name":"D","size":{{size}},"logicalType":"decimal","precision":{{precision}}}""";
+            var ancestor = $$"""{"type":"fixed","name":"D","size":{{size}},"logicalType":"decimal","precision":1}""";
+            var result = await new BuiltInDocumentCompatibilityValidator().CheckAsync(
+                "Avro/1.11.0", "full", Bytes(candidate), [Bytes(ancestor)]);
+            var bothValid = size > 0 && precision <= maximumPrecision;
+            await Assert.That(result.Status).IsEqualTo(bothValid && precision != 1
+                ? DocumentCompatibilityStatus.Incompatible : DocumentCompatibilityStatus.Compatible);
+        }
+    }
+
+    [Test]
+    public async Task DecimalCompatibilityChecksReachUnionAndRecursiveRecordMembers()
+    {
+        var ancestor = Bytes("""
+            {"type":"record","name":"R","fields":[
+              {"name":"amount","type":["null",{"type":"bytes","logicalType":"decimal","precision":4,"scale":2}],"default":null},
+              {"name":"next","type":["null","R"],"default":null}]}
+            """);
+        var candidate = Bytes("""
+            {"type":"record","name":"R","fields":[
+              {"name":"amount","type":["null",{"type":"bytes","logicalType":"decimal","precision":4,"scale":1}],"default":null},
+              {"name":"next","type":["null","R"],"default":null}]}
+            """);
+        var result = await new BuiltInDocumentCompatibilityValidator().CheckAsync(
+            "Avro/1.11.0", "backward_transitive", candidate, [ancestor]);
+        await Assert.That(result.Status).IsEqualTo(DocumentCompatibilityStatus.Incompatible);
+        await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("compatibility.avro");
     }
 
     [Test]

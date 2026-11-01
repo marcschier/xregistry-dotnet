@@ -662,10 +662,13 @@ Authored annotations remain unchanged, including unknown names and invalid
 logical parameters; they cannot bypass underlying schema or default checks.
 This does not convert values to UUIDs, dates or decimals or compare logical
 types. The Avro 1.8.2/1.11.0 data-schema validation and compatibility profiles
-now use underlying wire types for non-decimal logical annotations, including
+now use underlying wire types for logical annotations, including
 unknown names. Underlying default and directional compatibility checks still
-apply. Decimal annotations remain `Unsupported` because precision/scale
-validation and decimal schema-resolution rules are not qualified. Neither
+apply. Valid decimal annotations on bytes/fixed declarations also retain
+precision and scale for compatibility: both must match when both schemas are
+valid decimals. Invalid annotations fall back to underlying types. Fixed
+capacity uses exact, budgeted integer arithmetic; bytes precision does not
+depend on the host decimal range. Exhausted reservations remain unchecked. Neither
 profile supplies native logical values or rewrites authored annotations.
 Named types remain in the caller's original protocol;
 selection does not inline them or synthesize the implicit system-error branch.
