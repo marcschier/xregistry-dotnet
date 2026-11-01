@@ -100213,9 +100213,13 @@
       ],
       "text": "- Use of CloudEvents is RECOMMENDED as it will provide well-defined metadata that will appear in each Message to help differentiate Message definitions.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read within Message Definition Matching, which explicitly does not mandate a matching mechanism and permits deviation. CloudEvents is supported but not mandatory: MessageEnvelopeRulesRequireMetadataWithoutRequiringAnEnvelope and BindingPrecedenceDoesNotInventAnImplicitConcreteProtocol admit envelope-only, protocol-only and payload-only definitions. This library stores/materializes definitions; matching incoming application messages is a consumer responsibility. No recommendation is converted to a registry admission requirement.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -100244,9 +100248,13 @@
       ],
       "text": "- Message definitions SHOULD have a `messageid` value that is the same as the CloudEvents' `type` context attribute defined for that Message. This will allow for an exact mapping from the incoming Message's `type` attribute to its related Message definition.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read with the explicit permission to deviate from matching recommendations. Resource identity and authored CloudEvents type constraints are not rewritten or forced equal by storage/materialization. TypedCloudEventsPropertyValuesRetainTheirActualJsonTypesAndNullPresence and ImpliedCloudEventsRequirementsAndPayloadReferencesBecomeExplicitConstraints retain declarations independently of messageid. Selecting definitions for incoming messages remains consumer policy; no mandatory matching algorithm or identity rewrite is inferred.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -100275,9 +100283,13 @@
       ],
       "text": "- Message Resource types SHOULD be defined with a `maxversions` of `1`. This eliminates the need for each incoming Message to include some unique Version discriminator.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read as a model-author recommendation, with deviation permitted in the following paragraph. The active packaged Message Resource has maxversions 1, while custom compatible models remain subject to Core version behavior and explicit author configuration. This does not authorize rewriting a caller model to force one Version or selecting an incoming-message Version without a discriminator. Core lifecycle and full model/package evidence remain separately qualified.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -100307,9 +100319,13 @@
       ],
       "text": "- Modifications to Message definitions SHOULD NOT result in \"on the wire\" changes to the resulting messages as that could break existing systems. Rather, new Message definitions SHOULD be created, with new `type` and `messageid` values, and referenced through the use of the `deprecated` attribute.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read as application/model-author evolution guidance, not a prohibition on registry metadata updates. The library does not generate application wire messages and cannot infer whether a changed constraint breaks deployed consumers. Atomic declaration patch/restart tests preserve explicit storage semantics; authors remain responsible for assigning replacement identities and deprecation references when changing wire contracts. Library API backward compatibility is distinct from this specification recommendation.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -100338,9 +100354,13 @@
       ],
       "text": "Implementations and Registry model authors MAY deviate from these recommendations; however, they are then responsible for defining the mechanisms by which a unique Message definition is matched to incoming messages.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The library preserves explicit models and definitions rather than imposing CloudEvents/type identity or an incoming-message matching algorithm. BindingPrecedenceDoesNotInventAnImplicitConcreteProtocol and MessageEnvelopeRulesRequireMetadataWithoutRequiringAnEnvelope cover alternate definition forms. An application deviating from the preceding recommendations must define its own unique-definition matching policy; storage/materialization does not claim to implement that consumer runtime policy.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -100754,9 +100774,13 @@
       ],
       "text": "When [CloudEvents](https://cloudevents.io) is used for a particular message, it is RECOMMENDED that the message's `messageid` attribute be the same as the [CloudEvents `type` attribute](https://github.com/cloudevents/spec/blob/main/cloudevents/spec.md#type). Doing so makes for easier management of the meta-model by correlating the look-up value (id) of messages with their related events.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read with Message Definition Matching recommendations and its deviation clause. Authored Message identity and CloudEvents type are preserved independently; the library does not force equality or infer wire compatibility from a metadata diff. New identities/type values and deprecation for changed wire contracts are model-author/producer responsibilities. Registry updates remain atomic and permitted; this is not a library backward-compatibility promise or a runtime matcher implementation.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -102166,9 +102190,13 @@
       ],
       "text": "- All attribute declarations are OPTIONAL. Requirements for absent definitions are implied by the CloudEvents specification.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read with the base attribute table and required-flag exceptions. Registry storage completes present declarations without inventing absent ones; definition materialization makes implied CloudEvents constraints explicit after the complete base overlay. MessageEnvelopeRulesRequireMetadataWithoutRequiringAnEnvelope admits an empty declaration object and ImpliedCloudEventsRequirementsAndPayloadReferencesBecomeExplicitConstraints proves mandatory id/type/source and fixed specversion inference. This is definition completion, not validation or generation of an actual CloudEvent.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -102198,9 +102226,13 @@
       ],
       "text": "- The `specversion` attribute is implied by the message envelope and is OPTIONAL. If present, it MUST be declared with a `string` type and set to the value \"1.0\".",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "ValidateMessageProperties enforces string type and fixed 1.0 literal; CompleteMessageMetadata defaults a present specversion declaration. Definition materialization also makes an absent implied declaration explicit after overlay. OpaqueCoreBoundariesDoNotWaiveDeclarationAndEnvelopeRules rejects wrong specversion; ImpliedCloudEventsRequirementsAndPayloadReferencesBecomeExplicitConstraints asserts the inferred exact declaration. No unsupported envelope version is silently rewritten.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -102229,9 +102261,13 @@
       ],
       "text": "- The `type`, `id`, and `source` attributes implicitly have the `required` flag set to `true` and MUST NOT be declared as `required: false`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "ValidateMessageProperties rejects explicit false for mandatory CloudEvents context attributes; completion defaults present declarations true. Definition materialization makes omitted mandatory declarations explicit after inherited constraints are merged. OpaqueCoreBoundariesDoNotWaiveDeclarationAndEnvelopeRules covers invalid false and ImpliedCloudEventsRequirementsAndPayloadReferencesBecomeExplicitConstraints asserts exact implied flags. An absent declaration is not permission to omit the context attribute from an actual event; runtime validation remains separate.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -102260,9 +102296,13 @@
       ],
       "text": "- The `id` attribute's `value` SHOULD NOT be defined.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read as producer/model-author guidance, not a MUST NOT admission rule. Valid authored fixed id constraints remain permitted; absent id values are not generated by registry storage or materialization. ImpliedCloudEventsRequirementsAndPayloadReferencesBecomeExplicitConstraints asserts an implied required id declaration with no invented value; OpaqueCoreBoundariesDoNotWaiveDeclarationAndEnvelopeRules rejects invalid empty id literals. Generating unique event identifiers belongs to application-message creation.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -102327,9 +102367,13 @@
       ],
       "text": "- The `dataschema` attribute's `value` is inferred from the [`dataschemauri`](#dataschemauri) attribute or [`dataschema`](#dataschema) attribute of the message definition if absent. If present, the value MUST match the `dataschemauri` attribute of the message definition.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Definition materialization infers the URI-valued constraint from dataschemauri after overlay and retains its declaring source. ImpliedCloudEventsRequirementsAndPayloadReferencesBecomeExplicitConstraints asserts exact inferred values/provenance; InlineSchemaInferenceNeverInventsAnAcquisitionUri retains an explicit message_schema_uri obligation when only inline schema exists. MessageSchemaRulesDiagnoseEachIndependentConstraint and EnvelopeSchemaDeclarationsMustAgreeWithMessageSchemaUri reject fixed literal mismatch. Unresolved templates retain runtime substitution obligations rather than being compared as concrete URLs. Inline-schema URI mapping and concrete-object selection are not claimed complete merely from identity admission.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -102453,9 +102497,13 @@
       ],
       "text": "For clarity of the definition, you MAY always declare all implied attribute properties explicitly, but they MUST conform with the rules above.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Explicit declarations pass the same shape/type/literal/required validation as inferred constraints and are never accepted merely because a Core section is opaque. OpaqueCoreBoundariesDoNotWaiveDeclarationAndEnvelopeRules rejects contradictory explicit flags/types/values; CompositionRejectsContradictoryInheritedConstraints applies the same rule after overlay. ImpliedCloudEventsRequirementsAndPayloadReferencesBecomeExplicitConstraints asserts the resulting explicit constraints. Actual event generation/matching and unresolved inline schema URI mapping remain separate.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
