@@ -14,6 +14,118 @@ public class ApiOperationReferenceTests
     [Arguments("OpenAPI/3.0", "openapi", "3.0.4")]
     [Arguments("OpenAPI/3.1", "openapi", "3.1.1")]
     [Arguments("Swagger/2.0", "swagger", "2.0")]
+    public async Task RootPathItemShapesCannotBeBypassedByPointersOrEarlyNamedMatches(
+        string format, string versionField, string version)
+    {
+        foreach (var invalid in new[] { "null", "true", "1", "[]", "\"bad\"", "{}" })
+        {
+            foreach (var name in new[] { "/bad/~", "invalid-name", "" })
+            {
+                if (invalid == "{}" && name.StartsWith('/')) { continue; }
+                foreach (var selector in new[] { "operations/Target", "operations/Missing", "/paths/~1valid/get" })
+                {
+                    var paths = new JsonObject
+                    {
+                        ["/valid"] = new JsonObject { ["get"] = new JsonObject { ["operationId"] = "Target" } },
+                        ["/remote"] = new JsonObject { ["$ref"] = "https://not-acquired.test/path" },
+                        [name] = JsonNode.Parse(invalid)
+                    };
+                    var document = new JsonObject { [versionField] = version, ["paths"] = paths };
+                    var calls = 0;
+                    var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                        System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                        ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                        resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+                    await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo(name.StartsWith('/')
+                        ? "document.path_item" : "document.path");
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo("$/paths/" + name.Replace("~", "~0").Replace("/", "~1"));
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                    await Assert.That(calls).IsEqualTo(0);
+                }
+            }
+        }
+    }
+
+    [Test]
+    public async Task RootWebhookShapesAreCheckedEvenWithoutPathsAndBeforeDependencyAcquisition()
+    {
+        foreach (var invalid in new[] { "null", "true", "1", "[]", "\"bad\"" })
+        {
+            foreach (var hasPaths in new[] { false, true })
+            {
+                foreach (var selector in new[] { "operations/Target", "operations/Missing", "/webhooks/valid/get" })
+                {
+                    var document = new JsonObject
+                    {
+                        ["openapi"] = "3.1.1",
+                        ["webhooks"] = new JsonObject
+                        {
+                            ["valid"] = new JsonObject { ["get"] = new JsonObject { ["operationId"] = "Target" } },
+                            ["remote"] = new JsonObject { ["$ref"] = "https://not-acquired.test/path" },
+                            ["x-invalid/~"] = JsonNode.Parse(invalid)
+                        }
+                    };
+                    if (hasPaths) { document["paths"] = new JsonObject(); }
+                    var calls = 0;
+                    var result = await ApiOperationDocumentResolver.ResolveAsync("OpenAPI/3.1", "application/json",
+                        System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                        ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                        resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+                    await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.path_item");
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo("$/webhooks/x-invalid~1~0");
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                    await Assert.That(calls).IsEqualTo(0);
+                }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "openapi", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "openapi", "3.1.1")]
+    [Arguments("Swagger/2.0", "swagger", "2.0")]
+    public async Task RootPathExtensionsAndEmptyItemsRetainTheirNativeMeaning(
+        string format, string versionField, string version)
+    {
+        var document = new JsonObject
+        {
+            [versionField] = version,
+            ["paths"] = new JsonObject
+            {
+                ["/valid"] = new JsonObject { ["get"] = new JsonObject { ["operationId"] = "Target" } },
+                ["/"] = new JsonObject(),
+                ["x-null"] = null, ["x-array"] = new JsonArray(true), ["x-number"] = 1,
+                ["x-reference"] = new JsonObject { ["$ref"] = "https://not-acquired.test/extension" }
+            }
+        };
+        if (format != "OpenAPI/3.1")
+        {
+            document["webhooks"] = new JsonObject { ["ignored"] = null };
+        }
+        foreach (var selector in new[] { "operations/Target", "/paths/~1valid/get", "operations/Missing" })
+        {
+            var calls = 0;
+            var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+            await Assert.That(result.Status).IsEqualTo(selector.EndsWith("Missing", StringComparison.Ordinal)
+                ? ApiOperationResolutionStatus.NotFound : ApiOperationResolutionStatus.Selected);
+            await Assert.That(calls).IsEqualTo(0);
+            if (result.Status == ApiOperationResolutionStatus.Selected)
+            {
+                await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("Target");
+                await Assert.That(result.DocumentPath).IsEqualTo("$/paths/~1valid/get");
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "openapi", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "openapi", "3.1.1")]
+    [Arguments("Swagger/2.0", "swagger", "2.0")]
     public async Task UnrelatedDuplicateOperationIdsPreventNamedSelectionOrNotFound(
         string format, string versionField, string version)
     {
@@ -730,7 +842,10 @@ public class ApiOperationReferenceTests
                 """.Replace("KEY", key, StringComparison.Ordinal)),
             ApiOperationReference.Parse("/apigroups/g/apis/a#/paths/" + key + "/get"));
         await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
-        await Assert.That(result.Diagnostic!.Code).IsEqualTo("selection.operation_pointer");
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(key == "users"
+            ? "document.path" : "selection.operation_pointer");
+        await Assert.That(result.Diagnostic.Path).IsEqualTo(key == "users"
+            ? "$/paths/users" : "$/selector");
         await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
     }
 

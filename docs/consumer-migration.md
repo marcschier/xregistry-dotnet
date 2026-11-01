@@ -523,6 +523,14 @@ OpenAPI and Swagger `paths` entries must start with `/`; `x-` entries are
 specification extensions. Operation-ID selection ignores extension payloads,
 including apparent operations or references inside them. Under `paths`, a JSON
 Pointer must select an HTTP method beneath a slash-prefixed path, not extension data.
+Root Path Items must be objects, including reference-only and empty items.
+Malformed keys or item shapes fail before selection or dependency acquisition,
+even when another operation matched or a pointer targets an unrelated valid
+item. Paths extension values remain opaque. OpenAPI 3.1 applies the object
+requirement to every root webhook, including `x-` names and documents without
+`paths`; older formats leave the unknown `webhooks` field uninterpreted.
+This preflight does not validate every Path Item field or retrieve dependencies
+for pointer selection.
 OpenAPI rejects templated paths with identical hierarchies that
 differ only in placeholder names before named or pointer selection. Reversing
 declaration order does not permit a partial result or dependency acquisition.

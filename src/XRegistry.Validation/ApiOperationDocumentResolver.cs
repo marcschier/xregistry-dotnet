@@ -497,11 +497,18 @@ public static partial class ApiOperationDocumentResolver
         {
             return componentFailure;
         }
-        if (format == "OpenAPI/3.1" && root.TryGetProperty("webhooks", out var webhookMap) &&
-            webhookMap.ValueKind != JsonValueKind.Object)
+        if (format == "OpenAPI/3.1" && root.TryGetProperty("webhooks", out var webhookMap))
         {
-            return Failure(ApiOperationResolutionStatus.Invalid, "document.webhooks",
-                "The webhooks value must be an object.", "$/webhooks");
+            if (webhookMap.ValueKind != JsonValueKind.Object)
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid, "document.webhooks",
+                    "The webhooks value must be an object.", "$/webhooks");
+            }
+            var webhookFailure = ValidateRootPathItems(webhookMap, "webhooks", false, cancellationToken);
+            if (webhookFailure is not null)
+            {
+                return webhookFailure;
+            }
         }
         if (!root.TryGetProperty("paths", out var paths))
         {
@@ -519,22 +526,42 @@ public static partial class ApiOperationDocumentResolver
             return Failure(ApiOperationResolutionStatus.Invalid, "document.paths",
                 "The API document must contain a paths object.", "$/paths");
         }
-        if (format != "Swagger/2.0")
+        return ValidateRootPathItems(paths, "paths", format != "Swagger/2.0", cancellationToken);
+    }
+
+    private static ApiOperationResolutionResult? ValidateRootPathItems(JsonElement items, string collection,
+        bool checkHierarchy, CancellationToken cancellationToken)
+    {
+        var pathHierarchies = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var path in items.EnumerateObject())
         {
-            var pathHierarchies = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var path in paths.EnumerateObject())
+            cancellationToken.ThrowIfCancellationRequested();
+            var pointer = "$/" + collection + "/" + Escape(path.Name);
+            if (collection == "paths")
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (!path.Name.StartsWith('/'))
+                if (path.Name.StartsWith("x-", StringComparison.Ordinal))
                 {
                     continue;
                 }
+                if (!path.Name.StartsWith('/'))
+                {
+                    return Failure(ApiOperationResolutionStatus.Invalid, "document.path",
+                        "A paths entry must start with '/' or be an x- specification extension.", pointer);
+                }
+            }
+            if (path.Value.ValueKind != JsonValueKind.Object)
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid, "document.path_item",
+                    "A root Path Item or Reference Object must be an object.", pointer);
+            }
+            if (checkHierarchy)
+            {
                 var hierarchy = PathTemplateExpression().Replace(path.Name, "{}");
                 if (!pathHierarchies.Add(hierarchy))
                 {
                     return Failure(ApiOperationResolutionStatus.Invalid, "document.path_template_conflict",
                         "Templated paths with the same hierarchy cannot differ only in template parameter names.",
-                        "$/paths/" + Escape(path.Name));
+                        pointer);
                 }
             }
         }
