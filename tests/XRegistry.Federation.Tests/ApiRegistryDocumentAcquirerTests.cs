@@ -14,6 +14,113 @@ namespace XRegistry.Federation.Tests;
 public class ApiRegistryDocumentAcquirerTests
 {
     [Test]
+    [Arguments("1", false)]
+    [Arguments("preview:@", true)]
+    public async Task ApiDefaultAcquisitionUsesTheDeclaredCoreVersionWithoutSemverSelection(string id, bool sticky)
+    {
+        var source = new Source();
+        var version = "/apigroups/g/apis/a/versions/" + Uri.EscapeDataString(id);
+        source.SelectedPath = version;
+        source.Metadata["xid"] = version;
+        source.Metadata["versionid"] = id;
+        source.Meta["defaultversionid"] = id;
+        source.Meta["defaultversionsticky"] = sticky;
+        var budget = new FederationReadBudget();
+        var acquired = await ApiRegistryDocumentAcquirer.AcquireDefaultAsync(source, "/apigroups/g/apis/a", budget);
+        await Assert.That(acquired.VersionXid).IsEqualTo(version);
+        await Assert.That(acquired.Format).IsEqualTo("openapi/3.1");
+        await Assert.That(budget.Requests).IsEqualTo(4L);
+        await Assert.That(budget.ObjectsRead).IsEqualTo(4L);
+        await Assert.That(source.Reads.Select(r => r.Target).SequenceEqual(
+            ["/apigroups/g/apis/a/meta", version, version, "/apigroups/g/apis/a/meta"])).IsTrue();
+    }
+
+    [Test]
+    public async Task ApiDefaultAcquisitionRejectsChangedSelectionWithoutRetry()
+    {
+        var source = new Source { ChangeDefault = true };
+        var error = await Assert.That(async () =>
+            await ApiRegistryDocumentAcquirer.AcquireDefaultAsync(source, "/apigroups/g/apis/a"))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected default race rejection.");
+        await Assert.That(error.Code).IsEqualTo(FederationErrorCode.InconsistentSnapshot);
+        await Assert.That(source.Reads.Count).IsEqualTo(4);
+        await Assert.That(source.Reads.Count(r => r.Operation == FederationOperation.Document)).IsEqualTo(1);
+        await Assert.That(source.Reads.Any(r => r.Target.EndsWith("/versions/2", StringComparison.Ordinal))).IsFalse();
+    }
+
+    [Test]
+    [Arguments("xid", "/apigroups/g/apis/other/meta", FederationErrorCode.InvalidPackage)]
+    [Arguments("apiid", "other", FederationErrorCode.InvalidPackage)]
+    [Arguments("defaultversionid", "", FederationErrorCode.InvalidPackage)]
+    [Arguments("xref", "/apigroups/g/apis/other", FederationErrorCode.UnsupportedOperation)]
+    public async Task ApiDefaultMetadataFailuresPreventVersionReads(string field, string value, FederationErrorCode code)
+    {
+        var source = new Source();
+        source.Meta[field] = value;
+        var error = await Assert.That(async () =>
+            await ApiRegistryDocumentAcquirer.AcquireDefaultAsync(source, "/apigroups/g/apis/a"))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected Meta rejection.");
+        await Assert.That(error.Code).IsEqualTo(code);
+        await Assert.That(source.Reads.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task ApiDefaultAcquisitionSharesCumulativeBudgetsAndDoesNotReturnBeforeRecheck()
+    {
+        var baseline = new FederationReadBudget();
+        await ApiRegistryDocumentAcquirer.AcquireDefaultAsync(new Source(), "/apigroups/g/apis/a", baseline);
+        var exact = new FederationReadBudget(new(maxRequests: 4, maxObjects: 4,
+            maxTotalBytes: baseline.BytesRead, maxWork: baseline.Work));
+        var acquired = await ApiRegistryDocumentAcquirer.AcquireDefaultAsync(new Source(), "/apigroups/g/apis/a", exact);
+        await Assert.That(acquired.VersionXid).IsEqualTo(Source.Path);
+        await Assert.That(exact.BytesRead).IsEqualTo(baseline.BytesRead);
+        var source = new Source();
+        var budget = new FederationReadBudget(new(maxRequests: 3));
+        var error = await Assert.That(async () =>
+            await ApiRegistryDocumentAcquirer.AcquireDefaultAsync(source, "/apigroups/g/apis/a", budget))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected recheck budget rejection.");
+        await Assert.That(error.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        await Assert.That(source.Reads.Count).IsEqualTo(3);
+        var second = new Source();
+        await Assert.That(async () =>
+            await ApiRegistryDocumentAcquirer.AcquireDefaultAsync(second, "/apigroups/g/apis/a", budget))
+            .Throws<FederationException>();
+        await Assert.That(second.Reads).IsEmpty();
+    }
+
+    [Test]
+    [Arguments("read", FederationErrorCode.NotFound)]
+    [Arguments("denied", FederationErrorCode.PolicyDenied)]
+    [Arguments("external", FederationErrorCode.Unavailable)]
+    public async Task ApiDefaultAcquisitionDoesNotReplaceTheDeclaredUnavailableVersion(
+        string failure, FederationErrorCode code)
+    {
+        var source = new Source { Failure = failure };
+        var error = await Assert.That(async () =>
+            await ApiRegistryDocumentAcquirer.AcquireDefaultAsync(source, "/apigroups/g/apis/a"))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected selected Version failure.");
+        await Assert.That(error.Code).IsEqualTo(code);
+        await Assert.That(source.Reads.Count).IsEqualTo(failure == "read" ? 2 : 3);
+        await Assert.That(source.Reads.Where(r => !r.Target.EndsWith("/meta", StringComparison.Ordinal))
+            .All(r => r.Target == Source.Path)).IsTrue();
+    }
+
+    [Test]
+    public async Task ApiDefaultAcquisitionRejectsVersionPathsAndPropagatesCancellation()
+    {
+        var source = new Source();
+        await Assert.That(async () =>
+            await ApiRegistryDocumentAcquirer.AcquireDefaultAsync(source, Source.Path)).Throws<ArgumentException>();
+        await Assert.That(source.Reads).IsEmpty();
+        using var cancellation = new CancellationTokenSource();
+        var cancelled = new Source { Cancellation = cancellation };
+        await Assert.That(async () =>
+            await ApiRegistryDocumentAcquirer.AcquireDefaultAsync(cancelled, "/apigroups/g/apis/a",
+                cancellationToken: cancellation.Token)).Throws<OperationCanceledException>();
+        await Assert.That(cancelled.Reads.Count).IsEqualTo(1);
+    }
+
+    [Test]
     public async Task ApiAcquisitionDoesNotInventFormatValidationOrDocumentBasesForPresentEmptyBytes()
     {
         var source = new Source { InputBytes = [], DocumentBase = null, DocumentOrigin = null };
@@ -187,6 +294,12 @@ public class ApiRegistryDocumentAcquirerTests
         };
         internal long MetadataLength => Encoding.UTF8.GetByteCount(Metadata.ToJsonString());
         internal List<FederationReadRequest> Reads { get; } = [];
+        internal string SelectedPath { get; set; } = Path;
+        internal bool ChangeDefault { get; init; }
+        internal JsonObject Meta { get; } = new()
+        {
+            ["xid"] = "/apigroups/g/apis/a/meta", ["apiid"] = "a", ["defaultversionid"] = "1"
+        };
         internal string? Failure { get; init; }
         internal string? Change { get; init; }
         internal bool Disposed { get; set; }
@@ -201,10 +314,16 @@ public class ApiRegistryDocumentAcquirerTests
             ObjectDisposedException.ThrowIf(Disposed, this);
             Reads.Add(request);
             Cancellation?.Cancel();
+            if (request.Target == "/apigroups/g/apis/a/meta")
+            {
+                if (ChangeDefault && Reads.Count > 1) { Meta["defaultversionid"] = "2"; }
+                return ValueTask.FromResult(FederationReadResult.FromMetadata(request.Target, Context,
+                    RegistryJson.Parse(Meta.ToJsonString()).RootElement));
+            }
             if (request.Operation == FederationOperation.Entity)
             {
                 if (Failure == "read") { throw new FederationException(FederationErrorCode.NotFound, "Missing Version."); }
-                return ValueTask.FromResult(FederationReadResult.FromMetadata(Path, Context,
+                return ValueTask.FromResult(FederationReadResult.FromMetadata(SelectedPath, Context,
                     RegistryJson.Parse(Metadata.ToJsonString()).RootElement));
             }
             if (Failure is "denied" or "unavailable")
@@ -224,7 +343,7 @@ public class ApiRegistryDocumentAcquirerTests
                 Capabilities = RegistryJson.Parse("""{"federation":{"resolution":"producer"}}""").RootElement;
             }
             return ValueTask.FromResult(FederationReadResult.FromDocument(
-                Change == "resultpath" ? "/apigroups/g/apis/a/versions/2" : Path,
+                Change == "resultpath" ? "/apigroups/g/apis/a/versions/2" : SelectedPath,
                 Change == "resultcontext" ? new("test", "urn:test:other") : Context,
                 new FederationDocument(InputBytes, Change == "media" ? "text/plain" : "application/json",
                     DocumentBase, DocumentOrigin)));

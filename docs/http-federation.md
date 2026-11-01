@@ -108,8 +108,21 @@ Metadata and acquired bytes consume cumulative request, object, byte and work
 budgets; hashing and output also have finite bounds. Repeated calls cannot
 reset a supplied budget. Cancellation propagates.
 
+`AcquireDefaultAsync` accepts an API Resource XID. It reads Resource Meta,
+captures Core's `defaultversionid`, acquires that exact Version, then reads
+Meta again. It follows a sticky or prerelease default without applying SemVer
+selection. An observed default change produces `InconsistentSnapshot`; a
+missing selected Version fails without choosing a replacement. Aliases must
+be resolved to their authorized source before this operation.
+
+Both Meta reads and exact-Version acquisition use the same captured source
+and cumulative budget. Exhaustion before the final Meta check is a failure,
+not an unchecked success. These observations do not eliminate ABA changes
+or establish a transaction across live HTTP reads.
+
 The live HTTP workflow publishes two API Versions, acquires the older exact
-Version after the default changes, and selects its OpenAPI operation after
+Version after the default changes, verifies the current and sticky Core
+defaults, and selects the retained OpenAPI operation after
 closing both source and host. Without an authorized dependency resolver,
 its relative Path Item `$ref` produces `Indeterminate`. With one, the resolver
 receives the absolute dependency URL resolved against the captured retrieval

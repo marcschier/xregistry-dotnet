@@ -66,6 +66,26 @@ public class HttpTests
         await Assert.That(acquired.Document.Origin).IsEqualTo(new Uri(host.Client.BaseAddress!, version).AbsoluteUri);
         await Assert.That(source.Observations.Any(o => o.RequestUri.AbsolutePath.EndsWith("/versions/2", StringComparison.Ordinal)))
             .IsFalse();
+        var currentDefault = await ApiRegistryDocumentAcquirer.AcquireDefaultAsync(source, "/apigroups/g/apis/a", budget);
+        await Assert.That(currentDefault.VersionXid).IsEqualTo("/apigroups/g/apis/a/versions/2");
+        using (var defaultStream = currentDefault.Document.OpenRead())
+        using (var reader = new StreamReader(defaultStream, Encoding.UTF8))
+        {
+            await Assert.That(await reader.ReadToEndAsync()).IsEqualTo(second);
+        }
+        using (var change = new HttpRequestMessage(HttpMethod.Put, "/apigroups/g/apis/a/meta")
+        {
+            Content = new StringContent("""{"defaultversionid":"1","defaultversionsticky":true}""",
+                Encoding.UTF8, "application/json")
+        })
+        using (var response = await host.Client.SendAsync(change))
+        {
+            await Assert.That(response.IsSuccessStatusCode).IsTrue()
+                .Because(await response.Content.ReadAsStringAsync());
+        }
+        var stickyDefault = await ApiRegistryDocumentAcquirer.AcquireDefaultAsync(source, "/apigroups/g/apis/a", budget);
+        await Assert.That(stickyDefault.VersionXid).IsEqualTo(version);
+        await Assert.That(stickyDefault.ContentDigest).IsEqualTo(acquired.ContentDigest);
         var reference = ApiOperationReference.Parse(version + "#operations/Read");
         source.Dispose();
         await host.DisposeAsync();

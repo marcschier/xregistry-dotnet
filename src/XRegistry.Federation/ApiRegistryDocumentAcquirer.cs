@@ -53,6 +53,65 @@ public static class ApiRegistryDocumentAcquirer
         }
         budget ??= new();
         var reads = new CapturedFederationReadScope(source, budget, cancellationToken);
+        RequireApi(reads, request);
+        return await AcquireVersionAsync(reads, request, budget, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Captures a Resource's Core default and acquires that exact Version from the same source.</summary>
+    /// <remarks>Aliases are not resolved. An observed default change fails without retry or fallback.</remarks>
+    public static async ValueTask<ApiAcquiredDocument> AcquireDefaultAsync(IFederationReadSource source,
+        string resourceXid, FederationReadBudget? budget = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(resourceXid);
+        cancellationToken.ThrowIfCancellationRequested();
+        var resource = new FederationReadRequest(FederationOperation.Entity, resourceXid);
+        if (resource.Parts.Length != 4)
+        {
+            throw new ArgumentException("An API Resource XID is required.", nameof(resourceXid));
+        }
+        budget ??= new();
+        var reads = new CapturedFederationReadScope(source, budget, cancellationToken);
+        RequireApi(reads, resource);
+        var metaRequest = new FederationReadRequest(FederationOperation.Entity, resourceXid + "/meta");
+        var before = await reads.MetadataAsync(metaRequest).ConfigureAwait(false);
+        var defaultId = DefaultVersion(before, metaRequest.Target, resource.Parts[3]);
+        var version = new FederationReadRequest(FederationOperation.Entity,
+            resourceXid + "/versions/" + Uri.EscapeDataString(defaultId));
+        var acquired = await AcquireVersionAsync(reads, version, budget, cancellationToken).ConfigureAwait(false);
+        var after = await reads.MetadataAsync(metaRequest).ConfigureAwait(false);
+        if (DefaultVersion(after, metaRequest.Target, resource.Parts[3]) != defaultId)
+        {
+            throw new FederationException(FederationErrorCode.InconsistentSnapshot,
+                "The API Resource default changed during acquisition.");
+        }
+        reads.Check();
+        return acquired;
+    }
+
+    private static string DefaultVersion(System.Text.Json.JsonElement metadata, string metaXid, string apiId)
+    {
+        var entity = metadata.TryGetProperty("entity", out var nested) ? nested : metadata;
+        if (!FederationSyntax.SameXid(FederationJson.String(entity, "xid"), metaXid) ||
+            FederationJson.String(entity, "apiid") != apiId)
+        {
+            throw FederationJson.Invalid("API Resource Meta identifies a different entity.");
+        }
+        if (entity.TryGetProperty("xref", out _))
+        {
+            throw new FederationException(FederationErrorCode.UnsupportedOperation,
+                "An API alias must be resolved to its authorized source before default acquisition.");
+        }
+        var id = FederationJson.String(entity, "defaultversionid");
+        if (id.Length == 0)
+        {
+            throw FederationJson.Invalid("API Resource Meta has an empty default Version identity.");
+        }
+        return id;
+    }
+
+    private static void RequireApi(CapturedFederationReadScope reads, FederationReadRequest request)
+    {
         if (!reads.Model.Groups.TryGetValue(request.Parts[0], out var group) || group.Singular != "apigroup" ||
             !group.Resources.TryGetValue(request.Parts[2], out var resource) ||
             resource.Singular != "api" || !resource.HasDocument)
@@ -60,6 +119,12 @@ public static class ApiRegistryDocumentAcquirer
             throw new FederationException(FederationErrorCode.UnsupportedOperation,
                 "The selected Version is not a document-bearing API Resource in the captured model.");
         }
+    }
+
+    private static async ValueTask<ApiAcquiredDocument> AcquireVersionAsync(CapturedFederationReadScope reads,
+        FederationReadRequest request, FederationReadBudget budget, CancellationToken cancellationToken)
+    {
+        var versionXid = request.Target;
         var metadata = await reads.MetadataAsync(request).ConfigureAwait(false);
         var entity = metadata.TryGetProperty("entity", out var nested) ? nested : metadata;
         if (!FederationSyntax.SameXid(FederationJson.String(entity, "xid"), versionXid) ||
