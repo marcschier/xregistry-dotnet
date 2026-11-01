@@ -1,8 +1,8 @@
 # Concrete schema selection
 
-`SchemaObjectSelector.SelectAsync` in `XRegistry.Validation` implements the
-concrete-type selection rules in the active Schema Registry specification,
-sections 4.3.1-4.3.5. It accepts **already acquired Document bytes** and the raw
+`SchemaObjectSelector.SelectAsync` in `XRegistry.Validation` applies bounded
+concrete-type selection for the formats listed below. It accepts **already
+acquired schema Document bytes** and the raw
 `dataschemauri` (or another schema-selection URI). It does not read a Registry,
 open a file, issue HTTP requests, or acquire that URI again.
 
@@ -139,6 +139,51 @@ and `~1`, once. For example, `%252F` denotes the literal characters `%2F`, not a
 path separator. A colon separator may itself be percent-encoded after the exact
 Document prefix. An explicit empty local `:` suffix is invalid, not an omitted
 Avro suffix.
+
+## Embedded Avro and Protobuf schemas
+
+`SelectEmbeddedAsync` takes the containing JSON Document and performs both
+stages of a compound selector. `DocumentReference` identifies the embedded
+schema with an exact URI-fragment JSON Pointer; `SchemaUri` adds `:Name` for
+the record or message. Colon-containing Registry IDs remain part of the
+explicit pointer and do not determine the selector boundary.
+
+```csharp
+const string reference =
+    "https://example.test/registry.json#/schemas/telemetry/schema";
+
+var result = await SchemaObjectSelector.SelectEmbeddedAsync(
+    "Protobuf/3",
+    """
+    {"schemas":{"telemetry":{"schema":"syntax=\"proto3\"; message Event { string id=1; }"}}}
+    """u8.ToArray(),
+    reference + ":Event",
+    new SchemaObjectSelectionOptions { DocumentReference = reference },
+    cancellationToken);
+```
+
+The caller supplies bytes acquired from `https://example.test/registry.json`;
+the selector does not fetch that URL. It parses the complete container with
+duplicate-name rejection, decodes the pointer once, and extracts the Avro JSON
+object or Protobuf string before selecting a declaration. The result owns the
+complete extracted schema, including its declarations and imports. Protobuf
+JSON string escapes are decoded; Avro retains the selected object's JSON text.
+The result does not retain the container or prove its origin or digest.
+
+A direct schema Resource URI such as
+`/schemagroups/g1/schemas/s1#Event` still uses `SelectAsync` with acquired schema
+bytes. Its `#Event` is a declaration selector, not a container pointer.
+Use `:Event` only when the schema itself is selected by an existing fragment.
+Avro may omit the declaration suffix to select a record root; Protobuf requires
+a message suffix even when the schema contains only one message.
+
+Container parsing, extracted-schema ownership, validation and dependencies
+share one budget. Total bytes include the container and extracted schema;
+parsed-node and work limits are not reset between stages. Pointer character
+and step limits also apply before extraction. Missing pointers and missing
+declarations return `NotFound`; a wrong schema representation returns
+`Invalid` with `selection.not_schema`. Acquisition authorization and dependency
+base-URI policy remain with the caller.
 
 ## Bounded XML selectors
 

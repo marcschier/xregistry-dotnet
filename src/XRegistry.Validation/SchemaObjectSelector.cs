@@ -1,6 +1,7 @@
 // Copyright (c) 2026 xregistry-dotnet contributors.
 // SPDX-License-Identifier: MIT
 
+using System.Text;
 using System.Text.Json;
 
 namespace XRegistry.Validation;
@@ -13,7 +14,7 @@ public static class SchemaObjectSelector
     /// selects exactly one concrete declaration. Cancellation and resolver exceptions
     /// propagate; invalid caller options throw argument exceptions.
     /// </summary>
-    public static async ValueTask<SchemaObjectSelectionResult> SelectAsync(
+    public static ValueTask<SchemaObjectSelectionResult> SelectAsync(
         string format,
         ReadOnlyMemory<byte> document,
         string schemaUri,
@@ -25,6 +26,103 @@ public static class SchemaObjectSelector
         cancellationToken.ThrowIfCancellationRequested();
         options ??= new();
         options.Validate();
+        return SelectCoreAsync(format, document, schemaUri, options,
+            new SchemaObjectContext(options.Validation, cancellationToken), cancellationToken);
+    }
+
+    /// <summary>Selects an Avro record or Protobuf message from a schema embedded in an acquired JSON document.</summary>
+    /// <remarks>
+    /// DocumentReference must identify the schema with an exact URI-fragment JSON Pointer.
+    /// The schema URI extends that reference with an optional Avro or required Protobuf ':Name'.
+    /// The caller acquires the containing bytes and authorizes dependency resolution; no URI is
+    /// fetched or normalized. Parsing, extraction and type selection share finite budgets.
+    /// The result owns the extracted schema bytes, not the containing JSON document.
+    /// </remarks>
+    public static async ValueTask<SchemaObjectSelectionResult> SelectEmbeddedAsync(
+        string format, ReadOnlyMemory<byte> containingDocument, string schemaUri,
+        SchemaObjectSelectionOptions options, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(format);
+        ArgumentNullException.ThrowIfNull(schemaUri);
+        ArgumentNullException.ThrowIfNull(options);
+        cancellationToken.ThrowIfCancellationRequested();
+        options.Validate();
+        var reference = options.DocumentReference;
+        if (reference is null || !reference.Contains('#'))
+        {
+            throw new ArgumentException("An exact acquired schema reference with a JSON Pointer fragment is required.",
+                nameof(options));
+        }
+        if (!AvroSyntax.IsFormat(format) &&
+            !format.Equals("Protobuf/2", StringComparison.OrdinalIgnoreCase) &&
+            !format.Equals("Protobuf/3", StringComparison.OrdinalIgnoreCase))
+        {
+            return new(SchemaObjectSelectionStatus.Unsupported,
+                new("$", "format.unsupported", "Embedded named-type selection supports Avro and Protobuf schemas."));
+        }
+        var documents = new SchemaObjectContext(options.Validation, cancellationToken);
+        var context = documents.Validation;
+        try
+        {
+            SchemaObjectReference.Parse(schemaUri, options, true, context);
+            var hash = reference.IndexOf('#');
+            var pointer = SchemaJson.DecodeFragment(reference[(hash + 1)..], "$/selector", "selection.pointer", context);
+            if (pointer.Length > options.MaxSelectorLength || pointer.Count(c => c == '/') > options.MaxSelectorSegments)
+            {
+                ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$/selector", "limit.selector",
+                    "The embedded schema pointer exceeds its character or step limit.");
+            }
+            var owned = documents.OwnRoot(containingDocument, reference[..hash]);
+            using var container = context.ReadJson(owned);
+            var target = SchemaJson.DecodedPointer(container.RootElement, pointer, "$/selector", context).Value;
+            string text;
+            if (AvroSyntax.IsFormat(format))
+            {
+                if (target.ValueKind != JsonValueKind.Object)
+                {
+                    SchemaObjectSelectionFailure.Fail(SchemaObjectSelectionStatus.Invalid, "selection.not_schema",
+                        "An embedded Avro schema must be a JSON object.");
+                }
+                text = target.GetRawText();
+            }
+            else
+            {
+                if (target.ValueKind != JsonValueKind.String)
+                {
+                    SchemaObjectSelectionFailure.Fail(SchemaObjectSelectionStatus.Invalid, "selection.not_schema",
+                        "An embedded Protobuf schema must be a string.");
+                }
+                text = target.GetString()!;
+            }
+            var length = Encoding.UTF8.GetByteCount(text);
+            if (length > options.Validation.MaxDocumentBytes)
+            {
+                ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$", "limit.bytes",
+                    "The extracted schema exceeds its per-document byte limit.");
+            }
+            return await SelectCoreAsync(format, Encoding.UTF8.GetBytes(text), schemaUri, options, documents,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (SchemaObjectSelectionFailure failure)
+        {
+            return new(failure.Status, failure.Diagnostic);
+        }
+        catch (ValidationFailure failure)
+        {
+            if (failure.Diagnostic.Code is "reference.pointer" or "reference.not_found")
+            {
+                var missing = failure.Diagnostic.Code == "reference.not_found";
+                return new(missing ? SchemaObjectSelectionStatus.NotFound : SchemaObjectSelectionStatus.Invalid,
+                    new("$/selector", missing ? "selection.not_found" : "selection.pointer", failure.Diagnostic.Detail));
+            }
+            return FromValidationFailure(failure);
+        }
+    }
+
+    private static async ValueTask<SchemaObjectSelectionResult> SelectCoreAsync(
+        string format, ReadOnlyMemory<byte> document, string schemaUri, SchemaObjectSelectionOptions options,
+        SchemaObjectContext documents, CancellationToken cancellationToken)
+    {
         var jsonSchema = JsonSchemaSyntax.IsFormat(format);
         var jsonStructure = format.Equals("JsonStructure", StringComparison.OrdinalIgnoreCase) ||
             format.Equals("JsonStructure/draft-04", StringComparison.OrdinalIgnoreCase);
@@ -40,7 +138,6 @@ public static class SchemaObjectSelector
 
         try
         {
-            var documents = new SchemaObjectContext(options.Validation, cancellationToken);
             var context = documents.Validation;
             var reference = SchemaObjectReference.Parse(schemaUri, options, avro || protobuf, context);
             if (protobuf && reference.Selector.Length == 0)
@@ -122,14 +219,17 @@ public static class SchemaObjectSelector
         }
         catch (ValidationFailure failure)
         {
-            return new(failure.Status switch
-            {
-                DocumentValidationStatus.Invalid => SchemaObjectSelectionStatus.Invalid,
-                DocumentValidationStatus.Unsupported => SchemaObjectSelectionStatus.Unsupported,
-                _ => SchemaObjectSelectionStatus.Indeterminate,
-            }, failure.Diagnostic);
+            return FromValidationFailure(failure);
         }
     }
+
+    private static SchemaObjectSelectionResult FromValidationFailure(ValidationFailure failure) =>
+        new(failure.Status switch
+        {
+            DocumentValidationStatus.Invalid => SchemaObjectSelectionStatus.Invalid,
+            DocumentValidationStatus.Unsupported => SchemaObjectSelectionStatus.Unsupported,
+            _ => SchemaObjectSelectionStatus.Indeterminate
+        }, failure.Diagnostic);
 
     private static (JsonElement Value, string Path) SelectJson(JsonElement root, IReadOnlySet<string> schemaPaths,
         string pointer, SchemaObjectSelectionOptions options, ValidationContext context)

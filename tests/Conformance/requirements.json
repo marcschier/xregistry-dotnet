@@ -103507,13 +103507,20 @@
       ],
       "text": "When a URI, like the Message Registry's [`dataschemauri`](../message/spec.md#dataschemauri), points to an Avro Schema document directly, it MAY use a URI fragment `#{record-name}` to reference a particular record declaration. Otherwise the top-level object definition of the schema is used.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Selected MAY policy: SelectAsync accepts #Name on acquired Avro schema bytes, including Registry-root-relative schema Resource references, and defaults to a record root only when no selector is present. It rejects wrong-kind, ambiguous and missing declarations rather than choosing another record. This is bounded declaration-selection evidence for supported Avro formats, not acquisition authorization, complete Avro validity or native/platform qualification.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DirectRegistryRootReferencesUseHashNamesRatherThanCompoundColons",
+          "AvroOptionalRootAndQualifiedRecordsHaveLiteralIdentities",
+          "AvroSelectionDistinguishesAmbiguousWrongKindMissingAndInvalidNames",
+          "AvroWithoutSuffixNeverFallsBackToANestedRecord"
+        ],
         "nativeEvidence": []
       }
     },
@@ -103538,13 +103545,24 @@
       ],
       "text": "If the schema document is itself selected by a URI fragment, such as a JSON Pointer into an xRegistry document, a record selector MAY be appended to that fragment using `:{record-name}`. In this compound fragment, the part before the record selector locates the schema document, and the record name selects a declaration within that schema. The colon is used only for this two-stage selection, not when the URI identifies the schema document directly.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Selected MAY policy: SelectEmbeddedAsync performs container JSON Pointer extraction and Avro :Name selection from caller-acquired bytes using an explicit exact DocumentReference. Colon-containing IDs are not split or guessed; pointer and suffix percent decoding are single-pass. Avro may omit the record suffix. Container and extracted schema share cumulative finite byte/node/work budgets. Selection owns the extracted schema but does not establish container provenance, acquire URLs or qualify native platforms.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EmbeddedSchemasUsePointerExtractionBeforeNamedDeclarationSelection",
+          "EmbeddedAvroOptionalSelectorPreservesExactSuffixAndOnePassDecoding",
+          "EmbeddedPointersDecodeOnceAndRetainTheExactAcquisitionReference",
+          "EmbeddedPointerFailuresCannotSelectAnotherSchema",
+          "EmbeddedSchemaRepresentationMustMatchTheDeclaredFormat",
+          "EmbeddedTotalByteLimitIncludesContainerAndExtractedSchema",
+          "EmbeddedNodeLimitsIncludeBothParsingStages",
+          "EmbeddedSelectionValidatesTheCompleteContainer"
+        ],
         "nativeEvidence": []
       }
     },
@@ -103569,13 +103587,21 @@
       ],
       "text": "A URI, like the Message Registry's [`dataschemauri`](../message/spec.md#dataschemauri), that points to a Protobuf Schema document MUST reference a Protobuf `message` declaration contained in the schema document. When the URI identifies the schema document directly, the message name MUST be specified as a URI fragment using `#{message-name}`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "SelectAsync requires a #Name selector for direct Protobuf schema bytes, including Registry-root-relative references. Only messages declared in the supplied root schema can be selected; enums, comment text, ambiguous names and imported-only declarations cannot substitute for a contained message. Bounded Protobuf/2 and Protobuf/3 syntax policy remains explicit; this does not claim full language or provider/native qualification.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DirectRegistryRootReferencesUseHashNamesRatherThanCompoundColons",
+          "ProtobufRequiresAMessageSuffixEvenWithOnlyOneMessage",
+          "ProtobufNeverSelectsEnumsCommentsOrAnAmbiguousFirstMessage",
+          "ProtobufImportsProvideContextButAreNotContainedRootDeclarations",
+          "ProtobufTwoSelectsTheDeclaredMessage"
+        ],
         "nativeEvidence": []
       }
     },
@@ -103600,13 +103626,24 @@
       ],
       "text": "If the schema document is itself selected by a URI fragment, such as a JSON Pointer into an xRegistry document, the message name MUST be appended to that fragment using `:{message-name}`. In this compound fragment, the part before the message selector locates the schema document, and the message name selects a declaration within that schema. The colon is used only for this two-stage selection, not when the URI identifies the schema document directly.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "SelectEmbeddedAsync extracts a Protobuf schema string from the exact explicit container JSON Pointer and requires a :Name suffix before selecting a contained message. It rejects omission even with one message, wrong representations and mismatched acquisition references. Dependencies use only the explicit resolver; finite bytes, nodes and work are cumulative across extraction and validation. This is acquired-container selection, not URI acquisition, container integrity proof or native/platform qualification.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EmbeddedSchemasUsePointerExtractionBeforeNamedDeclarationSelection",
+          "EmbeddedProtobufRequiresANamedSuffixEvenForOneMessage",
+          "EmbeddedProtobufUsesOnlyTheExplicitDependencyResolver",
+          "EmbeddedSchemaRepresentationMustMatchTheDeclaredFormat",
+          "EmbeddedSelectionRequiresExplicitPointerContextAndPropagatesCancellation",
+          "EmbeddedInputByteLimitsApplyToTheWholeContainer",
+          "EmbeddedPointerStepLimitHasAnInclusiveBoundary",
+          "EmbeddedWorkAndDepthLimitsCannotBeBypassedByASmallSchema"
+        ],
         "nativeEvidence": []
       }
     },
