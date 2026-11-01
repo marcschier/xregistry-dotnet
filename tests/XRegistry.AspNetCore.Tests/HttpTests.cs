@@ -33,16 +33,21 @@ public class HttpTests
     {
         const string first = """
             <description xmlns="http://www.w3.org/ns/wsdl" xmlns:t="urn:api" targetNamespace="urn:api">
+              <include location="base.wsdl"/>
+              <interface name="Port" extends="t:Base"/>
+            </description>
+            """;
+        const string dependency = """
+            <description xmlns="http://www.w3.org/ns/wsdl" xmlns:t="urn:api" targetNamespace="urn:api">
               <interface name="Base" styleDefault="urn:style">
                 <fault name="Failure" element="#any"/>
                 <operation name="Read" pattern="http://www.w3.org/ns/wsdl/out-in">
                   <output element="#any"/><input element="#none"/><infault ref="t:Failure"/>
                 </operation>
               </interface>
-              <interface name="Port" extends="t:Base"/>
             </description>
             """;
-        var second = first.Replace("name=\"Read\"", "name=\"New\"", StringComparison.Ordinal);
+        var second = first.Replace("name=\"Port\"", "name=\"NewPort\"", StringComparison.Ordinal);
         const string version = "/apigroups/g/apis/a/versions/1";
         await using var host = await TestHost.StartAsync(model: BuiltInRegistryModels.Compile(RegistryModelKind.Api),
             useBoundPublicRoot: true);
@@ -66,10 +71,26 @@ public class HttpTests
         using var memory = new MemoryStream();
         await stream.CopyToAsync(memory);
         await Assert.That(Encoding.UTF8.GetString(memory.ToArray())).IsEqualTo(first);
-        var selected = await ApiOperationDocumentResolver.ResolveAsync(acquired.Format, acquired.Document.ContentType!,
+        var dependencyUri = new Uri(new Uri(acquired.Document.Origin!), "base.wsdl");
+        var calls = new List<string>();
+        ValueTask<ReadOnlyMemory<byte>?> ResolveDependency(string uri, CancellationToken cancellation)
+        {
+            cancellation.ThrowIfCancellationRequested();
+            calls.Add(uri);
+            return ValueTask.FromResult<ReadOnlyMemory<byte>?>(uri == dependencyUri.AbsoluteUri ?
+                Encoding.UTF8.GetBytes(dependency) : (ReadOnlyMemory<byte>?)null);
+        }
+        var unresolved = await ApiOperationDocumentResolver.ResolveAsync(acquired.Format, acquired.Document.ContentType!,
             memory.ToArray(), ApiOperationReference.Parse(version +
                 "#interfaces/%7Burn:api%7DPort/operations/%7Burn:api%7DRead"), new Uri(acquired.Document.Origin!));
+        await Assert.That(unresolved.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(calls.Count).IsEqualTo(0);
+        var selected = await ApiOperationDocumentResolver.ResolveAsync(acquired.Format, acquired.Document.ContentType!,
+            memory.ToArray(), ApiOperationReference.Parse(version +
+                "#interfaces/%7Burn:api%7DPort/operations/%7Burn:api%7DRead"), new Uri(acquired.Document.Origin!), ResolveDependency);
         await Assert.That(selected.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(calls.SequenceEqual([dependencyUri.AbsoluteUri])).IsTrue();
+        await Assert.That(selected.DocumentUri).IsEqualTo(dependencyUri);
         await Assert.That(selected.Wsdl20Operation!.OperationName).IsEqualTo("{urn:api}Read");
         await Assert.That(selected.Wsdl20Operation.DeclaringInterfaceName).IsEqualTo("{urn:api}Base");
         await Assert.That(selected.Wsdl20Operation.MessageExchangePattern).IsEqualTo("http://www.w3.org/ns/wsdl/out-in");
@@ -84,7 +105,8 @@ public class HttpTests
         await Assert.That(fault.FaultXml.Contains("name=\"Failure\"", StringComparison.Ordinal)).IsTrue();
         var missing = await ApiOperationDocumentResolver.ResolveAsync(acquired.Format, acquired.Document.ContentType!,
             memory.ToArray(), ApiOperationReference.Parse(version +
-                "#interfaces/%7Burn:api%7DPort/operations/%7Burn:api%7DNew"));
+                "#interfaces/%7Burn:api%7DNewPort/operations/%7Burn:api%7DRead"),
+            new Uri(acquired.Document.Origin!), ResolveDependency);
         await Assert.That(missing.Status).IsEqualTo(ApiOperationResolutionStatus.NotFound);
     }
 

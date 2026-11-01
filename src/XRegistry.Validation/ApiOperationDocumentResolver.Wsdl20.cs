@@ -69,8 +69,9 @@ public static partial class ApiOperationDocumentResolver
     private const string Wsdl20PatternPrefix = Wsdl20Namespace + "/";
     private sealed record Wsdl20FaultComponent(string DeclaringInterface, string Name, string ContentModel, string Xml);
 
-    private static ApiOperationResolutionResult ResolveWsdl20(string contentType, ReadOnlyMemory<byte> bytes,
-        ApiOperationSelector selector, Uri? documentUri, CancellationToken token)
+    private static async ValueTask<ApiOperationResolutionResult> ResolveWsdl20Async(string contentType, ReadOnlyMemory<byte> bytes,
+        ApiOperationSelector selector, Uri? documentUri, ApiOperationDocumentDependencyResolver? resolver,
+        CancellationToken token)
     {
         var media = contentType.Split(';', 2)[0].Trim();
         if (!media.Equals("application/xml", StringComparison.OrdinalIgnoreCase) &&
@@ -92,26 +93,31 @@ public static partial class ApiOperationDocumentResolver
             MaxNodes = Capabilities.MaxDocumentNodes,
             MaxWork = 8_388_608
         }, token);
+        XNamespace ns = Wsdl20Namespace;
+        var documents = new Dictionary<XElement, (string Namespace, Uri? Origin, HashSet<string> Imports)>();
+        var loaded = new Dictionary<Uri, XElement>();
+        var unavailable = new HashSet<Uri>();
+        var incompleteNamespaces = new HashSet<string>(StringComparer.Ordinal);
+        var catalogs = new List<(string Namespace, int Depth)>();
+        var references = 0;
         try
         {
             foreach (var value in selector.Tokens) { budget.Work(value.Length, "$/selector"); }
             CheckExpanded(selector.Tokens[1]);
             CheckExpanded(selector.Tokens[3]);
             var root = ReadWsdlXml(bytes, budget);
-            XNamespace ns = Wsdl20Namespace;
-            ValidationContext.Require(root.Name == ns + "description", "$", "wsdl.version",
-                "WSDL 2.0 requires a description root in its WSDL namespace.");
-            var targetNamespace = root.Attribute("targetNamespace")?.Value.Trim(' ', '\t', '\r', '\n');
-            ValidationContext.Require(targetNamespace is not null &&
-                !HasRawUriWhitespaceOrControls(targetNamespace) &&
-                Uri.IsWellFormedUriString(targetNamespace, UriKind.Absolute), "$", "wsdl.namespace",
-                "A WSDL 2.0 description requires an absolute target namespace.");
-            if (root.Elements(ns + "import").Any() || root.Elements(ns + "include").Any())
+            if (documentUri is not null) { loaded.Add(documentUri, root); }
+            await LoadAsync(root, documentUri, 0).ConfigureAwait(false);
+            for (var index = 0; index < catalogs.Count; index++)
             {
-                return Failure(ApiOperationResolutionStatus.Unsupported, "wsdl20.import",
-                    "This WSDL 2.0 policy selects components from a standalone description only.");
+                var catalog = catalogs[index];
+                budget.Work();
+                if (documents.Values.Any(document => document.Namespace == catalog.Namespace)) { continue; }
+                await AcquireAsync(new Uri(catalog.Namespace, UriKind.Absolute), catalog.Namespace, null, catalog.Depth, false)
+                    .ConfigureAwait(false);
             }
-            foreach (var element in root.Descendants())
+            foreach (var document in documents.Keys)
+            foreach (var element in document.Descendants())
             {
                 budget.Work();
                 if (element.Name.Namespace != ns && element.Attribute(ns + "required") is { } required)
@@ -127,9 +133,10 @@ public static partial class ApiOperationDocumentResolver
                 }
             }
             var interfaces = new Dictionary<string, XElement>(StringComparer.Ordinal);
-            foreach (var declaration in root.Elements(ns + "interface"))
+            foreach (var document in documents)
+            foreach (var declaration in document.Key.Elements(ns + "interface"))
             {
-                var name = Expanded(targetNamespace, Name(declaration), budget);
+                var name = Expanded(document.Value.Namespace, Name(declaration), budget);
                 ValidationContext.Require(interfaces.TryAdd(name, declaration), "$/interface", "wsdl.duplicate_interface",
                     "A WSDL 2.0 interface name must be unique.");
             }
@@ -137,13 +144,23 @@ public static partial class ApiOperationDocumentResolver
                 Dictionary<string, Wsdl20FaultComponent> Faults, int Depth)>(StringComparer.Ordinal);
             var active = new HashSet<string>(StringComparer.Ordinal);
             foreach (var name in interfaces.Keys) { _ = Visit(name, 0); }
-            if (!closures.TryGetValue(selector.Tokens[1], out var closure) ||
+            var selectedNamespace = selector.Tokens[1][1..selector.Tokens[1].LastIndexOf('}')];
+            if (selectedNamespace != documents[root].Namespace && !documents[root].Imports.Contains(selectedNamespace) ||
+                !closures.TryGetValue(selector.Tokens[1], out var closure) ||
                 !closure.Operations.TryGetValue(selector.Tokens[3], out var selected))
             {
+                if ((selectedNamespace == documents[root].Namespace || documents[root].Imports.Contains(selectedNamespace)) &&
+                    incompleteNamespaces.Contains(selectedNamespace))
+                {
+                    return Failure(ApiOperationResolutionStatus.Indeterminate, "reference.unresolved",
+                        "Unavailable namespace information prevents conclusive WSDL operation selection.");
+                }
                 return Failure(ApiOperationResolutionStatus.NotFound, "selection.not_found",
                     "No WSDL 2.0 operation matches the expanded interface and operation locator.");
             }
-            return new(ApiOperationResolutionStatus.Selected, documentUri: documentUri, wsdl20Operation: selected);
+            var declaringDocument = interfaces[selected.DeclaringInterfaceName].Ancestors().Last();
+            return new(ApiOperationResolutionStatus.Selected, documentUri: documents[declaringDocument].Origin,
+                wsdl20Operation: selected);
 
             (Dictionary<string, Wsdl20OperationSelection> Operations, Dictionary<string, Wsdl20FaultComponent> Faults, int Depth)
                 Visit(string name, int depth)
@@ -157,8 +174,14 @@ public static partial class ApiOperationDocumentResolver
                     CheckInheritanceDepth(depth + cached.Depth);
                     return cached;
                 }
+                if (!interfaces.ContainsKey(name) && incompleteNamespaces.Contains(name[1..name.LastIndexOf('}')]))
+                {
+                    ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$/interface", "reference.unresolved",
+                        "Unavailable namespace information prevents resolution of an extended interface.");
+                }
                 ValidationContext.Require(interfaces.TryGetValue(name, out var declaration), "$/interface", "wsdl.interface",
                     "A WSDL 2.0 interface extends an undeclared interface.");
+                var targetNamespace = documents[declaration.Ancestors().Last()].Namespace;
                 active.Add(name);
                 var result = new Dictionary<string, Wsdl20OperationSelection>(StringComparer.Ordinal);
                 var faults = new Dictionary<string, Wsdl20FaultComponent>(StringComparer.Ordinal);
@@ -269,6 +292,10 @@ public static partial class ApiOperationDocumentResolver
                     element.GetNamespaceOfPrefix(parts[0])?.NamespaceName;
                 ValidationContext.Require(namespaceName is not null, "$/interface", "wsdl.qname",
                     "A WSDL component reference uses an undeclared namespace prefix.");
+                var containing = documents[element.Ancestors().Last()];
+                ValidationContext.Require(namespaceName == containing.Namespace || containing.Imports.Contains(namespaceName),
+                    "$/interface", "wsdl.import_required",
+                    "A foreign WSDL component reference requires an import in its authored document.");
                 return Expanded(namespaceName, parts[^1], budget);
             }
 
@@ -371,6 +398,110 @@ public static partial class ApiOperationDocumentResolver
         {
             return Failure(ApiOperationResolutionStatus.Invalid, "wsdl.xml",
                 "The WSDL document or an XML name is malformed; DTD processing is prohibited.");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Failure(ApiOperationResolutionStatus.Denied, "dependency.denied",
+                "Caller policy denied a required WSDL 2.0 import or include.");
+        }
+
+        async ValueTask LoadAsync(XElement entry, Uri? origin, int depth)
+        {
+            budget.Work();
+            if (depth > Capabilities.MaxReferenceDepth)
+            {
+                ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$/import", "limit.depth",
+                    "The WSDL document nesting limit was exceeded.");
+            }
+            ValidationContext.Require(entry.Name == ns + "description", "$", "wsdl.version",
+                "WSDL 2.0 requires a description root in its WSDL namespace.");
+            var targetNamespace = entry.Attribute("targetNamespace")?.Value.Trim(' ', '\t', '\r', '\n');
+            ValidationContext.Require(targetNamespace is not null && !HasRawUriWhitespaceOrControls(targetNamespace) &&
+                Uri.IsWellFormedUriString(targetNamespace, UriKind.Absolute), "$", "wsdl.namespace",
+                "A WSDL 2.0 description requires an absolute target namespace.");
+            var imports = new HashSet<string>(StringComparer.Ordinal);
+            var hints = new HashSet<(string Namespace, string? Location)>();
+            documents.Add(entry, (targetNamespace, origin, imports));
+            foreach (var reference in entry.Elements().Where(e => e.Name == ns + "include" || e.Name == ns + "import"))
+            {
+                budget.Work();
+                var include = reference.Name == ns + "include";
+                var expectedNamespace = include ? targetNamespace :
+                    reference.Attribute("namespace")?.Value.Trim(' ', '\t', '\r', '\n');
+                ValidationContext.Require(expectedNamespace is not null &&
+                    !HasRawUriWhitespaceOrControls(expectedNamespace) &&
+                    Uri.IsWellFormedUriString(expectedNamespace, UriKind.Absolute), "$/import", "wsdl.import_namespace",
+                    "A WSDL 2.0 import requires an absolute namespace.");
+                var location = reference.Attribute("location")?.Value.Trim(' ', '\t', '\r', '\n');
+                ValidationContext.Require(!include || location is not null, "$/include", "wsdl.include",
+                    "A WSDL 2.0 include requires a location.");
+                if (!include)
+                {
+                    ValidationContext.Require(expectedNamespace != targetNamespace, "$/import", "wsdl.import_namespace",
+                        "A WSDL 2.0 import must identify a foreign namespace.");
+                    ValidationContext.Require(hints.Add((expectedNamespace, location)), "$/import", "wsdl.duplicate_import",
+                        "Repeated imports for one namespace must have distinct location values.");
+                    imports.Add(expectedNamespace);
+                }
+                if (location is null)
+                {
+                    catalogs.Add((expectedNamespace, depth + 1));
+                    continue;
+                }
+                var uri = WsdlImportUri(reference, location, origin, budget);
+                await AcquireAsync(uri, expectedNamespace, uri, depth + 1, include).ConfigureAwait(false);
+            }
+        }
+
+        async ValueTask AcquireAsync(Uri uri, string expectedNamespace, Uri? origin, int depth, bool required)
+        {
+            if (unavailable.Contains(uri))
+            {
+                Missing();
+                return;
+            }
+            if (!loaded.TryGetValue(uri, out var dependency))
+            {
+                if (++references > Capabilities.MaxReferencedDocuments)
+                {
+                    ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$/import", "limit.references",
+                        "The WSDL imported-document limit was exceeded.");
+                }
+                token.ThrowIfCancellationRequested();
+                var acquired = resolver is null ? null : await resolver(uri.AbsoluteUri, token).ConfigureAwait(false);
+                token.ThrowIfCancellationRequested();
+                if (acquired is null)
+                {
+                    unavailable.Add(uri);
+                    Missing();
+                    return;
+                }
+                dependency = ReadWsdlXml(acquired.Value, budget);
+                ValidationContext.Require(dependency.Name == ns + "description", "$/import", "wsdl.version",
+                    "A WSDL 2.0 import or include must resolve to a WSDL 2.0 description.");
+                CheckNamespace();
+                loaded.Add(uri, dependency);
+                await LoadAsync(dependency, origin, depth).ConfigureAwait(false);
+            }
+            else { CheckNamespace(); }
+
+            void Missing()
+            {
+                if (required)
+                {
+                    ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$/include", "reference.unresolved",
+                        "No explicitly supplied document resolves the required WSDL include.");
+                }
+                incompleteNamespaces.Add(expectedNamespace);
+            }
+
+            void CheckNamespace()
+            {
+                ValidationContext.Require(
+                    dependency.Attribute("targetNamespace")?.Value.Trim(' ', '\t', '\r', '\n') == expectedNamespace,
+                    "$/import", "wsdl.import_namespace",
+                    "The acquired WSDL namespace contradicts its import or include.");
+            }
         }
 
         static string Name(XElement element)

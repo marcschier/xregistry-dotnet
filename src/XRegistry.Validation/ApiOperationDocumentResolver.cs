@@ -51,7 +51,7 @@ public sealed class ApiOperationResolverCapabilities
     /// </summary>
     public bool SupportsCallerProvidedOperationReferences { get; }
 
-    /// <summary>Gets whether WSDL 1.1 imports use the explicit caller dependency resolver.</summary>
+    /// <summary>Gets whether WSDL 1.1 imports and WSDL 2.0 imports/includes use the explicit caller dependency resolver.</summary>
     public bool SupportsCallerProvidedWsdlImports { get; }
 
     /// <summary>Gets the maximum number of distinct referenced documents loaded for one resolution.</summary>
@@ -274,7 +274,8 @@ public static partial class ApiOperationDocumentResolver
         }
         if (format == "WSDL/2.0")
         {
-            return ResolveWsdl20(contentType, document, reference.Selector, documentUri, cancellationToken);
+            return await ResolveWsdl20Async(contentType, document, reference.Selector, documentUri, resolveReference,
+                cancellationToken).ConfigureAwait(false);
         }
         if (!string.Equals(contentType.Split(';', 2)[0].Trim(), grpc ? "text/plain" : "application/json",
             StringComparison.OrdinalIgnoreCase))

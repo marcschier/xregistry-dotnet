@@ -28,7 +28,7 @@ complete xRegistry conformance.
 | HTTP serving | `XRegistry.AspNetCore.MapXRegistry` | Maps a concrete `RegistryEngine`; it does not start or secure a host. |
 | Transactional persistence | Application-owned `IRegistryPersistence`, or `LocalRegistryPersistence` over `LocalFileStore` | Storage generations are not entity epochs or remote Registry revisions. |
 | Schema-source validation | `XRegistry.Validation` | Supported schema formats and policies, not OPC UA NodeSets/sessions/projection. |
-| API Registry and operation references | `XRegistry.Models` (`RegistryModelKind.Api`) and `XRegistry.Validation` (`ApiOperationReference`, `ApiOperationDocumentResolver`) | The model describes versioned API definitions. The parser accepts operation, service, interface, GraphQL and JSON Pointer selectors. Document resolution supports OpenAPI 3.0/3.1 and Swagger 2.0 JSON operations by `operationId` or JSON Pointer, OpenRPC 1.4 JSON methods by exact `name`, Avro Protocol 1.12.0 JSON messages by exact member name, assembled Smithy 2 JSON AST operations by absolute shape ID, gRPC Proto3 source methods by exact package-qualified service and RPC name, WSDL 1.1 XML operations by expanded port type QName and local operation name with explicitly resolved imports, and standalone WSDL 2.0 operations by expanded interface/operation QNames under the declared pattern policy. WSDL 1.1 overloads can use effective input/output names. JSON and WSDL selectors do not validate the full API document; other language resolvers remain unsupported. |
+| API Registry and operation references | `XRegistry.Models` (`RegistryModelKind.Api`) and `XRegistry.Validation` (`ApiOperationReference`, `ApiOperationDocumentResolver`) | The model describes versioned API definitions. The parser accepts operation, service, interface, GraphQL and JSON Pointer selectors. Document resolution supports OpenAPI 3.0/3.1 and Swagger 2.0 JSON operations by `operationId` or JSON Pointer, OpenRPC 1.4 JSON methods by exact `name`, Avro Protocol 1.12.0 JSON messages by exact member name, assembled Smithy 2 JSON AST operations by absolute shape ID, gRPC Proto3 source methods by exact package-qualified service and RPC name, WSDL 1.1 XML operations by expanded port type QName and local operation name with explicitly resolved imports, and WSDL 2.0 operations by expanded interface/operation QNames with explicit imports/includes under the declared pattern policy. WSDL 1.1 overloads can use effective input/output names. JSON and WSDL selectors do not validate the full API document; other language resolvers remain unsupported. |
 | Federation read acquisition | `IFederationReadSource` / `HttpFederationReadSource` | A read-source seam, not a write dispatcher or immutable live snapshot. |
 | OPC UA access and federation reads | `XRegistry.Bindings.OpcUa` | Uses OPC UA Client Stack 2.0.1 to discover endpoints, apply caller policy, open a Session, remap the portable root through `NamespaceArray`, and verify Registry type and Core version. `OpcUaRegistryReadSource` maps Registry, Group, Resource, Meta, Version and collection views, and reads local FileType Documents or returns external-reference descriptors. `OpcUaRegistryWriter` updates Properties and calls Methods, including Resource Document replacement. Callers supply Group, Resource and ResourceVersions ObjectType mappings. Fake-Session tests cover reader, source and writer behavior; in-process server tests cover Session establishment, XREG-Events subscription management, writes, methods and document transfer. Two-server tests cover trusted external Resource and Version resolution. Core API views and NodeSet projection remain unimplemented. Endpoint security policy is caller-selected. Generic packages remain free of OPC UA types. |
 
@@ -323,7 +323,7 @@ Unavailable or denied imports prevent selection, and shared dependencies are
 acquired once. Imported schemas remain unvalidated schema data.
 See [the bounded WSDL policy](validation.md#wsdl-11-operation-selection).
 
-Standalone `WSDL/2.0` selection uses expanded interface and operation QNames.
+`WSDL/2.0` selection uses expanded interface and operation QNames.
 `Wsdl20Operation` retains the declaring interface, native operation XML,
 message-exchange-pattern IRI, effective styles and resolved fault references. Interface inheritance does
 not change an operation's declaring namespace; diamond paths to the same
@@ -335,9 +335,15 @@ the selected derived interface cannot supply it. Native propagation rules
 reject forbidden directions and duplicate fault-name/label pairs.
 The policy supports the published Adjuncts patterns and the named additional-MEP
 Note patterns with `#any` or `#none` message and fault content.
-Imports/includes, schema-element resolution, other type
-systems and custom patterns remain unsupported; see
-[WSDL 2.0 selection](validation.md#standalone-wsdl-20-operation-selection).
+Imports and includes use only the caller's dependency callback, with per-Document
+URI and `xml:base` resolution. Circular includes reuse declarations; foreign
+QNames require an import in their authored Document. Locationless imports use
+acquired namespace components or a namespace-URI catalog lookup, which does not
+invent a retrieval origin. Unavailable import hints do not block already resolved
+components; unresolved component references and unavailable includes still
+prevent selection. Schema-element resolution,
+other type systems and custom patterns remain unsupported; see
+[WSDL 2.0 selection](validation.md#wsdl-20-operation-selection).
 
 API dependency references reject raw whitespace and control characters before
 base-URI lookup or acquisition. The document portion also rejects malformed

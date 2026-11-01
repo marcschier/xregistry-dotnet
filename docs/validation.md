@@ -107,7 +107,7 @@ message import after source and host disposal.
 It preserves entry bytes and native operation meaning without asserting that
 registration or selection establishes full document validity.
 
-## Standalone WSDL 2.0 operation selection
+## WSDL 2.0 operation selection
 
 `WSDL/2.0` XML selection uses expanded QNames for both interface and operation,
 for example `#interfaces/%7Burn:api%7DPort/operations/%7Burn:api%7DRead`.
@@ -134,7 +134,7 @@ Placeholder labels and directions retain
 their native meaning; XML child order does not substitute for those labels.
 Invalid names, duplicate or missing interfaces, inheritance cycles, conflicting
 operations and malformed placeholders fail before returning a match.
-Unimplemented imports/includes, schema-element references,
+Unimplemented schema-element references,
 other type systems, custom patterns and required extensions report
 `Unsupported`, never a successful unchecked selection.
 
@@ -158,8 +158,31 @@ facets without normalizing the resulting namespace or pattern identity.
 WSDL 2.0 selection shares the hardened XML reader and finite byte, node, depth,
 work and deadline limits. Inheritance is bounded separately at 64 edges,
 including cached chains; declaration order cannot bypass that limit.
+WSDL 2.0 imports and includes use the explicit caller dependency callback.
+Includes require matching target namespaces; imports require foreign target
+namespaces. Location hints resolve against each containing Document and
+inherited `xml:base`. Shared and circular includes reuse the same parsed
+Document without duplicating its declarations, as required by
+[WSDL 2.0 sections 4.1 and 4.2](https://www.w3.org/TR/2007/REC-wsdl20-20070626/#includes).
+Foreign QNames require an import in the Document that authors the reference;
+an included Document's import does not grant that permission to its includer.
+Documents importing the same namespace share its acquired components.
+
+An import without a location uses already acquired namespace components or
+asks the callback for that namespace URI. Such a catalog lookup does not
+establish a retrieval origin; relative dependencies still need an explicit base.
+Unavailable import hints do not invalidate an otherwise resolved operation.
+If missing namespace information prevents resolving an authored component,
+selection reports `Indeterminate`, not an invented missing-component result.
+Includes still require their Documents. Denied dependencies,
+namespace contradictions, malformed XML and exhausted aggregate budgets prevent
+partial selection. The callback owns redirect and credential policy, and its
+bytes remain associated with the requested location rather than an inferred
+post-redirect URI. Selected operations retain their declaring Document's origin.
+
 The actual HTTP workflow retains an older exact Version and selects its inherited
-operation and fault declarations after default change and source disposal.
+operation and fault declarations through an explicit relative include after
+default change and source disposal.
 These checks establish the declared selection policy, not full WSDL 2.0 document
 validation.
 

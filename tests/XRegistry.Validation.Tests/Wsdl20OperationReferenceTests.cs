@@ -116,8 +116,6 @@ public class Wsdl20OperationReferenceTests
     }
 
     [Test]
-    [Arguments("<import namespace=\"urn:other\" location=\"other.wsdl\"/>", "wsdl20.import")]
-    [Arguments("<include location=\"other.wsdl\"/>", "wsdl20.import")]
     [Arguments("<interface name=\"Port\"><operation name=\"Read\" pattern=\"urn:custom\"><input element=\"#none\"/></operation></interface>", "wsdl.pattern")]
     [Arguments("<interface name=\"Port\"><operation name=\"Read\"><input element=\"t:Payload\"/><output element=\"#none\"/></operation></interface>", "wsdl20.element")]
     [Arguments("<interface name=\"Port\"><operation name=\"Read\"><input/><output element=\"#none\"/></operation></interface>", "wsdl20.element")]
@@ -334,13 +332,309 @@ public class Wsdl20OperationReferenceTests
             Document(""), Reference("Port"), cancellationToken: cancellation.Token)).Throws<OperationCanceledException>();
     }
 
+    [Test]
+    public async Task Wsdl20ImportsAndCircularIncludesRetainOneDeclaringComponentAndItsOrigin()
+    {
+        var origin = new Uri("https://example.test/root.wsdl");
+        var calls = new List<string>();
+        var root = Document("""
+            <include location="left.wsdl"/><include location="right.wsdl"/>
+            <interface name="Port" xmlns:f="urn:foreign" extends="f:Base"/>
+            <import namespace="urn:foreign" location=" foreign.wsdl "/>
+            """);
+        var foreign = Document("""
+            <interface name="Base" styleDefault="urn:foreign-style">
+              <fault name="F" element="#none"/>
+              <operation name="Read"><input element="#none"/><output element="#any"/><outfault ref="t:F"/></operation>
+            </interface>
+            """, "urn:foreign");
+        var result = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml", root,
+            ApiOperationReference.Parse("/apigroups/g/apis/a#interfaces/%7Burn:api%7DPort/operations/%7Burn:foreign%7DRead"),
+            origin, (uri, cancellation) =>
+            {
+                cancellation.ThrowIfCancellationRequested();
+                calls.Add(uri);
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(uri switch
+                {
+                    "https://example.test/left.wsdl" => Document("<include location=\"root.wsdl\"/><include location=\"right.wsdl\"/>"),
+                    "https://example.test/right.wsdl" => Document("<include location=\"root.wsdl\"/>"),
+                    "https://example.test/foreign.wsdl" => foreign,
+                    _ => throw new InvalidOperationException("Unexpected dependency " + uri)
+                });
+            });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(calls.SequenceEqual(["https://example.test/left.wsdl", "https://example.test/right.wsdl",
+            "https://example.test/foreign.wsdl"])).IsTrue();
+        await Assert.That(result.DocumentUri).IsEqualTo(new Uri("https://example.test/foreign.wsdl"));
+        await Assert.That(result.Wsdl20Operation!.DeclaringInterfaceName).IsEqualTo("{urn:foreign}Base");
+        await Assert.That(result.Wsdl20Operation.OperationName).IsEqualTo("{urn:foreign}Read");
+        await Assert.That(result.Wsdl20Operation.Styles.SequenceEqual(["urn:foreign-style"])).IsTrue();
+        await Assert.That(result.Wsdl20Operation.Faults[0].FaultName).IsEqualTo("{urn:foreign}F");
+        Array.Fill(root, (byte)'!');
+        Array.Fill(foreign, (byte)'!');
+        await Assert.That(XElement.Parse(result.Wsdl20Operation.OperationXml).GetNamespaceOfPrefix("t")!.NamespaceName)
+            .IsEqualTo("urn:foreign");
+        await Assert.That(XElement.Parse(result.Wsdl20Operation.Faults[0].FaultXml).Attribute("name")!.Value).IsEqualTo("F");
+    }
+
+    [Test]
+    public async Task Wsdl20DependenciesUseContainingXmlBaseAndNamespaceCatalogWithoutInventingOrigin()
+    {
+        var calls = new List<string>();
+        var result = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml",
+            Document("<include xml:base=\"parts/\" location=\"first.wsdl\"/>"), Reference("Port"),
+            new Uri("https://example.test/root.wsdl"), (uri, _) =>
+            {
+                calls.Add(uri);
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(uri switch
+                {
+                    "https://example.test/parts/first.wsdl" => Document(
+                        "<include xml:base=\"../shared/\" location=\"second.wsdl\"/>"),
+                    "https://example.test/shared/second.wsdl" => Document(
+                        "<interface name=\"Port\"><operation name=\"Read\"><input element=\"#none\"/><output element=\"#any\"/></operation></interface>"),
+                    _ => throw new InvalidOperationException("Unexpected dependency " + uri)
+                });
+            });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(calls.SequenceEqual(["https://example.test/parts/first.wsdl",
+            "https://example.test/shared/second.wsdl"])).IsTrue();
+        await Assert.That(result.DocumentUri).IsEqualTo(new Uri("https://example.test/shared/second.wsdl"));
+        var catalog = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml",
+            Document("<import namespace=\"urn:foreign\"/>"),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#interfaces/%7Burn:foreign%7DPort/operations/%7Burn:foreign%7DRead"),
+            resolveReference: (uri, _) =>
+            {
+                calls.Add(uri);
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Document(
+                    "<interface name=\"Port\"><operation name=\"Read\"><input element=\"#none\"/><output element=\"#any\"/></operation></interface>",
+                    "urn:foreign"));
+            });
+        await Assert.That(catalog.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(calls.Last()).IsEqualTo("urn:foreign");
+        await Assert.That(catalog.DocumentUri).IsNull();
+        await Assert.That(catalog.Wsdl20Operation!.OperationName).IsEqualTo("{urn:foreign}Read");
+    }
+
+    [Test]
+    [Arguments("<include/>", "wsdl.include", 0)]
+    [Arguments("<import location=\"other.wsdl\"/>", "wsdl.import_namespace", 0)]
+    [Arguments("<import namespace=\"urn:api\" location=\"other.wsdl\"/>", "wsdl.import_namespace", 0)]
+    [Arguments("<include location=\"other.wsdl#fragment\"/>", "dependency.uri", 0)]
+    [Arguments("<include location=\"other.wsdl\"/>", "wsdl.import_namespace", 1)]
+    [Arguments("<import namespace=\"urn:foreign\" location=\"other.wsdl\"/><import namespace=\"urn:foreign\" location=\"other.wsdl\"/>",
+        "wsdl.duplicate_import", 1)]
+    public async Task Wsdl20ImportAndIncludeContradictionsPreventPartialSelection(string references, string code, int expectedCalls)
+    {
+        var calls = 0;
+        var result = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml", Document(references),
+            Reference("Port"), new Uri("https://example.test/root.wsdl"), (_, _) =>
+            {
+                calls++;
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Document("", "urn:foreign"));
+            });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        await Assert.That(result.Wsdl20Operation).IsNull();
+        await Assert.That(calls).IsEqualTo(expectedCalls);
+    }
+
+    [Test]
+    public async Task Wsdl20ForeignVisibilityRequiresImportsInTheAuthoredDocument()
+    {
+        var root = Document("""
+            <include location="part.wsdl"/>
+            <interface name="Port" xmlns:f="urn:foreign" extends="f:Base"/>
+            """);
+        var result = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml", root,
+            Reference("Port"), new Uri("https://example.test/root.wsdl"), (uri, _) =>
+                ValueTask.FromResult<ReadOnlyMemory<byte>?>(uri.EndsWith("part.wsdl", StringComparison.Ordinal) ?
+                    Document("<import namespace=\"urn:foreign\" location=\"foreign.wsdl\"/>") :
+                    Document("<interface name=\"Base\"/>", "urn:foreign")));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("wsdl.import_required");
+        await Assert.That(result.Wsdl20Operation).IsNull();
+        var unrelated = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml",
+            Document("<import namespace=\"urn:foreign\" location=\"foreign.wsdl\"/>"),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#interfaces/%7Burn:third%7DPort/operations/%7Burn:third%7DRead"),
+            new Uri("https://example.test/root.wsdl"), (uri, _) =>
+                ValueTask.FromResult<ReadOnlyMemory<byte>?>(uri.EndsWith("foreign.wsdl", StringComparison.Ordinal) ?
+                    Document("<import namespace=\"urn:third\" location=\"third.wsdl\"/>", "urn:foreign") :
+                    Document("<interface name=\"Port\"><operation name=\"Read\"><input element=\"#none\"/><output element=\"#any\"/></operation></interface>",
+                        "urn:third")));
+        await Assert.That(unrelated.Status).IsEqualTo(ApiOperationResolutionStatus.NotFound);
+        await Assert.That(unrelated.Wsdl20Operation).IsNull();
+    }
+
+    [Test]
+    [Arguments(true)]
+    [Arguments(false)]
+    public async Task Wsdl20NamespaceVisibilityUsesAllAcquiredHintsWithoutOrderDependentCatalogLookups(bool catalogFirst)
+    {
+        const string catalog = "<import namespace=\"urn:foreign\"/>";
+        const string include = "<include location=\"part.wsdl\"/>";
+        var calls = new List<string>();
+        var result = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml",
+            Document((catalogFirst ? catalog + include : include + catalog) +
+                "<interface name=\"Port\" xmlns:f=\"urn:foreign\" extends=\"f:Base\"/>"),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#interfaces/%7Burn:api%7DPort/operations/%7Burn:foreign%7DRead"),
+            new Uri("https://example.test/root.wsdl"), (uri, _) =>
+            {
+                calls.Add(uri);
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(uri switch
+                {
+                    "https://example.test/part.wsdl" => Document("<import namespace=\"urn:foreign\" location=\"foreign.wsdl\"/>"),
+                    "https://example.test/foreign.wsdl" => Document(
+                        "<interface name=\"Base\"><operation name=\"Read\"><input element=\"#none\"/><output element=\"#any\"/></operation></interface>",
+                        "urn:foreign"),
+                    _ => throw new InvalidOperationException("Unnecessary catalog lookup " + uri)
+                });
+            });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(calls.SequenceEqual(["https://example.test/part.wsdl", "https://example.test/foreign.wsdl"])).IsTrue();
+        await Assert.That(result.DocumentUri).IsEqualTo(new Uri("https://example.test/foreign.wsdl"));
+        await Assert.That(result.Wsdl20Operation!.DeclaringInterfaceName).IsEqualTo("{urn:foreign}Base");
+    }
+
+    [Test]
+    public async Task Wsdl20UnavailableImportHintsDoNotPreventResolvedComponentsOrInventMissingOnes()
+    {
+        var calls = new List<string>();
+        var reference = ApiOperationReference.Parse(
+            "/apigroups/g/apis/a#interfaces/%7Burn:api%7DPort/operations/%7Burn:foreign%7DRead");
+        var root = Document("""
+            <import namespace="urn:foreign" location="missing.wsdl"/>
+            <import namespace="urn:foreign" location="available.wsdl"/>
+            <interface name="Port" xmlns:f="urn:foreign" extends="f:Base"/>
+            """);
+        var result = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml", root, reference,
+            new Uri("https://example.test/root.wsdl"), (uri, _) =>
+            {
+                calls.Add(uri);
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(uri.EndsWith("available.wsdl", StringComparison.Ordinal) ?
+                    Document("<interface name=\"Base\"><operation name=\"Read\"><input element=\"#none\"/><output element=\"#any\"/></operation></interface>",
+                        "urn:foreign") : (ReadOnlyMemory<byte>?)null);
+            });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(calls.SequenceEqual(["https://example.test/missing.wsdl",
+            "https://example.test/available.wsdl"])).IsTrue();
+        await Assert.That(result.DocumentUri).IsEqualTo(new Uri("https://example.test/available.wsdl"));
+        var unresolved = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml", root, reference,
+            new Uri("https://example.test/root.wsdl"));
+        await Assert.That(unresolved.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(unresolved.Diagnostic!.Code).IsEqualTo("reference.unresolved");
+        await Assert.That(unresolved.Wsdl20Operation).IsNull();
+        var local = await Resolve("""
+            <import namespace="urn:unused"/>
+            <interface name="Port"><operation name="Read"><input element="#none"/><output element="#any"/></operation></interface>
+            """);
+        await Assert.That(local.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(local.Wsdl20Operation!.OperationName).IsEqualTo("{urn:api}Read");
+        var required = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml",
+            Document("<import namespace=\"urn:foreign\" location=\"missing.wsdl\"/><include location=\"missing.wsdl\"/>"),
+            Reference("Port"), new Uri("https://example.test/root.wsdl"), (uri, _) =>
+            {
+                calls.Add(uri);
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(null);
+            });
+        await Assert.That(required.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(required.Diagnostic!.Code).IsEqualTo("reference.unresolved");
+        await Assert.That(calls.Count).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task Wsdl20DependencyPolicyMissingBaseMalformedXmlAndCancellationRemainExplicit()
+    {
+        var bytes = Document("<include location=\"part.wsdl\"/>");
+        var missingBase = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml", bytes, Reference("Port"));
+        await Assert.That(missingBase.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(missingBase.Diagnostic!.Code).IsEqualTo("dependency.base");
+        var missing = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml", bytes, Reference("Port"),
+            new Uri("https://example.test/root.wsdl"));
+        await Assert.That(missing.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(missing.Diagnostic!.Code).IsEqualTo("reference.unresolved");
+        var denied = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml", bytes, Reference("Port"),
+            new Uri("https://example.test/root.wsdl"), (_, _) => throw new UnauthorizedAccessException());
+        await Assert.That(denied.Status).IsEqualTo(ApiOperationResolutionStatus.Denied);
+        await Assert.That(denied.Diagnostic!.Code).IsEqualTo("dependency.denied");
+        foreach (var xml in new[] { "<!DOCTYPE x [<!ENTITY e 'unsafe'>]><x>&e;</x>",
+            "<definitions xmlns=\"http://schemas.xmlsoap.org/wsdl/\"/>" })
+        {
+            var invalid = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml", bytes, Reference("Port"),
+                new Uri("https://example.test/root.wsdl"), (_, _) =>
+                    ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes(xml)));
+            await Assert.That(invalid.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+            await Assert.That(invalid.Wsdl20Operation).IsNull();
+        }
+        using var cancellation = new CancellationTokenSource();
+        await Assert.That(async () => await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml",
+            bytes, Reference("Port"), new Uri("https://example.test/root.wsdl"), (_, _) =>
+            {
+                cancellation.Cancel();
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Document(""));
+            }, cancellation.Token)).Throws<OperationCanceledException>();
+    }
+
+    [Test]
+    [Arguments(32)]
+    [Arguments(33)]
+    public async Task Wsdl20DistinctDocumentBudgetCountsAcquisitionsRatherThanRepeatedIncludes(int count)
+    {
+        var calls = 0;
+        var references = string.Concat(Enumerable.Range(0, count)
+            .Select(index => "<include location=\"part" + index + ".wsdl\"/><include location=\"part" + index + ".wsdl\"/>"));
+        var result = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml",
+            Document(references + "<interface name=\"Port\"><operation name=\"Read\"><input element=\"#none\"/><output element=\"#any\"/></operation></interface>"),
+            Reference("Port"), new Uri("https://example.test/root.wsdl"), (_, _) =>
+            {
+                calls++;
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Document(""));
+            });
+        await Assert.That(calls).IsEqualTo(32);
+        await Assert.That(result.Status).IsEqualTo(count == 32 ? ApiOperationResolutionStatus.Selected :
+            ApiOperationResolutionStatus.Indeterminate);
+        if (count == 33)
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("limit.references");
+            await Assert.That(result.Wsdl20Operation).IsNull();
+        }
+    }
+
+    [Test]
+    [Arguments(3, false)]
+    [Arguments(4, false)]
+    [Arguments(1, true)]
+    public async Task Wsdl20DependencyBytesShareTheCumulativeBudget(int count, bool oversized)
+    {
+        var calls = 0;
+        var body = Document("<!---->");
+        var size = ApiOperationDocumentResolver.Capabilities.MaxDocumentBytes + (oversized ? 1 : 0);
+        var dependency = Document("<!--" + new string('x', size - body.Length) + "-->");
+        await Assert.That(dependency.Length).IsEqualTo(size);
+        var result = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml",
+            Document(string.Concat(Enumerable.Range(0, count).Select(index => "<include location=\"part" + index + ".wsdl\"/>")) +
+                "<interface name=\"Port\"><operation name=\"Read\"><input element=\"#none\"/><output element=\"#any\"/></operation></interface>"),
+            Reference("Port"), new Uri("https://example.test/root.wsdl"), (_, _) =>
+            {
+                calls++;
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(dependency);
+            });
+        await Assert.That(calls).IsEqualTo(count);
+        await Assert.That(result.Status).IsEqualTo(!oversized && count == 3 ? ApiOperationResolutionStatus.Selected :
+            ApiOperationResolutionStatus.Indeterminate);
+        if (oversized || count == 4)
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo(oversized ? "limit.bytes" : "limit.total_bytes");
+            await Assert.That(result.Wsdl20Operation).IsNull();
+        }
+    }
+
     private static ValueTask<ApiOperationResolutionResult> Resolve(string interfaces) =>
         ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml", Document(interfaces), Reference("Port"));
 
     private static ApiOperationReference Reference(string name) => ApiOperationReference.Parse(
         "/apigroups/g/apis/a#interfaces/%7Burn:api%7D" + name + "/operations/%7Burn:api%7DRead");
 
-    private static byte[] Document(string content) => Encoding.UTF8.GetBytes(
-        "<description xmlns=\"http://www.w3.org/ns/wsdl\" xmlns:t=\"urn:api\" targetNamespace=\"urn:api\">" +
+    private static byte[] Document(string content, string targetNamespace = "urn:api") => Encoding.UTF8.GetBytes(
+        "<description xmlns=\"http://www.w3.org/ns/wsdl\" xmlns:t=\"" + targetNamespace + "\" targetNamespace=\"" + targetNamespace + "\">" +
         content + "</description>");
 }
