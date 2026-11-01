@@ -32,7 +32,7 @@ public class ApiOperationReferenceTests
         ["apigroups", "users", "apis", "Profile", "versions", "2"];
     private static readonly string[] s_singleDecodeTokens = ["operations", "a~1b%2F"];
     private static readonly string[] s_supportedFormats =
-        ["OpenAPI/3.0", "OpenAPI/3.1", "Swagger/2.0", "OpenRPC/1.4", "AvroProtocol/1.12.0", "Smithy/2.0", "gRPC/proto3", "WSDL/1.1"];
+        ["OpenAPI/3.0", "OpenAPI/3.1", "Swagger/2.0", "OpenRPC/1.4", "AvroProtocol/1.12.0", "Smithy/2.0", "gRPC/proto3", "WSDL/1.1", "WSDL/2.0"];
     private static readonly ApiOperationSelectorKind[] s_supportedSelectors =
         [ApiOperationSelectorKind.Operation, ApiOperationSelectorKind.JsonPointer, ApiOperationSelectorKind.ServiceOperation,
             ApiOperationSelectorKind.InterfaceOperation, ApiOperationSelectorKind.InterfaceOperationInputOutput];

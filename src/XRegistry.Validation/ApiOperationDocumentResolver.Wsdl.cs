@@ -357,18 +357,9 @@ public static partial class ApiOperationDocumentResolver
             ValidationContext.Require(faultNames.Add(WsdlName(fault)), "$/portType/operation/fault", "wsdl.fault",
                 "WSDL fault names must be unique within an operation.");
         }
-        var copy = new XElement(operation);
-        foreach (var ancestor in operation.AncestorsAndSelf())
-        {
-            foreach (var attribute in ancestor.Attributes().Where(a => a.IsNamespaceDeclaration))
-            {
-                budget.Work((long)attribute.Name.LocalName.Length + attribute.Value.Length + 1);
-                if (copy.Attribute(attribute.Name) is null) { copy.Add(new XAttribute(attribute)); }
-            }
-        }
         return new(interfaceName, name, inputName, outputName,
             input.Length == 0 ? null : Message(input[0]), output.Length == 0 ? null : Message(output[0]),
-            pattern, copy, faults.Select(Message).ToArray());
+            pattern, NamespaceCompleteWsdlOperation(operation, budget), faults.Select(Message).ToArray());
 
         string Message(XElement element)
         {
@@ -388,6 +379,20 @@ public static partial class ApiOperationDocumentResolver
                 "A WSDL operation references an undeclared message.");
             return expanded;
         }
+    }
+
+    private static XElement NamespaceCompleteWsdlOperation(XElement operation, ValidationContext budget)
+    {
+        var copy = new XElement(operation);
+        foreach (var ancestor in operation.AncestorsAndSelf())
+        {
+            foreach (var attribute in ancestor.Attributes().Where(a => a.IsNamespaceDeclaration))
+            {
+                budget.Work((long)attribute.Name.LocalName.Length + attribute.Value.Length + 1);
+                if (copy.Attribute(attribute.Name) is null) { copy.Add(new XAttribute(attribute)); }
+            }
+        }
+        return copy;
     }
 
     private static string WsdlName(XElement element)

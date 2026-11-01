@@ -21,7 +21,7 @@ public sealed class ApiOperationResolverCapabilities
     internal ApiOperationResolverCapabilities()
     {
         Formats = Array.AsReadOnly(["OpenAPI/3.0", "OpenAPI/3.1", "Swagger/2.0", "OpenRPC/1.4",
-            "AvroProtocol/1.12.0", "Smithy/2.0", "gRPC/proto3", "WSDL/1.1"]);
+            "AvroProtocol/1.12.0", "Smithy/2.0", "gRPC/proto3", "WSDL/1.1", "WSDL/2.0"]);
         ContentTypes = Array.AsReadOnly(["application/json", "text/plain", "application/xml", "text/xml"]);
         Selectors = Array.AsReadOnly([ApiOperationSelectorKind.Operation, ApiOperationSelectorKind.JsonPointer,
             ApiOperationSelectorKind.ServiceOperation, ApiOperationSelectorKind.InterfaceOperation,
@@ -120,17 +120,20 @@ public sealed class ApiOperationResolutionResult
 {
     internal ApiOperationResolutionResult(ApiOperationResolutionStatus status, DocumentDiagnostic? diagnostic = null,
         JsonElement operation = default, string? documentPath = null, Uri? documentUri = null,
-        GrpcOperationSelection? grpcOperation = null, WsdlOperationSelection? wsdlOperation = null)
+        GrpcOperationSelection? grpcOperation = null, WsdlOperationSelection? wsdlOperation = null,
+        Wsdl20OperationSelection? wsdl20Operation = null)
     {
         var jsonSelection = operation.ValueKind == JsonValueKind.Object &&
-            !string.IsNullOrEmpty(documentPath) && grpcOperation is null && wsdlOperation is null;
+            !string.IsNullOrEmpty(documentPath) && grpcOperation is null && wsdlOperation is null && wsdl20Operation is null;
         var grpcSelection = grpcOperation is not null && operation.ValueKind == JsonValueKind.Undefined &&
-            documentPath is null && wsdlOperation is null;
+            documentPath is null && wsdlOperation is null && wsdl20Operation is null;
         var wsdlSelection = wsdlOperation is not null && grpcOperation is null &&
+            operation.ValueKind == JsonValueKind.Undefined && documentPath is null && wsdl20Operation is null;
+        var wsdl20Selection = wsdl20Operation is not null && wsdlOperation is null && grpcOperation is null &&
             operation.ValueKind == JsonValueKind.Undefined && documentPath is null;
-        if (status == ApiOperationResolutionStatus.Selected && !(jsonSelection || grpcSelection || wsdlSelection) ||
+        if (status == ApiOperationResolutionStatus.Selected && !(jsonSelection || grpcSelection || wsdlSelection || wsdl20Selection) ||
             status != ApiOperationResolutionStatus.Selected &&
-                (diagnostic is null || grpcOperation is not null || wsdlOperation is not null))
+                (diagnostic is null || grpcOperation is not null || wsdlOperation is not null || wsdl20Operation is not null))
         {
             throw new ArgumentException("A selected operation or a diagnostic is required.");
         }
@@ -142,6 +145,7 @@ public sealed class ApiOperationResolutionResult
         DocumentUri = documentUri;
         GrpcOperation = grpcOperation;
         WsdlOperation = wsdlOperation;
+        Wsdl20Operation = wsdl20Operation;
     }
 
     /// <summary>Gets the resolution outcome.</summary>
@@ -158,6 +162,9 @@ public sealed class ApiOperationResolutionResult
 
     /// <summary>Gets the selected native WSDL operation, or null for other selections and failures.</summary>
     public WsdlOperationSelection? WsdlOperation { get; }
+
+    /// <summary>Gets the selected native WSDL 2.0 operation, or null for other selections and failures.</summary>
+    public Wsdl20OperationSelection? Wsdl20Operation { get; }
 
     /// <summary>Gets the selected gRPC source method, or null for other outcomes and JSON selections.</summary>
     public GrpcOperationSelection? GrpcOperation { get; }
@@ -191,7 +198,7 @@ public enum ApiOperationResolutionStatus
     Denied,
 }
 
-/// <summary>Selects operations from acquired JSON API documents and gRPC Proto3 source.</summary>
+/// <summary>Selects native operations from acquired JSON API, gRPC Proto3 and WSDL documents.</summary>
 public static partial class ApiOperationDocumentResolver
 {
     private static readonly string[] s_methods =
@@ -264,6 +271,10 @@ public static partial class ApiOperationDocumentResolver
         {
             return await ResolveWsdl11Async(contentType, document, reference.Selector, documentUri, resolveReference,
                 cancellationToken).ConfigureAwait(false);
+        }
+        if (format == "WSDL/2.0")
+        {
+            return ResolveWsdl20(contentType, document, reference.Selector, documentUri, cancellationToken);
         }
         if (!string.Equals(contentType.Split(';', 2)[0].Trim(), grpc ? "text/plain" : "application/json",
             StringComparison.OrdinalIgnoreCase))

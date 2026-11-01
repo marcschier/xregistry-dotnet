@@ -117055,7 +117055,7 @@
       "text": "For WSDL, an interface token MUST use the expanded QName `{namespace}local`, independent of XML prefix choices. Apply token escaping and percent encoding to the entire expanded name. For a WSDL 1.1 port type in `urn:example:users`:",
       "review": {
         "status": "reviewed",
-        "note": "WSDL 1.1 selection uses the expanded targetNamespace/portType name independently of prefix spelling and rejects prefix-based selector tokens. API locator parsing performs the specified percent/tilde decoding before exact comparison. Explicitly authorized imports share captured containing-document/xml:base URI resolution and budgets, preserve imported operation origins and reject contradictory target namespaces. Real HTTP exact-Version acquisition preserves native selection through relative message imports after default change and disposal. WSDL 2.0 remains unsupported, so the whole clause remains pending.",
+        "note": "WSDL 1.1 selection uses the expanded targetNamespace/portType name independently of prefix spelling and rejects prefix-based selector tokens. API locator parsing performs the specified percent/tilde decoding before exact comparison. Explicitly authorized imports share captured containing-document/xml:base URI resolution and budgets, preserve imported operation origins and reject contradictory target namespaces. Real HTTP exact-Version acquisition preserves native selection through relative message imports after default change and disposal. Standalone WSDL 2.0 selection uses expanded interface/operation names; its imports and full component policies remain pending.",
         "roles": [
           "client",
           "producer"
@@ -117130,13 +117130,21 @@
       ],
       "text": "For WSDL 2.0, both the interface and operation tokens MUST be expanded QNames. An inherited operation retains its declaring namespace. Equivalent inherited components with the same QName identify one operation; conflicting components make the document invalid under WSDL's component rules. The input/output overload suffix is only defined for WSDL 1.1. Neither form chooses a service endpoint or binding; those are separate native WSDL components.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Standalone WSDL 2.0 selection requires expanded interface/operation names, preserves declaring interface and native pattern/style defaults, collapses diamond paths to the same operation component and rejects conflicting parent components. WSDL Part 1 section 2.15 includes the declaring parent in component equivalence; similar operation XML from different interfaces is not sufficient. The WSDL 1.1 overload suffix is unsupported. Native XML and HTTP exact-Version/disposal tests establish the bounded predefined-pattern policy without endpoint/binding inference. Imports/includes, fault/element components, other type systems, custom patterns and full document validation remain unsupported, so broad qualification remains pending.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "Wsdl20OperationReferenceTests.Wsdl20DiamondInheritanceCollapsesTheSameComponentAndRetainsDeclaringDefaults",
+          "Wsdl20OperationReferenceTests.Wsdl20ConflictingInheritedComponentsCannotBeCollapsedByXmlSimilarity",
+          "Wsdl20OperationReferenceTests.Wsdl20ExpandedNamesAreExactAndCannotUseWsdl11OverloadSelectors",
+          "Wsdl20OperationReferenceTests.Wsdl20PreservesNativePatternIdentityAndOwnedXml",
+          "HttpTests.ExactHttpWsdl20AcquisitionSelectsInheritedNativeOperationAfterDisposal"
+        ],
         "nativeEvidence": []
       }
     },

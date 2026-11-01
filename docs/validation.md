@@ -96,7 +96,7 @@ Its bytes are associated with the requested import URI; the callback contract
 does not return a distinct post-redirect origin.
 
 `SupportsCallerProvidedWsdlImports` is true; `SupportsApiDocumentValidation`
-remains false. WSDL 2.0, embedded schema validity and complete binding/service
+remains false. Embedded schema validity and complete binding/service
 validation remain unsupported. All acquired Documents share byte, node, depth,
 work, dependency-count and deadline limits; cancellation propagates without
 dispatching later dependencies.
@@ -106,6 +106,38 @@ and selects the retained WSDL operation through an explicitly authorized relativ
 message import after source and host disposal.
 It preserves entry bytes and native operation meaning without asserting that
 registration or selection establishes full document validity.
+
+## Standalone WSDL 2.0 operation selection
+
+`WSDL/2.0` XML selection uses expanded QNames for both interface and operation,
+for example `#interfaces/%7Burn:api%7DPort/operations/%7Burn:api%7DRead`.
+The WSDL 1.1 input/output overload suffix is not accepted. An inherited operation
+retains its declaring interface and namespace; a derived interface does not
+rename it. Diamond inheritance reaches the same component once. Distinct
+declaring interfaces are different parent components, so operations with the
+same QName conflict even when their XML declarations look alike.
+
+`Wsdl20Operation` owns the native operation XML, declaring interface, expanded
+operation name, message-exchange-pattern IRI and effective style set. Omitted
+patterns retain WSDL's `in-out` default. Omitted styles use the declaring
+interface's `styleDefault`, not a derived interface's defaults; an explicitly
+empty style overrides that default. Selection does not choose a binding or
+endpoint, invoke a service or translate the operation into JSON.
+
+This policy checks the eight predefined WSDL 2.0 message-exchange patterns with
+`#any` or `#none` message content. Placeholder labels and directions retain
+their native meaning; XML child order does not substitute for those labels.
+Invalid names, duplicate or missing interfaces, inheritance cycles, conflicting
+operations and malformed placeholders fail before returning a match.
+Unimplemented imports/includes, fault components, schema-element references,
+other type systems, custom patterns and required extensions report
+`Unsupported`, never a successful unchecked selection.
+
+WSDL 2.0 selection shares the hardened XML reader and finite byte, node, depth,
+work and deadline limits. Inheritance is bounded separately at 64 edges.
+The actual HTTP workflow retains an older exact Version and selects its inherited
+operation after default change and source disposal. These checks establish the
+declared selection policy, not full WSDL 2.0 document validation.
 
 ## Compatibility
 
