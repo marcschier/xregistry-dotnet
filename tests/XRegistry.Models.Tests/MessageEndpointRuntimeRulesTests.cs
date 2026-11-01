@@ -10,6 +10,40 @@ namespace XRegistry.Models.Tests;
 public class MessageEndpointRuntimeRulesTests
 {
     [Test]
+    [Arguments("application/cloudevents+json", "application/cloudevents+json", true)]
+    [Arguments("application/cloudevents+json", "APPLICATION/CLOUDEVENTS+JSON", true)]
+    [Arguments("application/cloudevents+json", "application/json", false)]
+    [Arguments("application/cloudevents+json", "application/cloudevents+xml", false)]
+    [Arguments("not a media type", "application/cloudevents+json", false)]
+    public async Task StructuredEnvelopeFormatMustAgreeWithTheOuterRepresentation(
+        string format, string representation, bool valid)
+    {
+        var metadata = RegistryJson.Parse(new JsonObject
+        {
+            ["envelope"] = "CloudEvents/1.0",
+            ["envelopeoptions"] = new JsonObject { ["mode"] = "structured", ["format"] = format },
+            ["envelopemetadata"] = new JsonObject
+            {
+                ["datacontenttype"] = new JsonObject { ["value"] = "application/json" }
+            },
+            ["datacontenttype"] = representation
+        }.ToJsonString());
+        if (valid)
+        {
+            var completed = RegistryDomainRules.CompleteMessageMetadata(metadata);
+            await Assert.That(completed.RootElement.GetProperty("envelopeoptions").GetProperty("format").GetString()).IsEqualTo(format);
+            await Assert.That(completed.RootElement.GetProperty("envelopemetadata").GetProperty("datacontenttype").GetProperty("value").GetString())
+                .IsEqualTo("application/json");
+        }
+        else
+        {
+            var error = await Assert.That(() => RegistryDomainRules.CompleteMessageMetadata(metadata)).Throws<RegistryException>();
+            await Assert.That(error!.Diagnostic.Code).IsEqualTo("invalid_attribute");
+            await Assert.That(error.Diagnostic.Path).IsEqualTo("/envelopeoptions/format");
+        }
+    }
+
+    [Test]
     [Arguments("envelope", "\"\"", false)]
     [Arguments("envelope", "1", false)]
     [Arguments("envelope", "\"/1\"", false)]

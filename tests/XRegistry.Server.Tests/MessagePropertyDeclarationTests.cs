@@ -14,6 +14,49 @@ namespace XRegistry.Server.Tests;
 public class MessagePropertyDeclarationTests
 {
     [Test]
+    public async Task StructuredFormatMismatchCannotPublishOrChangeStoredRepresentation()
+    {
+        var store = new InMemoryRegistryPersistence();
+        var engine = MessageEndpointRuntimeTests.CreateDomain(RegistryModelKind.Message, store);
+        const string path = "/messagegroups/g/messages/m";
+        string Metadata(string format) => new JsonObject
+        {
+            ["envelope"] = "CloudEvents/1.0",
+            ["envelopeoptions"] = new JsonObject { ["mode"] = "structured", ["format"] = format },
+            ["envelopemetadata"] = new JsonObject
+            {
+                ["datacontenttype"] = new JsonObject { ["value"] = "application/json" }
+            },
+            ["datacontenttype"] = "application/cloudevents+json",
+            ["protocol"] = "HTTP",
+            ["protocoloptions"] = new JsonObject
+            {
+                ["headers"] = new JsonArray(new JsonObject { ["name"] = "Content-Type", ["value"] = "application/cloudevents+json" })
+            }
+        }.ToJsonString();
+        await ExpectCode(() => Send(engine, RegistryAction.Replace, path, Metadata("application/json")), "invalid_attribute");
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(0);
+        await Send(engine, RegistryAction.Replace, path, Metadata("application/cloudevents+json"));
+        var before = (await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        foreach (var format in new[] { "application/json", "not a media type" })
+        {
+            await ExpectCode(() => Send(engine, RegistryAction.Patch, path,
+                new JsonObject { ["envelopeoptions"] = new JsonObject { ["mode"] = "structured", ["format"] = format } }.ToJsonString()), "invalid_attribute");
+            await Assert.That((await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText()).IsEqualTo(before);
+            await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        }
+        var restarted = MessageEndpointRuntimeTests.CreateDomain(RegistryModelKind.Message, store);
+        await Assert.That((await Send(restarted, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText()).IsEqualTo(before);
+        var revised = await Send(engine, RegistryAction.Patch, path,
+            """{"envelopeoptions":{"mode":"structured","format":"APPLICATION/CLOUDEVENTS+JSON"}}""");
+        await Assert.That(revised.Metadata!.RootElement.GetProperty("envelopeoptions").GetProperty("format").GetString())
+            .IsEqualTo("APPLICATION/CLOUDEVENTS+JSON");
+        await Assert.That(revised.Metadata.RootElement.GetProperty("envelopemetadata").GetProperty("datacontenttype").GetProperty("value").GetString())
+            .IsEqualTo("application/json");
+    }
+
+    [Test]
     public async Task HttpQueryNamesAreNotDeclarationMetadataAndInvalidTemplatesRejectAtomically()
     {
         var store = new InMemoryRegistryPersistence();

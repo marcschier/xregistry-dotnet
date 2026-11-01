@@ -34,6 +34,14 @@ public static partial class RegistryDomainRules
     private static IEnumerable<(string Value, string Path, bool SamePlane)> ContentTypeDeclarations(JsonElement message)
     {
         if (SelectorIs(message, "envelope", "CloudEvents/1.0") &&
+            TryObject(message, "envelopeoptions", out var structuredOptions) &&
+            structuredOptions.TryGetProperty("mode", out var structuredMode) &&
+            structuredMode.ValueKind == JsonValueKind.String && structuredMode.GetString() == "structured" &&
+            OptionalText(structuredOptions, "format", "/envelopeoptions/format") is { } structuredFormat)
+        {
+            yield return (structuredFormat, "/envelopeoptions/format", true);
+        }
+        if (SelectorIs(message, "envelope", "CloudEvents/1.0") &&
             TryObject(message, "envelopemetadata", out var envelope) &&
             TryObject(envelope, "datacontenttype", out var declaration) &&
             OptionalText(declaration, "value", "/envelopemetadata/datacontenttype/value") is { } contentType)

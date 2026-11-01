@@ -115,6 +115,11 @@ Other parameter values retain case-sensitive comparison, including multipart
 boundaries. Comparison does not rewrite any stored declaration. Different
 character sets or case-sensitive parameter values still reject, while structured
 CloudEvents payload and envelope content types remain separate representations.
+In structured mode, `envelopeoptions.format` declares the outer representation
+and must agree with literal outer `datacontenttype` and protocol content-type
+declarations. It does not constrain the nested payload's content type. Invalid
+format syntax or conflicting outer declarations reject without changing stored
+metadata or events; equivalent media-type spellings remain authored values.
 
 Local `basemessage` admission uses `ValidateMessageBaseReference` to check the
 actual Message model type and Resource/Version path. It does not require a
