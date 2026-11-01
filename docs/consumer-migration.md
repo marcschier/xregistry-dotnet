@@ -58,6 +58,14 @@ checked before reporting unsupported evaluation. Reserved 2020-12
 `$recursiveAnchor` values must be anchor strings, unlike the 2019-09 boolean
 values. Applications must not interpret these syntax checks as dynamic resolution.
 
+Supplied schemas are checked as ordinary schemas, so `$vocabulary` no longer
+activates support requirements from authored declarations. Unknown vocabulary
+URIs remain data; URI-name and boolean-value syntax checks still apply.
+Modern nested `$vocabulary` declarations fail, as do `$schema` declarations
+outside resource roots. Draft-07 forbids nested dialect declarations entirely.
+The validator does not acquire custom meta-schemas, and an unrecognized
+well-formed `$schema` still reports unsupported processing.
+
 Legacy prepare/replay/incarnation/generation extensions are not standard
 xRegistry HTTP. The in-process persistence/response preparation methods do not
 imply proprietary wire endpoints.

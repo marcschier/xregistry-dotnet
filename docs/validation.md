@@ -8,7 +8,7 @@ successful validation.
 
 | Format family | Current syntax policy |
 | --- | --- |
-| JSON Schema | draft-07, 2019-09, 2020-12 structural/keyword validation with explicitly resolved references; unimplemented dynamic/resource vocabularies are unsupported. |
+| JSON Schema | draft-07, 2019-09, 2020-12 structural/keyword validation with explicitly resolved references; embedded resource IDs, dynamic evaluation and custom meta-schema processing are unsupported. |
 | XML Schema | XSD 1.0 through hardened, preflight-bounded `XmlSchemaSet`; no DTD/external resolver. XSD 1.1 and unqualified constructs are unsupported. |
 | Avro | 1.8.2 and 1.11.0 grammar, names/references, unions, records, enum/fixed and defaults. Logical annotations use underlying wire types; valid decimal annotations retain precision/scale for resolution. |
 | Protobuf | Proto2/3 lexer and declaration/type/field/default/enum/reserved/service checks, with explicit imports. Custom options, groups and extensions are unsupported. No protoc subprocess. |
@@ -46,6 +46,18 @@ undergo anchor checks before their semantics report `Unsupported`.
 The reserved 2020-12 `$recursiveAnchor` uses the standard meta-schema's anchor
 string shape, not the 2019-09 boolean shape. Malformed values are `Invalid`;
 well-formed dynamic constructs remain unchecked.
+
+The validator processes supplied Documents as ordinary schemas, not as
+meta-schemas selected by another schema. Modern `$vocabulary` declarations
+therefore retain their URI-name and boolean-value syntax checks without
+activating vocabulary support requirements, as required by
+[Core section 8.1.2](https://json-schema.org/draft/2020-12/draft-bhutton-json-schema-01#section-8.1.2).
+Unknown required declarations do not cause an ordinary schema to fail.
+`$vocabulary` is forbidden in subschemas, and `$schema` requires a resource
+root with an absolute URI declaration. Draft-07 forbids nested `$schema`
+declarations even with `$id`; modern embedded resources remain unsupported.
+Malformed dialect URIs are `Invalid`, while well-formed unrecognized dialects
+remain `Unsupported`. No custom meta-schema is acquired or evaluated.
 
 JSON Schema reference fragments undergo strict UTF-8 percent decoding once
 before choosing JSON Pointer or plain-name anchor resolution. Encoded anchors

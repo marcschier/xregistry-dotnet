@@ -110,7 +110,11 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
             switch (property.Name)
             {
                 case "$schema":
-                    var dialect = SchemaJson.String(value, childPath).TrimEnd('#');
+                    var dialectUri = SchemaJson.String(value, childPath);
+                    CheckUri(dialectUri, childPath, true);
+                    ValidationContext.Require(path == "$" || _draft != 7 && schema.TryGetProperty("$id", out _),
+                        childPath, "schema.dialect_location", "A dialect declaration requires a schema resource root.");
+                    var dialect = dialectUri.TrimEnd('#');
                     var expected = _draft switch
                     {
                         7 => "http://json-schema.org/draft-07/schema",
@@ -164,19 +168,13 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
                     Unsupported(childPath, "schema.dynamic_reference", "Dynamic/recursive reference semantics are not implemented.");
                     break;
                 case "$vocabulary" when _draft != 7:
+                    ValidationContext.Require(path == "$", childPath, "schema.vocabulary_location",
+                        "A vocabulary declaration must not appear in a subschema.");
                     SchemaJson.Object(value, childPath);
                     foreach (var vocabulary in value.EnumerateObject())
                     {
                         CheckUri(vocabulary.Name, childPath, true);
                         SchemaJson.Boolean(vocabulary.Value, childPath);
-                        var prefix = $"https://json-schema.org/draft/{(_draft == 2019 ? "2019-09" : "2020-12")}/vocab/";
-                        var known = vocabulary.Name.StartsWith(prefix, StringComparison.Ordinal)
-                            && vocabulary.Name[prefix.Length..] is "core" or "applicator" or "validation" or "meta-data"
-                                or "format" or "format-annotation" or "format-assertion" or "content" or "unevaluated";
-                        if (vocabulary.Value.GetBoolean() && !known)
-                        {
-                            Unsupported(childPath, "schema.vocabulary_unsupported", $"Required vocabulary '{vocabulary.Name}' is unsupported.");
-                        }
                     }
                     break;
                 case "type":

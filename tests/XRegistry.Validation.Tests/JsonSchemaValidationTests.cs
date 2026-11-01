@@ -10,6 +10,107 @@ namespace XRegistry.Validation.Tests;
 public class JsonSchemaValidationTests
 {
     [Test]
+    [Arguments("JsonSchema/draft/2019-09", true)]
+    [Arguments("JsonSchema/draft/2019-09", false)]
+    [Arguments("JsonSchema/draft/2020-12", true)]
+    [Arguments("JsonSchema/draft/2020-12", false)]
+    public async Task OrdinarySchemasDoNotActivateDeclaredVocabularySupport(string format, bool required)
+    {
+        var calls = 0;
+        var schema = Encoding.UTF8.GetBytes($$$"""
+            {"$vocabulary":{"https://unknown.test/vocabulary":{{{required.ToString().ToLowerInvariant()}}}},
+             "type":"string","x-custom":{"$ref":"https://never.test/"}}
+            """);
+        var result = await new BuiltInDocumentValidator().ValidateAsync(format, schema, new()
+        {
+            ResolveReference = (_, _) => { calls++; throw new UnauthorizedAccessException(); }
+        });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("JsonSchema/draft/2019-09", "https://json-schema.org/draft/2019-09/schema")]
+    [Arguments("JsonSchema/draft/2020-12", "https://json-schema.org/draft/2020-12/schema")]
+    public async Task ReferencedOrdinarySchemasKeepVocabularyDeclarationsInactive(string format, string dialect)
+    {
+        var calls = new List<string>();
+        var result = await new BuiltInDocumentValidator().ValidateAsync(format,
+            """{"$ref":"https://schemas.test/target"}"""u8.ToArray(), new()
+            {
+                ResolveReference = (reference, _) =>
+                {
+                    calls.Add(reference);
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes($$$"""
+                        {"$schema":"{{{dialect}}}","$vocabulary":{"https://unknown.test/vocabulary":true},"type":"string"}
+                        """));
+                }
+            });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+        await Assert.That(calls.SequenceEqual(["https://schemas.test/target"])).IsTrue();
+    }
+
+    [Test]
+    [Arguments("""{"$vocabulary":{"relative":true}}""", "schema.uri")]
+    [Arguments("""{"$vocabulary":{"https://unknown.test/%GG":true}}""", "schema.uri")]
+    [Arguments("""{"$vocabulary":{"https://unknown.test/vocabulary":null}}""", "schema.boolean")]
+    [Arguments("""{"$vocabulary":{"https://unknown.test/vocabulary":true},"type":"invalid"}""", "schema.type")]
+    public async Task IgnoredVocabularySupportDoesNotDisableSchemaSyntaxChecks(string schema, string code)
+    {
+        foreach (var format in new[] { "JsonSchema/draft/2019-09", "JsonSchema/draft/2020-12" })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync(format, Encoding.UTF8.GetBytes(schema));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+            await Assert.That(result.Diagnostics.Single().Code).IsEqualTo(code);
+        }
+    }
+
+    [Test]
+    [Arguments("JsonSchema/draft-07", "http://json-schema.org/draft-07/schema#")]
+    [Arguments("JsonSchema/draft/2019-09", "https://json-schema.org/draft/2019-09/schema")]
+    [Arguments("JsonSchema/draft/2020-12", "https://json-schema.org/draft/2020-12/schema")]
+    public async Task DialectDeclarationsRejectNonResourceSubschemas(string format, string dialect)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync(format, Encoding.UTF8.GetBytes($$$$"""
+            {"properties":{"value":{"$schema":"{{{{dialect}}}}","type":"string"}}}
+            """));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("schema.dialect_location");
+        await Assert.That(result.Diagnostics.Single().Path).IsEqualTo("$/properties/value/$schema");
+    }
+
+    [Test]
+    [Arguments("JsonSchema/draft/2019-09")]
+    [Arguments("JsonSchema/draft/2020-12")]
+    public async Task VocabularyDeclarationsRejectSubschemas(string format)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync(format,
+            """{"properties":{"value":{"$vocabulary":{},"type":"string"}}}"""u8.ToArray());
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("schema.vocabulary_location");
+        await Assert.That(result.Diagnostics.Single().Path).IsEqualTo("$/properties/value/$vocabulary");
+    }
+
+    [Test]
+    [Arguments("relative")]
+    [Arguments("https://example.test/%GG")]
+    [Arguments("https://json-schema.org/draft/2020-12/schema##")]
+    public async Task MalformedDialectUrisAreInvalidRatherThanUnsupported(string dialect)
+    {
+        var schema = RegistryJson.Create(writer =>
+        {
+            writer.WriteStartObject(); writer.WriteString("$schema", dialect); writer.WriteEndObject();
+        });
+        var result = await new BuiltInDocumentValidator().ValidateAsync("JsonSchema/draft/2020-12",
+            Encoding.UTF8.GetBytes(schema.RootElement.GetRawText()));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("schema.uri");
+        await Assert.That(result.Diagnostics.Single().Path).IsEqualTo("$/$schema");
+    }
+
+    [Test]
     [Arguments("JsonSchema/draft/2019-09", "a", true)]
     [Arguments("JsonSchema/draft/2019-09", "A0-._:z", true)]
     [Arguments("JsonSchema/draft/2019-09", "_node", false)]
@@ -413,7 +514,7 @@ public class JsonSchemaValidationTests
     [Arguments("""{"allOf":[]}""", DocumentValidationStatus.Invalid, "schema.empty")]
     [Arguments("""{"items":[{"type":"string"}]}""", DocumentValidationStatus.Invalid, "schema.object")]
     [Arguments("""{"prefixItems":[{"type":"string"}],"items":false}""", DocumentValidationStatus.Valid, "")]
-    [Arguments("""{"$vocabulary":{"https://example.test/vocabulary":true}}""", DocumentValidationStatus.Unsupported, "schema.vocabulary_unsupported")]
+    [Arguments("""{"$vocabulary":{"https://example.test/vocabulary":true}}""", DocumentValidationStatus.Valid, "")]
     [Arguments("""{"$vocabulary":{"https://example.test/vocabulary":"true"}}""", DocumentValidationStatus.Invalid, "schema.boolean")]
     [Arguments("""{"$schema":"http://json-schema.org/draft-07/schema#"}""", DocumentValidationStatus.Invalid, "schema.dialect_mismatch")]
     [Arguments("""{"$schema":"https://example.test/unknown"}""", DocumentValidationStatus.Unsupported, "schema.dialect_unsupported")]
