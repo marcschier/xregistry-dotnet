@@ -145,19 +145,21 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
                     break;
                 case "$anchor" when _draft != 7:
                     var anchor = SchemaJson.String(value, childPath);
-                    ValidationContext.Require(anchor.Length > 0 && (char.IsAsciiLetter(anchor[0]) || anchor[0] == '_')
-                        && anchor.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-' or '.'), childPath,
-                        "schema.anchor", "Invalid schema anchor.");
+                    CheckAnchor(anchor, childPath);
                     ValidationContext.Require(document.Anchors.TryAdd(anchor, path), childPath,
                         "schema.duplicate_anchor", "A schema anchor must be unique within a document.");
                     break;
                 case "$dynamicRef" when _draft == 2020:
                 case "$recursiveRef" when _draft != 7:
-                case "$dynamicAnchor" when _draft == 2020:
-                    SchemaJson.String(value, childPath);
+                    CheckUri(SchemaJson.String(value, childPath), childPath, false);
                     Unsupported(childPath, "schema.dynamic_reference", "Dynamic/recursive reference semantics are not implemented.");
                     break;
-                case "$recursiveAnchor" when _draft != 7:
+                case "$dynamicAnchor" when _draft == 2020:
+                case "$recursiveAnchor" when _draft == 2020:
+                    CheckAnchor(SchemaJson.String(value, childPath), childPath);
+                    Unsupported(childPath, "schema.dynamic_reference", "Dynamic/recursive reference semantics are not implemented.");
+                    break;
+                case "$recursiveAnchor" when _draft == 2019:
                     SchemaJson.Boolean(value, childPath);
                     Unsupported(childPath, "schema.dynamic_reference", "Dynamic/recursive reference semantics are not implemented.");
                     break;
@@ -331,6 +333,12 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
     private static void CheckType(string type, string path)
         => ValidationContext.Require(type is "null" or "boolean" or "object" or "array"
             or "number" or "integer" or "string", path, "schema.type", $"'{type}' is not a JSON Schema type.");
+
+    private void CheckAnchor(string anchor, string path)
+        => ValidationContext.Require(anchor.Length > 0
+            && (char.IsAsciiLetter(anchor[0]) || _draft == 2020 && anchor[0] == '_')
+            && anchor.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-' or '.' || _draft == 2019 && c == ':'),
+            path, "schema.anchor", "Invalid schema anchor for the selected dialect.");
 
     private static void CheckUri(string value, string path, bool absolute)
     {

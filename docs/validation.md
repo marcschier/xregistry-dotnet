@@ -38,6 +38,15 @@ the [2019-09 meta-schema](https://json-schema.org/draft/2019-09/schema)
 and the [2020-12 meta-schema](https://json-schema.org/draft/2020-12/schema).
 This policy does not implement custom vocabularies or instance annotation output.
 
+Anchor spelling follows each Core meta-schema: 2019-09 requires an ASCII
+letter first and permits colons thereafter; 2020-12 also permits an initial
+underscore but forbids colons. Encoded references resolve those names after
+one fragment decode. Dynamic references undergo URI checks and dynamic anchors
+undergo anchor checks before their semantics report `Unsupported`.
+The reserved 2020-12 `$recursiveAnchor` uses the standard meta-schema's anchor
+string shape, not the 2019-09 boolean shape. Malformed values are `Invalid`;
+well-formed dynamic constructs remain unchecked.
+
 JSON Schema reference fragments undergo strict UTF-8 percent decoding once
 before choosing JSON Pointer or plain-name anchor resolution. Encoded anchors
 therefore resolve as anchors, and encoded leading slashes select pointers.

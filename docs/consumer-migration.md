@@ -51,6 +51,13 @@ still apply, and recognized keywords retain their checks. Modern reserved
 `definitions` and `dependencies` shapes remain checked. Recognized dynamic
 reference semantics remain unsupported; this is not custom-vocabulary support.
 
+Anchor names now follow the selected Core grammar. The 2019-09 dialect accepts
+colons after an initial ASCII letter but rejects initial underscores; 2020-12
+accepts initial underscores but rejects colons. Dynamic URI/anchor syntax is
+checked before reporting unsupported evaluation. Reserved 2020-12
+`$recursiveAnchor` values must be anchor strings, unlike the 2019-09 boolean
+values. Applications must not interpret these syntax checks as dynamic resolution.
+
 Legacy prepare/replay/incarnation/generation extensions are not standard
 xRegistry HTTP. The in-process persistence/response preparation methods do not
 imply proprietary wire endpoints.

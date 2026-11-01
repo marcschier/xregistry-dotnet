@@ -10,6 +10,110 @@ namespace XRegistry.Validation.Tests;
 public class JsonSchemaValidationTests
 {
     [Test]
+    [Arguments("JsonSchema/draft/2019-09", "a", true)]
+    [Arguments("JsonSchema/draft/2019-09", "A0-._:z", true)]
+    [Arguments("JsonSchema/draft/2019-09", "_node", false)]
+    [Arguments("JsonSchema/draft/2019-09", ":node", false)]
+    [Arguments("JsonSchema/draft/2020-12", "_", true)]
+    [Arguments("JsonSchema/draft/2020-12", "_A0-._z", true)]
+    [Arguments("JsonSchema/draft/2020-12", "a:z", false)]
+    [Arguments("JsonSchema/draft/2020-12", "0node", false)]
+    [Arguments("JsonSchema/draft/2019-09", "", false)]
+    [Arguments("JsonSchema/draft/2020-12", "", false)]
+    [Arguments("JsonSchema/draft/2019-09", "caf\u00e9", false)]
+    [Arguments("JsonSchema/draft/2020-12", "caf\u00e9", false)]
+    [Arguments("JsonSchema/draft/2019-09", "a/b", false)]
+    [Arguments("JsonSchema/draft/2020-12", "a/b", false)]
+    [Arguments("JsonSchema/draft/2019-09", "a b", false)]
+    [Arguments("JsonSchema/draft/2020-12", "a b", false)]
+    public async Task AnchorGrammarFollowsTheSelectedCoreMetaSchema(string format, string anchor, bool valid)
+    {
+        var schema = RegistryJson.Create(writer =>
+        {
+            writer.WriteStartObject(); writer.WriteString("$anchor", anchor); writer.WriteEndObject();
+        });
+        var result = await new BuiltInDocumentValidator().ValidateAsync(format,
+            Encoding.UTF8.GetBytes(schema.RootElement.GetRawText()));
+        await Assert.That(result.Status).IsEqualTo(valid ? DocumentValidationStatus.Valid : DocumentValidationStatus.Invalid);
+        if (valid) { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+        else
+        {
+            await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("schema.anchor");
+            await Assert.That(result.Diagnostics.Single().Path).IsEqualTo("$/$anchor");
+        }
+    }
+
+    [Test]
+    [Arguments("JsonSchema/draft/2019-09", "a:z", "#a:z")]
+    [Arguments("JsonSchema/draft/2019-09", "a:z", "#a%3Az")]
+    [Arguments("JsonSchema/draft/2020-12", "_node", "#_node")]
+    [Arguments("JsonSchema/draft/2020-12", "_node", "#%5Fnode")]
+    public async Task DialectSpecificAnchorsResolveWithoutExternalAcquisition(string format, string anchor, string reference)
+    {
+        var calls = 0;
+        var schema = RegistryJson.Create(writer =>
+        {
+            writer.WriteStartObject();
+            writer.WriteString("$ref", reference);
+            writer.WriteStartObject("$defs"); writer.WriteStartObject("target");
+            writer.WriteString("$anchor", anchor); writer.WriteString("type", "string");
+            writer.WriteEndObject(); writer.WriteEndObject(); writer.WriteEndObject();
+        });
+        var result = await new BuiltInDocumentValidator().ValidateAsync(format,
+            Encoding.UTF8.GetBytes(schema.RootElement.GetRawText()), new()
+            {
+                ResolveReference = (_, _) => { calls++; throw new UnauthorizedAccessException(); }
+            });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("JsonSchema/draft/2019-09", "$recursiveRef", "part%GG", "schema.uri")]
+    [Arguments("JsonSchema/draft/2019-09", "$recursiveRef", "part\\name", "schema.uri")]
+    [Arguments("JsonSchema/draft/2020-12", "$recursiveRef", "part%GG", "schema.uri")]
+    [Arguments("JsonSchema/draft/2020-12", "$dynamicRef", "part#node#other", "schema.uri")]
+    [Arguments("JsonSchema/draft/2020-12", "$dynamicRef", "part name", "schema.uri")]
+    [Arguments("JsonSchema/draft/2020-12", "$dynamicAnchor", "node:part", "schema.anchor")]
+    [Arguments("JsonSchema/draft/2020-12", "$dynamicAnchor", "", "schema.anchor")]
+    [Arguments("JsonSchema/draft/2020-12", "$recursiveAnchor", "node:part", "schema.anchor")]
+    public async Task MalformedDynamicKeywordsRejectBeforeUnsupportedSemantics(
+        string format, string keyword, string value, string code)
+    {
+        var calls = 0;
+        var schema = RegistryJson.Create(writer =>
+        {
+            writer.WriteStartObject(); writer.WriteString(keyword, value); writer.WriteEndObject();
+        });
+        var result = await new BuiltInDocumentValidator().ValidateAsync(format,
+            Encoding.UTF8.GetBytes(schema.RootElement.GetRawText()), new()
+            {
+                ResolveReference = (_, _) => { calls++; throw new UnauthorizedAccessException(); }
+            });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics.Single().Code).IsEqualTo(code);
+        await Assert.That(result.Diagnostics.Single().Path).IsEqualTo("$/" + keyword);
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("JsonSchema/draft/2019-09", """{"$recursiveAnchor":"node"}""", DocumentValidationStatus.Invalid, "schema.boolean")]
+    [Arguments("JsonSchema/draft/2020-12", """{"$recursiveAnchor":true}""", DocumentValidationStatus.Invalid, "schema.string")]
+    [Arguments("JsonSchema/draft/2020-12", """{"$recursiveAnchor":false}""", DocumentValidationStatus.Invalid, "schema.string")]
+    [Arguments("JsonSchema/draft/2020-12", """{"$recursiveAnchor":"_node"}""", DocumentValidationStatus.Unsupported, "schema.dynamic_reference")]
+    [Arguments("JsonSchema/draft/2020-12", """{"$dynamicAnchor":"_node"}""", DocumentValidationStatus.Unsupported, "schema.dynamic_reference")]
+    [Arguments("JsonSchema/draft/2019-09", """{"$recursiveRef":"part#node"}""", DocumentValidationStatus.Unsupported, "schema.dynamic_reference")]
+    [Arguments("JsonSchema/draft/2020-12", """{"$dynamicRef":"part#node"}""", DocumentValidationStatus.Unsupported, "schema.dynamic_reference")]
+    public async Task RecursiveAndDynamicKeywordsRetainDialectSpecificShapeAndUnsupportedBoundaries(
+        string format, string schema, DocumentValidationStatus status, string code)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync(format, Encoding.UTF8.GetBytes(schema));
+        await Assert.That(result.Status).IsEqualTo(status);
+        await Assert.That(result.Diagnostics.Single().Code).IsEqualTo(code);
+    }
+
+    [Test]
     [Arguments("JsonSchema/draft-07", "$defs")]
     [Arguments("JsonSchema/draft-07", "$anchor")]
     [Arguments("JsonSchema/draft-07", "$vocabulary")]
