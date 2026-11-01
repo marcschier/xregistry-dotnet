@@ -102872,9 +102872,13 @@
       ],
       "text": "The schema registry therefore allows managing multiple versions of schemas, declares their lineage, and states their compatibility policy. The compatibility policy is used to determine whether a schema change is compatible with prior versions and whether data that has been serialized based on prior versions can still be deserialized and/or validated using the new schema. This compatibility check is important to ensure that changes to schemas do not inadvertently break the ability to read existing data, and MAY be enforced by implementations of the schema registry. The [xRegistry Core][xRegistry Core] specification defines the versioning and compatibility relationship mechanisms.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read the complete active upstream-d290b1ec Schema spec and model, including the document-store and lineage examples. Enforcement is optional here, but selected compatibility modes invoke Core obligations. BuiltInRegistryResourceValidator checks actual ancestor Documents, not version-name order; Avro has semantic resolution and other formats only exact-byte proofs. Broad compatibility qualification remains pending, including the separate Core admission conflict; this overview is not whole-format conformance.",
+        "roles": [
+          "server",
+          "producer",
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -102912,9 +102916,13 @@
       ],
       "text": "The key words \"MUST\", \"MUST NOT\", \"REQUIRED\", \"SHALL\", \"SHALL NOT\", \"SHOULD\", \"SHOULD NOT\", \"RECOMMENDED\", \"MAY\", and \"OPTIONAL\" in this document are to be interpreted as described in [RFC 2119](https://tools.ietf.org/html/rfc2119).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "RFC2119 terminology, read within the complete active upstream-d290b1ec Schema source. It establishes interpretation, not an executable behavior or implementation receipt.",
+        "roles": [
+          "server",
+          "producer",
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -102945,9 +102953,13 @@
       ],
       "text": "For clarity, OPTIONAL attributes (specification-defined and extensions) are OPTIONAL for clients to use, but the servers' responsibility will vary. Server-unknown extension attributes MUST be silently stored in the backing datastore. Specification-defined and server-known extension attributes MUST generate an error if the corresponding feature is not supported or enabled. However, as with all attributes, if accepting the attribute would result in a bad state (such as exceeding a size limit, or results in a security issue), then the server MAY choose to reject the request.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The active Schema model admits Group/Version wildcard any data; SchemaWildcardExtensionsRoundTripWithoutRewritingExactValuesOrDocumentBytes checks exact stored extension values and unchanged Document bytes. The inherited Core model-admission ambiguity still applies to closed models. Known-disabled attributes and policy/size rejections require their own Core matrix; wildcard evidence does not prove that matrix.",
+        "roles": [
+          "server",
+          "producer",
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -102978,9 +102990,13 @@
       ],
       "text": "In the pseudo JSON format snippets `?` means the preceding attribute is OPTIONAL, `*` means the preceding attribute MAY appear zero or more times, and `+` means the preceding attribute MUST appear at least once. The presence of the `#` character means the remaining portion of the line is a comment. Whitespace characters in the JSON snippets are used for readability and are not normative.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Notation for the active source's pseudo-JSON examples, read with the complete fenced forms. These markers are not literal runtime JSON or independently executable obligations.",
+        "roles": [
+          "server",
+          "producer",
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -103009,9 +103025,13 @@
       ],
       "text": "We use the term **schema** (or schema Resource) in this specification as a logical grouping of **schema Versions**. A **schema Version** is a concrete document. The **schema** Resource is a semantic umbrella formed around one or more concrete schema Version documents that represent iterations of the same logical schema. Per the definition of the [`compatibility`][xRegistry compatibility] attribute, all Versions of a single **schema** MUST adhere to the rules defined by the `compatibility` attribute. Any breaking change MUST result in a new **schema** Resource being created.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Separate Resource identity and selected compatibility policy are distinct obligations. BreakingSchemaEvolutionRequiresADifferentResourceUnderTheDeclaredPolicy rejects a proven incompatible Avro candidate and publishes it under a new Resource while preserving the original. IncompatibleAvroMutationsPreserveAllVersionsAndPolicy also checks changed ancestors, policies and ancestry. Unknown policies/changed non-Avro schemas are not proven compatibility and remain outside broad qualification; no automatic migration to a new Resource is inferred.",
+        "roles": [
+          "server",
+          "producer",
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -103040,9 +103060,13 @@
       ],
       "text": "In terms of versioning, you can think of a **schema** as a collection of versions that are compatible according to the selected `compatibility` mode. The [`deprecated`][xRegistry deprecated] attribute MAY be used to indicate the appropriate new schema to use following a breaking change.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Deprecation is optional Core metadata, not a requirement to discover, create or retrieve a replacement Resource. Compatibility evidence is scoped to actual selected policies. A Schema-specific deprecation/replacement lifecycle workflow has not been qualified here; generic deprecation behavior does not establish that workflow.",
+        "roles": [
+          "server",
+          "producer",
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -103071,9 +103095,13 @@
       ],
       "text": "A Schema Group is a container for schemas that are related to each other in some application-defined way. Its OPTIONAL `format` attribute can constrain the formats of its schemas, as described in [Schema Groups](#41-schema-groups).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Group format is an optional string in the active model; schemas.format equals that Group attribute. SchemaGroupFormatAndInstanceDefaultConstrainEverySchemaWithoutPartialPublication checks inheritance of an instance default and rollback of a mismatching Version or Group-format change. Absent Group format is a separate mixed-format case, not an invented default.",
+        "roles": [
+          "server",
+          "producer",
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -103102,9 +103130,13 @@
       ],
       "text": "Implementations of this specification MAY include additional extension attributes, including the `*` attribute of type `any`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The packaged active Schema model includes any wildcards at Group and Version levels. SchemaWildcardExtensionsRoundTripWithoutRewritingExactValuesOrDocumentBytes checks nested values, arbitrary-width numbers and metadata-only changes without rewriting schema bytes. This permitted extension mechanism does not grant special Document semantics to extension payloads or relax Core name/type constraints.",
+        "roles": [
+          "server",
+          "producer",
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -103133,9 +103165,13 @@
       ],
       "text": "The Group (`<GROUP>`) name for the Schema Registry is `schemagroup` (singular). The plural, used as the collection name, is `schemagroups`. The Schema Group defines an OPTIONAL `format` extension attribute of type `string`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The active schema/model.json names schemagroup/schemagroups and its optional string format exactly. BuiltInRegistryModels compiles only packaged sources; SchemaRegistryDomainTests exercise these public paths using RegistryModelKind.Schema. Model names, format typing and nested Resource routes remain separate from full binding qualification.",
+        "roles": [
+          "server",
+          "producer",
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -103164,9 +103200,13 @@
       ],
       "text": "A schema group is a collection of schemas that are related to each other in some application-defined way. Without a value for the Group's `format`, a Schema Group MAY contain schemas of different formats.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "PackagedSchemaModelAllowsDifferentFormatsWithinAnUnconstrainedGroup publishes JSON Schema and Protobuf under one Group, checks the absent Group format and retrieves exact Protobuf bytes. Application-defined grouping is not assigned an additional semantic rule. This evidence uses the packaged model and public engine, not a custom substitute model.",
+        "roles": [
+          "server",
+          "producer",
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -103195,9 +103235,13 @@
       ],
       "text": "Every schema (i.e. the schema Resource) MUST reside inside a Schema Group.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The active model defines schemas only beneath schemagroups; public SchemaRegistryDomainTests create and retrieve those nested identities. No top-level schema Resource is defined. Negative orphan-route and import/export hierarchy cases remain separate Core/binding evidence obligations; successful nested creation alone does not prove their rejection.",
+        "roles": [
+          "server",
+          "producer",
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -103226,9 +103270,13 @@
       ],
       "text": "Additionally, if desired, a schemagroup-instance level constraint MAY be added:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read together with the following fenced schemas.format default example and the preceding equals constraint. SchemaGroupFormatAndInstanceDefaultConstrainEverySchemaWithoutPartialPublication uses this exact instance default and checks returned format, validation and rollback of conflicting changes. The example does not authorize widening an existing model constraint.",
+        "roles": [
+          "server",
+          "producer",
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -103257,9 +103305,13 @@
       ],
       "text": "All Versions of a single Schema Resource MUST adhere to the semantic rules of the schema's [`compatibility`][xRegistry compatibility] attribute, if specified.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The adapter checks every candidate Version and its required actual ancestors. Avro direction, transitive ancestry and rejected mutation retention have direct BuiltInValidationAdapterTests evidence. Cross-format and changed non-Avro semantics remain unsupported, and the Core compatibility-admission conflict is unresolved. This unconditional umbrella clause therefore remains pending, not closed by Avro or exact-byte identity tests.",
+        "roles": [
+          "server",
+          "producer",
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -103288,9 +103340,13 @@
       ],
       "text": "Implementations of this specification MAY choose to support any of the [`compatibility`][xRegistry compatibility] values defined in the core xRegistry specification.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "BuiltInRegistryResourceValidator advertises all six Core direction/transitive modes for its scoped format policies. UnsupportedCompatibilityModeIsUnknownRatherThanAnEstablishedViolation checks mode disabling and strict/non-strict behavior; AvroCompatibilityUsesTheDeclaredDirectionAndAncestry exercises every advertised mode. Advertisement does not establish semantic support for changed non-Avro formats or resolve Core admission wording.",
+        "roles": [
+          "server",
+          "producer",
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -103319,9 +103375,13 @@
       ],
       "text": "Implementations of this specification SHOULD use the xRegistry default algorithm for generating new `versionid` values and for determining which is the latest Version. See [Version IDs][xRegistry version-ids] for more information, but in summary it means:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read with all three following bullets: positive integer ids start at one, advance by one and select latest by space-padded lexical ordering. SchemaVersionsUseTheDefaultMonotonicAlgorithmAcrossTheDecimalWidthBoundary checks ids/ancestors/defaults through eleven, deletion fallback to ten and next allocation twelve. Arbitrary-width counters, explicit manual ids and persistent restart qualification remain separate Core obligations.",
+        "roles": [
+          "server",
+          "producer",
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -103350,9 +103410,12 @@
       ],
       "text": "When semantic versioning is used in a solution, it is RECOMMENDED to include a major version identifier in the `schemaid`, like `\"com.example.event.v1\"` or `\"com.example.event.2024-02\"`, so that incompatible, but historically related schemas can be more easily identified by users and developers. The schema `versionid` then functions as the semantic minor version identifier.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Producer naming recommendation, not a mandatory schemaid syntax or automatic major/minor assignment algorithm. The engine preserves explicit Core ids; BreakingSchemaEvolutionRequiresADifferentResourceUnderTheDeclaredPolicy uses distinct major-bearing Resource ids without synthesizing one. No SemVer policy is inferred from those example names.",
+        "roles": [
+          "producer",
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -103382,13 +103445,20 @@
       ],
       "text": "The `format` attribute in the [Core model](../core/spec.md#format-attribute) is defined as being OPTIONAL. However, this specification modifies it to be REQUIRED.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The active Schema model makes Version format required and matchversions. SchemaFormatIsRequiredOnCreationAndCannotBeRemovedFromAnExistingVersion checks Resource and exact-Version creation failures, rejection of explicit deletion and retained generation/bytes/events. A Group-instance default can satisfy the requirement, as checked by SchemaGroupFormatAndInstanceDefaultConstrainEverySchemaWithoutPartialPublication; a missing format is not accepted merely because Core makes it optional.",
+        "roles": [
+          "server",
+          "producer",
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "SchemaRegistryDomainTests.SchemaFormatIsRequiredOnCreationAndCannotBeRemovedFromAnExistingVersion",
+          "SchemaRegistryDomainTests.SchemaGroupFormatAndInstanceDefaultConstrainEverySchemaWithoutPartialPublication"
+        ],
         "nativeEvidence": []
       }
     },
@@ -103414,13 +103484,21 @@
       ],
       "text": "This specification further refines the [core specification's `format`](../core/spec.md#format-attribute) for use in a Schema Registry by defining a set of common schema format names that MUST be used for the given formats, but applications MAY define extensions for other formats on their own.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read all five following format sections and examples, including direct and embedded fragment rules. The adapter advertises exact standardized format spellings for its qualified subsets. SchemaCustomFormatNamesRemainAuthoredAndUncheckedWithoutAnInventedPolicy checks custom naming, explicit unsupported diagnostics and exact bytes. XSD1.1, other Avro releases and unimplemented schema constructs remain unqualified; admission of a format string cannot establish full format conformance or complete selector support.",
+        "roles": [
+          "server",
+          "producer",
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "SchemaRegistryDomainTests.SchemaCustomFormatNamesRemainAuthoredAndUncheckedWithoutAnInventedPolicy",
+          "BuiltInValidationAdapterTests.AllQualifiedSyntaxFamiliesProduceValidatedMetadata",
+          "BuiltInValidationAdapterTests.UnsupportedVariantsRemainUncheckedWithReasonsAndStrictModeRejects"
+        ],
         "nativeEvidence": []
       }
     },
@@ -103727,9 +103805,13 @@
       ],
       "text": "It is expected that any implementation of this specification will use authentication and authorization mechanisms that are appropriate for the application domain and the deployment environment. This MAY include, but is not limited to, OAuth 2.0, OpenID Connect, API keys, or other mechanisms appropriate for the use case.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Deployment-owned mechanism choice, read with the preceding explicit authentication/authorization scope exclusion and following Group/Resource boundary discussion. It does not mandate OAuth, OIDC or API keys or qualify production security. Core operation authorization and protocol-specific deployment evidence remain their own obligations.",
+        "roles": [
+          "server",
+          "producer",
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",

@@ -14,6 +14,55 @@ namespace XRegistry.Server.Tests;
 public class SchemaRegistryDomainTests
 {
     [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task SchemaFormatIsRequiredOnCreationAndCannotBeRemovedFromAnExistingVersion(bool exactVersion)
+    {
+        var persistence = new InMemoryRegistryPersistence();
+        var engine = SchemaEngine(persistence);
+        var path = "/schemagroups/g/schemas/s" + (exactVersion ? "/versions/1" : "") + "$details";
+        await ExpectCode(() => Send(engine, RegistryAction.Replace, path,
+            """{"schema":{"type":"string"}}"""), "required_attribute_missing");
+        await Assert.That((await Send(engine, RegistryAction.Read, "/")).Metadata!.RootElement
+            .GetProperty("schemagroupscount").GetInt32()).IsEqualTo(0);
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(0);
+        await Send(engine, RegistryAction.Replace, path,
+            """{"format":"JsonSchema/draft-07","schema":{"type":"string"}}""");
+        using var before = await persistence.ReadSnapshotAsync();
+        await ExpectCode(() => Send(engine, RegistryAction.Patch, path,
+            """{"format":null}"""), "invalid_attribute");
+        using var after = await persistence.ReadSnapshotAsync();
+        await Assert.That(after.Generation).IsEqualTo(before.Generation);
+        var retained = (await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement;
+        await Assert.That(retained.GetProperty("format").GetString()).IsEqualTo("JsonSchema/draft-07");
+        await Assert.That(retained.GetProperty("formatvalidated").GetBoolean()).IsTrue();
+        var stored = await Send(engine, RegistryAction.Read, path[..^8]);
+        using var content = stored.Document!.OpenRead();
+        using var reader = new StreamReader(content, Encoding.UTF8);
+        await Assert.That(await reader.ReadToEndAsync()).IsEqualTo("""{"type":"string"}""");
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task SchemaCustomFormatNamesRemainAuthoredAndUncheckedWithoutAnInventedPolicy()
+    {
+        var engine = SchemaEngine();
+        const string document = "caller-owned custom schema text";
+        var created = await Send(engine, RegistryAction.Replace, "/schemagroups/g/schemas/custom$details", """
+            {"format":"VendorSchema/2026","contenttype":"text/plain","schema":"caller-owned custom schema text"}
+            """);
+        await Assert.That(created.Metadata!.RootElement.GetProperty("format").GetString()).IsEqualTo("VendorSchema/2026");
+        await Assert.That(created.Metadata.RootElement.GetProperty("formatvalidated").GetBoolean()).IsFalse();
+        await Assert.That(created.Metadata.RootElement.GetProperty("formatvalidatedreason").GetString()!)
+            .Contains("format.unsupported");
+        var stored = await Send(engine, RegistryAction.Read, "/schemagroups/g/schemas/custom/versions/1");
+        using var content = stored.Document!.OpenRead();
+        using var reader = new StreamReader(content, Encoding.UTF8);
+        await Assert.That(await reader.ReadToEndAsync()).IsEqualTo(document);
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(1);
+    }
+
+    [Test]
     public async Task PackagedSchemaModelAllowsDifferentFormatsWithinAnUnconstrainedGroup()
     {
         var engine = SchemaEngine();
