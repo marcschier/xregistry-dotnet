@@ -32,9 +32,9 @@ public class HttpTests
     public async Task ExactHttpWsdlAcquisitionPreservesNativeOperationSelectionAfterDefaultChangeAndDisposal()
     {
         const string first = """
-            <definitions xmlns="http://schemas.xmlsoap.org/wsdl/" xmlns:t="urn:users" targetNamespace="urn:users">
-              <message name="Message"/><portType name="Port">
-                <operation name="Read"><input message="t:Message"/><output message="t:Message"/></operation>
+            <definitions xmlns="http://schemas.xmlsoap.org/wsdl/" xmlns:m="urn:messages" targetNamespace="urn:users">
+              <import namespace="urn:messages" location="messages.wsdl"/><portType name="Port">
+                <operation name="Read"><input message="m:Message"/><output message="m:Message"/></operation>
               </portType>
             </definitions>
             """;
@@ -62,19 +62,39 @@ public class HttpTests
         using var memory = new MemoryStream();
         await stream.CopyToAsync(memory);
         await Assert.That(Encoding.UTF8.GetString(memory.ToArray())).IsEqualTo(first);
+        var calls = new List<string>();
+        var dependencyUri = new Uri(new Uri(acquired.Document.Origin!), "messages.wsdl").AbsoluteUri;
+        ValueTask<ReadOnlyMemory<byte>?> ResolveImport(string uri, CancellationToken cancellation)
+        {
+            cancellation.ThrowIfCancellationRequested();
+            calls.Add(uri);
+            return ValueTask.FromResult<ReadOnlyMemory<byte>?>(uri == dependencyUri ? Encoding.UTF8.GetBytes("""
+                <definitions xmlns="http://schemas.xmlsoap.org/wsdl/" targetNamespace="urn:messages">
+                  <message name="Message"/>
+                </definitions>
+                """) : (ReadOnlyMemory<byte>?)null);
+        }
+        var reference = ApiOperationReference.Parse(version + "#interfaces/%7Burn:users%7DPort/operations/Read");
+        var unresolved = await ApiOperationDocumentResolver.ResolveAsync(acquired.Format, acquired.Document.ContentType!,
+            memory.ToArray(), reference, new Uri(acquired.Document.Origin!));
+        await Assert.That(unresolved.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(calls.Count).IsEqualTo(0);
         var result = await ApiOperationDocumentResolver.ResolveAsync(acquired.Format, acquired.Document.ContentType!,
-            memory.ToArray(), ApiOperationReference.Parse(version +
-                "#interfaces/%7Burn:users%7DPort/operations/Read"), new Uri(acquired.Document.Origin!));
+            memory.ToArray(), reference, new Uri(acquired.Document.Origin!), ResolveImport);
         await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
         await Assert.That(result.WsdlOperation!.InterfaceName).IsEqualTo("{urn:users}Port");
         await Assert.That(result.WsdlOperation.OperationName).IsEqualTo("Read");
         await Assert.That(result.WsdlOperation.MessageExchangePattern).IsEqualTo(WsdlMessageExchangePattern.RequestResponse);
         await Assert.That(result.WsdlOperation.InputName).IsEqualTo("ReadRequest");
         await Assert.That(result.WsdlOperation.OutputName).IsEqualTo("ReadResponse");
+        await Assert.That(result.WsdlOperation.InputMessage).IsEqualTo("{urn:messages}Message");
+        await Assert.That(result.WsdlOperation.OutputMessage).IsEqualTo("{urn:messages}Message");
+        await Assert.That(calls.Count).IsEqualTo(1);
+        await Assert.That(calls[0]).IsEqualTo(dependencyUri);
         await Assert.That(result.DocumentUri!.AbsoluteUri).IsEqualTo(acquired.Document.Origin);
         var missing = await ApiOperationDocumentResolver.ResolveAsync(acquired.Format, acquired.Document.ContentType!,
             memory.ToArray(), ApiOperationReference.Parse(version +
-                "#interfaces/%7Burn:users%7DPort/operations/ReadNew"));
+                "#interfaces/%7Burn:users%7DPort/operations/ReadNew"), new Uri(acquired.Document.Origin!), ResolveImport);
         await Assert.That(missing.Status).IsEqualTo(ApiOperationResolutionStatus.NotFound);
     }
 

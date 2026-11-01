@@ -28,6 +28,7 @@ public sealed class ApiOperationResolverCapabilities
             ApiOperationSelectorKind.InterfaceOperationInputOutput]);
         SupportsCallerProvidedPathItemReferences = true;
         SupportsCallerProvidedOperationReferences = true;
+        SupportsCallerProvidedWsdlImports = true;
         MaxReferencedDocuments = 32;
         SupportsApiDocumentValidation = false;
         SupportsOperationResolution = true;
@@ -50,7 +51,7 @@ public sealed class ApiOperationResolverCapabilities
     /// </summary>
     public bool SupportsCallerProvidedOperationReferences { get; }
 
-    /// <summary>Gets whether WSDL imports are resolved; this policy selects standalone WSDL 1.1 documents only.</summary>
+    /// <summary>Gets whether WSDL 1.1 imports use the explicit caller dependency resolver.</summary>
     public bool SupportsCallerProvidedWsdlImports { get; }
 
     /// <summary>Gets the maximum number of distinct referenced documents loaded for one resolution.</summary>
@@ -261,7 +262,8 @@ public static partial class ApiOperationDocumentResolver
         var grpc = format == "gRPC/proto3";
         if (format == "WSDL/1.1")
         {
-            return ResolveWsdl11(contentType, document, reference.Selector, documentUri, cancellationToken);
+            return await ResolveWsdl11Async(contentType, document, reference.Selector, documentUri, resolveReference,
+                cancellationToken).ConfigureAwait(false);
         }
         if (!string.Equals(contentType.Split(';', 2)[0].Trim(), grpc ? "text/plain" : "application/json",
             StringComparison.OrdinalIgnoreCase))

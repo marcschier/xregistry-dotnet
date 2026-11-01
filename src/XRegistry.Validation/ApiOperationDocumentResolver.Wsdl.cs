@@ -62,8 +62,9 @@ public static partial class ApiOperationDocumentResolver
 {
     private const string Wsdl11Namespace = "http://schemas.xmlsoap.org/wsdl/";
 
-    private static ApiOperationResolutionResult ResolveWsdl11(string contentType, ReadOnlyMemory<byte> bytes,
-        ApiOperationSelector selector, Uri? documentUri, CancellationToken token)
+    private static async ValueTask<ApiOperationResolutionResult> ResolveWsdl11Async(string contentType, ReadOnlyMemory<byte> bytes,
+        ApiOperationSelector selector, Uri? documentUri, ApiOperationDocumentDependencyResolver? resolver,
+        CancellationToken token)
     {
         var media = contentType.Split(';', 2)[0].Trim();
         if (!media.Equals("application/xml", StringComparison.OrdinalIgnoreCase) &&
@@ -86,6 +87,10 @@ public static partial class ApiOperationDocumentResolver
             MaxNodes = Capabilities.MaxDocumentNodes,
             MaxWork = 8_388_608
         }, token);
+        var documents = new List<(XElement Root, Uri? Origin)>();
+        var loaded = new Dictionary<Uri, XElement>();
+        var active = new HashSet<Uri>();
+        var references = 0;
         try
         {
             foreach (var value in selector.Tokens) { budget.Work(value.Length, "$/selector"); }
@@ -94,28 +99,13 @@ public static partial class ApiOperationDocumentResolver
             ValidationContext.Require(interfaceToken.StartsWith('{') && close >= 1 && close < interfaceToken.Length - 1,
                 "$/selector", "wsdl.interface_name", "A WSDL interface selector requires an expanded QName.");
             XmlConvert.VerifyNMTOKEN(interfaceToken[(close + 1)..]);
-            budget.Bytes(bytes.Length, "$");
-            var settings = new XmlReaderSettings
-            {
-                DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null,
-                MaxCharactersInDocument = Capabilities.MaxDocumentBytes
-            };
-            using var stream = new MemoryStream(bytes.ToArray(), false);
-            using (var reader = XmlReader.Create(stream, settings))
-            {
-                while (reader.Read())
-                {
-                    budget.Node(reader.Depth + 1);
-                    budget.Work(reader.AttributeCount + 1);
-                }
-            }
-            stream.Position = 0;
-            using var xmlReader = XmlReader.Create(stream, settings);
-            var root = XDocument.Load(xmlReader, LoadOptions.PreserveWhitespace).Root!;
+            var root = ReadWsdlXml(bytes, budget);
             XNamespace ns = Wsdl11Namespace;
             ValidationContext.Require(root.Name == ns + "definitions", "$", "wsdl.version",
                 "WSDL 1.1 requires a definitions root in its WSDL namespace.");
-            foreach (var element in root.Descendants())
+            await LoadAsync(root, documentUri, 0).ConfigureAwait(false);
+            foreach (var document in documents)
+            foreach (var element in document.Root.Descendants())
             {
                 budget.Work();
                 if (element.Name.Namespace == ns || element.Attribute(ns + "required") is not { } required) { continue; }
@@ -129,28 +119,26 @@ public static partial class ApiOperationDocumentResolver
                         "A required WSDL extension needs an explicitly implemented processing policy.");
                 }
             }
-            if (root.Elements(ns + "import").Any())
-            {
-                return Failure(ApiOperationResolutionStatus.Unsupported, "wsdl.import",
-                    "This WSDL selector supports standalone documents; imported components require a native resolver.");
-            }
-            var targetNamespace = root.Attribute("targetNamespace")?.Value ?? "";
             var messages = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var message in root.Elements(ns + "message"))
+            foreach (var document in documents)
+            foreach (var message in document.Root.Elements(ns + "message"))
             {
                 budget.Work();
-                ValidationContext.Require(messages.Add(Expanded(targetNamespace, WsdlName(message), budget)),
+                ValidationContext.Require(messages.Add(Expanded(document.Root.Attribute("targetNamespace")?.Value ?? "",
+                    WsdlName(message), budget)),
                     "$/message", "wsdl.duplicate_message", "A WSDL message name must be unique.");
             }
             var ports = new HashSet<string>(StringComparer.Ordinal);
-            var operations = new List<WsdlOperationSelection>();
-            foreach (var port in root.Elements(ns + "portType"))
+            var operations = new List<(WsdlOperationSelection Operation, Uri? Origin)>();
+            foreach (var document in documents)
+            foreach (var port in document.Root.Elements(ns + "portType"))
             {
                 budget.Work();
-                var interfaceName = Expanded(targetNamespace, WsdlName(port), budget);
+                var interfaceName = Expanded(document.Root.Attribute("targetNamespace")?.Value ?? "", WsdlName(port), budget);
                 ValidationContext.Require(ports.Add(interfaceName), "$/portType", "wsdl.duplicate_interface",
                     "A WSDL port type name must be unique.");
                 var identities = new HashSet<(string, string?, string?)>();
+                var messageNames = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var operation in port.Elements(ns + "operation"))
                 {
                     budget.Work();
@@ -158,12 +146,19 @@ public static partial class ApiOperationDocumentResolver
                     ValidationContext.Require(identities.Add((selected.OperationName, selected.InputName, selected.OutputName)),
                         "$/portType/operation", "wsdl.duplicate_operation",
                         "Overloaded WSDL operations must have distinguishable effective input/output names.");
+                    foreach (var messageName in new[] { selected.InputName, selected.OutputName })
+                    {
+                        if (messageName is null) { continue; }
+                        budget.Work(messageName.Length + 1L);
+                        ValidationContext.Require(messageNames.Add(messageName), "$/portType/operation", "wsdl.message_name",
+                            "Effective input and output names must be unique within a WSDL port type.");
+                    }
                     if (interfaceName == selector.Tokens[1] && selected.OperationName == selector.Tokens[3] &&
                         (selector.Kind != ApiOperationSelectorKind.InterfaceOperationInputOutput ||
                             (selected.InputName ?? "!") == selector.Tokens[5] &&
                             (selected.OutputName ?? "!") == selector.Tokens[7]))
                     {
-                        operations.Add(selected);
+                        operations.Add((selected, document.Origin));
                     }
                 }
             }
@@ -171,20 +166,159 @@ public static partial class ApiOperationDocumentResolver
             {
                 0 => Failure(ApiOperationResolutionStatus.NotFound, "selection.not_found",
                     "No WSDL operation matches the exact interface and operation locator."),
-                1 => new(ApiOperationResolutionStatus.Selected, documentUri: documentUri, wsdlOperation: operations[0]),
+                1 => new(ApiOperationResolutionStatus.Selected, documentUri: operations[0].Origin,
+                    wsdlOperation: operations[0].Operation),
                 _ => Failure(ApiOperationResolutionStatus.Ambiguous, "selection.ambiguous",
                     "A name-only WSDL locator matches overloaded operations; select their effective input/output names.")
             };
         }
         catch (ValidationFailure error)
         {
-            return new(error.Status == DocumentValidationStatus.Indeterminate ?
-                ApiOperationResolutionStatus.Indeterminate : ApiOperationResolutionStatus.Invalid, error.Diagnostic);
+            return new(error.Status switch
+            {
+                DocumentValidationStatus.Indeterminate => ApiOperationResolutionStatus.Indeterminate,
+                DocumentValidationStatus.Unsupported => ApiOperationResolutionStatus.Unsupported,
+                _ => ApiOperationResolutionStatus.Invalid
+            }, error.Diagnostic);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Failure(ApiOperationResolutionStatus.Denied, "dependency.denied",
+                "Caller policy denied a required WSDL import.");
         }
         catch (XmlException)
         {
             return Failure(ApiOperationResolutionStatus.Invalid, "wsdl.xml",
                 "The WSDL document or an XML name is malformed; DTD processing is prohibited.", "$");
+        }
+
+        async ValueTask LoadAsync(XElement entry, Uri? origin, int depth)
+        {
+            budget.Work();
+            if (depth > Capabilities.MaxReferenceDepth)
+            {
+                ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$/import", "limit.depth",
+                    "The WSDL import nesting limit was exceeded.");
+            }
+            XNamespace ns = Wsdl11Namespace;
+            if (entry.Attribute("name") is { } documentName) { XmlConvert.VerifyNCName(documentName.Value); }
+            if (entry.Attribute("targetNamespace") is { } targetNamespace)
+            {
+                budget.Work(targetNamespace.Value.Length + 1L);
+                ValidationContext.Require(!HasRawUriWhitespaceOrControls(targetNamespace.Value) &&
+                    Uri.IsWellFormedUriString(targetNamespace.Value, UriKind.Absolute), "$", "wsdl.namespace",
+                    "A WSDL target namespace must be a well-formed absolute URI.");
+            }
+            documents.Add((entry, origin));
+            if (origin is not null) { active.Add(origin); loaded.Add(origin, entry); }
+            foreach (var import in entry.Elements(ns + "import"))
+            {
+                budget.Work();
+                var location = import.Attribute("location")?.Value;
+                var expectedNamespace = import.Attribute("namespace")?.Value;
+                ValidationContext.Require(location is not null && expectedNamespace is not null, "$/import", "wsdl.import",
+                    "A WSDL 1.1 import requires location and namespace attributes.");
+                var importUri = WsdlImportUri(import, location, origin, budget);
+                if (active.Contains(importUri))
+                {
+                    ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$/import", "dependency.cycle",
+                        "The WSDL import graph contains a cycle.");
+                }
+                if (!loaded.TryGetValue(importUri, out var dependency))
+                {
+                    if (++references > Capabilities.MaxReferencedDocuments)
+                    {
+                        ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$/import", "limit.references",
+                            "The WSDL imported-document limit was exceeded.");
+                    }
+                    token.ThrowIfCancellationRequested();
+                    var acquired = resolver is null ? null :
+                        await resolver(importUri.AbsoluteUri, token).ConfigureAwait(false);
+                    token.ThrowIfCancellationRequested();
+                    if (acquired is null)
+                    {
+                        ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$/import", "reference.unresolved",
+                            "No explicitly supplied document resolves the WSDL import.");
+                    }
+                    dependency = ReadWsdlXml(acquired.Value, budget);
+                    if (dependency.Name == ns + "definitions")
+                    {
+                        ValidationContext.Require((dependency.Attribute("targetNamespace")?.Value ?? "") == expectedNamespace,
+                            "$/import", "wsdl.import_namespace", "The imported WSDL target namespace contradicts its import.");
+                        await LoadAsync(dependency, importUri, depth + 1).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        if (dependency.Name != XName.Get("schema", "http://www.w3.org/2001/XMLSchema"))
+                        {
+                            ValidationContext.Fail(DocumentValidationStatus.Unsupported, "$/import", "wsdl.import_kind",
+                                "This WSDL import policy supports WSDL 1.1 and XML Schema documents only.");
+                        }
+                        ValidationContext.Require((dependency.Attribute("targetNamespace")?.Value ?? "") == expectedNamespace,
+                            "$/import", "wsdl.import_namespace", "The imported schema target namespace contradicts its import.");
+                        loaded.Add(importUri, dependency);
+                    }
+                }
+                ValidationContext.Require((dependency.Attribute("targetNamespace")?.Value ?? "") == expectedNamespace,
+                    "$/import", "wsdl.import_namespace", "A reused import contradicts the acquired target namespace.");
+            }
+            if (origin is not null) { active.Remove(origin); }
+        }
+    }
+
+    private static XElement ReadWsdlXml(ReadOnlyMemory<byte> bytes, ValidationContext budget)
+    {
+        budget.Bytes(bytes.Length, "$");
+        var settings = new XmlReaderSettings
+        {
+            DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null,
+            MaxCharactersInDocument = Capabilities.MaxDocumentBytes
+        };
+        using var stream = new MemoryStream(bytes.ToArray(), false);
+        using (var reader = XmlReader.Create(stream, settings))
+        {
+            while (reader.Read())
+            {
+                budget.Node(reader.Depth + 1);
+                budget.Work(reader.AttributeCount + 1);
+            }
+        }
+        stream.Position = 0;
+        using var xmlReader = XmlReader.Create(stream, settings);
+        return XDocument.Load(xmlReader, LoadOptions.PreserveWhitespace).Root!;
+    }
+
+    private static Uri WsdlImportUri(XElement import, string location, Uri? origin, ValidationContext budget)
+    {
+        var baseUri = origin;
+        foreach (var element in import.AncestorsAndSelf().Reverse())
+        {
+            if (element.Attribute(XNamespace.Xml + "base") is { } xmlBase)
+            {
+                baseUri = Resolve(xmlBase.Value, baseUri);
+            }
+        }
+        return Resolve(location, baseUri);
+
+        Uri Resolve(string value, Uri? relativeTo)
+        {
+            budget.Work(value.Length + 1L);
+            ValidationContext.Require(!HasRawUriWhitespaceOrControls(value) &&
+                Uri.IsWellFormedUriString(value, UriKind.RelativeOrAbsolute) &&
+                !value.Contains('#', StringComparison.Ordinal),
+                "$/import", "dependency.uri", "A WSDL import retrieval URI must be well formed and fragment-free.");
+            if (!value.StartsWith('/') && Uri.TryCreate(value, UriKind.Absolute, out var absolute)) { return absolute; }
+            if (relativeTo is null)
+            {
+                ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$/import", "dependency.base",
+                    "A relative WSDL import requires a captured absolute document base.");
+            }
+            if (!Uri.TryCreate(relativeTo, value, out var resolved))
+            {
+                ValidationContext.Fail(DocumentValidationStatus.Invalid, "$/import", "dependency.uri",
+                    "The WSDL import URI cannot be resolved against its base.");
+            }
+            return resolved;
         }
     }
 

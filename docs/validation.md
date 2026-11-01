@@ -52,7 +52,7 @@ the cumulative work budget. Exhausting that budget reports `Indeterminate` with
 `limit.work`, rather than accepting a declaration whose reservation checks were
 not completed.
 
-## Standalone WSDL operation selection
+## WSDL 1.1 operation selection
 
 `ApiOperationDocumentResolver` selects abstract operations from `WSDL/1.1`
 XML Documents with `application/xml` or `text/xml` media types. The locator
@@ -66,6 +66,8 @@ including the defaults in
 [WSDL 1.1 section 2.4.5](https://www.w3.org/TR/2001/NOTE-wsdl-20010315).
 Use `!` for an absent input or output. Names use XML NMTOKEN syntax, so a
 colon or leading digit is not rejected by an invented NCName restriction.
+Effective input and output names must be unique within each port type,
+including collisions introduced by defaults or between different operations.
 
 `WsdlOperation` retains the native operation XML with its in-scope namespaces,
 expanded message and fault QNames, effective names and transmission pattern.
@@ -74,15 +76,34 @@ No JSON operation or JSON Pointer is fabricated. Malformed XML, DTDs,
 wrong WSDL roots, missing message references, duplicate port types and
 indistinguishable overloads fail before selection.
 
-This is a standalone operation-selection policy, not full WSDL validation.
-Imports and required extensions report `Unsupported` without calling a dependency resolver;
-`SupportsCallerProvidedWsdlImports` and `SupportsApiDocumentValidation` remain
-false. WSDL 2.0, imported components, embedded schema validity and complete
-binding/service validation remain unsupported. Shared byte, node, depth,
-work and deadline limits apply, and cancellation propagates.
+WSDL 1.1 imports use only the explicit caller dependency resolver.
+Each `location` resolves against its containing Document URI and inherited
+`xml:base` values. Rooted and network-path references retain the authored
+authority; they are not converted to local file paths. Shared imported Documents
+are parsed once, while every import declaration must agree with the acquired
+target namespace. An operation selected from an imported WSDL retains that
+Document's URI. No callback means an unresolved dependency, not implicit network
+access or a successful partial selection.
+
+Imported XML Schema Documents are acquired, parsed with DTD processing prohibited,
+and checked for the declared target namespace. Their definitions remain schema
+data; this selector does not compile schemas, validate message parts or follow
+schema imports/includes. Required WSDL extensions and other imported document
+kinds report `Unsupported`. Unavailable, denied, malformed or cyclic imports
+prevent selection even when the entry Document contains a matching operation.
+The callback owns authorization, redirects, bounded I/O and credential policy.
+Its bytes are associated with the requested import URI; the callback contract
+does not return a distinct post-redirect origin.
+
+`SupportsCallerProvidedWsdlImports` is true; `SupportsApiDocumentValidation`
+remains false. WSDL 2.0, embedded schema validity and complete binding/service
+validation remain unsupported. All acquired Documents share byte, node, depth,
+work, dependency-count and deadline limits; cancellation propagates without
+dispatching later dependencies.
 
 The HTTP workflow acquires an older exact API Version after its default changes
-and selects the retained WSDL operation after source and host disposal.
+and selects the retained WSDL operation through an explicitly authorized relative
+message import after source and host disposal.
 It preserves entry bytes and native operation meaning without asserting that
 registration or selection establishes full document validity.
 

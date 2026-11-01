@@ -42,7 +42,7 @@ public class WsdlOperationReferenceTests
         await Assert.That(xml.Name.LocalName).IsEqualTo("operation");
         await Assert.That(xml.GetNamespaceOfPrefix("t")!.NamespaceName).IsEqualTo("urn:users");
         await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
-        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsCallerProvidedWsdlImports).IsFalse();
+        await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsCallerProvidedWsdlImports).IsTrue();
     }
 
     [Test]
@@ -121,6 +121,9 @@ public class WsdlOperationReferenceTests
     [Arguments("<operation name=\"Read\"><input message=\"t:Message\"/><input message=\"t:Message\"/></operation>", "wsdl.flow")]
     [Arguments("<operation name=\"Read\"><output message=\"t:Message\"/><fault name=\"F\" message=\"t:Message\"/></operation>", "wsdl.flow")]
     [Arguments("<operation name=\"Read\"><input message=\"t:Message\"/></operation><operation name=\"Read\"><input message=\"t:Message\"/></operation>", "wsdl.duplicate_operation")]
+    [Arguments("<operation name=\"Read\"><input name=\"same\" message=\"t:Message\"/><output name=\"same\" message=\"t:Message\"/></operation>", "wsdl.message_name")]
+    [Arguments("<operation name=\"Read\"><input name=\"same\" message=\"t:Message\"/></operation><operation name=\"Write\"><output name=\"same\" message=\"t:Message\"/></operation>", "wsdl.message_name")]
+    [Arguments("<operation name=\"Read\"><input message=\"t:Message\"/><output message=\"t:Message\"/></operation><operation name=\"Write\"><input name=\"ReadRequest\" message=\"t:Message\"/></operation>", "wsdl.message_name")]
     public async Task Wsdl11RejectsInvalidOperationComponentsBeforeSelection(string operations, string code)
     {
         var result = await ApiOperationDocumentResolver.ResolveAsync("WSDL/1.1", "application/xml",
@@ -131,7 +134,7 @@ public class WsdlOperationReferenceTests
     }
 
     [Test]
-    public async Task Wsdl11RejectsDtdsAndWrongRootsAndReportsImportsWithoutFetching()
+    public async Task Wsdl11RejectsDtdsAndWrongRootsAndReportsUnresolvedImports()
     {
         foreach (var xml in new[]
         {
@@ -154,9 +157,9 @@ public class WsdlOperationReferenceTests
                 calls++;
                 return ValueTask.FromResult<ReadOnlyMemory<byte>?>(null);
             });
-        await Assert.That(unsupported.Status).IsEqualTo(ApiOperationResolutionStatus.Unsupported);
-        await Assert.That(unsupported.Diagnostic!.Code).IsEqualTo("wsdl.import");
-        await Assert.That(calls).IsEqualTo(0);
+        await Assert.That(unsupported.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(unsupported.Diagnostic!.Code).IsEqualTo("reference.unresolved");
+        await Assert.That(calls).IsEqualTo(1);
     }
 
     [Test]
