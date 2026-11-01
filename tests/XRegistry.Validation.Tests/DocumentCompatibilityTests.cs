@@ -10,6 +10,42 @@ namespace XRegistry.Validation.Tests;
 public class DocumentCompatibilityTests
 {
     [Test]
+    [Arguments("full", """{"type":"int","logicalType":"date"}""", "\"int\"", DocumentCompatibilityStatus.Compatible)]
+    [Arguments("full", "\"long\"", """{"type":"long","logicalType":"timestamp-micros"}""", DocumentCompatibilityStatus.Compatible)]
+    [Arguments("full", """{"type":"long","logicalType":"timestamp-millis"}""",
+        """{"type":"long","logicalType":"future"}""", DocumentCompatibilityStatus.Compatible)]
+    [Arguments("full", """{"type":"int","logicalType":"uuid"}""", "\"int\"", DocumentCompatibilityStatus.Compatible)]
+    [Arguments("full", """{"type":"string","logicalType":"uuid"}""", "\"string\"", DocumentCompatibilityStatus.Compatible)]
+    [Arguments("backward", """{"type":"long","logicalType":"future"}""", "\"int\"", DocumentCompatibilityStatus.Compatible)]
+    [Arguments("forward", """{"type":"long","logicalType":"future"}""", "\"int\"", DocumentCompatibilityStatus.Incompatible)]
+    [Arguments("full", """{"type":"string","logicalType":"future"}""", "\"int\"", DocumentCompatibilityStatus.Incompatible)]
+    [Arguments("full", """{"type":"fixed","name":"D","size":12,"logicalType":"duration"}""",
+        """{"type":"fixed","name":"D","size":11}""", DocumentCompatibilityStatus.Incompatible)]
+    [Arguments("full", """{"type":"bytes","logicalType":"decimal","precision":4,"scale":2}""", "\"bytes\"",
+        DocumentCompatibilityStatus.Unsupported)]
+    [Arguments("full", "\"bytes\"", """{"type":"bytes","logicalType":"decimal","precision":4,"scale":2}""",
+        DocumentCompatibilityStatus.Unsupported)]
+    public async Task AvroLogicalAnnotationsPreserveUnderlyingReaderWriterDirectionAndDecimalBoundary(
+        string mode, string candidate, string ancestor, DocumentCompatibilityStatus expected)
+    {
+        foreach (var format in new[] { "Avro/1.8.2", "Avro/1.11.0" })
+        {
+            var result = await new BuiltInDocumentCompatibilityValidator().CheckAsync(
+                format, mode, Bytes(candidate), [Bytes(ancestor)]);
+            await Assert.That(result.Status).IsEqualTo(expected);
+            if (expected == DocumentCompatibilityStatus.Compatible)
+            {
+                await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+            }
+            else
+            {
+                await Assert.That(result.Diagnostics.Single().Code).IsEqualTo(
+                    expected == DocumentCompatibilityStatus.Unsupported ? "avro.logical_type" : "compatibility.avro");
+            }
+        }
+    }
+
+    [Test]
     [Arguments("backward", "\"long\"", "\"int\"", DocumentCompatibilityStatus.Compatible)]
     [Arguments("forward", "\"long\"", "\"int\"", DocumentCompatibilityStatus.Incompatible)]
     [Arguments("full", "\"long\"", "\"int\"", DocumentCompatibilityStatus.Incompatible)]

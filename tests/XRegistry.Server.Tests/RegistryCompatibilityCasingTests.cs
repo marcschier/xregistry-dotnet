@@ -12,6 +12,37 @@ namespace XRegistry.Server.Tests;
 public class RegistryCompatibilityCasingTests
 {
     [Test]
+    [Arguments("Avro/1.8.2")]
+    [Arguments("Avro/1.11.0")]
+    public async Task LogicalAnnotationsPublishWithUnderlyingCompatibilityWithoutRewritingSchema(string format)
+    {
+        var engine = ValidatingEngine(strict: true);
+        await Send(engine, RegistryAction.Replace, "/sets/g/schemas/s$details", $$$"""
+            {"versionid":"v1","format":"{{{format}}}","schema":{"type":"int","logicalType":"date"},
+             "meta":{"compatibility":"backward"}}
+            """);
+        const string schema = """{"type":"long","logicalType":"future-type","extension":{"precision":"authored"}}""";
+        var accepted = await Send(engine, RegistryAction.Post, "/sets/g/schemas/s$details", $$$"""
+            {"versionid":"v2","format":"{{{format}}}","schema":{{{schema}}}}
+            """);
+        await Assert.That(accepted.Metadata!.RootElement.GetProperty("formatvalidated").GetBoolean()).IsTrue();
+        await Assert.That(accepted.Metadata.RootElement.GetProperty("compatibilityvalidated").GetBoolean()).IsTrue();
+        await Assert.That(accepted.Metadata.RootElement.GetProperty("ancestorid").GetString()).IsEqualTo("v1");
+        var captured = (await Send(engine, RegistryAction.Read, "/sets/g/schemas/s$details")).Metadata!.RootElement;
+        using var bytes = (await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/versions/v2")).Document!.OpenRead();
+        using var reader = new StreamReader(bytes);
+        await Assert.That(await reader.ReadToEndAsync()).IsEqualTo(schema);
+        var before = captured.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        await ExpectCode(() => Send(engine, RegistryAction.Post, "/sets/g/schemas/s$details", $$$"""
+            {"versionid":"v3","format":"{{{format}}}","schema":{"type":"int","logicalType":"future-type"}}
+            """), "compatibility_violation");
+        await Assert.That((await Send(engine, RegistryAction.Read, "/sets/g/schemas/s$details")).Metadata!
+            .RootElement.GetRawText()).IsEqualTo(before);
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+    }
+
+    [Test]
     [Arguments("backward")]
     [Arguments("BACKWARD")]
     public async Task BackwardCompatibilityCasingFlowsThroughAvroValidation(string mode)

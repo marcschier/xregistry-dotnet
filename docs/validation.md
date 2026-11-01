@@ -10,7 +10,7 @@ successful validation.
 | --- | --- |
 | JSON Schema | draft-07, 2019-09, 2020-12 structural/keyword validation with explicitly resolved references; unimplemented dynamic/resource vocabularies are unsupported. |
 | XML Schema | XSD 1.0 through hardened, preflight-bounded `XmlSchemaSet`; no DTD/external resolver. XSD 1.1 and unqualified constructs are unsupported. |
-| Avro | 1.8.2 and 1.11.0 grammar, names/references, unions, records, enum/fixed and defaults. Logical-type policies are explicitly unqualified. |
+| Avro | 1.8.2 and 1.11.0 grammar, names/references, unions, records, enum/fixed and defaults. Non-decimal logical annotations use underlying wire types; decimal remains unqualified. |
 | Protobuf | Proto2/3 lexer and declaration/type/field/default/enum/reserved/service checks, with explicit imports. Custom options, groups and extensions are unsupported. No protoc subprocess. |
 | gRPC | `gRPC/proto3` uses the Proto3 policy and requires at least one service declared in the supplied root document. Imported source uses its declared syntax. Descriptor sets are unsupported. Source-method selection is available separately through `ApiOperationDocumentResolver`. |
 | JSON Structure | Draft-04 Core document/type/namespace/reference/union/compound grammar and bounded primitive restrictions. Required extensions, inheritance and unqualified extended primitive const/enum rules are unsupported. |
@@ -158,6 +158,19 @@ reports `Unsupported` with `xsd.pattern_value_unsupported`, including when the
 declarations are unrelated or occur in different acquired Documents.
 WSDL retains authored pattern text and separate facets; it does not rewrite
 anchors, combine facets or validate application values.
+
+Avro 1.8.2 and 1.11.0 read non-decimal logical annotations through their
+underlying wire schemas, following the publisher's
+[logical-type rules](https://avro.apache.org/docs/1.11.0/spec.html#Logical+Types).
+Unknown names are ignored for reading; optional native UUID, date, time,
+timestamp and duration representations are not supplied by this API.
+Annotations cannot bypass underlying type, fixed-size or default checks.
+Reader/writer compatibility uses the underlying schemas and retains its
+directional promotion rules. Authored annotations are not rewritten.
+Decimal annotations remain `Unsupported` with `avro.logical_type` because
+their precision/scale validation and distinct schema-resolution rules are
+not implemented; this includes otherwise identical decimal schemas.
+This policy does not validate application logical values or serialize them.
 
 Protobuf map declarations reserve their synthetic entry symbol in the containing
 message: `foo` reserves `FooEntry`, and `map_field` reserves `MapFieldEntry`.

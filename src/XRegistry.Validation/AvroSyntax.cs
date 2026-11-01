@@ -110,11 +110,11 @@ internal sealed class AvroSyntax(string format, ValidationContext context)
         var kind = SchemaJson.String(SchemaJson.Member(schema, "type", path), path + "/type");
         if (schema.TryGetProperty("logicalType", out var logicalType))
         {
-            SchemaJson.String(logicalType, path + "/logicalType");
-            if (!_protocol)
+            var logicalName = SchemaJson.String(logicalType, path + "/logicalType");
+            if (!_protocol && logicalName == "decimal")
             {
                 ValidationContext.Fail(DocumentValidationStatus.Unsupported, path + "/logicalType", "avro.logical_type",
-                    "Logical-type annotations are outside the implemented Avro wire-schema policy.");
+                    "Decimal precision/scale validation and schema resolution are outside the implemented Avro policy.");
             }
         }
         if (schema.TryGetProperty("doc", out var documentation))

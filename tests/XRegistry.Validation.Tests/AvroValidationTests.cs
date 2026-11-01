@@ -10,6 +10,70 @@ namespace XRegistry.Validation.Tests;
 public class AvroValidationTests
 {
     [Test]
+    [Arguments("""{"type":"int","logicalType":"date"}""")]
+    [Arguments("""{"type":"int","logicalType":"time-millis"}""")]
+    [Arguments("""{"type":"long","logicalType":"time-micros"}""")]
+    [Arguments("""{"type":"long","logicalType":"timestamp-millis"}""")]
+    [Arguments("""{"type":"long","logicalType":"timestamp-micros"}""")]
+    [Arguments("""{"type":"long","logicalType":"local-timestamp-millis"}""")]
+    [Arguments("""{"type":"long","logicalType":"local-timestamp-micros"}""")]
+    [Arguments("""{"type":"string","logicalType":"uuid"}""")]
+    [Arguments("""{"type":"fixed","name":"Duration","size":12,"logicalType":"duration"}""")]
+    [Arguments("""{"type":"fixed","name":"Duration","size":11,"logicalType":"duration"}""")]
+    [Arguments("""{"type":"int","logicalType":"uuid"}""")]
+    [Arguments("""{"type":"string","logicalType":"future-type","precision":{"extension":true}}""")]
+    [Arguments("""{"type":"bytes","logicalType":"Decimal","precision":4,"scale":2}""")]
+    [Arguments("""{"type":"string","logicalType":""}""")]
+    [Arguments("""{"type":"array","items":{"type":"long","logicalType":"timestamp-micros"},"logicalType":"future-array"}""")]
+    [Arguments("""{"type":"record","name":"R","logicalType":"future-record","fields":[{"name":"next","type":["null","R"],"default":null}]}""")]
+    public async Task NonDecimalLogicalAnnotationsUseTheirUnderlyingWireSchemaInBothDataProfiles(string schema)
+    {
+        foreach (var format in new[] { "Avro/1.8.2", "Avro/1.11.0" })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync(format, Encoding.UTF8.GetBytes(schema));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+            await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+        }
+    }
+
+    [Test]
+    [Arguments("""{"type":"Missing","logicalType":"future"}""", "avro.unknown_name", "$/type")]
+    [Arguments("""{"type":"string","logicalType":3}""", "schema.string", "$/logicalType")]
+    [Arguments("""{"type":"fixed","name":"F","size":-1,"logicalType":"duration"}""", "avro.fixed_size", "$/size")]
+    [Arguments("""{"type":"array","logicalType":"future"}""", "schema.required", "$/items")]
+    [Arguments("""{"type":"record","name":"R","fields":[{"name":"v","type":{"type":"int","logicalType":"date"},"default":2147483648}]}""",
+        "avro.default", "$/fields/0/default")]
+    [Arguments("""{"type":"record","name":"R","fields":[{"name":"v","type":{"type":"string","logicalType":"uuid"},"default":0}]}""",
+        "avro.default", "$/fields/0/default")]
+    [Arguments("""{"type":"record","name":"R","fields":[{"name":"v","type":{"type":"fixed","name":"D","size":12,"logicalType":"duration"},"default":"short"}]}""",
+        "avro.default", "$/fields/0/default")]
+    public async Task LogicalAnnotationsNeverBypassUnderlyingTypeAndDefaultChecks(string schema, string code, string path)
+    {
+        foreach (var format in new[] { "Avro/1.8.2", "Avro/1.11.0" })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync(format, Encoding.UTF8.GetBytes(schema));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+            await Assert.That(result.Diagnostics.Single().Code).IsEqualTo(code);
+            await Assert.That(result.Diagnostics.Single().Path).IsEqualTo(path);
+        }
+    }
+
+    [Test]
+    [Arguments("""{"type":"bytes","logicalType":"decimal","precision":4,"scale":2}""")]
+    [Arguments("""{"type":"bytes","logicalType":"decimal","precision":4,"scale":5}""")]
+    [Arguments("""{"type":"fixed","name":"D","size":2,"logicalType":"decimal","precision":4}""")]
+    public async Task DecimalAnnotationsRemainExplicitlyUncheckedUntilResolutionIsQualified(string schema)
+    {
+        foreach (var format in new[] { "Avro/1.8.2", "Avro/1.11.0" })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync(format, Encoding.UTF8.GetBytes(schema));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Unsupported);
+            await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("avro.logical_type");
+            await Assert.That(result.Diagnostics.Single().Path).IsEqualTo("$/logicalType");
+        }
+    }
+
+    [Test]
     [Arguments("\"long\"", DocumentValidationStatus.Valid)]
     [Arguments("""{"type":"record","name":"events.Order","fields":[{"name":"id","type":"long"},{"name":"next","type":["null","events.Order"],"default":null}]}""", DocumentValidationStatus.Valid)]
     [Arguments("""[{"type":"record","name":"First","fields":[]},{"type":"record","name":"Second","fields":[]}]""", DocumentValidationStatus.Valid)]

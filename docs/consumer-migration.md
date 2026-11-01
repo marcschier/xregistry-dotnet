@@ -662,7 +662,11 @@ Authored annotations remain unchanged, including unknown names and invalid
 logical parameters; they cannot bypass underlying schema or default checks.
 This does not convert values to UUIDs, dates or decimals or compare logical
 types. The Avro 1.8.2/1.11.0 data-schema validation and compatibility profiles
-continue to report `Unsupported` for logical-type annotations.
+now use underlying wire types for non-decimal logical annotations, including
+unknown names. Underlying default and directional compatibility checks still
+apply. Decimal annotations remain `Unsupported` because precision/scale
+validation and decimal schema-resolution rules are not qualified. Neither
+profile supplies native logical values or rewrites authored annotations.
 Named types remain in the caller's original protocol;
 selection does not inline them or synthesize the implicit system-error branch.
 Avro JSON metadata, including a member named `$ref`, never triggers dependency
