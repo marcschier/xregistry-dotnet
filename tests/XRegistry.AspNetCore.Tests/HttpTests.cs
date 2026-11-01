@@ -40,7 +40,7 @@ public class HttpTests
         const string dependency = """
             <description xmlns="http://www.w3.org/ns/wsdl" xmlns:t="urn:api" xmlns:p="urn:payload" targetNamespace="urn:api">
               <types xmlns:xs="http://www.w3.org/2001/XMLSchema">
-                <xs:import namespace="urn:payload" schemaLocation="payload.xsd"/>
+                <xs:import namespace="urn:payload" schemaLocation="payload.xsd#schema"/>
               </types>
               <interface name="Base" styleDefault="urn:style">
                 <fault name="Failure" element="p:Failure"/>
@@ -51,7 +51,7 @@ public class HttpTests
             </description>
             """;
         const string schema = """
-            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:payload">
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" id="schema" targetNamespace="urn:payload">
               <xs:element name="Payload" type="xs:string"/><xs:element name="Failure" type="xs:string"/>
             </xs:schema>
             """;

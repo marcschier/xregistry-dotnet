@@ -135,6 +135,7 @@ public static partial class ApiOperationDocumentResolver
         var schemaDependencies = new Dictionary<XElement, XElement[]>();
         var schemaNamespacePeers = new Dictionary<XElement, List<XElement>>();
         var externalSchemas = new Dictionary<Uri, XElement>();
+        var schemaContainers = new Dictionary<Uri, XElement>();
         var unavailableSchemas = new HashSet<Uri>();
         var inlineSchemas = new List<XElement>();
         var loaded = new Dictionary<Uri, XElement>();
@@ -653,8 +654,7 @@ public static partial class ApiOperationDocumentResolver
                     {
                         if (location.Contains('#', StringComparison.Ordinal))
                         {
-                            ValidationContext.Fail(DocumentValidationStatus.Unsupported, "$/types", "wsdl20.schema_fragment",
-                                "This schema policy does not yet select embedded schemas through location fragments.");
+                            return await ResolveSchemaFragmentAsync(reference, location, origin, depth).ConfigureAwait(false);
                         }
                         uri = WsdlImportUri(reference, location, origin, budget);
                         origin = uri;
@@ -665,6 +665,17 @@ public static partial class ApiOperationDocumentResolver
                             "The schema dependency depth limit was exceeded.");
                     }
                     if (externalSchemas.TryGetValue(uri, out var cached)) { return cached; }
+                    if (schemaContainers.TryGetValue(uri, out var captured) || loaded.TryGetValue(uri, out captured))
+                    {
+                        ValidationContext.Require(captured.Name == XName.Get("schema", "http://www.w3.org/2001/XMLSchema"),
+                            "$/types", "xsd.root", "A fragment-free schema location must identify an XML Schema document.");
+                        externalSchemas.Add(uri, captured);
+                        if (schemaOrigins.TryAdd(captured, origin))
+                        {
+                            schemaCopies.Add(captured, NamespaceCompleteWsdlOperation(captured, budget));
+                        }
+                        return captured;
+                    }
                     ReadOnlyMemory<byte>? acquired = null;
                     if (!unavailableSchemas.Contains(uri))
                     {
@@ -696,6 +707,94 @@ public static partial class ApiOperationDocumentResolver
                     schemaOrigins.Add(schemaRoot, origin);
                     schemaCopies.Add(schemaRoot, NamespaceCompleteWsdlOperation(schemaRoot, budget));
                     return schemaRoot;
+                }
+
+                async ValueTask<XElement> ResolveSchemaFragmentAsync(XElement reference, string location, Uri? origin, int depth)
+                {
+                    budget.Work(location.Length + 1L);
+                    if (depth > Capabilities.MaxReferenceDepth)
+                    {
+                        ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$/types", "limit.depth",
+                            "The schema dependency depth limit was exceeded.");
+                    }
+                    var separator = location.IndexOf('#');
+                    var rawFragment = location[(separator + 1)..];
+                    // System.Uri rejects fragments on relative URI strings; validate the fragment without inventing a retrieval base.
+                    ValidationContext.Require(!HasRawUriWhitespaceOrControls(location) &&
+                        Uri.IsWellFormedUriString("urn:schema-fragment#" + rawFragment, UriKind.Absolute),
+                        "$/types", "dependency.uri",
+                        "A schema location must be a well-formed URI reference.");
+                    var fragment = Uri.UnescapeDataString(rawFragment);
+                    if (fragment.Contains('(', StringComparison.Ordinal) || fragment.Length == 0)
+                    {
+                        ValidationContext.Fail(DocumentValidationStatus.Unsupported, "$/types", "wsdl20.schema_fragment",
+                            "This schema fragment policy supports XML ID shorthand, not empty fragments or XPointer schemes.");
+                    }
+                    XmlConvert.VerifyNCName(fragment);
+                    var documentPart = location[..separator];
+                    XElement container;
+                    Uri? retrieval = null;
+                    if (documentPart.Length == 0 && origin is null &&
+                        !reference.AncestorsAndSelf().Any(element => element.Attribute(XNamespace.Xml + "base") is not null))
+                    {
+                        container = reference.AncestorsAndSelf().Last();
+                    }
+                    else
+                    {
+                        retrieval = WsdlImportUri(reference, documentPart, origin, budget);
+                        if (!loaded.TryGetValue(retrieval, out container!) &&
+                            !schemaContainers.TryGetValue(retrieval, out container!) &&
+                            !externalSchemas.TryGetValue(retrieval, out container!))
+                        {
+                            if (++references > Capabilities.MaxReferencedDocuments)
+                            {
+                                ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$/types", "limit.references",
+                                    "The shared WSDL and schema dependency count was exceeded.");
+                            }
+                            token.ThrowIfCancellationRequested();
+                            var acquired = resolver is null ? null : await resolver(retrieval.AbsoluteUri, token).ConfigureAwait(false);
+                            token.ThrowIfCancellationRequested();
+                            if (acquired is null)
+                            {
+                                ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$/types", "reference.unresolved",
+                                    "No explicitly supplied document resolves the schema fragment's containing document.");
+                            }
+                            container = ReadWsdlXml(acquired.Value, budget);
+                            schemaContainers.Add(retrieval, container);
+                        }
+                    }
+                    var matches = new List<XElement>();
+                    foreach (var element in container.DescendantsAndSelf())
+                    {
+                        budget.Work();
+                        if (element.Attribute(XNamespace.Xml + "id")?.Value.Trim(' ', '\t', '\r', '\n') == fragment ||
+                            element.Name.NamespaceName == "http://www.w3.org/2001/XMLSchema" &&
+                            element.Attribute("id")?.Value.Trim(' ', '\t', '\r', '\n') == fragment)
+                        {
+                            matches.Add(element);
+                        }
+                    }
+                    ValidationContext.Require(matches.Count <= 1, "$/types", "wsdl20.schema_fragment_duplicate",
+                        "A schema fragment identifier must identify one element in its containing document.");
+                    if (matches.Count == 0)
+                    {
+                        ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$/types", "reference.unresolved",
+                            "The schema location fragment does not identify an element in its captured document.");
+                    }
+                    var selected = matches[0];
+                    ValidationContext.Require(selected.Name == XName.Get("schema", "http://www.w3.org/2001/XMLSchema"),
+                        "$/types", "xsd.root", "A schema location fragment must identify an XML Schema schema element.");
+                    if (schemaOrigins.TryAdd(selected, retrieval))
+                    {
+                        var copy = NamespaceCompleteWsdlOperation(selected, budget);
+                        if (selected.Ancestors().Any(element => element.Attribute(XNamespace.Xml + "base") is not null))
+                        {
+                            copy.SetAttributeValue(XNamespace.Xml + "base",
+                                WsdlImportUri(selected, "", retrieval, budget).AbsoluteUri);
+                        }
+                        schemaCopies.Add(selected, copy);
+                    }
+                    return selected;
                 }
 
                 static string SchemaNamespace(XElement schema) =>

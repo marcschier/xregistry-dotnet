@@ -134,7 +134,7 @@ Placeholder labels and directions retain
 their native meaning; XML child order does not substitute for those labels.
 Invalid names, duplicate or missing interfaces, inheritance cycles, conflicting
 operations and malformed placeholders fail before returning a match.
-Schema-location fragment selectors, other type systems, custom patterns and required extensions report
+Unimplemented XPointer schemes, other type systems, custom patterns and required extensions report
 `Unsupported`, never a successful unchecked selection.
 
 Fault references resolve against the operation's declaring interface and its
@@ -215,13 +215,31 @@ graphs; unavailable import hints can use resolved namespace Documents or an
 explicit catalog, while includes still require their location's Document.
 Missing schema information reports `Indeterminate`; denied
 dependencies, malformed XML and namespace contradictions prevent partial
-selection. Location fragments and XSD constructs outside the bounded compiler
+selection. XSD constructs outside the bounded compiler
 policy report `Unsupported`. These checks do not establish full schema or WSDL
 validation.
 
+Schema locations can select an embedded schema with an XML ID shorthand
+fragment, such as `other.wsdl#payload`. The fragment matches an XSD `id` or
+`xml:id` and must identify one schema element; duplicate IDs and targets of
+the wrong kind prevent selection. Fragment decoding does not change the
+schema's namespace identity. The callback receives only the fragment-free
+retrieval URI. Multiple fragments and whole-schema references reuse one
+captured Document and share the distinct-acquisition count.
+
+A fragment-only location uses the containing Document's effective XML base;
+it does not necessarily identify the authored Document when `xml:base` changes
+that base. Without an origin or XML base, a fragment-only reference can select
+the authored Document's own inline schema without acquisition. Retained schema
+context includes inherited XML bases when known. An external XML container
+supplies only the selected schema, not its WSDL interfaces. Missing Documents
+or IDs report `Indeterminate`; empty fragments and XPointer schemes remain
+`Unsupported`. This is the declared XML ID policy, not full XPointer support.
+
 The actual HTTP workflow retains an older exact Version and selects its inherited
 operation, fault and externally imported element declarations through explicit
-relative WSDL and schema dependencies after default change and source disposal.
+relative WSDL and XML ID schema-fragment dependencies after default change and
+source disposal.
 
 ## Compatibility
 
