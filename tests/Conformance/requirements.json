@@ -102577,9 +102577,13 @@
       ],
       "text": "The values of all `string` and `uritemplate`-typed properties and headers and query elements MAY contain placeholders using the [RFC6570][RFC6570] Level 1 URI Template syntax. When the same placeholder is used in multiple properties, the value of the placeholder is assumed to be identical.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read with the HTTP table and query string-map rule. Every query value now receives template validation independently of its key; declaration-like parameter names must not skip grammar checks. HttpQueryParameterNamesCannotBypassTemplateValidation covers description/specurl/type/required and an ordinary key with Level-2 operators, modifiers, dotted names and unterminated expressions; HttpQueryNamesAreNotDeclarationMetadataAndInvalidTemplatesRejectAtomically proves public atomic creation/patches, unchanged events, valid templates and restart. Native field/map shape checks and existing header/method/status cases remain applicable. Template substitution and equality of repeated placeholders remain actual-message runtime obligations. No HTTP application-message generation/matching conformance is claimed.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",

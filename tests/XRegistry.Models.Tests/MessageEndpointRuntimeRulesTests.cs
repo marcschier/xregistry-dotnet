@@ -10,6 +10,32 @@ namespace XRegistry.Models.Tests;
 public class MessageEndpointRuntimeRulesTests
 {
     [Test]
+    [Arguments("description")]
+    [Arguments("specurl")]
+    [Arguments("type")]
+    [Arguments("required")]
+    [Arguments("ordinary")]
+    public async Task HttpQueryParameterNamesCannotBypassTemplateValidation(string name)
+    {
+        RegistryJson Metadata(string value) => RegistryJson.Parse(new JsonObject
+        {
+            ["protocol"] = "HTTP",
+            ["protocoloptions"] = new JsonObject { ["query"] = new JsonObject { [name] = value } }
+        }.ToJsonString());
+        foreach (var invalid in new[] { "{+device}", "{device*}", "{device.part}", "{device" })
+        {
+            var error = await Assert.That(() => RegistryDomainRules.CompleteMessageMetadata(Metadata(invalid)))
+                .Throws<RegistryException>();
+            await Assert.That(error!.Diagnostic.Code).IsEqualTo("invalid_attribute");
+            await Assert.That(error.Diagnostic.Path).IsEqualTo("/protocoloptions/query/" + name);
+        }
+        const string valid = "orders/{device}";
+        var completed = RegistryDomainRules.CompleteMessageMetadata(Metadata(valid));
+        await Assert.That(completed.RootElement.GetProperty("protocoloptions").GetProperty("query").GetProperty(name).GetString())
+            .IsEqualTo(valid);
+    }
+
+    [Test]
     [Arguments("MQTT/3.1.1")]
     [Arguments("mqtt/5.0")]
     [Arguments("HTTP")]

@@ -42,7 +42,7 @@ public static partial class RegistryDomainRules
         }
         string[] fields = protocol?.ToUpperInvariant() switch
         {
-            "HTTP" => ["headers", "query", "path", "method", "status"],
+            "HTTP" => ["headers", "path", "method", "status"],
             "AMQP/1.0" => ["properties", "application-properties", "message-annotations", "delivery-annotations", "header", "footer"],
             "MQTT/3.1.1" => ["topic_name"],
             "MQTT/5.0" => ["topic_name", "response_topic", "content_type", "user_properties"],
@@ -112,6 +112,7 @@ public static partial class RegistryDomainRules
                     {
                         throw Invalid("An HTTP query value must be a string.", At("/protocoloptions/query", parameter.Name));
                     }
+                    _ = TemplateLiteral(parameter.Value.GetString()!, At("/protocoloptions/query", parameter.Name), false);
                 }
             }
             if (OptionalText(options, "status", "/protocoloptions/status", nonempty: false) is { } status)

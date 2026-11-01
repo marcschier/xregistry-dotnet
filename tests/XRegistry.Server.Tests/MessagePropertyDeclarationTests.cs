@@ -14,6 +14,35 @@ namespace XRegistry.Server.Tests;
 public class MessagePropertyDeclarationTests
 {
     [Test]
+    public async Task HttpQueryNamesAreNotDeclarationMetadataAndInvalidTemplatesRejectAtomically()
+    {
+        var store = new InMemoryRegistryPersistence();
+        var engine = MessageEndpointRuntimeTests.CreateDomain(RegistryModelKind.Message, store);
+        const string path = "/messagegroups/g/messages/m";
+        string Metadata(string name, string value) => new JsonObject
+        {
+            ["protocol"] = "HTTP",
+            ["protocoloptions"] = new JsonObject { ["query"] = new JsonObject { [name] = value } }
+        }.ToJsonString();
+        await ExpectCode(() => Send(engine, RegistryAction.Replace, path, Metadata("description", "{+device}")), "invalid_attribute");
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(0);
+        await Send(engine, RegistryAction.Replace, path, Metadata("description", "orders/{device}"));
+        var before = (await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        foreach (var name in new[] { "description", "specurl", "type", "required" })
+        {
+            await ExpectCode(() => Send(engine, RegistryAction.Patch, path, Metadata(name, "{device*}")), "invalid_attribute");
+            await Assert.That((await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText()).IsEqualTo(before);
+            await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        }
+        var restarted = MessageEndpointRuntimeTests.CreateDomain(RegistryModelKind.Message, store);
+        await Assert.That((await Send(restarted, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText()).IsEqualTo(before);
+        var updated = await Send(engine, RegistryAction.Patch, path, Metadata("required", "replies/{device}"));
+        await Assert.That(updated.Metadata!.RootElement.GetProperty("protocoloptions").GetProperty("query").GetProperty("required").GetString())
+            .IsEqualTo("replies/{device}");
+    }
+
+    [Test]
     public async Task UnversionedMqttCannotBypassMessageOrGroupDomainAdmission()
     {
         using var packaged = BuiltInRegistryModels.LoadSource(RegistryModelKind.Message);

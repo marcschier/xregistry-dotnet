@@ -69,6 +69,9 @@ subject/reply-to fields remain strings, including in compatible models that
 declare them as `any`. Domain validation rejects non-string shapes and preserves
 authored Level-1 templates. HTTP `query` is a map of string values, not an array
 of declaration objects; empty maps and empty string values remain valid.
+Query parameter names such as `description`, `type` and `required` do not
+identify declaration metadata. Their values receive the same template checks as
+every other query parameter.
 Runtime substitution and agreement of repeated variables still belong to the
 application that creates the message.
 
