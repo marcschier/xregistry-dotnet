@@ -1,7 +1,6 @@
 // Copyright (c) 2026 xregistry-dotnet contributors.
 // SPDX-License-Identifier: MIT
 
-using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -37,10 +36,6 @@ public static partial class ApiOperationDocumentResolver
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
     private static partial Regex SmithyUriFragment();
 
-    [GeneratedRegex(@"\A[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*\z",
-        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
-    private static partial Regex SmithyMediaTypeComponent();
-
     [GeneratedRegex(@"\A[!#$%&'*+.^_`|~0-9A-Za-z-]+\z",
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
     private static partial Regex SmithyHttpHeaderName();
@@ -48,14 +43,6 @@ public static partial class ApiOperationDocumentResolver
     [GeneratedRegex(@"\A(?:[A-Za-z0-9._~!$&'()*+,;=-]|%[A-Fa-f0-9]{2})*\z",
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
     private static partial Regex SmithyHostPrefixLiteral();
-
-    private static bool IsSmithyMediaTypeName(string value)
-    {
-        var slash = value.IndexOf('/');
-        return slash is >= 1 and <= 127 && value.Length - slash - 1 is >= 1 and <= 127 &&
-            SmithyMediaTypeComponent().IsMatch(value.AsSpan(0, slash)) &&
-            SmithyMediaTypeComponent().IsMatch(value.AsSpan(slash + 1));
-    }
 
     private static bool IsSmithyNamespaceUri(string value)
     {
@@ -1639,9 +1626,7 @@ public static partial class ApiOperationDocumentResolver
                             "document.trait_value", "The Smithy mediaType trait requires a string value.");
                         var mediaTypeText = trait.Value.GetString()!;
                         budget.Work(mediaTypeText.Length, traitPath);
-                        ValidationContext.Require(MediaTypeHeaderValue.TryParse(mediaTypeText, out var mediaType) &&
-                            mediaType.MediaType is not null && IsSmithyMediaTypeName(mediaType.MediaType) &&
-                            mediaType.Parameters.All(static parameter => parameter.Value is not null),
+                        ValidationContext.Require(IsDeclaredMediaType(mediaTypeText),
                             traitPath, "document.media_type",
                             "The Smithy media type requires RFC 6838 type/subtype names and valid parameters.");
                         continue;

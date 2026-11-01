@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
+using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -214,6 +215,24 @@ public static partial class ApiOperationDocumentResolver
 
     [GeneratedRegex(@"\{[^{}]+\}", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
     private static partial Regex PathTemplateExpression();
+
+    [GeneratedRegex(@"\A[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*\z",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
+    private static partial Regex MediaTypeComponent();
+
+    private static bool IsDeclaredMediaType(string value)
+    {
+        if (!MediaTypeHeaderValue.TryParse(value, out var mediaType) || mediaType.MediaType is null)
+        {
+            return false;
+        }
+        var name = mediaType.MediaType;
+        var slash = name.IndexOf('/');
+        return slash is >= 1 and <= 127 && name.Length - slash - 1 is >= 1 and <= 127 &&
+            MediaTypeComponent().IsMatch(name.AsSpan(0, slash)) &&
+            MediaTypeComponent().IsMatch(name.AsSpan(slash + 1)) &&
+            mediaType.Parameters.All(static parameter => parameter.Value is not null);
+    }
 
     /// <summary>Gets the exact optional resolution features available from this implementation.</summary>
     public static ApiOperationResolverCapabilities Capabilities { get; } = new();

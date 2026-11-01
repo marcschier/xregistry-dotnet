@@ -554,8 +554,13 @@ selection does not copy root declarations into the selected Operation Object
 or reorder or deduplicate authored arrays. Root checks precede selection and
 retrieval; reached operations, including reference targets, retain the named
 versus pointer boundaries below. OpenAPI does not inherit these Swagger fields.
-Media-type syntax in `consumes` and `produces` remains unqualified by this
-array-shape check.
+Swagger `consumes` and `produces` entries also use the same bounded media-type
+parser as Smithy declarations. Type and subtype names use the RFC 6838
+character grammar and inclusive 127-character limits; parameters must parse
+and have values. Unknown names, casing, vendor suffixes and quoted parameters
+remain authored data. Wildcard ranges are not concrete MIME type declarations.
+This does not check media-type registration, application support or full RFC
+qualification.
 Named operation lookup checks uniqueness of every encountered `operationId`,
 not only the requested name. Repeated unrelated IDs report `Invalid` rather
 than returning an earlier match or `NotFound`; repeated requested IDs retain

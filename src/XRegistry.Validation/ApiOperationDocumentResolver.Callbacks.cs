@@ -150,6 +150,12 @@ public static partial class ApiOperationDocumentResolver
                         "Swagger transport declarations must be strings; schemes must be http, https, ws or wss.",
                         path + "/" + index.ToString(System.Globalization.CultureInfo.InvariantCulture));
                 }
+                if (field != "schemes" && !IsDeclaredMediaType(declaration.GetString()!))
+                {
+                    return Failure(ApiOperationResolutionStatus.Invalid, "document.media_type",
+                        "Swagger media declarations require RFC 6838 type/subtype names and valid parameters.",
+                        path + "/" + index.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                }
                 index++;
             }
         }

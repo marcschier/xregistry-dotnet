@@ -11,11 +11,108 @@ namespace XRegistry.Validation.Tests;
 public class ApiOperationReferenceTests
 {
     [Test]
+    public async Task SwaggerMediaTypeDeclarationsRejectMalformedNamesAndParameters()
+    {
+        foreach (var text in new[]
+        {
+            "", "application", "/json", "application/", "application/json/extra",
+            "*/*", "application/*", "_application/json", "application/.json",
+            "application/j%son", "application/j'son", "application/j*son",
+            "application/j\u00e9son", "application/json\r\nX-Header: value",
+            "text/plain; charset", "text/plain; charset=", "text/plain; note=\"unterminated"
+        })
+        {
+            foreach (var field in new[] { "consumes", "produces" })
+            {
+                foreach (var root in new[] { false, true })
+                {
+                    var operation = new JsonObject { ["operationId"] = "Target" };
+                    var document = new JsonObject
+                    {
+                        ["swagger"] = "2.0",
+                        ["paths"] = new JsonObject { ["/items"] = new JsonObject { ["get"] = operation } }
+                    };
+                    (root ? document : operation)[field] = new JsonArray("application/json", text);
+                    foreach (var selector in new[] { "operations/Target", "operations/Missing", "/paths/~1items/get" })
+                    {
+                        var calls = 0;
+                        var result = await ApiOperationDocumentResolver.ResolveAsync("Swagger/2.0", "application/json",
+                            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                            ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                            resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+                        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+                        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.media_type");
+                        await Assert.That(result.Diagnostic.Path).IsEqualTo((root ? "$" : "$/paths/~1items/get") + "/" + field + "/1");
+                        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                        await Assert.That(calls).IsEqualTo(0);
+                    }
+                }
+            }
+        }
+    }
+
+    [Test]
+    public async Task SwaggerMediaTypesPreserveOpenNamesParametersAndRfc6838LengthBoundaries()
+    {
+        var values = new List<(string Text, bool Valid)>
+        {
+            ("APPLICATION/VND.example+JSON", true), ("example/x.private", true),
+            ("a/0", true), ("a!#$&-^_.+/b!#$&-^_.+", true),
+            ("text/plain; charset=utf-8", true), ("text/plain; note=\"two words\"", true)
+        };
+        foreach (var length in new[] { 1, 126, 127, 128 })
+        {
+            values.Add((new string('a', length) + "/json", length <= 127));
+            values.Add(("application/" + new string('a', length), length <= 127));
+        }
+        foreach (var (text, valid) in values)
+        {
+            foreach (var field in new[] { "consumes", "produces" })
+            {
+                var operation = new JsonObject { ["operationId"] = "Target", [field] = new JsonArray(text, text) };
+                var document = new JsonObject
+                {
+                    ["swagger"] = "2.0",
+                    ["paths"] = new JsonObject { ["/items"] = new JsonObject { ["get"] = operation.DeepClone() } }
+                };
+                foreach (var referenced in new[] { false, true })
+                {
+                    document["paths"]!["/items"]!["get"] = referenced
+                        ? new JsonObject { ["$ref"] = "https://allowed.test/operation" } : operation.DeepClone();
+                    var calls = 0;
+                    var result = await ApiOperationDocumentResolver.ResolveAsync("Swagger/2.0", "application/json",
+                        System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                        ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+                        resolveReference: (uri, _) =>
+                        {
+                            calls++;
+                            if (uri != "https://allowed.test/operation") { throw new UnauthorizedAccessException(); }
+                            return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(operation.ToJsonString()));
+                        });
+                    await Assert.That(result.Status).IsEqualTo(valid
+                        ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+                    await Assert.That(calls).IsEqualTo(referenced ? 1 : 0);
+                    if (valid)
+                    {
+                        await Assert.That(JsonNode.DeepEquals(operation, JsonNode.Parse(result.Operation.GetRawText()))).IsTrue();
+                    }
+                    else
+                    {
+                        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.media_type");
+                        await Assert.That(result.Diagnostic.Path).IsEqualTo((referenced ? "$/" : "$/paths/~1items/get/") + field + "/0");
+                        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                    }
+                }
+            }
+        }
+    }
+
+    [Test]
     public async Task SwaggerTransportChecksFollowReferencedOperationsAndRetainPointerLocality()
     {
         foreach (var field in new[] { "schemes", "consumes", "produces" })
         {
-            var operation = new JsonObject { ["operationId"] = "Target", [field] = new JsonArray("valid", false) };
+            var operation = new JsonObject { ["operationId"] = "Target", [field] = new JsonArray("application/json", false) };
             if (field == "schemes") { operation[field]![0] = "https"; }
             var document = new JsonObject
             {
