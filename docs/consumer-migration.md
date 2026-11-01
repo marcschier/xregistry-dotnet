@@ -325,11 +325,17 @@ See [the bounded WSDL policy](validation.md#wsdl-11-operation-selection).
 
 Standalone `WSDL/2.0` selection uses expanded interface and operation QNames.
 `Wsdl20Operation` retains the declaring interface, native operation XML,
-message-exchange-pattern IRI and effective styles. Interface inheritance does
+message-exchange-pattern IRI, effective styles and resolved fault references. Interface inheritance does
 not change an operation's declaring namespace; diamond paths to the same
 component collapse without merging conflicting components.
-The policy supports predefined patterns with `#any` or `#none` content.
-Imports/includes, fault components, schema-element resolution, other type
+Faults retain their declaring interfaces, owned XML, expanded names, native
+content models, directions and effective message labels. A fault must be visible
+from the operation's declaring interface; a sibling interface visible only from
+the selected derived interface cannot supply it. Native propagation rules
+reject forbidden directions and duplicate fault-name/label pairs.
+The policy supports the published Adjuncts patterns and the named additional-MEP
+Note patterns with `#any` or `#none` message and fault content.
+Imports/includes, schema-element resolution, other type
 systems and custom patterns remain unsupported; see
 [WSDL 2.0 selection](validation.md#standalone-wsdl-20-operation-selection).
 

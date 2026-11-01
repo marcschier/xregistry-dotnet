@@ -34,8 +34,9 @@ public class HttpTests
         const string first = """
             <description xmlns="http://www.w3.org/ns/wsdl" xmlns:t="urn:api" targetNamespace="urn:api">
               <interface name="Base" styleDefault="urn:style">
+                <fault name="Failure" element="#any"/>
                 <operation name="Read" pattern="http://www.w3.org/ns/wsdl/out-in">
-                  <output element="#any"/><input element="#none"/>
+                  <output element="#any"/><input element="#none"/><infault ref="t:Failure"/>
                 </operation>
               </interface>
               <interface name="Port" extends="t:Base"/>
@@ -73,6 +74,14 @@ public class HttpTests
         await Assert.That(selected.Wsdl20Operation.DeclaringInterfaceName).IsEqualTo("{urn:api}Base");
         await Assert.That(selected.Wsdl20Operation.MessageExchangePattern).IsEqualTo("http://www.w3.org/ns/wsdl/out-in");
         await Assert.That(selected.Wsdl20Operation.Styles.SequenceEqual(["urn:style"])).IsTrue();
+        await Assert.That(selected.Wsdl20Operation.Faults.Count).IsEqualTo(1);
+        var fault = selected.Wsdl20Operation.Faults[0];
+        await Assert.That(fault.DeclaringInterfaceName).IsEqualTo("{urn:api}Base");
+        await Assert.That(fault.FaultName).IsEqualTo("{urn:api}Failure");
+        await Assert.That(fault.ContentModel).IsEqualTo("#any");
+        await Assert.That(fault.Direction).IsEqualTo("in");
+        await Assert.That(fault.MessageLabel).IsEqualTo("In");
+        await Assert.That(fault.FaultXml.Contains("name=\"Failure\"", StringComparison.Ordinal)).IsTrue();
         var missing = await ApiOperationDocumentResolver.ResolveAsync(acquired.Format, acquired.Document.ContentType!,
             memory.ToArray(), ApiOperationReference.Parse(version +
                 "#interfaces/%7Burn:api%7DPort/operations/%7Burn:api%7DNew"));

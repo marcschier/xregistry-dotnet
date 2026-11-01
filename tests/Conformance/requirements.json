@@ -117131,7 +117131,7 @@
       "text": "For WSDL 2.0, both the interface and operation tokens MUST be expanded QNames. An inherited operation retains its declaring namespace. Equivalent inherited components with the same QName identify one operation; conflicting components make the document invalid under WSDL's component rules. The input/output overload suffix is only defined for WSDL 1.1. Neither form chooses a service endpoint or binding; those are separate native WSDL components.",
       "review": {
         "status": "reviewed",
-        "note": "Standalone WSDL 2.0 selection requires expanded interface/operation names, preserves declaring interface and native pattern/style defaults, collapses diamond paths to the same operation component and rejects conflicting parent components. WSDL Part 1 section 2.15 includes the declaring parent in component equivalence; similar operation XML from different interfaces is not sufficient. The WSDL 1.1 overload suffix is unsupported. Native XML and HTTP exact-Version/disposal tests establish the bounded predefined-pattern policy without endpoint/binding inference. Imports/includes, fault/element components, other type systems, custom patterns and full document validation remain unsupported, so broad qualification remains pending.",
+        "note": "Standalone WSDL 2.0 selection requires expanded interface/operation names, preserves declaring interface and native pattern/style defaults, collapses diamond paths to the same component and rejects conflicting parent components. WSDL Part 1 section 2.15 includes the declaring parent in component equivalence; similar XML from different interfaces is not sufficient. Fault declarations and references retain their declaring identities and owned XML. Fault visibility uses the declaring operation's interface closure; the dated Adjuncts and additional-MEP Note supply explicit propagation rules, effective labels and unique fault-name/label pairs. Native XML and HTTP exact-Version/disposal tests establish this bounded policy without endpoint/binding inference. The WSDL 1.1 overload suffix is unsupported. Imports/includes, schema-element references, other type systems, custom patterns and full document validation remain unsupported, so broad qualification remains pending.",
         "roles": [
           "client"
         ]
@@ -117143,6 +117143,11 @@
           "Wsdl20OperationReferenceTests.Wsdl20ConflictingInheritedComponentsCannotBeCollapsedByXmlSimilarity",
           "Wsdl20OperationReferenceTests.Wsdl20ExpandedNamesAreExactAndCannotUseWsdl11OverloadSelectors",
           "Wsdl20OperationReferenceTests.Wsdl20PreservesNativePatternIdentityAndOwnedXml",
+          "Wsdl20OperationReferenceTests.Wsdl20FaultReferencesApplyNativePropagationAndDefaultLabels",
+          "Wsdl20OperationReferenceTests.Wsdl20DiamondFaultComponentsRetainTheirDeclaringIdentityAndDistinctLabels",
+          "Wsdl20OperationReferenceTests.Wsdl20FaultReferenceFailuresPreventPartialSelection",
+          "Wsdl20OperationReferenceTests.Wsdl20FaultVisibilityAndComponentConflictsAreNotInferredFromTheSelectedInterface",
+          "Wsdl20OperationReferenceTests.Wsdl20XmlAttributeWhitespaceUsesNativeTokenValuesWithoutNormalizingIriIdentity",
           "HttpTests.ExactHttpWsdl20AcquisitionSelectsInheritedNativeOperationAfterDisposal"
         ],
         "nativeEvidence": []
