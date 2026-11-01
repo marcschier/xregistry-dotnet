@@ -114,8 +114,8 @@ cells and uploads evidence after failure as well as success. Linux jobs
 provision a separate ext4 test-data volume. OPC UA, sample-hosting and bridge
 tests are explicitly classified outside this generic-library gate; their
 omission is not evidence that they passed. Scheduling these cells does not
-establish that they pass, resolve the .NET 8 HTTP dependency warning below,
-review requirement mappings or promote a package's qualification status.
+establish that they pass, review requirement mappings or promote a package's
+qualification status.
 
 The driver passed complete Core and Models suites at
 `18728752587a11d9fabc1af1b95426c2d3a57bc5` on both .NET 8 and .NET 10/
@@ -474,19 +474,32 @@ receipts and before/after narratives are retained in the
 
 ## .NET 8 HTTP test dependency warning
 
-The TUnit HTTP test project brings packaged System.Text.Json 10.0.x into its
-.NET 8 host. An isolated reproduction established that ASP.NET Core/ILC 8.0.31
-with that package analyzes `JsonOptions.CreateDefaultTypeResolver`, producing
-IL2026/IL3050 even while runtime JSON reflection is disabled. Switching to raw
-`RequestDelegate` routes does not fix that combination. This is reproducible
-without TUnit and is not a decoder implementation warning.
+System.Text.Json 10.0.x declares its reflection-default getter through
+`FeatureSwitchDefinition`. ILC 8 does not fold that newer declaration to the
+configured constant. ASP.NET Core 8 therefore retains
+`JsonOptions.CreateDefaultTypeResolver` during analysis and emits IL2026/IL3050
+even when the published runtime configuration disables JSON reflection.
+The current-source reproduction used ASP.NET Core/ILC 8.0.33 and the pinned
+System.Text.Json 10.0.12. Changing routes to raw `RequestDelegate` does not
+remove framework JSON initialization.
 
-The test binary executes its cases, but its .NET 8 publishing warning gate is
-not clean. No warning was suppressed and no dependency was silently downgraded.
-A clean-cache consumer of the actual Client/Core NuGets, using the framework
-JSON dependency, published without those warnings and passed 31 native Kestrel
-checks. See [HTTP compression](http-compression.md) for the causal evidence and
-exact qualification boundary.
+The `XRegistry` package includes a `buildTransitive` compiler substitution for
+.NET 8 Native AOT publication. It substitutes only
+`JsonSerializer.get_IsReflectionEnabledByDefault()` and only when the compiler
+feature `System.Text.Json.JsonSerializer.IsReflectionEnabledByDefault` is
+`false`; the resulting getter returns that same configured value. Managed
+builds, .NET 10 builds and reflection-enabled publication are unchanged.
+Repository project builds import the same targets. This supplies the older
+compiler's feature-switch representation without suppressing diagnostics,
+enabling reflection or changing dependency versions.
+
+The retained historical runs above remain failed. Only a fresh source-matched
+run with zero IL diagnostics, actual native execution and complete
+native/managed case parity can qualify a corrected cell. The shared native
+proof also asserts that JSON reflection is disabled in a genuine native
+process. Earlier clean-cache Client/Core consumers used framework JSON and
+passed 31 native Kestrel checks; see
+[HTTP compression](http-compression.md) for that separate evidence.
 
 The generic all-package consumer also uses framework JSON on .NET 8.
 Federation and Publication no longer force a System.Text.Json 10.x dependency

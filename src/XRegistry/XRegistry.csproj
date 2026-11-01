@@ -6,4 +6,9 @@
     <IsPackable>true</IsPackable>
     <PackageId>XRegistry</PackageId>
   </PropertyGroup>
+  <ItemGroup>
+    <None Remove="buildTransitive\**\*" />
+    <None Include="buildTransitive\XRegistry.targets" Pack="true" PackagePath="buildTransitive\" />
+    <None Include="buildTransitive\XRegistry.System.Text.Json.net8.xml" Pack="true" PackagePath="buildTransitive\" />
+  </ItemGroup>
 </Project>

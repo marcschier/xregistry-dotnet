@@ -1,0 +1,8 @@
+<!-- Copyright (c) 2026 xregistry-dotnet contributors. -->
+<!-- SPDX-License-Identifier: MIT -->
+
+<Project>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0' and '$(PublishAot)' == 'true'">
+    <IlcArg Include="--substitution:$(MSBuildThisFileDirectory)XRegistry.System.Text.Json.net8.xml" />
+  </ItemGroup>
+</Project>

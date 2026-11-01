@@ -9,6 +9,7 @@ import os
 import re
 from pathlib import Path
 import unittest
+import xml.etree.ElementTree as ET
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -118,6 +119,50 @@ class DocumentationPolicyTests(unittest.TestCase):
 
 
 class RestoreAndLicensePolicyTests(unittest.TestCase):
+    def test_net8_json_feature_substitution_preserves_false_switch_and_consumer_packaging(self) -> None:
+        directory = ROOT / "src" / "XRegistry" / "buildTransitive"
+        targets = ET.parse(directory / "XRegistry.targets").getroot()
+        groups = targets.findall("ItemGroup")
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0].get("Condition"),
+                         "'$(TargetFramework)' == 'net8.0' and '$(PublishAot)' == 'true'")
+        self.assertEqual([item.tag for item in groups[0]], ["IlcArg"])
+        self.assertEqual([item.attrib for item in groups[0]], [{
+            "Include": "--substitution:$(MSBuildThisFileDirectory)XRegistry.System.Text.Json.net8.xml"
+        }])
+        substitutions = ET.parse(directory / "XRegistry.System.Text.Json.net8.xml").getroot()
+        self.assertEqual(substitutions.tag, "linker")
+        self.assertEqual(len(substitutions), 1)
+        assembly = substitutions[0]
+        self.assertEqual(assembly.attrib, {
+            "fullname": "System.Text.Json",
+            "feature": "System.Text.Json.JsonSerializer.IsReflectionEnabledByDefault",
+            "featurevalue": "false",
+        })
+        self.assertEqual(len(assembly), 1)
+        self.assertEqual(assembly.tag, "assembly")
+        serializer = assembly[0]
+        self.assertEqual(serializer.tag, "type")
+        self.assertEqual(serializer.attrib, {"fullname": "System.Text.Json.JsonSerializer"})
+        self.assertEqual([method.tag for method in serializer], ["method"])
+        self.assertEqual([method.attrib for method in serializer], [{
+            "signature": "System.Boolean get_IsReflectionEnabledByDefault()",
+            "body": "stub",
+            "value": "false",
+        }])
+        project = ET.parse(ROOT / "src" / "XRegistry" / "XRegistry.csproj").getroot()
+        packaged = {item.get("Include"): item.attrib for item in project.findall(".//None")
+                    if item.get("Include") is not None}
+        for name in ("XRegistry.targets", "XRegistry.System.Text.Json.net8.xml"):
+            self.assertEqual(packaged["buildTransitive\\" + name], {
+                "Include": "buildTransitive\\" + name,
+                "Pack": "true",
+                "PackagePath": "buildTransitive\\",
+            })
+        imports = ET.parse(ROOT / "Directory.Build.targets").getroot().findall("Import")
+        self.assertIn("$(MSBuildThisFileDirectory)src\\XRegistry\\buildTransitive\\XRegistry.targets",
+                      [item.get("Project") for item in imports])
+
     def test_repository_has_no_nuget_lockfiles_or_locked_restore_machinery(self) -> None:
         lockfiles = [
             path.relative_to(ROOT)

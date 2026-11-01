@@ -1,0 +1,13 @@
+<!-- Copyright (c) 2026 xregistry-dotnet contributors. -->
+<!-- SPDX-License-Identifier: MIT -->
+
+<linker>
+  <assembly fullname="System.Text.Json"
+            feature="System.Text.Json.JsonSerializer.IsReflectionEnabledByDefault"
+            featurevalue="false">
+    <type fullname="System.Text.Json.JsonSerializer">
+      <method signature="System.Boolean get_IsReflectionEnabledByDefault()"
+              body="stub" value="false" />
+    </type>
+  </assembly>
+</linker>

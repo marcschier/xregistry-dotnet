@@ -39,5 +39,9 @@ public class NativeExecutionProofTests
         }
 
         await Assert.That(compiledMethods).IsGreaterThanOrEqualTo(0);
+        if (nativeAot)
+        {
+            await Assert.That(JsonSerializer.IsReflectionEnabledByDefault).IsFalse();
+        }
     }
 }
