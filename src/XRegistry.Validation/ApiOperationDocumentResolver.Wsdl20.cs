@@ -7,11 +7,32 @@ using System.Collections.ObjectModel;
 
 namespace XRegistry.Validation;
 
+/// <summary>An independently retained global XML Schema element and its inline schema context.</summary>
+public sealed class Wsdl20SchemaElementSelection
+{
+    internal Wsdl20SchemaElementSelection(string name, string xml, ReadOnlyCollection<string> schemas, Uri? documentUri)
+    {
+        ElementName = name;
+        ElementXml = xml;
+        SchemaDocuments = schemas;
+        DocumentUri = documentUri;
+    }
+
+    /// <summary>Gets the expanded name of the global element, not a type name.</summary>
+    public string ElementName { get; }
+    /// <summary>Gets retained element declaration XML with its in-scope namespaces.</summary>
+    public string ElementXml { get; }
+    /// <summary>Gets the independently owned inline schemas needed to interpret the declaration.</summary>
+    public ReadOnlyCollection<string> SchemaDocuments { get; }
+    /// <summary>Gets the containing WSDL document's origin when known.</summary>
+    public Uri? DocumentUri { get; }
+}
+
 /// <summary>An independently retained WSDL 2.0 fault reference and its declaring fault component.</summary>
 public sealed class Wsdl20FaultReferenceSelection
 {
     internal Wsdl20FaultReferenceSelection(string declaringInterface, string faultName, string contentModel,
-        string faultXml, string direction, string messageLabel)
+        string faultXml, string direction, string messageLabel, Wsdl20SchemaElementSelection? schemaElement)
     {
         DeclaringInterfaceName = declaringInterface;
         FaultName = faultName;
@@ -19,13 +40,14 @@ public sealed class Wsdl20FaultReferenceSelection
         FaultXml = faultXml;
         Direction = direction;
         MessageLabel = messageLabel;
+        SchemaElement = schemaElement;
     }
 
     /// <summary>Gets the expanded name of the interface that declares the fault.</summary>
     public string DeclaringInterfaceName { get; }
     /// <summary>Gets the expanded name of the referenced fault component.</summary>
     public string FaultName { get; }
-    /// <summary>Gets the native fault content model, currently #any or #none.</summary>
+    /// <summary>Gets the native fault content model, #any, #none or an expanded element QName.</summary>
     public string ContentModel { get; }
     /// <summary>Gets retained fault declaration XML with its in-scope namespaces.</summary>
     public string FaultXml { get; }
@@ -33,13 +55,16 @@ public sealed class Wsdl20FaultReferenceSelection
     public string Direction { get; }
     /// <summary>Gets the effective label of the placeholder associated with this fault.</summary>
     public string MessageLabel { get; }
+    /// <summary>Gets the resolved global schema element, or null for #any and #none content.</summary>
+    public Wsdl20SchemaElementSelection? SchemaElement { get; }
 }
 
 /// <summary>An independently owned WSDL 2.0 operation without binding or endpoint inference.</summary>
 public sealed class Wsdl20OperationSelection
 {
     internal Wsdl20OperationSelection(string declaringInterface, string operationName, string pattern, XElement operation,
-        IEnumerable<string> styles, IEnumerable<Wsdl20FaultReferenceSelection> faults)
+        IEnumerable<string> styles, IEnumerable<Wsdl20FaultReferenceSelection> faults,
+        IEnumerable<Wsdl20SchemaElementSelection> schemaElements)
     {
         DeclaringInterfaceName = declaringInterface;
         OperationName = operationName;
@@ -47,6 +72,7 @@ public sealed class Wsdl20OperationSelection
         OperationXml = operation.ToString(SaveOptions.DisableFormatting);
         Styles = Array.AsReadOnly(styles.Distinct(StringComparer.Ordinal).ToArray());
         Faults = Array.AsReadOnly(faults.ToArray());
+        SchemaElements = Array.AsReadOnly(schemaElements.Distinct().ToArray());
     }
 
     /// <summary>Gets the expanded name of the interface that originally declares this operation.</summary>
@@ -61,13 +87,16 @@ public sealed class Wsdl20OperationSelection
     public ReadOnlyCollection<string> Styles { get; }
     /// <summary>Gets resolved fault references with their native identities, directions and effective labels.</summary>
     public ReadOnlyCollection<Wsdl20FaultReferenceSelection> Faults { get; }
+    /// <summary>Gets the resolved global elements used by message and fault references.</summary>
+    public ReadOnlyCollection<Wsdl20SchemaElementSelection> SchemaElements { get; }
 }
 
 public static partial class ApiOperationDocumentResolver
 {
     private const string Wsdl20Namespace = "http://www.w3.org/ns/wsdl";
     private const string Wsdl20PatternPrefix = Wsdl20Namespace + "/";
-    private sealed record Wsdl20FaultComponent(string DeclaringInterface, string Name, string ContentModel, string Xml);
+    private sealed record Wsdl20FaultComponent(string DeclaringInterface, string Name, string ContentModel, string Xml,
+        Wsdl20SchemaElementSelection? SchemaElement);
 
     private static async ValueTask<ApiOperationResolutionResult> ResolveWsdl20Async(string contentType, ReadOnlyMemory<byte> bytes,
         ApiOperationSelector selector, Uri? documentUri, ApiOperationDocumentDependencyResolver? resolver,
@@ -95,6 +124,8 @@ public static partial class ApiOperationDocumentResolver
         }, token);
         XNamespace ns = Wsdl20Namespace;
         var documents = new Dictionary<XElement, (string Namespace, Uri? Origin, HashSet<string> Imports)>();
+        var includes = new Dictionary<XElement, List<XElement>>();
+        var schemaContexts = new Dictionary<XElement, Dictionary<string, Wsdl20SchemaElementSelection>>();
         var loaded = new Dictionary<Uri, XElement>();
         var unavailable = new HashSet<Uri>();
         var incompleteNamespaces = new HashSet<string>(StringComparer.Ordinal);
@@ -203,14 +234,9 @@ public static partial class ApiOperationDocumentResolver
                     var expanded = Expanded(targetNamespace, Name(fault), budget);
                     ValidationContext.Require(declaredFaults.Add(expanded), "$/interface/fault", "wsdl.duplicate_fault",
                         "An interface cannot declare two WSDL 2.0 faults with the same expanded name.");
-                    var content = fault.Attribute("element")?.Value.Trim(' ', '\t', '\r', '\n') ?? "#other";
-                    if (content is not ("#any" or "#none"))
-                    {
-                        ValidationContext.Fail(DocumentValidationStatus.Unsupported, "$/interface/fault", "wsdl20.element",
-                            "This WSDL 2.0 policy does not yet resolve schema element declarations or other type systems.");
-                    }
-                    AddFault(new(name, expanded, content,
-                        NamespaceCompleteWsdlOperation(fault, budget).ToString(SaveOptions.DisableFormatting)));
+                    var content = Content(fault);
+                    AddFault(new(name, expanded, content.Model,
+                        NamespaceCompleteWsdlOperation(fault, budget).ToString(SaveOptions.DisableFormatting), content.Element));
                 }
                 var declaredNames = new HashSet<string>(StringComparer.Ordinal);
                 CheckStyles(declaration.Attribute("styleDefault")?.Value);
@@ -225,10 +251,11 @@ public static partial class ApiOperationDocumentResolver
                         Uri.IsWellFormedUriString(pattern, UriKind.Absolute), "$/interface/operation", "wsdl.pattern",
                         "A WSDL 2.0 message-exchange pattern must be an absolute IRI.");
                     CheckStyles(operation.Attribute("style")?.Value);
-                    var references = CheckMessages(operation, pattern, faults);
+                    var elements = new List<Wsdl20SchemaElementSelection>();
+                    var references = CheckMessages(operation, pattern, faults, elements);
                     Add(new(name, expanded, pattern, NamespaceCompleteWsdlOperation(operation, budget),
                         Words(operation.Attribute("style")?.Value ?? declaration.Attribute("styleDefault")?.Value),
-                        references));
+                        references, elements));
                 }
                 active.Remove(name);
                 closures.Add(name, (result, faults, closureDepth));
@@ -275,7 +302,7 @@ public static partial class ApiOperationDocumentResolver
                 XmlConvert.VerifyNCName(name[(close + 1)..]);
             }
 
-            string QName(XElement element, string value)
+            string QName(XElement element, string value, bool wsdlComponent = true)
             {
                 budget.Work(value.Length + 1L);
                 value = value.Trim(' ', '\t', '\r', '\n');
@@ -293,7 +320,7 @@ public static partial class ApiOperationDocumentResolver
                 ValidationContext.Require(namespaceName is not null, "$/interface", "wsdl.qname",
                     "A WSDL component reference uses an undeclared namespace prefix.");
                 var containing = documents[element.Ancestors().Last()];
-                ValidationContext.Require(namespaceName == containing.Namespace || containing.Imports.Contains(namespaceName),
+                ValidationContext.Require(!wsdlComponent || namespaceName == containing.Namespace || containing.Imports.Contains(namespaceName),
                     "$/interface", "wsdl.import_required",
                     "A foreign WSDL component reference requires an import in its authored document.");
                 return Expanded(namespaceName, parts[^1], budget);
@@ -310,7 +337,7 @@ public static partial class ApiOperationDocumentResolver
             }
 
             Wsdl20FaultReferenceSelection[] CheckMessages(XElement operation, string pattern,
-                Dictionary<string, Wsdl20FaultComponent> faults)
+                Dictionary<string, Wsdl20FaultComponent> faults, List<Wsdl20SchemaElementSelection> elements)
             {
                 var directions = pattern switch
                 {
@@ -339,12 +366,8 @@ public static partial class ApiOperationDocumentResolver
                     var label = message.Attribute("messageLabel")?.Value.Trim(' ', '\t', '\r', '\n') ?? expected;
                     ValidationContext.Require(label == expected && labels.Add(label), "$/operation", "wsdl.message_label",
                         "WSDL message labels must identify distinct placeholders with their native directions.");
-                    var element = message.Attribute("element")?.Value.Trim(' ', '\t', '\r', '\n');
-                    if (element is not ("#any" or "#none"))
-                    {
-                        ValidationContext.Fail(DocumentValidationStatus.Unsupported, "$/operation", "wsdl20.element",
-                            "This WSDL 2.0 policy does not yet resolve schema element declarations or other type systems.");
-                    }
+                    var content = Content(message);
+                    if (content.Element is { } element) { elements.Add(element); }
                 }
                 var references = new List<Wsdl20FaultReferenceSelection>();
                 var keys = new HashSet<(string Fault, string Label)>();
@@ -380,9 +403,84 @@ public static partial class ApiOperationDocumentResolver
                         "A fault message label must identify a placeholder allowed by its native direction.");
                     ValidationContext.Require(keys.Add((expanded, label)), "$/operation/fault", "wsdl.duplicate_fault_ref",
                         "A fault component and message label combination must be unique within an operation.");
-                    references.Add(new(fault.DeclaringInterface, fault.Name, fault.ContentModel, fault.Xml, direction, label));
+                    references.Add(new(fault.DeclaringInterface, fault.Name, fault.ContentModel, fault.Xml, direction, label,
+                        fault.SchemaElement));
+                    if (fault.SchemaElement is { } schemaElement) { elements.Add(schemaElement); }
                 }
                 return references.ToArray();
+            }
+
+            (string Model, Wsdl20SchemaElementSelection? Element) Content(XElement reference)
+            {
+                var authored = reference.Attribute("element")?.Value.Trim(' ', '\t', '\r', '\n') ?? "#other";
+                if (authored is "#any" or "#none") { return (authored, null); }
+                if (authored.StartsWith('#'))
+                {
+                    ValidationContext.Fail(DocumentValidationStatus.Unsupported, "$/operation", "wsdl20.element",
+                        "This WSDL 2.0 policy does not interpret other type systems.");
+                }
+                var name = QName(reference, authored, wsdlComponent: false);
+                var containing = reference.Ancestors().Last();
+                var schemas = Schemas(containing);
+                ValidationContext.Require(schemas.TryGetValue(name, out var element), "$/operation", "wsdl20.schema_element",
+                    "A message or fault element QName must identify a visible global XML Schema element.");
+                return (name, element);
+            }
+
+            Dictionary<string, Wsdl20SchemaElementSelection> Schemas(XElement document)
+            {
+                if (schemaContexts.TryGetValue(document, out var cached)) { return cached; }
+                XNamespace xs = "http://www.w3.org/2001/XMLSchema";
+                var visited = new HashSet<XElement>();
+                var roots = new List<(XElement Source, XElement Copy)>();
+                Collect(document);
+                var schemaDocuments = Array.AsReadOnly(roots.Select(root =>
+                    root.Copy.ToString(SaveOptions.DisableFormatting)).ToArray());
+                foreach (var xml in schemaDocuments) { budget.Work(xml.Length); }
+                var result = new Dictionary<string, Wsdl20SchemaElementSelection>(StringComparer.Ordinal);
+                var symbols = new HashSet<(string Kind, string Name)>();
+                foreach (var schema in roots)
+                foreach (var declaration in schema.Source.Elements())
+                {
+                    budget.Work();
+                    if (declaration.Name.Namespace != xs ||
+                        declaration.Name.LocalName is not ("element" or "simpleType" or "complexType")) { continue; }
+                    var name = Expanded(schema.Source.Attribute("targetNamespace")?.Value.Trim(' ', '\t', '\r', '\n') ?? "",
+                        Name(declaration), budget);
+                    var kind = declaration.Name.LocalName == "element" ? "element" : "type";
+                    ValidationContext.Require(symbols.Add((kind, name)), "$/types", "wsdl20.schema_duplicate",
+                        "Inline schemas cannot duplicate global elements or types within their namespace.");
+                    if (kind != "element") { continue; }
+                    result.Add(name, new(name,
+                        NamespaceCompleteWsdlOperation(declaration, budget).ToString(SaveOptions.DisableFormatting),
+                        schemaDocuments,
+                        documents[schema.Source.Ancestors().Last()].Origin));
+                }
+                new XmlSchemaSyntax(budget).ValidateEmbedded(roots.Select(root => root.Copy).ToArray());
+                schemaContexts.Add(document, result);
+                return result;
+
+                void Collect(XElement entry)
+                {
+                    budget.Work();
+                    if (!visited.Add(entry)) { return; }
+                    var types = entry.Elements(ns + "types").ToArray();
+                    ValidationContext.Require(types.Length <= 1, "$/types", "wsdl20.types",
+                        "A WSDL description can contain at most one types element.");
+                    foreach (var type in types)
+                    {
+                        if (type.Elements(xs + "import").Any())
+                        {
+                            ValidationContext.Fail(DocumentValidationStatus.Unsupported, "$/types", "wsdl20.schema_import",
+                                "This WSDL 2.0 policy does not yet acquire imported XML Schemas.");
+                        }
+                        foreach (var schema in type.Elements(xs + "schema"))
+                        {
+                            roots.Add((schema, NamespaceCompleteWsdlOperation(schema, budget)));
+                        }
+                    }
+                    foreach (var included in includes[entry]) { Collect(included); }
+                }
             }
         }
         catch (ValidationFailure failure)
@@ -422,6 +520,7 @@ public static partial class ApiOperationDocumentResolver
             var imports = new HashSet<string>(StringComparer.Ordinal);
             var hints = new HashSet<(string Namespace, string? Location)>();
             documents.Add(entry, (targetNamespace, origin, imports));
+            includes.Add(entry, []);
             foreach (var reference in entry.Elements().Where(e => e.Name == ns + "include" || e.Name == ns + "import"))
             {
                 budget.Work();
@@ -449,16 +548,17 @@ public static partial class ApiOperationDocumentResolver
                     continue;
                 }
                 var uri = WsdlImportUri(reference, location, origin, budget);
-                await AcquireAsync(uri, expectedNamespace, uri, depth + 1, include).ConfigureAwait(false);
+                var dependency = await AcquireAsync(uri, expectedNamespace, uri, depth + 1, include).ConfigureAwait(false);
+                if (include && dependency is not null) { includes[entry].Add(dependency); }
             }
         }
 
-        async ValueTask AcquireAsync(Uri uri, string expectedNamespace, Uri? origin, int depth, bool required)
+        async ValueTask<XElement?> AcquireAsync(Uri uri, string expectedNamespace, Uri? origin, int depth, bool required)
         {
             if (unavailable.Contains(uri))
             {
                 Missing();
-                return;
+                return null;
             }
             if (!loaded.TryGetValue(uri, out var dependency))
             {
@@ -474,7 +574,7 @@ public static partial class ApiOperationDocumentResolver
                 {
                     unavailable.Add(uri);
                     Missing();
-                    return;
+                    return null;
                 }
                 dependency = ReadWsdlXml(acquired.Value, budget);
                 ValidationContext.Require(dependency.Name == ns + "description", "$/import", "wsdl.version",
@@ -484,6 +584,7 @@ public static partial class ApiOperationDocumentResolver
                 await LoadAsync(dependency, origin, depth).ConfigureAwait(false);
             }
             else { CheckNamespace(); }
+            return dependency;
 
             void Missing()
             {

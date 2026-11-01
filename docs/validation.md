@@ -128,20 +128,20 @@ This policy checks the three message-exchange patterns in
 [WSDL 2.0 Adjuncts](https://www.w3.org/TR/2007/REC-wsdl20-adjuncts-20070626/)
 and the five patterns in the
 [additional-MEP Note](https://www.w3.org/TR/2007/NOTE-wsdl20-additional-meps-20070626/)
-with `#any` or `#none` message content. The Note is non-normative; support for
+with `#any`, `#none` or resolved inline-XSD element content. The Note is non-normative; support for
 its named patterns is part of this implementation's declared policy.
 Placeholder labels and directions retain
 their native meaning; XML child order does not substitute for those labels.
 Invalid names, duplicate or missing interfaces, inheritance cycles, conflicting
 operations and malformed placeholders fail before returning a match.
-Unimplemented schema-element references,
+Unimplemented schema imports/includes,
 other type systems, custom patterns and required extensions report
 `Unsupported`, never a successful unchecked selection.
 
 Fault references resolve against the operation's declaring interface and its
 extended interfaces, not every interface visible from the selected derived
 interface. `Faults` retains each fault's expanded name, declaring interface,
-owned declaration XML, `#any` or `#none` content model, direction and effective
+owned declaration XML, native content model, direction and effective
 message label. Diamond paths retain the same fault component; different
 declaring parents with the same fault QName conflict.
 
@@ -180,8 +180,25 @@ partial selection. The callback owns redirect and credential policy, and its
 bytes remain associated with the requested location rather than an inferred
 post-redirect URI. Selected operations retain their declaring Document's origin.
 
+Message and fault element QNames resolve to named global elements in inline
+XSD 1.0 schemas. WSDL includes expose their schemas; WSDL imports do not expose
+the imported Document's schemas to the importer. Multiple inline schemas can
+share a namespace, but cannot duplicate global elements or global types.
+Element and type names occupy separate symbol spaces, so a type cannot satisfy
+a message's element reference, even when it has the same QName.
+
+`SchemaElements` retains each referenced global element's expanded name,
+declaration XML, containing Document origin and complete inline schema context.
+Fault references expose their element through `SchemaElement`; `#any` and
+`#none` have no schema element. The shared bounded XSD compiler checks the
+visible inline schemas before selection. Input bytes and nodes already charged
+by WSDL acquisition are not charged again; copying, reparsing and compilation
+still consume cumulative work. Unsupported XSD constructs, direct schema
+imports and inline-schema imports/includes prevent selection without retrieval.
+This slice does not establish full schema or WSDL validation.
+
 The actual HTTP workflow retains an older exact Version and selects its inherited
-operation and fault declarations through an explicit relative include after
+operation, fault and inline element declarations through an explicit relative include after
 default change and source disposal.
 These checks establish the declared selection policy, not full WSDL 2.0 document
 validation.

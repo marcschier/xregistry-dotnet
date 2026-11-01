@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 using System.Globalization;
+using System.Text;
 using System.Xml;
+using System.Xml.Linq;
 using System.Xml.Schema;
 
 namespace XRegistry.Validation;
@@ -32,6 +34,49 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
         {
             throw new ValidationFailure(DocumentValidationStatus.Invalid,
                 new(LinePath(error.LineNumber, error.LinePosition), "xml.syntax", "The document is not permitted well-formed XML (DTDs are prohibited)."));
+        }
+        catch (XmlSchemaException error)
+        {
+            throw new ValidationFailure(DocumentValidationStatus.Invalid,
+                new(LinePath(error.LineNumber, error.LinePosition), "xsd.schema", error.Message));
+        }
+    }
+
+    internal void ValidateEmbedded(IReadOnlyList<XElement> roots)
+    {
+        try
+        {
+            var schemas = new XmlSchemaSet { XmlResolver = null };
+            schemas.ValidationEventHandler += OnValidation;
+            var parsed = new List<XmlSchema>();
+            foreach (var root in roots)
+            {
+                var bytes = Encoding.UTF8.GetBytes(root.ToString(SaveOptions.DisableFormatting));
+                context.Work(bytes.Length);
+                Preflight(bytes, prepaid: true);
+                using var stream = new MemoryStream(bytes, false);
+                using var reader = XmlReader.Create(stream, Settings(embedded: true));
+                var schema = XmlSchema.Read(reader, OnValidation);
+                ValidationContext.Require(schema is not null, "$", "xsd.schema", "An XML Schema document is required.");
+                if (schema.Includes.Count > 0)
+                {
+                    ValidationContext.Fail(DocumentValidationStatus.Unsupported, "$", "xsd.embedded_dependency",
+                        "This embedded-schema policy does not resolve schema imports or includes.");
+                }
+                parsed.Add(schema);
+            }
+            context.Work(CompilationWork());
+            foreach (var schema in parsed) { schemas.Add(schema); }
+            context.CancellationToken.ThrowIfCancellationRequested();
+            schemas.Compile();
+            context.CancellationToken.ThrowIfCancellationRequested();
+            ValidationContext.Require(schemas.IsCompiled, "$", "xsd.compilation", "The embedded XML Schemas did not compile.");
+        }
+        catch (XmlException error)
+        {
+            throw new ValidationFailure(DocumentValidationStatus.Invalid,
+                new(LinePath(error.LineNumber, error.LinePosition), "xml.syntax",
+                    "The embedded schema is not permitted well-formed XML (DTDs are prohibited)."));
         }
         catch (XmlSchemaException error)
         {
@@ -75,10 +120,10 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
         return schema;
     }
 
-    private void Preflight(ReadOnlyMemory<byte> bytes)
+    private void Preflight(ReadOnlyMemory<byte> bytes, bool prepaid = false)
     {
         using var stream = new MemoryStream(bytes.ToArray(), false);
-        using var reader = XmlReader.Create(stream, Settings());
+        using var reader = XmlReader.Create(stream, Settings(embedded: prepaid));
         var sawRoot = false;
         while (reader.Read())
         {
@@ -88,7 +133,8 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
                 continue;
             }
 
-            context.Node(reader.Depth + 1);
+            if (prepaid) { context.Work(); }
+            else { context.Node(reader.Depth + 1); }
             if (!sawRoot)
             {
                 ValidationContext.Require(reader.LocalName == "schema" && reader.NamespaceURI == Namespace,
@@ -119,7 +165,8 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
             }
             for (var i = 0; i < reader.AttributeCount; i++)
             {
-                context.Node(reader.Depth + 2);
+                if (prepaid) { context.Work(); }
+                else { context.Node(reader.Depth + 2); }
             }
         }
         ValidationContext.Require(sawRoot, "$", "xsd.root", "An XML Schema root is required.");
@@ -136,11 +183,11 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
         return _elements * _elements * _occurrenceCost;
     }
 
-    internal XmlReaderSettings Settings() => new()
+    internal XmlReaderSettings Settings(bool embedded = false) => new()
     {
         DtdProcessing = DtdProcessing.Prohibit,
         XmlResolver = null,
-        MaxCharactersInDocument = context.Options.MaxDocumentBytes,
+        MaxCharactersInDocument = embedded ? context.Options.MaxWork : context.Options.MaxDocumentBytes,
         MaxCharactersFromEntities = 1_024,
         IgnoreComments = true,
     };

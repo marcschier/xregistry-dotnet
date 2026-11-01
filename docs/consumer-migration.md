@@ -334,15 +334,19 @@ from the operation's declaring interface; a sibling interface visible only from
 the selected derived interface cannot supply it. Native propagation rules
 reject forbidden directions and duplicate fault-name/label pairs.
 The policy supports the published Adjuncts patterns and the named additional-MEP
-Note patterns with `#any` or `#none` message and fault content.
+Note patterns with `#any`, `#none` or resolved inline-XSD element content.
 Imports and includes use only the caller's dependency callback, with per-Document
 URI and `xml:base` resolution. Circular includes reuse declarations; foreign
 QNames require an import in their authored Document. Locationless imports use
 acquired namespace components or a namespace-URI catalog lookup, which does not
 invent a retrieval origin. Unavailable import hints do not block already resolved
 components; unresolved component references and unavailable includes still
-prevent selection. Schema-element resolution,
-other type systems and custom patterns remain unsupported; see
+prevent selection. `SchemaElements` retains named global elements and their
+complete inline schema context; fault references expose their `SchemaElement`.
+WSDL includes expose inline schemas, while WSDL imports do not. Types and local
+element declarations cannot substitute for global elements. Inline compilation
+shares the bounded XSD policy without recharging acquired bytes or nodes.
+Schema imports/includes, other type systems and custom patterns remain unsupported; see
 [WSDL 2.0 selection](validation.md#wsdl-20-operation-selection).
 
 API dependency references reject raw whitespace and control characters before

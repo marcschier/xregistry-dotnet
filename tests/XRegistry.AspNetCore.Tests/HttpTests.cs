@@ -38,11 +38,14 @@ public class HttpTests
             </description>
             """;
         const string dependency = """
-            <description xmlns="http://www.w3.org/ns/wsdl" xmlns:t="urn:api" targetNamespace="urn:api">
+            <description xmlns="http://www.w3.org/ns/wsdl" xmlns:t="urn:api" xmlns:p="urn:payload" targetNamespace="urn:api">
+              <types xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:schema targetNamespace="urn:payload">
+                <xs:element name="Payload" type="xs:string"/><xs:element name="Failure" type="xs:string"/>
+              </xs:schema></types>
               <interface name="Base" styleDefault="urn:style">
-                <fault name="Failure" element="#any"/>
+                <fault name="Failure" element="p:Failure"/>
                 <operation name="Read" pattern="http://www.w3.org/ns/wsdl/out-in">
-                  <output element="#any"/><input element="#none"/><infault ref="t:Failure"/>
+                  <output element="#any"/><input element="p:Payload"/><infault ref="t:Failure"/>
                 </operation>
               </interface>
             </description>
@@ -99,10 +102,14 @@ public class HttpTests
         var fault = selected.Wsdl20Operation.Faults[0];
         await Assert.That(fault.DeclaringInterfaceName).IsEqualTo("{urn:api}Base");
         await Assert.That(fault.FaultName).IsEqualTo("{urn:api}Failure");
-        await Assert.That(fault.ContentModel).IsEqualTo("#any");
+        await Assert.That(fault.ContentModel).IsEqualTo("{urn:payload}Failure");
         await Assert.That(fault.Direction).IsEqualTo("in");
         await Assert.That(fault.MessageLabel).IsEqualTo("In");
         await Assert.That(fault.FaultXml.Contains("name=\"Failure\"", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(fault.SchemaElement!.ElementName).IsEqualTo("{urn:payload}Failure");
+        await Assert.That(fault.SchemaElement.DocumentUri).IsEqualTo(dependencyUri);
+        await Assert.That(fault.SchemaElement.SchemaDocuments[0].Contains("name=\"Payload\"", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(selected.Wsdl20Operation.SchemaElements.Count).IsEqualTo(2);
         var missing = await ApiOperationDocumentResolver.ResolveAsync(acquired.Format, acquired.Document.ContentType!,
             memory.ToArray(), ApiOperationReference.Parse(version +
                 "#interfaces/%7Burn:api%7DNewPort/operations/%7Burn:api%7DRead"),
