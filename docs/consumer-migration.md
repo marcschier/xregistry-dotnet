@@ -533,6 +533,15 @@ matching precedence. This checks the Paths Object identity rule, not the
 complete path-template or parameter-declaration grammar.
 Swagger 2.0 does not declare the same prohibition, so that format does not
 inherit this OpenAPI rule.
+Named operation lookup checks uniqueness of every encountered `operationId`,
+not only the requested name. Repeated unrelated IDs report `Invalid` rather
+than returning an earlier match or `NotFound`; repeated requested IDs retain
+the existing `Ambiguous` outcome. Names remain case-sensitive and IDs remain
+optional. Repeated references create separate API occurrences even when their
+document bytes are cached; unused component definitions remain inactive.
+This applies across paths and, for OpenAPI, reachable callbacks and 3.1 webhooks.
+JSON Pointer selection remains a direct selection, not a whole-operation-graph
+validation pass.
 OpenAPI 3.1 operation-ID selection also searches `webhooks`, including referenced
 Path Items. Webhook names are exact strings, not slash-prefixed paths; an `x-`
 name in this map is a webhook, not a Paths specification extension. Duplicate

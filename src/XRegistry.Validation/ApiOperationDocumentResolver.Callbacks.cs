@@ -9,7 +9,8 @@ public static partial class ApiOperationDocumentResolver
 {
     private static async ValueTask<ApiOperationResolutionResult?> CollectOperationMatchesAsync(
         OperationLocation location, string operationId, bool includeCallbacks, List<OperationLocation> matches,
-        ReferenceContext references, ValidationContext budget, HashSet<string> active, int depth,
+        Dictionary<string, int> operationCounts, ReferenceContext references, ValidationContext budget,
+        HashSet<string> active, int depth,
         CancellationToken cancellationToken)
     {
         budget.Work(path: location.Pointer);
@@ -31,6 +32,14 @@ public static partial class ApiOperationDocumentResolver
                 return Failure(ApiOperationResolutionStatus.Invalid, "document.operation_id",
                     "An operationId must be a string.", location.Pointer + "/operationId");
             }
+            var nativeId = id.GetString()!;
+            operationCounts[nativeId] = Math.Min(2, operationCounts.GetValueOrDefault(nativeId) + 1);
+            if (operationCounts[nativeId] > 1 && !string.Equals(nativeId, operationId, StringComparison.Ordinal))
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid, "document.operation_id_duplicate",
+                    "Operation IDs must be unique among the API's operation occurrences.",
+                    location.Pointer + "/operationId");
+            }
             if (string.Equals(id.GetString(), operationId, StringComparison.Ordinal) && matches.Count < 2)
             {
                 matches.Add(location);
@@ -47,7 +56,7 @@ public static partial class ApiOperationDocumentResolver
             {
                 budget.Work(path: location.Pointer);
                 var failure = await CollectCallbackMatchesAsync(callback.Value, location.Source,
-                    location.Pointer + "/callbacks/" + Escape(callback.Name), operationId, matches,
+                    location.Pointer + "/callbacks/" + Escape(callback.Name), operationId, matches, operationCounts,
                     references, budget, active, depth + 1, cancellationToken).ConfigureAwait(false);
                 if (failure is not null) { return failure; }
             }
@@ -58,7 +67,8 @@ public static partial class ApiOperationDocumentResolver
 
     private static async ValueTask<ApiOperationResolutionResult?> CollectCallbackMatchesAsync(
         JsonElement callback, ReferencedDocument source, string pointer, string operationId,
-        List<OperationLocation> matches, ReferenceContext references, ValidationContext budget,
+        List<OperationLocation> matches, Dictionary<string, int> operationCounts,
+        ReferenceContext references, ValidationContext budget,
         HashSet<string> active, int depth, CancellationToken cancellationToken)
     {
         var referencePath = new HashSet<string>(StringComparer.Ordinal);
@@ -107,7 +117,7 @@ public static partial class ApiOperationDocumentResolver
             if (pathItem.Failure is not null) { return pathItem.Failure; }
             foreach (var operation in pathItem.Operations.Values)
             {
-                var failure = await CollectOperationMatchesAsync(operation, operationId, true, matches,
+                var failure = await CollectOperationMatchesAsync(operation, operationId, true, matches, operationCounts,
                     references, budget, active, depth, cancellationToken).ConfigureAwait(false);
                 if (failure is not null) { return failure; }
             }

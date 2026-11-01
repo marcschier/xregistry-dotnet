@@ -732,6 +732,7 @@ public static partial class ApiOperationDocumentResolver
         string operationId, ReferenceContext references, ValidationContext budget, CancellationToken cancellationToken)
     {
         var matches = new List<OperationLocation>();
+        var operationCounts = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var collectionName in format == "OpenAPI/3.1" ? new[] { "paths", "webhooks" } : new[] { "paths" })
         {
             if (!root.TryGetProperty(collectionName, out var paths)) { continue; }
@@ -762,7 +763,7 @@ public static partial class ApiOperationDocumentResolver
                 foreach (var operation in pathItem.Operations)
                 {
                     var failure = await CollectOperationMatchesAsync(operation.Value, operationId,
-                        format != "Swagger/2.0", matches, references, budget,
+                        format != "Swagger/2.0", matches, operationCounts, references, budget,
                         new(StringComparer.Ordinal), 0, cancellationToken).ConfigureAwait(false);
                     if (failure is not null)
                     {

@@ -13,6 +13,144 @@ public class ApiOperationReferenceTests
     [Test]
     [Arguments("OpenAPI/3.0", "openapi", "3.0.4")]
     [Arguments("OpenAPI/3.1", "openapi", "3.1.1")]
+    [Arguments("Swagger/2.0", "swagger", "2.0")]
+    public async Task UnrelatedDuplicateOperationIdsPreventNamedSelectionOrNotFound(
+        string format, string versionField, string version)
+    {
+        foreach (var requested in new[] { "Target", "Missing" })
+        {
+            foreach (var reference in new[] { false, true })
+            {
+                var document = new JsonObject
+                {
+                    [versionField] = version,
+                    ["paths"] = new JsonObject
+                    {
+                        ["/target"] = new JsonObject { ["get"] = new JsonObject { ["operationId"] = "Target" } },
+                        ["/a"] = reference
+                            ? new JsonObject { ["$ref"] = "https://approved.test/shared" }
+                            : new JsonObject { ["get"] = new JsonObject { ["operationId"] = "Other" } },
+                        ["/b"] = reference
+                            ? new JsonObject { ["$ref"] = "https://approved.test/shared" }
+                            : new JsonObject { ["post"] = new JsonObject { ["operationId"] = "Other" } }
+                    }
+                };
+                var calls = 0;
+                var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#operations/" + requested),
+                    resolveReference: (uri, _) =>
+                    {
+                        calls++;
+                        if (uri != "https://approved.test/shared") { throw new UnauthorizedAccessException(); }
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>( """{"get":{"operationId":"Other"}}"""u8.ToArray());
+                    });
+                await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.operation_id_duplicate");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo(reference ? "$/get/operationId" : "$/paths/~1b/post/operationId");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                await Assert.That(calls).IsEqualTo(reference ? 1 : 0);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task UnrelatedCallbackOperationIdDuplicatesCannotHideBehindAPathMatch(string format, string version)
+    {
+        var document = new JsonObject
+        {
+            ["openapi"] = version,
+            ["paths"] = new JsonObject
+            {
+                ["/x"] = new JsonObject
+                {
+                    ["get"] = new JsonObject
+                    {
+                        ["operationId"] = "Target",
+                        ["callbacks"] = new JsonObject
+                        {
+                            ["first"] = new JsonObject { ["url"] = new JsonObject { ["post"] = new JsonObject { ["operationId"] = "Other" } } },
+                            ["second"] = new JsonObject { ["url"] = new JsonObject { ["post"] = new JsonObject { ["operationId"] = "Other" } } }
+                        }
+                    }
+                }
+            }
+        };
+        foreach (var requested in new[] { "Target", "Missing" })
+        {
+            var result = ApiOperationDocumentResolver.Resolve(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/" + requested));
+            await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.operation_id_duplicate");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/paths/~1x/get/callbacks/second/url/post/operationId");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "openapi", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "openapi", "3.1.1")]
+    [Arguments("Swagger/2.0", "swagger", "2.0")]
+    public async Task OperationIdUniquenessIsCaseSensitiveAndDoesNotRequireOptionalIds(
+        string format, string versionField, string version)
+    {
+        var document = new JsonObject
+        {
+            [versionField] = version,
+            ["paths"] = new JsonObject
+            {
+                ["/x"] = new JsonObject { ["get"] = new JsonObject { ["operationId"] = "Target" } },
+                ["/y"] = new JsonObject { ["post"] = new JsonObject { ["operationId"] = "target" } },
+                ["/z"] = new JsonObject { ["put"] = new JsonObject(), ["post"] = new JsonObject() }
+            }
+        };
+        if (format == "OpenAPI/3.1")
+        {
+            document["components"] = new JsonObject
+            {
+                ["pathItems"] = new JsonObject
+                {
+                    ["Unused"] = new JsonObject { ["get"] = new JsonObject { ["operationId"] = "Target" } }
+                }
+            };
+        }
+        foreach (var requested in new[] { "Target", "target", "Missing" })
+        {
+            var result = ApiOperationDocumentResolver.Resolve(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/" + requested));
+            await Assert.That(result.Status).IsEqualTo(requested == "Missing"
+                ? ApiOperationResolutionStatus.NotFound : ApiOperationResolutionStatus.Selected);
+            if (result.Status == ApiOperationResolutionStatus.Selected)
+            {
+                await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo(requested);
+            }
+        }
+    }
+
+    [Test]
+    public async Task UnrelatedOperationIdDuplicatesAreCheckedAcrossPathsAndWebhooks()
+    {
+        foreach (var requested in new[] { "Target", "Missing" })
+        {
+            var result = ApiOperationDocumentResolver.Resolve("OpenAPI/3.1", "application/json", """
+                {"openapi":"3.1.1",
+                  "paths":{"/x":{"get":{"operationId":"Target"}},"/y":{"post":{"operationId":"Other"}}},
+                  "webhooks":{"notify":{"post":{"operationId":"Other"}}}}
+                """u8.ToArray(), ApiOperationReference.Parse("/apigroups/g/apis/a#operations/" + requested));
+            await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.operation_id_duplicate");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/webhooks/notify/post/operationId");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "openapi", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "openapi", "3.1.1")]
     public async Task IdenticalTemplatedPathHierarchiesCannotReturnPartialOperationSelections(
         string format, string versionField, string version)
     {
