@@ -87,8 +87,19 @@ structural reservation for base/local composition, bounding chains before
 native compilation. This conservative reservation can leave valid derivations
 unchecked. WSDL selection retains the authored base QName, local declaration
 and complete schema context rather than flattening inherited particles.
-Patterns, referenced groups, identity constraints and redefinitions remain
+Patterns, identity constraints and redefinitions remain
 outside the compiler policy; extension does not bypass that boundary.
+
+Named XSD model groups and attribute groups use native QName resolution,
+including caller-resolved imported definitions. Model groups retain sequence,
+choice and all particles; attribute groups retain their attribute declarations.
+Missing and cyclic definitions, conflicting attributes and illegal particle
+combinations fail compilation. Group and attribute-group names occupy separate
+symbol spaces. Each reference doubles the cumulative structural reservation,
+including repeated references and references within definitions, so cached
+definitions cannot bypass expansion limits. Valid long chains may remain
+unchecked under this conservative bound. WSDL retains references and complete
+schema context without copying group members into the selected declaration.
 
 Protobuf map declarations reserve their synthetic entry symbol in the containing
 message: `foo` reserves `FooEntry`, and `map_field` reserves `MapFieldEntry`.

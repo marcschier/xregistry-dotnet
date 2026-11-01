@@ -788,6 +788,30 @@ public class Wsdl20OperationReferenceTests
     }
 
     [Test]
+    public async Task Wsdl20NamedGroupsRetainReferencesAndDefinitionsWithoutFlattening()
+    {
+        var result = await Resolve("""
+            <types xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:schema targetNamespace="urn:api">
+              <xs:group name="Fields"><xs:sequence><xs:element name="first"/></xs:sequence></xs:group>
+              <xs:attributeGroup name="Attributes"><xs:attribute name="id" type="xs:int"/></xs:attributeGroup>
+              <xs:element name="Payload"><xs:complexType><xs:group ref="t:Fields"/><xs:attributeGroup ref="t:Attributes"/></xs:complexType></xs:element>
+            </xs:schema></types>
+            <interface name="Port"><operation name="Read"><input element="t:Payload"/><output element="#none"/></operation></interface>
+            """);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        var schema = result.Wsdl20Operation!.SchemaElements.Single();
+        await Assert.That(schema.ElementName).IsEqualTo("{urn:api}Payload");
+        var declaration = XElement.Parse(schema.ElementXml);
+        var xs = XNamespace.Get("http://www.w3.org/2001/XMLSchema");
+        await Assert.That(declaration.Descendants(xs + "group").Single().Attribute("ref")!.Value).IsEqualTo("t:Fields");
+        await Assert.That(declaration.Descendants(xs + "attributeGroup").Single().Attribute("ref")!.Value).IsEqualTo("t:Attributes");
+        await Assert.That(declaration.Descendants(xs + "element").Any()).IsFalse();
+        var document = XElement.Parse(schema.SchemaDocuments.Single());
+        await Assert.That(document.Elements(xs + "group").Single().Attribute("name")!.Value).IsEqualTo("Fields");
+        await Assert.That(document.Elements(xs + "attributeGroup").Single().Attribute("name")!.Value).IsEqualTo("Attributes");
+    }
+
+    [Test]
     public async Task Wsdl20ComplexContentRetainsBaseAndDerivedDeclarationsWithoutFlatteningParticles()
     {
         var result = await Resolve("""

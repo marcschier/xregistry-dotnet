@@ -248,8 +248,7 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
             if (reader.NamespaceURI == Namespace)
             {
                 if (reader.LocalName is "pattern" or "redefine"
-                    or "key" or "keyref" or "unique"
-                    || reader.LocalName is "group" or "attributeGroup" && reader.GetAttribute("ref") is not null)
+                    or "key" or "keyref" or "unique")
                 {
                     ValidationContext.Fail(DocumentValidationStatus.Unsupported, "$", "xsd.construct_unsupported",
                         $"The '{reader.LocalName}' construct is outside the bounded XSD compilation policy.");
@@ -260,6 +259,10 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
                 if (reader.LocalName == "complexContent")
                 {
                     ReserveExpansion(2, "base/local content composition");
+                }
+                if (reader.LocalName is "group" or "attributeGroup" && reader.GetAttribute("ref") is not null)
+                {
+                    ReserveExpansion(2, "named group reference");
                 }
                 if (reader.LocalName is "element" or "choice" or "sequence" or "any" or "group" &&
                     choiceBranches.ContainsKey(reader.Depth - 1))

@@ -69,6 +69,14 @@ can therefore remain unchecked. WSDL selection preserves base references and
 complete schema context without flattening inherited particles. Unsupported
 constructs within derived content still prevent compilation.
 
+Named model-group and attribute-group references use native schema resolution.
+Imported definitions require caller acquisition; QName text is not a retrieval
+URL. Missing, cyclic or conflicting definitions fail compilation. Every
+reference contributes a factor of two to the structural reservation, including
+repeated uses, so valid large expansions can remain unchecked. WSDL retains
+authored references and the complete schema context rather than flattening
+group definitions into the selected element.
+
 For `Protobuf/2` and `Protobuf/3`, schema validation checks declaration names
 in their containing scope. Fields, oneofs, nested types and enum values cannot
 reuse a name in the same message; enum values share their enum's containing

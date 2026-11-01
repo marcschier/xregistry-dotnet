@@ -11,6 +11,185 @@ public class XmlSchemaValidationTests
 {
     [Test]
     [Arguments("""
+        <xs:group name="Fields"><xs:sequence><xs:element name="x"/></xs:sequence></xs:group>
+        <xs:complexType name="Row"><xs:group ref="Fields"/></xs:complexType>
+        """)]
+    [Arguments("""
+        <xs:group name="Fields"><xs:choice><xs:element name="x"/><xs:element name="y"/></xs:choice></xs:group>
+        <xs:complexType name="Row"><xs:sequence><xs:group ref="Fields" minOccurs="0" maxOccurs="3"/><xs:element name="end"/></xs:sequence></xs:complexType>
+        """)]
+    [Arguments("""
+        <xs:group name="Fields"><xs:all><xs:element name="x" minOccurs="0"/></xs:all></xs:group>
+        <xs:complexType name="Row"><xs:group ref="Fields" minOccurs="0"/></xs:complexType>
+        """)]
+    [Arguments("""
+        <xs:group name="Outer"><xs:sequence><xs:group ref="Inner"/></xs:sequence></xs:group>
+        <xs:group name="Inner"><xs:sequence><xs:element name="x"/></xs:sequence></xs:group>
+        <xs:attributeGroup name="OuterAttributes"><xs:attributeGroup ref="InnerAttributes"/><xs:attribute name="flag" type="xs:boolean"/></xs:attributeGroup>
+        <xs:attributeGroup name="InnerAttributes"><xs:attribute name="id" type="xs:int" use="required"/></xs:attributeGroup>
+        <xs:complexType name="Row"><xs:group ref="Outer"/><xs:attributeGroup ref="OuterAttributes"/></xs:complexType>
+        """)]
+    [Arguments("""
+        <xs:group name="Fields"><xs:sequence/></xs:group>
+        <xs:attributeGroup name="Attributes"/>
+        <xs:complexType name="Row"><xs:group ref="Fields"/><xs:attributeGroup ref="Attributes"/></xs:complexType>
+        """)]
+    public async Task NamedGroupsCompileNativeSequenceChoiceAllNestedAndEmptyDefinitions(string declarations)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(
+            "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">" + declarations +
+            "<xs:element name=\"root\" type=\"Row\"/></xs:schema>"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("""<xs:complexType name="Row"><xs:group ref="Missing"/></xs:complexType>""")]
+    [Arguments("""<xs:complexType name="Row"><xs:attributeGroup ref="Missing"/></xs:complexType>""")]
+    [Arguments("""
+        <xs:group name="G"><xs:sequence><xs:group ref="G"/></xs:sequence></xs:group>
+        <xs:complexType name="Row"><xs:group ref="G"/></xs:complexType>
+        """)]
+    [Arguments("""
+        <xs:group name="G"><xs:sequence><xs:group ref="H"/></xs:sequence></xs:group>
+        <xs:group name="H"><xs:sequence><xs:group ref="G"/></xs:sequence></xs:group>
+        <xs:complexType name="Row"><xs:group ref="G"/></xs:complexType>
+        """)]
+    [Arguments("""
+        <xs:attributeGroup name="G"><xs:attributeGroup ref="G"/></xs:attributeGroup>
+        <xs:complexType name="Row"><xs:attributeGroup ref="G"/></xs:complexType>
+        """)]
+    [Arguments("""
+        <xs:attributeGroup name="G"><xs:attributeGroup ref="H"/></xs:attributeGroup>
+        <xs:attributeGroup name="H"><xs:attributeGroup ref="G"/></xs:attributeGroup>
+        <xs:complexType name="Row"><xs:attributeGroup ref="G"/></xs:complexType>
+        """)]
+    [Arguments("""
+        <xs:group name="G"><xs:all><xs:element name="x"/></xs:all></xs:group>
+        <xs:complexType name="Row"><xs:group ref="G" maxOccurs="2"/></xs:complexType>
+        """)]
+    [Arguments("""
+        <xs:attributeGroup name="G"><xs:attribute name="id" type="xs:int"/></xs:attributeGroup>
+        <xs:complexType name="Row"><xs:attribute name="id" type="xs:string"/><xs:attributeGroup ref="G"/></xs:complexType>
+        """)]
+    [Arguments("""
+        <xs:group name="G"><xs:sequence><xs:element name="x" type="xs:int"/></xs:sequence></xs:group>
+        <xs:complexType name="Row"><xs:choice><xs:group ref="G"/><xs:element name="x" type="xs:string"/></xs:choice></xs:complexType>
+        """)]
+    public async Task NamedGroupsRejectNativeMissingCyclicAndConflictingDefinitions(string declarations)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(
+            "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">" + declarations +
+            "<xs:element name=\"root\" type=\"Row\"/></xs:schema>"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("xsd.schema");
+    }
+
+    [Test]
+    [Arguments("group", 2, DocumentValidationStatus.Valid)]
+    [Arguments("group", 16, DocumentValidationStatus.Indeterminate)]
+    [Arguments("attributeGroup", 2, DocumentValidationStatus.Valid)]
+    [Arguments("attributeGroup", 16, DocumentValidationStatus.Indeterminate)]
+    public async Task NamedGroupChainsReserveEveryReferenceBeforeNativeCompilation(
+        string kind, int count, DocumentValidationStatus expected)
+    {
+        var declarations = new StringBuilder();
+        for (var index = 0; index <= count; index++)
+        {
+            var content = index == 0 ? "" : $"<xs:{kind} ref=\"G{index - 1}\"/>";
+            if (kind == "group") { content = "<xs:sequence>" + content + "</xs:sequence>"; }
+            declarations.Append(System.Globalization.CultureInfo.InvariantCulture,
+                $"<xs:{kind} name=\"G{index}\">{content}</xs:{kind}>");
+        }
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(
+            "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">" + declarations +
+            $"<xs:complexType name=\"Row\"><xs:{kind} ref=\"G{count}\"/></xs:complexType></xs:schema>"));
+        await Assert.That(result.Status).IsEqualTo(expected);
+        if (expected == DocumentValidationStatus.Indeterminate)
+        {
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("limit.work");
+        }
+    }
+
+    [Test]
+    [Arguments(2, DocumentValidationStatus.Valid)]
+    [Arguments(16, DocumentValidationStatus.Indeterminate)]
+    public async Task RepeatedNamedGroupReferencesCannotBypassExpansionReservations(
+        int count, DocumentValidationStatus expected)
+    {
+        var references = string.Concat(Enumerable.Repeat("<xs:group ref=\"Fields\"/>", count));
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(
+            "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">" +
+            "<xs:group name=\"Fields\"><xs:sequence><xs:element name=\"x\"/></xs:sequence></xs:group>" +
+            "<xs:complexType name=\"Row\"><xs:sequence>" + references + "</xs:sequence></xs:complexType></xs:schema>"));
+        await Assert.That(result.Status).IsEqualTo(expected);
+        if (expected == DocumentValidationStatus.Indeterminate)
+        {
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("limit.work");
+        }
+    }
+
+    [Test]
+    public async Task NamedGroupAndAttributeGroupSymbolsRemainSeparateAtTheSameQName()
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes("""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:group name="Shared"><xs:sequence><xs:element name="x"/></xs:sequence></xs:group>
+              <xs:attributeGroup name="Shared"><xs:attribute name="id"/></xs:attributeGroup>
+              <xs:complexType name="Row"><xs:group ref="Shared"/><xs:attributeGroup ref="Shared"/></xs:complexType>
+            </xs:schema>
+            """));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+    }
+
+    [Test]
+    public async Task NamedGroupsCannotHideUnsupportedPatternsBeforeDependencyAcquisition()
+    {
+        var calls = 0;
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes("""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:include schemaLocation="never.xsd"/>
+              <xs:group name="Fields"><xs:sequence><xs:element name="x"><xs:simpleType>
+                <xs:restriction base="xs:string"><xs:pattern value=".*"/></xs:restriction>
+              </xs:simpleType></xs:element></xs:sequence></xs:group>
+              <xs:complexType name="Row"><xs:group ref="Fields"/></xs:complexType>
+            </xs:schema>
+            """), new() { ResolveReference = (_, _) => { calls++; throw new UnauthorizedAccessException(); } });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Unsupported);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("xsd.construct_unsupported");
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task NamedGroupImportsUseCallerResolvedNamespacesAndDoNotAcquireQNameText()
+    {
+        var references = new List<string>();
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes("""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:b="urn:base">
+              <xs:import namespace="urn:base" schemaLocation="base.xsd"/>
+              <xs:complexType name="Row"><xs:group ref="b:Fields"/><xs:attributeGroup ref="b:Attributes"/></xs:complexType>
+              <xs:element name="root" type="Row"/>
+            </xs:schema>
+            """), new()
+        {
+            DocumentUri = new("https://schemas.example/root.xsd"),
+            ResolveReference = (reference, _) =>
+            {
+                references.Add(reference);
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes("""
+                        <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:base">
+                          <xs:group name="Fields"><xs:sequence><xs:element name="x" type="xs:int"/></xs:sequence></xs:group>
+                          <xs:attributeGroup name="Attributes"><xs:attribute name="id" type="xs:string"/></xs:attributeGroup>
+                        </xs:schema>
+                        """));
+            }
+        });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(references.Single()).IsEqualTo("https://schemas.example/base.xsd");
+    }
+
+    [Test]
+    [Arguments("""
         <xs:complexType name="Base"><xs:sequence><xs:element name="first"/></xs:sequence><xs:attribute name="id" type="xs:int" use="required"/></xs:complexType>
         <xs:complexType name="Derived"><xs:complexContent><xs:extension base="Base"><xs:sequence><xs:element name="next"/></xs:sequence><xs:attribute name="flag" type="xs:boolean"/></xs:extension></xs:complexContent></xs:complexType>
         """)]
