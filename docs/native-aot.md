@@ -493,6 +493,13 @@ Repository project builds import the same targets. This supplies the older
 compiler's feature-switch representation without suppressing diagnostics,
 enabling reflection or changing dependency versions.
 
+A disconnected HTTP request can raise `ConnectionResetException` before its
+`RequestAborted` notification arrives. The adapter aborts that transport instead
+of treating it as a storage failure. Disconnect fixtures register the callback
+before signaling readiness and observe cancellation while the application
+pipeline remains active; Kestrel can retire the token when that pipeline
+returns. A TCP send half-close alone does not establish peer disconnection.
+
 The retained historical runs above remain failed. Only a fresh source-matched
 run with zero IL diagnostics, actual native execution and complete
 native/managed case parity can qualify a corrected cell. The shared native

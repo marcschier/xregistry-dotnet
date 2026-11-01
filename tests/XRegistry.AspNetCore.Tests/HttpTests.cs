@@ -602,13 +602,15 @@ public class HttpTests
         {
             if (context.Request.Method == "PUT")
             {
-                started.TrySetResult();
                 context.RequestAborted.Register(() => aborted.TrySetResult());
+                started.TrySetResult();
             }
-        }, completed: context =>
+        }, completedAsync: async context =>
         {
             if (context.Request.Method == "PUT")
             {
+                // Kestrel can retire the cancellation token when the application pipeline returns.
+                await aborted.Task.WaitAsync(TimeSpan.FromSeconds(5));
                 completed.TrySetResult();
             }
         });
@@ -618,7 +620,9 @@ public class HttpTests
             await socket.GetStream().WriteAsync(Encoding.ASCII.GetBytes(
                 "PUT /teams/g/files/f HTTP/1.1\r\nHost: localhost\r\nContent-Length: 10\r\nConnection: close\r\n\r\nx"));
             await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            socket.Client.Shutdown(SocketShutdown.Send);
+            // A send half-close permits a response; reset the connection to simulate disconnection.
+            socket.Client.LingerState = new LingerOption(true, 0);
+            socket.Client.Close();
             await aborted.Task.WaitAsync(TimeSpan.FromSeconds(5));
             await completed.Task.WaitAsync(TimeSpan.FromSeconds(10));
         }
@@ -736,7 +740,7 @@ public class HttpTests
             Action<HttpContext>? completed = null, RegistryModel? model = null, IRegistryResourceValidator? resourceValidator = null,
             bool allowCapabilityUpdates = false, IRegistryDocumentReferencePolicy? documentReferencePolicy = null,
             string pathBase = "", IRegistryHostBackend? hostBackend = null, Action<HttpContext>? started = null,
-            PublicationOpenedSnapshot? publicationSnapshot = null)
+            PublicationOpenedSnapshot? publicationSnapshot = null, Func<HttpContext, Task>? completedAsync = null)
         {
             var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { EnvironmentName = "Development", Args = [] });
             builder.Logging.ClearProviders();
@@ -754,7 +758,7 @@ public class HttpTests
                     await next(context);
                 });
             }
-            if (completed is not null)
+            if (completed is not null || completedAsync is not null)
             {
                 application.Use(async (context, next) =>
                 {
@@ -764,7 +768,11 @@ public class HttpTests
                     }
                     finally
                     {
-                        completed(context);
+                        completed?.Invoke(context);
+                        if (completedAsync is not null)
+                        {
+                            await completedAsync(context);
+                        }
                     }
                 });
             }

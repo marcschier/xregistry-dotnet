@@ -338,6 +338,10 @@ public static class RegistryEndpointRouteBuilderExtensions
                 await WriteProblemAsync(http, new(exception.StatusCode == StatusCodes.Status413PayloadTooLarge ? "request_too_large" : "bad_request",
                     path?.EscapedPath ?? "/", "The HTTP request body could not be read."), route).ConfigureAwait(false);
             }
+            catch (Microsoft.AspNetCore.Connections.ConnectionResetException)
+            {
+                http.Abort();
+            }
             catch (IOException exception)
             {
                 LogFailure(http, exception);
