@@ -1224,11 +1224,13 @@ public class XmlSchemaValidationTests
     }
 
     [Test]
-    public async Task StandaloneSchemaFragmentLocationsRemainExplicitlyUnsupported()
+    [Arguments("")]
+    [Arguments("xpointer(//xs:schema)")]
+    public async Task UnsupportedStandaloneSchemaFragmentsRejectBeforeAcquisition(string fragment)
     {
         var calls = 0;
-        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes("""
-            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:include schemaLocation="part.xml#schema"/></xs:schema>
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes($"""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:include schemaLocation="part.xml#{fragment}"/></xs:schema>
             """), new()
         {
             DocumentUri = new Uri("https://schemas.test/root.xsd"),
@@ -1237,6 +1239,378 @@ public class XmlSchemaValidationTests
         await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Unsupported);
         await Assert.That(result.Diagnostics[0].Code).IsEqualTo("xsd.schema_fragment");
         await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("schema")]
+    [Arguments("%73chema")]
+    [Arguments("element(schema)")]
+    [Arguments("element(/1/2)")]
+    [Arguments("element(missing)element(schema)")]
+    [Arguments("element(/2)element(/1/2)")]
+    [Arguments("element(/1/999999999999999999999)element(schema)")]
+    [Arguments("unknown(data)element(schema)")]
+    [Arguments("element(/01)element(schema)")]
+    public async Task StandaloneSchemaFragmentsSelectCapturedSchemaObjects(string fragment)
+    {
+        var root = Encoding.UTF8.GetBytes($"""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:include schemaLocation="part.xml#{fragment}"/>
+              <xs:element name="name" type="Name"/>
+            </xs:schema>
+            """);
+        var container = Encoding.UTF8.GetBytes("""
+            <container xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <unrelated/><xs:schema id="schema">
+                <xs:simpleType name="Name"><xs:restriction base="xs:string"/></xs:simpleType>
+              </xs:schema>
+            </container>
+            """);
+        var calls = new List<string>();
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", root, new()
+        {
+            DocumentUri = new("https://schemas.test/root.xsd"),
+            MaxReferences = 1,
+            MaxTotalBytes = root.Length + container.Length,
+            ResolveReference = (reference, _) =>
+            {
+                calls.Add(reference);
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(container);
+            }
+        });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+        await Assert.That(calls.SequenceEqual(["https://schemas.test/part.xml"])).IsTrue();
+    }
+
+    [Test]
+    [Arguments("missing", DocumentValidationStatus.Indeterminate, "reference.unresolved")]
+    [Arguments("element(/1/99)", DocumentValidationStatus.Indeterminate, "reference.unresolved")]
+    [Arguments("wrong", DocumentValidationStatus.Invalid, "xsd.root")]
+    [Arguments("duplicate", DocumentValidationStatus.Invalid, "xsd.schema_fragment_duplicate")]
+    public async Task StandaloneSchemaFragmentsDiagnoseMissingWrongKindAndDuplicateTargets(
+        string fragment, DocumentValidationStatus status, string code)
+    {
+        var calls = 0;
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes($"""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:include schemaLocation="part.xml#{fragment}"/>
+            </xs:schema>
+            """), new()
+        {
+            ResolveReference = (reference, _) =>
+            {
+                calls++;
+                if (reference != "part.xml") { throw new InvalidOperationException("Unexpected retrieval identity."); }
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes("""
+                    <container xmlns:xs="http://www.w3.org/2001/XMLSchema">
+                      <wrong xml:id="wrong"/><xs:schema id="duplicate"/><xs:schema xml:id="duplicate"/>
+                    </container>
+                    """));
+            }
+        });
+        await Assert.That(result.Status).IsEqualTo(status);
+        await Assert.That(result.Diagnostics.Single().Code).IsEqualTo(code);
+        await Assert.That(calls).IsEqualTo(1);
+    }
+
+    [Test]
+    [Arguments("element(schema")]
+    [Arguments("element(schema)^")]
+    [Arguments("element(^x)")]
+    [Arguments("invalid:name(schema) trailing")]
+    [Arguments("element(schema)%GG")]
+    [Arguments("schema#other")]
+    public async Task MalformedStandaloneSchemaFragmentsNeverAcquireDocuments(string fragment)
+    {
+        var calls = 0;
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes($"""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:include schemaLocation="part.xml#{fragment}"/>
+            </xs:schema>
+            """), new()
+        {
+            ResolveReference = (_, _) => { calls++; throw new UnauthorizedAccessException(); }
+        });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(1);
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task MultipleStandaloneSchemaFragmentsReuseContainerBytesAndSelectedSchemaIdentity()
+    {
+        var root = Encoding.UTF8.GetBytes("""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:include schemaLocation="part.xml#first"/>
+              <xs:include schemaLocation="part.xml#element(/1/1)"/>
+              <xs:include schemaLocation="part.xml#second"/>
+              <xs:element name="first" type="First"/><xs:element name="second" type="Second"/>
+            </xs:schema>
+            """);
+        var container = Encoding.UTF8.GetBytes("""
+            <container xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:schema id="first"><xs:simpleType name="First"><xs:restriction base="xs:string"/></xs:simpleType></xs:schema>
+              <xs:schema xml:id="second"><xs:simpleType name="Second"><xs:restriction base="xs:integer"/></xs:simpleType></xs:schema>
+            </container>
+            """);
+        var calls = 0;
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", root, new()
+        {
+            MaxReferences = 1,
+            MaxTotalBytes = root.Length + container.Length,
+            ResolveReference = (_, _) =>
+            {
+                calls++;
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(container);
+            }
+        });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(calls).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task StandaloneSchemaFragmentDependenciesKeepInheritedXmlBaseAndQNameNamespaces()
+    {
+        var calls = new List<string>();
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes("""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:person">
+              <xs:import namespace="urn:person" schemaLocation="parts.xml#schema"/>
+              <xs:element name="person" type="p:Person"/>
+            </xs:schema>
+            """), new()
+        {
+            DocumentUri = new("https://schemas.test/root.xsd"),
+            ResolveReference = (reference, _) =>
+            {
+                calls.Add(reference);
+                ReadOnlyMemory<byte>? supplied = reference switch
+                {
+                    "https://schemas.test/parts.xml" => Encoding.UTF8.GetBytes("""
+                        <container xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="urn:wrong" xml:base="nested/">
+                          <wrapper xmlns:t="urn:person"><xs:schema id="schema" targetNamespace="urn:person">
+                            <xs:include xml:base="types/" schemaLocation="name.xsd"/>
+                            <xs:complexType name="Person"><xs:sequence><xs:element name="name" type="t:Name"/></xs:sequence></xs:complexType>
+                          </xs:schema></wrapper>
+                        </container>
+                        """),
+                    "https://schemas.test/nested/types/name.xsd" => Encoding.UTF8.GetBytes("""
+                        <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:person">
+                          <xs:simpleType name="Name"><xs:restriction base="xs:string"/></xs:simpleType>
+                        </xs:schema>
+                        """),
+                    _ => null
+                };
+                return ValueTask.FromResult(supplied);
+            }
+        });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(calls.SequenceEqual(["https://schemas.test/parts.xml",
+            "https://schemas.test/nested/types/name.xsd"])).IsTrue();
+    }
+
+    [Test]
+    public async Task FragmentOnlySchemaDependenciesReuseTheContainingCapturedDocumentWithoutAnOrigin()
+    {
+        var container = Encoding.UTF8.GetBytes("""
+            <container xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:schema xml:id="first"><xs:include schemaLocation="#second"/>
+                <xs:element name="value" type="Value"/>
+              </xs:schema>
+              <xs:schema id="second"><xs:include schemaLocation="#element(first)"/>
+                <xs:simpleType name="Value"><xs:restriction base="xs:string"/></xs:simpleType>
+              </xs:schema>
+            </container>
+            """);
+        var calls = 0;
+        var root = Encoding.UTF8.GetBytes("""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:include schemaLocation="part.xml#first"/></xs:schema>
+            """);
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", root, new()
+        {
+            MaxReferences = 1,
+            MaxTotalBytes = root.Length + container.Length,
+            ResolveReference = (_, _) =>
+            {
+                calls++;
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(container);
+            }
+        });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(calls).IsEqualTo(1);
+    }
+
+    [Test]
+    [Arguments(0, DocumentValidationStatus.Indeterminate)]
+    [Arguments(1, DocumentValidationStatus.Valid)]
+    [Arguments(2, DocumentValidationStatus.Valid)]
+    public async Task StandaloneSchemaFragmentsChargeTheCompleteContainerAtTheByteBoundary(
+        int extraBytes, DocumentValidationStatus status)
+    {
+        var root = Encoding.UTF8.GetBytes("""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:include schemaLocation="part.xml#schema"/></xs:schema>
+            """);
+        var container = Encoding.UTF8.GetBytes("""
+            <container xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <unrelated>This text is not selected, but its bytes remain charged.</unrelated>
+              <xs:schema id="schema"/>
+            </container>
+            """);
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", root, new()
+        {
+            MaxTotalBytes = root.Length + container.Length - 1 + extraBytes,
+            ResolveReference = (_, _) => ValueTask.FromResult<ReadOnlyMemory<byte>?>(container)
+        });
+        await Assert.That(result.Status).IsEqualTo(status);
+        if (extraBytes == 0) { await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("limit.total_bytes"); }
+        else { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+    }
+
+    [Test]
+    public async Task StandaloneRootDocumentFragmentSelectsWithoutRetrievingItsAlreadyCapturedBytes()
+    {
+        var calls = 0;
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes("""
+            <container xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:schema id="schema">
+                <xs:include schemaLocation="#element(schema)"/>
+                <xs:element name="value" type="xs:string"/>
+              </xs:schema>
+              <xs:schema><xs:element name="invalid" type="Missing"/></xs:schema>
+            </container>
+            """), new()
+        {
+            DocumentUri = new("https://schemas.test/part.xml#schema"),
+            MaxReferences = 0,
+            ResolveReference = (_, _) => { calls++; throw new UnauthorizedAccessException(); }
+        });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(false, DocumentValidationStatus.Valid)]
+    [Arguments(true, DocumentValidationStatus.Invalid)]
+    public async Task StandaloneSchemaFragmentsCompileOnlyTheirSelectedDeclarationGraph(
+        bool selectInvalid, DocumentValidationStatus status)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes($"""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:include schemaLocation="part.xml#{(selectInvalid ? "invalid" : "valid")}"/>
+            </xs:schema>
+            """), new()
+        {
+            ResolveReference = (_, _) => ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes("""
+                <container xmlns:xs="http://www.w3.org/2001/XMLSchema">
+                  <xs:schema id="valid"><xs:element name="value" type="xs:string"/></xs:schema>
+                  <xs:schema id="invalid"><xs:element name="value" type="Missing"/></xs:schema>
+                </container>
+                """))
+        });
+        await Assert.That(result.Status).IsEqualTo(status);
+        if (selectInvalid) { await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("xsd.schema"); }
+        else { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+    }
+
+    [Test]
+    [Arguments(0, "limit.references")]
+    [Arguments(1, "reference.unresolved")]
+    public async Task UnavailableStandaloneSchemaFragmentDocumentsRemainUnresolvedOrReferenceLimited(
+        int maxReferences, string code)
+    {
+        var calls = 0;
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes("""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:include schemaLocation="part.xml#schema"/></xs:schema>
+            """), new()
+        {
+            MaxReferences = maxReferences,
+            ResolveReference = (_, _) =>
+            {
+                calls++;
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(null);
+            }
+        });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Indeterminate);
+        await Assert.That(result.Diagnostics.Single().Code).IsEqualTo(code);
+        await Assert.That(calls).IsEqualTo(maxReferences);
+    }
+
+    [Test]
+    public async Task StandaloneSchemaFragmentAcquisitionPropagatesCallerDenial()
+    {
+        var calls = 0;
+        await Assert.That(async () => await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0",
+            Encoding.UTF8.GetBytes("""
+                <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:include schemaLocation="part.xml#schema"/></xs:schema>
+                """), new()
+            {
+                ResolveReference = (reference, _) =>
+                {
+                    calls++;
+                    if (reference != "part.xml") { throw new InvalidOperationException("Unexpected retrieval identity."); }
+                    throw new UnauthorizedAccessException("Caller denied the captured container.");
+                }
+            })).Throws<UnauthorizedAccessException>();
+        await Assert.That(calls).IsEqualTo(1);
+    }
+
+    [Test]
+    [Arguments(25, DocumentValidationStatus.Indeterminate)]
+    [Arguments(26, DocumentValidationStatus.Valid)]
+    [Arguments(27, DocumentValidationStatus.Valid)]
+    public async Task UnselectedContainerElementsStillConsumeTheCumulativeNodeBudget(
+        int maxNodes, DocumentValidationStatus status)
+    {
+        var calls = 0;
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes("""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:include schemaLocation="part.xml#schema"/></xs:schema>
+            """), new()
+        {
+            MaxNodes = maxNodes,
+            ResolveReference = (_, _) =>
+            {
+                calls++;
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes("""
+                    <container xmlns:xs="http://www.w3.org/2001/XMLSchema">
+                      <a/><a/><a/><a/><a/><a/><a/><a/><a/><a/><a/><a/><a/><a/><a/><a/>
+                      <xs:schema id="schema"/>
+                    </container>
+                    """));
+            }
+        });
+        await Assert.That(result.Status).IsEqualTo(status);
+        if (status == DocumentValidationStatus.Indeterminate)
+        {
+            await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("limit.nodes");
+        }
+        else { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+        await Assert.That(calls).IsEqualTo(1);
+    }
+
+    [Test]
+    [Arguments("""
+        <!DOCTYPE container [<!ENTITY payload "unsafe">]>
+        <container xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:schema id="schema"/></container>
+        """, DocumentValidationStatus.Invalid)]
+    [Arguments("""
+        <container xmlns:xs="http://www.w3.org/2001/XMLSchema">
+          <unrelated><a><b><c><d><e/></d></c></b></a></unrelated><xs:schema id="schema"/>
+        </container>
+        """, DocumentValidationStatus.Indeterminate)]
+    public async Task StandaloneSchemaFragmentContainersCannotBypassDtdOrNestingPolicy(
+        string container, DocumentValidationStatus status)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes("""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:include schemaLocation="part.xml#schema"/></xs:schema>
+            """), new()
+        {
+            MaxDepth = 5,
+            ResolveReference = (_, _) => ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes(container))
+        });
+        await Assert.That(result.Status).IsEqualTo(status);
+        await Assert.That(result.Diagnostics.Single().Code).IsEqualTo(
+            status == DocumentValidationStatus.Invalid ? "xml.syntax" : "limit.depth");
     }
 
     [Test]

@@ -13,6 +13,8 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
 {
     private const string Namespace = "http://www.w3.org/2001/XMLSchema";
     private readonly Dictionary<(string Reference, bool Catalog), XmlSchema> _schemas = [];
+    private readonly Dictionary<(string Reference, bool Catalog), XElement> _containers = [];
+    private readonly Dictionary<(XElement Root, bool Catalog), XmlSchema> _selectedSchemas = [];
     private readonly Dictionary<XmlSchema, List<XmlSchema>> _dependencies = [];
     private long _elements;
     private long _occurrenceCost = 1;
@@ -105,16 +107,41 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
     private async ValueTask<XmlSchema> LoadAsync(ReadOnlyMemory<byte> bytes, string uri, int depth, bool catalogOrigin = false)
     {
         context.Node(depth);
-        context.Bytes(bytes.Length, "$");
-        Preflight(bytes);
-        using var stream = new MemoryStream(bytes.ToArray(), false);
-        using var reader = XmlReader.Create(stream, Settings());
-        context.Work(bytes.Length);
-        var root = XDocument.Load(reader, LoadOptions.SetLineInfo).Root!;
-        using var schemaReader = root.CreateReader();
+        var separator = catalogOrigin ? -1 : uri.IndexOf('#');
+        var documentUri = separator < 0 ? uri : uri[..separator];
+        var pointer = separator < 0 ? null : XmlSchemaFragment.Parse(
+            Uri.UnescapeDataString(uri[(separator + 1)..]), context, "$", "xsd.schema_fragment");
+        var preflighted = false;
+        if (!_containers.TryGetValue((documentUri, catalogOrigin), out var container))
+        {
+            context.Bytes(bytes.Length, "$");
+            if (pointer is null) { Preflight(bytes); preflighted = true; }
+            else { PreflightContainer(bytes); }
+            using var stream = new MemoryStream(bytes.ToArray(), false);
+            using var reader = XmlReader.Create(stream, Settings());
+            context.Work(bytes.Length);
+            container = XDocument.Load(reader, LoadOptions.SetLineInfo).Root!;
+            _containers.Add((documentUri, catalogOrigin), container);
+        }
+        var root = pointer is null ? container : XmlSchemaFragment.Select(
+            container, pointer, context, "$", "xsd.schema_fragment_duplicate");
+        if (_selectedSchemas.TryGetValue((root, catalogOrigin), out var existing))
+        {
+            _schemas.Add((uri, catalogOrigin), existing);
+            return existing;
+        }
+        var copy = pointer is null ? root : NamespaceComplete(root);
+        if (!preflighted)
+        {
+            var selectedBytes = Encoding.UTF8.GetBytes(copy.ToString(SaveOptions.DisableFormatting));
+            context.Work(selectedBytes.Length);
+            Preflight(selectedBytes, prepaid: true);
+        }
+        using var schemaReader = copy.CreateReader();
         var schema = XmlSchema.Read(schemaReader, OnValidation);
         ValidationContext.Require(schema is not null, "$", "xsd.schema", "An XML Schema document is required.");
         _schemas.Add((uri, catalogOrigin), schema);
+        _selectedSchemas.Add((root, catalogOrigin), schema);
         var targets = new List<XmlSchema>();
         _dependencies.Add(schema, targets);
         var declarations = root.Elements().Where(element => element.Name == XName.Get("import", Namespace) ||
@@ -138,10 +165,13 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
                 ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$", "reference.unresolved",
                     "An XML Schema import has no explicit location or namespace registration.");
             }
-            var key = catalog ? reference : DependencyUri(declarations[index], reference, catalogOrigin ? "" : uri);
+            var key = catalog ? reference : DependencyUri(declarations[index], reference, catalogOrigin ? "" : documentUri);
             if (!_schemas.TryGetValue((key, catalog), out var dependency))
             {
-                var supplied = await context.ResolveAsync(key, "$").ConfigureAwait(false);
+                var fragment = catalog ? -1 : key.IndexOf('#');
+                var retrieval = fragment < 0 ? key : key[..fragment];
+                var supplied = _containers.ContainsKey((retrieval, catalog)) ? ReadOnlyMemory<byte>.Empty :
+                    await context.ResolveAsync(retrieval, "$").ConfigureAwait(false);
                 dependency = await LoadAsync(supplied, key, depth + 1, catalog).ConfigureAwait(false);
             }
             external.Schema = dependency;
@@ -152,11 +182,6 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
 
     private string DependencyUri(XElement declaration, string reference, string origin)
     {
-        if (reference.Contains('#', StringComparison.Ordinal))
-        {
-            ValidationContext.Fail(DocumentValidationStatus.Unsupported, "$", "xsd.schema_fragment",
-                "Standalone XSD validation does not select embedded schemas through location fragments.");
-        }
         Uri.TryCreate(origin, UriKind.Absolute, out var baseUri);
         foreach (var element in declaration.AncestorsAndSelf().Reverse())
         {
@@ -171,22 +196,35 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
                 }
             }
         }
-        return Resolve(reference, baseUri);
+        return Resolve(reference, baseUri, allowFragment: true);
 
-        string Resolve(string value, Uri? relativeTo)
+        string Resolve(string value, Uri? relativeTo, bool allowFragment = false)
         {
             context.Work(value.Length + 1L);
+            var separator = value.IndexOf('#');
+            var documentPart = allowFragment && separator >= 0 ? value[..separator] : value;
+            if (allowFragment && separator >= 0)
+            {
+                var fragment = value[(separator + 1)..];
+                ValidationContext.Require(Uri.IsWellFormedUriString("urn:schema-fragment#" + fragment, UriKind.Absolute),
+                    "$", "dependency.uri", "A schema fragment must be well-formed URI-fragment data.");
+                _ = XmlSchemaFragment.Parse(Uri.UnescapeDataString(fragment), context, "$", "xsd.schema_fragment");
+            }
             ValidationContext.Require(!value.Any(character => char.IsWhiteSpace(character) || char.IsControl(character)) &&
                 !value.Contains('\\', StringComparison.Ordinal) &&
-                !value.Contains('#', StringComparison.Ordinal) &&
-                Uri.IsWellFormedUriString(value, UriKind.RelativeOrAbsolute),
-                "$", "dependency.uri", "A schema retrieval location must be a well-formed, fragment-free URI reference.");
+                (allowFragment || separator < 0) &&
+                (documentPart.Length == 0 || Uri.IsWellFormedUriString(documentPart, UriKind.RelativeOrAbsolute)),
+                "$", "dependency.uri", "A schema location must be a well-formed URI reference.");
             if (!value.StartsWith('/') && Uri.TryCreate(value, UriKind.Absolute, out var absolute))
             {
                 return absolute.AbsoluteUri;
             }
             if (relativeTo is null)
             {
+                if (allowFragment && separator >= 0 && documentPart.Length == 0)
+                {
+                    return origin + value;
+                }
                 if (value.StartsWith('/'))
                 {
                     ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$", "dependency.base",
@@ -198,6 +236,37 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
                 "The schema dependency URI cannot be resolved against its containing base.");
             return resolved.AbsoluteUri;
         }
+    }
+
+    private void PreflightContainer(ReadOnlyMemory<byte> bytes)
+    {
+        using var stream = new MemoryStream(bytes.ToArray(), false);
+        using var reader = XmlReader.Create(stream, Settings());
+        while (reader.Read())
+        {
+            context.Work();
+            if (reader.NodeType != XmlNodeType.Element) { continue; }
+            context.Node(reader.Depth + 1);
+            for (var index = 0; index < reader.AttributeCount; index++) { context.Node(reader.Depth + 2); }
+        }
+    }
+
+    private XElement NamespaceComplete(XElement root)
+    {
+        var copy = new XElement(root);
+        var seen = new HashSet<XName>();
+        foreach (var element in root.AncestorsAndSelf())
+        {
+            foreach (var attribute in element.Attributes())
+            {
+                context.Work();
+                if (attribute.IsNamespaceDeclaration && seen.Add(attribute.Name))
+                {
+                    copy.SetAttributeValue(attribute.Name, attribute.Value);
+                }
+            }
+        }
+        return copy;
     }
 
     private void CheckDependencyDepth(XmlSchema schema, HashSet<XmlSchema> path, int depth)

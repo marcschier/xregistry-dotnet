@@ -41,7 +41,14 @@ containing schema's retrieval URI and inherited XML base. Namespace catalogs
 do not supply retrieval origins; named-reference lookup remains available when
 no origin or XML base is supplied. Shared/circular schemas reuse acquired bytes,
 and cached chains still undergo the complete graph-depth check. Standalone
-location fragments remain unsupported. See [the validation policy](validation.md).
+location fragments now select captured schemas by XML ID or XPointer
+`element()` parts, sharing the WSDL pointer rules. Callbacks receive fragment-free
+Document references; multiple fragments share acquired bytes and pointers to the
+same element share one schema object. Selected schemas retain inherited QName
+namespaces and XML base. Containers remain subject to the complete byte, node
+and nesting budgets, including unselected content, while compilation checks
+only the selected declaration graph. Empty fragments and unsupported schemes
+remain unchecked. See [the validation policy](validation.md).
 
 The shared bounded XSD compiler accepts `xs:all` with native optional/required
 element and group-placement checks. WSDL selection retains those declarations

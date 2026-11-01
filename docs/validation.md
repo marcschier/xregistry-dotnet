@@ -15,7 +15,7 @@ successful validation.
 | gRPC | `gRPC/proto3` uses the Proto3 policy and requires at least one service declared in the supplied root document. Imported source uses its declared syntax. Descriptor sets are unsupported. Source-method selection is available separately through `ApiOperationDocumentResolver`. |
 | JSON Structure | Draft-04 Core document/type/namespace/reference/union/compound grammar and bounded primitive restrictions. Required extensions, inheritance and unqualified extended primitive const/enum rules are unsupported. |
 
-Standalone XSD imports and includes use only `DocumentValidationOptions.ResolveReference`.
+Standalone XSD imports, includes and redefinitions use only `DocumentValidationOptions.ResolveReference`.
 Each location resolves against the retrieved containing schema's URI and
 inherited `xml:base`, including a base on the dependency declaration itself.
 Rooted and network-path locations require an absolute base; they never become
@@ -26,8 +26,22 @@ establish that origin.
 
 Locationless imports use the namespace as an explicit catalog key, not a
 retrieval origin for the catalog's relative dependencies. Malformed retrieval
-spellings fail before callback dispatch. Standalone schema-location fragments
-remain `Unsupported`; this validator does not borrow the WSDL fragment selector.
+spellings fail before callback dispatch. Schema-location fragments select
+captured schema elements by XML ID shorthand or XPointer `element()` parts,
+using the same pointer grammar as WSDL. The callback receives only the
+fragment-free Document reference. Multiple fragments share captured bytes;
+different pointers selecting the same element share one compiled schema object.
+The selected schema retains inherited QName namespaces and XML base for its
+dependencies. A fragment-only location reuses its containing captured Document
+unless XML base resolves it elsewhere. A fragment in `DocumentUri` can also
+select the root schema from already supplied container bytes.
+
+Every container remains subject to byte, node and nesting limits, including
+unselected content, before schema selection. The compiler checks only the
+selected declaration graph; it does not validate unrelated schemas in the
+container. Missing targets remain unresolved, duplicate IDs and non-schema
+targets are invalid, and malformed pointers fail before acquisition. Empty
+fragments and pointers containing only unsupported schemes remain `Unsupported`.
 Shared and circular dependencies reuse parsed schemas and input-byte charges.
 The completed graph is depth-checked before native schema compilation, so
 acquiring shorter paths first cannot hide a longer cached chain. XML parsing,
