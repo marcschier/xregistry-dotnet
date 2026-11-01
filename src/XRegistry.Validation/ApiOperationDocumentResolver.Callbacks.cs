@@ -30,6 +30,9 @@ public static partial class ApiOperationDocumentResolver
         var nameFailure = ValidateHttpSecurityNames(location.Operation, location.Pointer,
             references.Root.Root, !includeCallbacks, cancellationToken);
         if (nameFailure is not null) { return nameFailure; }
+        var securityFailure = await ValidateEffectiveHttpSecurityAsync(location.Operation, location.Pointer,
+            references, cancellationToken).ConfigureAwait(false);
+        if (securityFailure is not null) { return securityFailure; }
         if (!includeCallbacks)
         {
             var transportFailure = ValidateSwaggerTransportDeclarations(location.Operation, location.Pointer, cancellationToken);
@@ -256,7 +259,13 @@ public static partial class ApiOperationDocumentResolver
         string format, CancellationToken cancellationToken)
     {
         var swagger = format == "Swagger/2.0";
-        if (!swagger && scheme.TryGetProperty("$ref", out _)) { return null; }
+        if (!swagger && scheme.TryGetProperty("$ref", out _))
+        {
+            var referenceFailure = ValidateSecurityString(scheme, "$ref", pointer, required: true);
+            if (referenceFailure is not null || format != "OpenAPI/3.1") { return referenceFailure; }
+            return ValidateSecurityString(scheme, "summary", pointer, required: false) ??
+                ValidateSecurityString(scheme, "description", pointer, required: false);
+        }
         var failure = ValidateSecurityString(scheme, "type", pointer, required: true);
         if (failure is not null) { return failure; }
         var type = scheme.GetProperty("type").GetString()!;
@@ -387,6 +396,71 @@ public static partial class ApiOperationDocumentResolver
                         "A Security Requirement name must identify a scheme declaration in the entry document.",
                         pointer + "/security/" + index.ToString(System.Globalization.CultureInfo.InvariantCulture) +
                         "/" + Escape(scheme.Name));
+                }
+            }
+            index++;
+        }
+        return null;
+    }
+
+    private static async ValueTask<ApiOperationResolutionResult?> ValidateEffectiveHttpSecurityAsync(
+        JsonElement value, string pointer, ReferenceContext references, CancellationToken cancellationToken)
+    {
+        if (!value.TryGetProperty("security", out var requirements)) { return null; }
+        var swagger = references.Format == "Swagger/2.0";
+        var entry = references.Root.Root;
+        var schemes = swagger ? entry.TryGetProperty("securityDefinitions", out var definitions) ? definitions : default
+            : entry.TryGetProperty("components", out var components) &&
+                components.TryGetProperty("securitySchemes", out var declarations) ? declarations : default;
+        var index = 0;
+        foreach (var requirement in requirements.EnumerateArray())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var name in requirement.EnumerateObject())
+            {
+                references.Work(pointer);
+                var scheme = schemes.GetProperty(name.Name);
+                var source = references.Root;
+                var schemePointer = (swagger ? "$/securityDefinitions/" : "$/components/securitySchemes/") + Escape(name.Name);
+                var active = new HashSet<string>(StringComparer.Ordinal);
+                while (true)
+                {
+                    references.Work(schemePointer);
+                    if (scheme.ValueKind != JsonValueKind.Object)
+                    {
+                        return InvalidSecurityScheme("A referenced security scheme must be an object.", schemePointer);
+                    }
+                    if (swagger || !scheme.TryGetProperty("$ref", out var reference)) { break; }
+                    var referenceFailure = ValidateHttpSecurityScheme(scheme, schemePointer, references.Format, cancellationToken);
+                    if (referenceFailure is not null) { return referenceFailure; }
+                    if (!active.Add(source.Identity + "#" + schemePointer))
+                    {
+                        return Failure(ApiOperationResolutionStatus.Indeterminate, "dependency.cycle",
+                            "A security scheme reference cycle prevents operation selection.", schemePointer + "/$ref");
+                    }
+                    if (active.Count > Capabilities.MaxReferenceDepth)
+                    {
+                        return Failure(ApiOperationResolutionStatus.Indeterminate, "limit.reference_depth",
+                            "The security scheme reference-chain depth limit was exceeded.", schemePointer + "/$ref");
+                    }
+                    var target = await references.ResolveAsync(source, reference.GetString()!, schemePointer + "/$ref",
+                        cancellationToken).ConfigureAwait(false);
+                    if (target.Failure is not null) { return target.Failure; }
+                    var resolved = target.Target!;
+                    scheme = resolved.Value;
+                    source = resolved.Document;
+                    schemePointer = resolved.Pointer;
+                }
+                var failure = ValidateHttpSecurityScheme(scheme, schemePointer, references.Format, cancellationToken);
+                if (failure is not null) { return failure; }
+                var type = scheme.GetProperty("type").GetString();
+                if (references.Format != "OpenAPI/3.1" && type is not ("oauth2" or "openIdConnect") &&
+                    name.Value.GetArrayLength() != 0)
+                {
+                    return Failure(ApiOperationResolutionStatus.Invalid, "document.security_scopes",
+                        "A non-OAuth Security Requirement must have an empty array in the selected API format.",
+                        pointer + "/security/" + index.ToString(System.Globalization.CultureInfo.InvariantCulture) +
+                        "/" + Escape(name.Name));
                 }
             }
             index++;

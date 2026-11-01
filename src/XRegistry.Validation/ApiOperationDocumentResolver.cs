@@ -383,10 +383,6 @@ public static partial class ApiOperationDocumentResolver
                 return version;
             }
 
-            if (reference.Selector.Kind == ApiOperationSelectorKind.JsonPointer)
-            {
-                return ResolvePointer(format, root, reference.Selector.Tokens, cancellationToken);
-            }
             if (format == "AvroProtocol/1.12.0")
             {
                 var selection = ResolveAvroMessage(root, reference.Selector.Tokens[^1], documentUri, cancellationToken);
@@ -409,7 +405,7 @@ public static partial class ApiOperationDocumentResolver
                 }
                 return selection;
             }
-            using var references = new ReferenceContext(parsed, documentUri, resolveReference, budget);
+            using var references = new ReferenceContext(parsed, documentUri, resolveReference, budget, format);
             if (format == "OpenRPC/1.4")
             {
                 try
@@ -427,6 +423,14 @@ public static partial class ApiOperationDocumentResolver
             }
             try
             {
+                var securityFailure = await ValidateEffectiveHttpSecurityAsync(root, "$", references,
+                    cancellationToken).ConfigureAwait(false);
+                if (securityFailure is not null) { return securityFailure; }
+                if (reference.Selector.Kind == ApiOperationSelectorKind.JsonPointer)
+                {
+                    return await ResolvePointerAsync(format, root, reference.Selector.Tokens, references,
+                        cancellationToken).ConfigureAwait(false);
+                }
                 return await ResolveOperationIdAsync(format, root, reference.Selector.Tokens[^1], references,
                     budget, cancellationToken).ConfigureAwait(false);
             }
@@ -993,8 +997,8 @@ public static partial class ApiOperationDocumentResolver
         return inherited;
     }
 
-    private static ApiOperationResolutionResult ResolvePointer(string format, JsonElement root, IReadOnlyList<string> tokens,
-        CancellationToken cancellationToken)
+    private static async ValueTask<ApiOperationResolutionResult> ResolvePointerAsync(string format, JsonElement root,
+        IReadOnlyList<string> tokens, ReferenceContext references, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var methodStart = 2;
@@ -1080,6 +1084,9 @@ public static partial class ApiOperationDocumentResolver
             var securityNameFailure = ValidateHttpSecurityNames(operation, pathPointer, root,
                 format == "Swagger/2.0", cancellationToken);
             if (securityNameFailure is not null) { return securityNameFailure; }
+            var securityFailure = await ValidateEffectiveHttpSecurityAsync(operation, pathPointer, references,
+                cancellationToken).ConfigureAwait(false);
+            if (securityFailure is not null) { return securityFailure; }
             if (format == "Swagger/2.0")
             {
                 var transportFailure = ValidateSwaggerTransportDeclarations(operation, pathPointer, cancellationToken);
@@ -1175,8 +1182,9 @@ public static partial class ApiOperationDocumentResolver
         private int _externalDocumentCount;
 
         internal ReferenceContext(JsonDocument root, Uri? rootUri,
-            ApiOperationDocumentDependencyResolver? resolver, ValidationContext budget)
+            ApiOperationDocumentDependencyResolver? resolver, ValidationContext budget, string format)
         {
+            Format = format;
             var uri = WithoutFragment(rootUri);
             Root = new(root, uri, uri?.AbsoluteUri ?? "$root", true);
             if (uri is not null)
@@ -1188,6 +1196,8 @@ public static partial class ApiOperationDocumentResolver
         }
 
         internal ReferencedDocument Root { get; }
+        internal string Format { get; }
+        internal void Work(string path) => _budget.Work(path: path);
 
         internal async ValueTask<ReferenceTargetResolution> ResolveAsync(ReferencedDocument source,
             string reference, string path, CancellationToken cancellationToken)

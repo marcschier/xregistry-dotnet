@@ -609,9 +609,8 @@ retrieved from another document; a same-named declaration in that retrieved
 document cannot supply a missing entry declaration. Names remain case-sensitive.
 Missing names report `Invalid` at the requirement property without acquiring
 scheme references. Declared reference objects are not dereferenced by this name
-check, and unused declarations remain inactive. This does not validate effective
-referenced scheme types or OAuth scopes, apply version-specific role rules or authorize
-requests.
+check, and unused reference declarations remain inactive. Effective scheme
+validation follows that name check; it does not authorize requests.
 Inline Security Scheme declarations are checked before selection, even when
 unused. Types follow the selected format: Swagger supports `basic`, `apiKey`
 and `oauth2`; OpenAPI supports `apiKey`, `http`, `oauth2` and `openIdConnect`,
@@ -626,9 +625,8 @@ Scope descriptions are strings; Swagger scopes retain opaque `x-` extensions,
 whereas OpenAPI scopes treat every key as a scope name. Empty flow and scope
 maps remain permitted. OpenAPI Reference Objects are not resolved by this
 inline check; Swagger Security Definitions do not permit a Reference Object
-in place of a Security Scheme. These checks do not qualify URL/URI syntax,
-scope membership or effective referenced schemes,
-and never retrieve discovery or OAuth addresses.
+in place of a Security Scheme. Inline checks do not qualify URL/URI syntax or
+scope membership and never retrieve discovery or OAuth addresses.
 Inline OpenAPI HTTP authentication scheme names must be nonempty RFC 7235
 tokens. The shared token check also serves callback header expressions; spaces,
 controls, non-ASCII characters and token separators are rejected without
@@ -636,6 +634,26 @@ dependency retrieval. Unknown schemes and all permitted token punctuation
 remain accepted, and authored case is not normalized. Registration and runtime
 authentication support are not checked. Swagger basic authentication does not
 inherit the OpenAPI `scheme` field.
+Security requirements at the root and each reached operation resolve their
+used OpenAPI schemes through the caller-supplied dependency resolver. This
+includes selected pointer operations and callback ancestors; pointers still do
+not traverse Path Item or Operation references. Scheme references use the
+containing document's base URI, shared document cache and existing acquisition
+policy. Unavailable targets, policy denial, malformed targets, cycles and
+reference-depth limits prevent a partial operation result. Unused scheme
+references remain inactive. Referenced schemes receive the same format-specific
+type, required-field and token checks as inline schemes; authored operations
+retain their original security arrays without inherited data or resolved
+scheme objects being copied into them.
+Scheme Reference Objects require string `$ref` values. OpenAPI 3.1 also checks
+optional string `summary` and `description`; 3.0 ignores these siblings.
+Swagger and OpenAPI 3.0 require empty requirement arrays for non-OAuth schemes.
+OpenAPI 3.1 permits non-OAuth role names, while OAuth and OpenID requirements
+retain authored scope names in both OpenAPI versions. Scheme classification
+uses the resolved target, not reference siblings. These checks do not validate
+scope membership, retrieve OAuth or discovery metadata, or enforce runtime
+authorization. URI syntax of unused references and documentation addresses
+remains outside this admission check.
 OpenAPI 3.1 operation-ID selection also searches `webhooks`, including referenced
 Path Items. Webhook names are exact strings, not slash-prefixed paths; an `x-`
 name in this map is a webhook, not a Paths specification extension. Duplicate
