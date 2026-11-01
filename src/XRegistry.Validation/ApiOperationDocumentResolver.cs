@@ -489,6 +489,14 @@ public static partial class ApiOperationDocumentResolver
                 "The root swagger value must be '2.0'.", "$/swagger");
         }
 
+        if (format.StartsWith("OpenAPI/", StringComparison.Ordinal))
+        {
+            var componentFailure = ValidateOpenApiComponentShapes(format, root, cancellationToken);
+            if (componentFailure is not null)
+            {
+                return componentFailure;
+            }
+        }
         if (format == "OpenAPI/3.1" && root.TryGetProperty("webhooks", out var webhookMap) &&
             webhookMap.ValueKind != JsonValueKind.Object)
         {
@@ -510,6 +518,56 @@ public static partial class ApiOperationDocumentResolver
         {
             return Failure(ApiOperationResolutionStatus.Invalid, "document.paths",
                 "The API document must contain a paths object.", "$/paths");
+        }
+        return null;
+    }
+
+    private static ApiOperationResolutionResult? ValidateOpenApiComponentShapes(string format, JsonElement root,
+        CancellationToken cancellationToken)
+    {
+        if (!root.TryGetProperty("components", out var components))
+        {
+            return null;
+        }
+        if (components.ValueKind != JsonValueKind.Object)
+        {
+            return Failure(ApiOperationResolutionStatus.Invalid, "document.components",
+                "OpenAPI components must be an object.", "$/components");
+        }
+        foreach (var collection in components.EnumerateObject())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (collection.Name is not ("schemas" or "responses" or "parameters" or "examples" or
+                "requestBodies" or "headers" or "securitySchemes" or "links" or "callbacks") &&
+                !(format == "OpenAPI/3.1" && collection.Name == "pathItems"))
+            {
+                continue;
+            }
+            var path = "$/components/" + collection.Name;
+            if (collection.Value.ValueKind != JsonValueKind.Object)
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid, "document.component_map",
+                    "An OpenAPI component collection must be an object.", path);
+            }
+            foreach (var entry in collection.Value.EnumerateObject())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var entryPath = path + "/" + Escape(entry.Name);
+                if (entry.Name.Length == 0 || entry.Name.Any(static c =>
+                    !char.IsAsciiLetterOrDigit(c) && c is not ('.' or '-' or '_')))
+                {
+                    return Failure(ApiOperationResolutionStatus.Invalid, "document.component_name",
+                        "An OpenAPI component name must contain only ASCII letters, digits, dots, hyphens or underscores.",
+                        entryPath);
+                }
+                if (entry.Value.ValueKind != JsonValueKind.Object &&
+                    !(format == "OpenAPI/3.1" && collection.Name == "schemas" &&
+                        entry.Value.ValueKind is JsonValueKind.True or JsonValueKind.False))
+                {
+                    return Failure(ApiOperationResolutionStatus.Invalid, "document.component_value",
+                        "An OpenAPI component must be an object; OpenAPI 3.1 schemas may also be booleans.", entryPath);
+                }
+            }
         }
         return null;
     }

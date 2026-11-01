@@ -10,6 +10,186 @@ namespace XRegistry.Validation.Tests;
 
 public class ApiOperationReferenceTests
 {
+    [Test]
+    [Arguments(-1)]
+    [Arguments(0)]
+    [Arguments(1)]
+    public async Task OpenApiUnusedComponentsConsumeTheInclusiveWholeDocumentNodeBudget(int excess)
+    {
+        foreach (var (format, version) in new[] { ("OpenAPI/3.0", "3.0.4"), ("OpenAPI/3.1", "3.1.1") })
+        {
+            var padding = string.Join(",", Enumerable.Repeat("null",
+                ApiOperationDocumentResolver.Capabilities.MaxDocumentNodes - 10 + excess));
+            var document = $$$$"""
+                {"openapi":"{{{{version}}}}","paths":{"/x":{"get":{"operationId":"Target"}}},
+                  "components":{"schemas":{"Unused":{}},"x-private":[
+                """ + padding + "]}}";
+            foreach (var selector in new[] { "operations/Target", "/paths/~1x/get" })
+            {
+                var calls = 0;
+                var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                    resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+                await Assert.That(result.Status).IsEqualTo(excess > 0
+                    ? ApiOperationResolutionStatus.Indeterminate : ApiOperationResolutionStatus.Selected);
+                await Assert.That(calls).IsEqualTo(0);
+                if (excess > 0)
+                {
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("limit.nodes");
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                }
+                else
+                {
+                    await Assert.That(result.Operation.GetRawText()).IsEqualTo("""{"operationId":"Target"}""");
+                }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiEmptyComponentMapsRemainOptional(string format, string version)
+    {
+        foreach (var components in new string?[] { null, "{}",
+            """
+            {"schemas":{},"responses":{},"parameters":{},"examples":{},"requestBodies":{},
+                "headers":{},"securitySchemes":{},"links":{},"callbacks":{}}
+            """ })
+        {
+            var document = new JsonObject
+            {
+                ["openapi"] = version,
+                ["paths"] = new JsonObject { ["/x"] = new JsonObject { ["get"] = new JsonObject { ["operationId"] = "Target" } } }
+            };
+            if (components is not null)
+            {
+                document["components"] = JsonNode.Parse(components);
+            }
+            var result = ApiOperationDocumentResolver.Resolve(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"));
+            await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+            await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("Target");
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiComponentShapesRejectBeforeOperationSelectionOrAcquisition(string format, string version)
+    {
+        var collections = new[] { "schemas", "responses", "parameters", "examples", "requestBodies",
+            "headers", "securitySchemes", "links", "callbacks" };
+        if (format == "OpenAPI/3.1")
+        {
+            collections = [.. collections, "pathItems"];
+        }
+        var invalid = new List<(JsonNode? Value, string Path, string Code)>();
+        foreach (var value in new[] { "null", "[]", "1", "true", "\"bad\"" })
+        {
+            invalid.Add((JsonNode.Parse(value), "$/components", "document.components"));
+        }
+        foreach (var collection in collections)
+        {
+            foreach (var value in new[] { "null", "[]", "1", "true", "\"bad\"" })
+            {
+                invalid.Add((new JsonObject { [collection] = JsonNode.Parse(value) },
+                    "$/components/" + collection, "document.component_map"));
+            }
+            foreach (var value in new[] { "null", "[]", "1", "\"bad\"" })
+            {
+                invalid.Add((new JsonObject { [collection] = new JsonObject { ["Valid"] = JsonNode.Parse(value) } },
+                    "$/components/" + collection + "/Valid", "document.component_value"));
+            }
+            if (collection != "schemas" || format == "OpenAPI/3.0")
+            {
+                foreach (var value in new[] { "true", "false" })
+                {
+                    invalid.Add((new JsonObject { [collection] = new JsonObject { ["Valid"] = JsonNode.Parse(value) } },
+                        "$/components/" + collection + "/Valid", "document.component_value"));
+                }
+            }
+            foreach (var name in new[] { "", "bad/~", "with space", "é", "a:b", "a\nb" })
+            {
+                invalid.Add((new JsonObject { [collection] = new JsonObject { [name] = new JsonObject() } },
+                    "$/components/" + collection + "/" + name.Replace("~", "~0").Replace("/", "~1"),
+                    "document.component_name"));
+            }
+        }
+        foreach (var (components, path, code) in invalid)
+        {
+            foreach (var selector in new[] { "operations/Target", "operations/Missing", "/paths/~1x/get" })
+            {
+                var document = new JsonObject
+                {
+                    ["openapi"] = version, ["components"] = components?.DeepClone(),
+                    ["paths"] = new JsonObject
+                    {
+                        ["/x"] = new JsonObject { ["get"] = new JsonObject { ["operationId"] = "Target" } },
+                        ["/remote"] = new JsonObject { ["$ref"] = "https://not-acquired.test/path" }
+                    }
+                };
+                var calls = 0;
+                var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                    resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+                await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+                await Assert.That(result.Diagnostic.Path).IsEqualTo(path);
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                await Assert.That(calls).IsEqualTo(0);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiUnusedComponentsPreserveOpaqueDefinitionsAndValidNames(string format, string version)
+    {
+        var components = new JsonObject { ["x-private"] = new JsonObject { ["schemas"] = false } };
+        foreach (var collection in new[] { "schemas", "responses", "parameters", "examples", "requestBodies",
+            "headers", "securitySchemes", "links", "callbacks" })
+        {
+            var values = new JsonObject();
+            foreach (var name in new[] { "A", "0", ".", "-", "_", "my.org_User-1" })
+            {
+                values[name] = new JsonObject { ["$ref"] = "https://not-acquired.test/unused", ["opaque"] = false };
+            }
+            components[collection] = values;
+        }
+        if (format == "OpenAPI/3.1")
+        {
+            components["pathItems"] = new JsonObject { ["Unused"] = new JsonObject { ["$ref"] = "https://not-acquired.test/path" } };
+            components["schemas"]!["True"] = true;
+            components["schemas"]!["False"] = false;
+        }
+        var document = new JsonObject
+        {
+            ["openapi"] = version, ["components"] = components,
+            ["paths"] = new JsonObject { ["/x"] = new JsonObject { ["get"] = new JsonObject { ["operationId"] = "Target" } } }
+        };
+        foreach (var selector in new[] { "operations/Target", "/paths/~1x/get", "operations/Missing" })
+        {
+            var calls = 0;
+            var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+            await Assert.That(result.Status).IsEqualTo(selector.EndsWith("Missing", StringComparison.Ordinal)
+                ? ApiOperationResolutionStatus.NotFound : ApiOperationResolutionStatus.Selected);
+            await Assert.That(calls).IsEqualTo(0);
+            if (result.Status == ApiOperationResolutionStatus.Selected)
+            {
+                await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("Target");
+                await Assert.That(result.DocumentPath).IsEqualTo("$/paths/~1x/get");
+            }
+        }
+    }
+
     private const string OpenApiDocument = """
         {
           "openapi": "3.1.1",
@@ -241,19 +421,19 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
-    [Arguments("OpenAPI/3.0", """{"openapi":"3.0.4","components":{}}""")]
-    [Arguments("Swagger/2.0", """{"swagger":"2.0","components":{}}""")]
-    [Arguments("OpenAPI/3.1", """{"openapi":"3.1.1"}""")]
-    [Arguments("OpenAPI/3.1", """{"openapi":"3.1.1","components":null}""")]
-    [Arguments("OpenAPI/3.1", """{"openapi":"3.1.1","paths":null,"components":{}}""")]
-    [Arguments("OpenAPI/3.1", """{"openapi":"3.1.1","paths":[],"webhooks":{}}""")]
-    public async Task OptionalOpenApi31PathsDoNotRelaxOtherRootRequirements(string format, string document)
+    [Arguments("OpenAPI/3.0", """{"openapi":"3.0.4","components":{}}""", "document.paths")]
+    [Arguments("Swagger/2.0", """{"swagger":"2.0","components":{}}""", "document.paths")]
+    [Arguments("OpenAPI/3.1", """{"openapi":"3.1.1"}""", "document.paths")]
+    [Arguments("OpenAPI/3.1", """{"openapi":"3.1.1","components":null}""", "document.components")]
+    [Arguments("OpenAPI/3.1", """{"openapi":"3.1.1","paths":null,"components":{}}""", "document.paths")]
+    [Arguments("OpenAPI/3.1", """{"openapi":"3.1.1","paths":[],"webhooks":{}}""", "document.paths")]
+    public async Task OptionalOpenApi31PathsDoNotRelaxOtherRootRequirements(string format, string document, string code)
     {
         var result = ApiOperationDocumentResolver.Resolve(format, "application/json",
             System.Text.Encoding.UTF8.GetBytes(document),
             ApiOperationReference.Parse("/apigroups/g/apis/a#operations/GetUser"));
         await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
-        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.paths");
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
         await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
     }
 
@@ -908,7 +1088,7 @@ public class ApiOperationReferenceTests
     [Arguments("""{"pathItems":{"reusable":{"get":true}}}""",
         "/components/pathItems/reusable/get", ApiOperationResolutionStatus.Invalid)]
     [Arguments("""{}""", "/components/pathItems/reusable/get", ApiOperationResolutionStatus.NotFound)]
-    [Arguments("""{"pathItems":null}""", "/components/pathItems/reusable/get", ApiOperationResolutionStatus.NotFound)]
+    [Arguments("""{"pathItems":null}""", "/components/pathItems/reusable/get", ApiOperationResolutionStatus.Invalid)]
     public async Task ComponentOperationPointersRejectReferencesAndMissingOrNonOperationTargets(
         string components, string selector, ApiOperationResolutionStatus status)
     {

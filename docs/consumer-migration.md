@@ -573,6 +573,19 @@ only API occurrences reachable through paths, webhooks and callbacks. Reusable
 definitions do not add candidates merely by existing in `components`.
 Full OpenAPI validation and YAML parsing remain unsupported.
 
+OpenAPI component containers are checked before named or pointer selection.
+A present `components` value must be an object; its standard collections must
+be object maps with ASCII letter/digit/dot/hyphen/underscore names. Entries must
+be objects, except that OpenAPI 3.1 `schemas` also permits booleans. The 3.1
+`pathItems` collection follows the same map/name rules. Malformed containers
+cannot produce an earlier partial match or dispatch dependency retrieval.
+This follows the Components Object declarations in
+[OpenAPI 3.0.4](https://spec.openapis.org/oas/v3.0.4.html#components-object)
+and [OpenAPI 3.1.1](https://spec.openapis.org/oas/v3.1.1.html#components-object).
+Empty maps remain valid. Unused object contents and extension values remain
+inactive, but consume the whole-Document byte/node budgets. This shape check
+does not validate every reusable object or acquire unused references.
+
 For `OpenRPC/1.4`, selection checks every resolved Method Object before returning
 a match. Each method requires a `params` array, including notifications with no
 parameters. An omitted `result` remains absent; the resolver does not invent a
