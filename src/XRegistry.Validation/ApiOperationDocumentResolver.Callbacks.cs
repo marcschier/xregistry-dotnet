@@ -113,7 +113,7 @@ public static partial class ApiOperationDocumentResolver
                 return InvalidCallbackExpression(pointer + "/" + Escape(expression.Name));
             }
             var pathItem = await ResolvePathItemAsync(expression.Value, source, pointer + "/" + Escape(expression.Name),
-                references, new(StringComparer.Ordinal), cancellationToken).ConfigureAwait(false);
+                references, new(StringComparer.Ordinal), true, cancellationToken).ConfigureAwait(false);
             if (pathItem.Failure is not null) { return pathItem.Failure; }
             foreach (var operation in pathItem.Operations.Values)
             {

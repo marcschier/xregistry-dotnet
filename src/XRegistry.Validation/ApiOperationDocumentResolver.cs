@@ -781,7 +781,7 @@ public static partial class ApiOperationDocumentResolver
 
                 var pathPointer = "$/" + collectionName + "/" + Escape(path.Name);
                 var pathItem = await ResolvePathItemAsync(path.Value, references.Root, pathPointer, references,
-                    new(StringComparer.Ordinal), cancellationToken).ConfigureAwait(false);
+                    new(StringComparer.Ordinal), format != "Swagger/2.0", cancellationToken).ConfigureAwait(false);
                 if (pathItem.Failure is not null)
                 {
                     return pathItem.Failure;
@@ -812,7 +812,7 @@ public static partial class ApiOperationDocumentResolver
 
     private static async ValueTask<PathItemResolution> ResolvePathItemAsync(JsonElement pathItem,
         ReferencedDocument source, string sourcePointer, ReferenceContext references, HashSet<string> referencePath,
-        CancellationToken cancellationToken)
+        bool supportsTrace, CancellationToken cancellationToken)
     {
         if (pathItem.ValueKind != JsonValueKind.Object)
         {
@@ -851,7 +851,7 @@ public static partial class ApiOperationDocumentResolver
             }
 
             var inherited = await ResolvePathItemAsync(resolvedTarget.Value, resolvedTarget.Document,
-                resolvedTarget.Pointer, references, referencePath, cancellationToken).ConfigureAwait(false);
+                resolvedTarget.Pointer, references, referencePath, supportsTrace, cancellationToken).ConfigureAwait(false);
             referencePath.Remove(targetIdentity);
             if (inherited.Failure is not null)
             {
@@ -864,6 +864,7 @@ public static partial class ApiOperationDocumentResolver
         foreach (var method in s_methods)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (method == "trace" && !supportsTrace) { continue; }
             if (!pathItem.TryGetProperty(method, out var operation))
             {
                 continue;
@@ -979,6 +980,7 @@ public static partial class ApiOperationDocumentResolver
         if (methodStart < 0 || tokens.Count <= methodStart ||
             (tokens.Count - methodStart - 1) % 4 != 0 ||
             tokens.Count > methodStart + 1 && format == "Swagger/2.0" ||
+            format == "Swagger/2.0" && tokens[methodStart] == "trace" ||
             !s_methods.Contains(tokens[methodStart], StringComparer.Ordinal))
         {
             return Failure(ApiOperationResolutionStatus.Invalid, "selection.operation_pointer",

@@ -541,6 +541,12 @@ matching precedence. This checks the Paths Object identity rule, not the
 complete path-template or parameter-declaration grammar.
 Swagger 2.0 does not declare the same prohibition, so that format does not
 inherit this OpenAPI rule.
+HTTP method recognition also follows the selected format. OpenAPI 3.0 and 3.1
+include `trace`; Swagger 2.0 does not. A Swagger `trace` field therefore cannot
+create a named operation, introduce an operation-reference retrieval or become
+a valid operation pointer, including when its containing Path Item is retrieved
+through an authorized reference. This does not claim full validation of unknown
+Path Item fields.
 Named operation lookup checks uniqueness of every encountered `operationId`,
 not only the requested name. Repeated unrelated IDs report `Invalid` rather
 than returning an earlier match or `NotFound`; repeated requested IDs retain

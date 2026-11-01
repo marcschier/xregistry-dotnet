@@ -14,6 +14,125 @@ public class ApiOperationReferenceTests
     [Arguments("OpenAPI/3.0", "openapi", "3.0.4")]
     [Arguments("OpenAPI/3.1", "openapi", "3.1.1")]
     [Arguments("Swagger/2.0", "swagger", "2.0")]
+    public async Task NativeHttpMethodsRemainSelectableInInlineAndReferencedPathItems(
+        string format, string versionField, string version)
+    {
+        foreach (var method in format == "Swagger/2.0"
+            ? new[] { "get", "put", "post", "delete", "options", "head", "patch" }
+            : new[] { "get", "put", "post", "delete", "options", "head", "patch", "trace" })
+        {
+            var item = new JsonObject
+            {
+                [method] = new JsonObject { ["operationId"] = "Target" },
+                ["TRACE"] = new JsonObject { ["$ref"] = "https://not-acquired.test/uppercase" }
+            };
+            foreach (var referenced in new[] { false, true })
+            {
+                var document = new JsonObject
+                {
+                    [versionField] = version,
+                    ["paths"] = new JsonObject
+                    {
+                        ["/items"] = referenced
+                            ? new JsonObject { ["$ref"] = "https://allowed.test/path" } : item.DeepClone()
+                    }
+                };
+                var calls = 0;
+                var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+                    resolveReference: (uri, _) =>
+                    {
+                        calls++;
+                        if (uri != "https://allowed.test/path") { throw new UnauthorizedAccessException(); }
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+                            System.Text.Encoding.UTF8.GetBytes(item.ToJsonString()));
+                    });
+                await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+                await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("Target");
+                await Assert.That(result.DocumentPath).IsEqualTo((referenced ? "$/" : "$/paths/~1items/") + method);
+                await Assert.That(calls).IsEqualTo(referenced ? 1 : 0);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task SwaggerTraceFieldsDoNotCreateOperationsOrAcquireOperationReferences(bool referencedPath)
+    {
+        foreach (var trace in new[]
+        {
+            "null", "true", "[]",
+            """{"operationId":"Target"}""",
+            """{"$ref":"https://not-acquired.test/operation"}"""
+        })
+        {
+            var item = $$"""{"get":{"operationId":"Get"},"trace":{{trace}}}""";
+            var document = referencedPath
+                ? """{"swagger":"2.0","paths":{"/items":{"$ref":"https://allowed.test/path"}}}"""
+                : $$$$"""{"swagger":"2.0","paths":{"/items":{{{{item}}}}}}""";
+            foreach (var name in new[] { "Target", "Get", "Missing" })
+            {
+                var calls = new List<string>();
+                var result = await ApiOperationDocumentResolver.ResolveAsync("Swagger/2.0", "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#operations/" + name),
+                    resolveReference: (uri, _) =>
+                    {
+                        calls.Add(uri);
+                        if (uri != "https://allowed.test/path") { throw new UnauthorizedAccessException(); }
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+                            System.Text.Encoding.UTF8.GetBytes(item));
+                    });
+                await Assert.That(result.Status).IsEqualTo(name == "Get"
+                    ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.NotFound);
+                await Assert.That(calls.Count).IsEqualTo(referencedPath ? 1 : 0);
+                if (name == "Get")
+                {
+                    await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("Get");
+                    await Assert.That(result.DocumentPath).IsEqualTo(referencedPath ? "$/get" : "$/paths/~1items/get");
+                }
+                else { await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined); }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("Swagger/2.0", "swagger", "2.0", false)]
+    [Arguments("OpenAPI/3.0", "openapi", "3.0.4", true)]
+    [Arguments("OpenAPI/3.1", "openapi", "3.1.1", true)]
+    public async Task TraceOperationSelectorsFollowTheSelectedApiLanguage(
+        string format, string versionField, string version, bool supportsTrace)
+    {
+        var document = $$$$$"""{"{{{{{versionField}}}}}":"{{{{{version}}}}}","paths":{"/items":{"trace":{"operationId":"Trace"}}}}""";
+        foreach (var selector in new[] { "operations/Trace", "/paths/~1items/trace" })
+        {
+            var result = ApiOperationDocumentResolver.Resolve(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector));
+            await Assert.That(result.Status).IsEqualTo(supportsTrace ? ApiOperationResolutionStatus.Selected
+                : selector.StartsWith('/') ? ApiOperationResolutionStatus.Invalid : ApiOperationResolutionStatus.NotFound);
+            if (supportsTrace)
+            {
+                await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("Trace");
+                await Assert.That(result.DocumentPath).IsEqualTo("$/paths/~1items/trace");
+            }
+            else
+            {
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                if (selector.StartsWith('/'))
+                {
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("selection.operation_pointer");
+                }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "openapi", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "openapi", "3.1.1")]
+    [Arguments("Swagger/2.0", "swagger", "2.0")]
     public async Task RootPathItemShapesCannotBeBypassedByPointersOrEarlyNamedMatches(
         string format, string versionField, string version)
     {
