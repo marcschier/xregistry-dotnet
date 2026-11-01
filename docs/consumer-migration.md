@@ -334,7 +334,7 @@ from the operation's declaring interface; a sibling interface visible only from
 the selected derived interface cannot supply it. Native propagation rules
 reject forbidden directions and duplicate fault-name/label pairs.
 The policy supports the published Adjuncts patterns and the named additional-MEP
-Note patterns with `#any`, `#none` or resolved inline-XSD element content.
+Note patterns with `#any`, `#none` or resolved XSD element content.
 Imports and includes use only the caller's dependency callback, with per-Document
 URI and `xml:base` resolution. Circular includes reuse declarations; foreign
 QNames require an import in their authored Document. Locationless imports use
@@ -342,11 +342,19 @@ acquired namespace components or a namespace-URI catalog lookup, which does not
 invent a retrieval origin. Unavailable import hints do not block already resolved
 components; unresolved component references and unavailable includes still
 prevent selection. `SchemaElements` retains named global elements and their
-complete inline schema context; fault references expose their `SchemaElement`.
-WSDL includes expose inline schemas, while WSDL imports do not. Types and local
-element declarations cannot substitute for global elements. Inline compilation
-shares the bounded XSD policy without recharging acquired bytes or nodes.
-Schema imports/includes, other type systems and custom patterns remain unsupported; see
+complete acquired schema context; `SchemaDocumentUris` retains the matching
+origins, and fault references expose their `SchemaElement`.
+WSDL includes expose schemas, while WSDL imports do not. Direct `types/xs:import`
+exposes its namespace; inline-schema imports supply compiler dependencies
+without exposing foreign elements to WSDL references. Includes expose their
+declarations, including native chameleon namespace adoption, without changing
+the retained source XML. Types and local element declarations cannot substitute
+for global elements. Caller-resolved schema imports/includes reuse acquired
+schemas and share the WSDL budgets, distinct-acquisition count and 64-edge depth limit. Compilation uses explicit
+schema links with network resolution disabled, without recharging acquired
+bytes or nodes. Namespace catalogs retain unknown origins; missing dependencies
+prevent partial selection. Schema-location fragments, other type systems,
+custom patterns and unimplemented XSD constructs remain unsupported; see
 [WSDL 2.0 selection](validation.md#wsdl-20-operation-selection).
 
 API dependency references reject raw whitespace and control characters before

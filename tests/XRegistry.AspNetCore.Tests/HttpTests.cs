@@ -39,9 +39,9 @@ public class HttpTests
             """;
         const string dependency = """
             <description xmlns="http://www.w3.org/ns/wsdl" xmlns:t="urn:api" xmlns:p="urn:payload" targetNamespace="urn:api">
-              <types xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:schema targetNamespace="urn:payload">
-                <xs:element name="Payload" type="xs:string"/><xs:element name="Failure" type="xs:string"/>
-              </xs:schema></types>
+              <types xmlns:xs="http://www.w3.org/2001/XMLSchema">
+                <xs:import namespace="urn:payload" schemaLocation="payload.xsd"/>
+              </types>
               <interface name="Base" styleDefault="urn:style">
                 <fault name="Failure" element="p:Failure"/>
                 <operation name="Read" pattern="http://www.w3.org/ns/wsdl/out-in">
@@ -49,6 +49,11 @@ public class HttpTests
                 </operation>
               </interface>
             </description>
+            """;
+        const string schema = """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:payload">
+              <xs:element name="Payload" type="xs:string"/><xs:element name="Failure" type="xs:string"/>
+            </xs:schema>
             """;
         var second = first.Replace("name=\"Port\"", "name=\"NewPort\"", StringComparison.Ordinal);
         const string version = "/apigroups/g/apis/a/versions/1";
@@ -75,13 +80,15 @@ public class HttpTests
         await stream.CopyToAsync(memory);
         await Assert.That(Encoding.UTF8.GetString(memory.ToArray())).IsEqualTo(first);
         var dependencyUri = new Uri(new Uri(acquired.Document.Origin!), "base.wsdl");
+        var schemaUri = new Uri(dependencyUri, "payload.xsd");
         var calls = new List<string>();
         ValueTask<ReadOnlyMemory<byte>?> ResolveDependency(string uri, CancellationToken cancellation)
         {
             cancellation.ThrowIfCancellationRequested();
             calls.Add(uri);
             return ValueTask.FromResult<ReadOnlyMemory<byte>?>(uri == dependencyUri.AbsoluteUri ?
-                Encoding.UTF8.GetBytes(dependency) : (ReadOnlyMemory<byte>?)null);
+                Encoding.UTF8.GetBytes(dependency) : uri == schemaUri.AbsoluteUri ?
+                Encoding.UTF8.GetBytes(schema) : (ReadOnlyMemory<byte>?)null);
         }
         var unresolved = await ApiOperationDocumentResolver.ResolveAsync(acquired.Format, acquired.Document.ContentType!,
             memory.ToArray(), ApiOperationReference.Parse(version +
@@ -92,7 +99,7 @@ public class HttpTests
             memory.ToArray(), ApiOperationReference.Parse(version +
                 "#interfaces/%7Burn:api%7DPort/operations/%7Burn:api%7DRead"), new Uri(acquired.Document.Origin!), ResolveDependency);
         await Assert.That(selected.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
-        await Assert.That(calls.SequenceEqual([dependencyUri.AbsoluteUri])).IsTrue();
+        await Assert.That(calls.SequenceEqual([dependencyUri.AbsoluteUri, schemaUri.AbsoluteUri])).IsTrue();
         await Assert.That(selected.DocumentUri).IsEqualTo(dependencyUri);
         await Assert.That(selected.Wsdl20Operation!.OperationName).IsEqualTo("{urn:api}Read");
         await Assert.That(selected.Wsdl20Operation.DeclaringInterfaceName).IsEqualTo("{urn:api}Base");
@@ -107,7 +114,8 @@ public class HttpTests
         await Assert.That(fault.MessageLabel).IsEqualTo("In");
         await Assert.That(fault.FaultXml.Contains("name=\"Failure\"", StringComparison.Ordinal)).IsTrue();
         await Assert.That(fault.SchemaElement!.ElementName).IsEqualTo("{urn:payload}Failure");
-        await Assert.That(fault.SchemaElement.DocumentUri).IsEqualTo(dependencyUri);
+        await Assert.That(fault.SchemaElement.DocumentUri).IsEqualTo(schemaUri);
+        await Assert.That(fault.SchemaElement.SchemaDocumentUris[0]).IsEqualTo(schemaUri);
         await Assert.That(fault.SchemaElement.SchemaDocuments[0].Contains("name=\"Payload\"", StringComparison.Ordinal)).IsTrue();
         await Assert.That(selected.Wsdl20Operation.SchemaElements.Count).IsEqualTo(2);
         var missing = await ApiOperationDocumentResolver.ResolveAsync(acquired.Format, acquired.Document.ContentType!,

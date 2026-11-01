@@ -7,25 +7,29 @@ using System.Collections.ObjectModel;
 
 namespace XRegistry.Validation;
 
-/// <summary>An independently retained global XML Schema element and its inline schema context.</summary>
+/// <summary>An independently retained global XML Schema element and its acquired schema context.</summary>
 public sealed class Wsdl20SchemaElementSelection
 {
-    internal Wsdl20SchemaElementSelection(string name, string xml, ReadOnlyCollection<string> schemas, Uri? documentUri)
+    internal Wsdl20SchemaElementSelection(string name, string xml, ReadOnlyCollection<string> schemas, Uri? documentUri,
+        ReadOnlyCollection<Uri?> schemaDocumentUris)
     {
         ElementName = name;
         ElementXml = xml;
         SchemaDocuments = schemas;
         DocumentUri = documentUri;
+        SchemaDocumentUris = schemaDocumentUris;
     }
 
     /// <summary>Gets the expanded name of the global element, not a type name.</summary>
     public string ElementName { get; }
     /// <summary>Gets retained element declaration XML with its in-scope namespaces.</summary>
     public string ElementXml { get; }
-    /// <summary>Gets the independently owned inline schemas needed to interpret the declaration.</summary>
+    /// <summary>Gets the independently owned schema documents needed to interpret the declaration.</summary>
     public ReadOnlyCollection<string> SchemaDocuments { get; }
-    /// <summary>Gets the containing WSDL document's origin when known.</summary>
+    /// <summary>Gets the declaring schema's origin, or its containing WSDL document's origin for inline schemas.</summary>
     public Uri? DocumentUri { get; }
+    /// <summary>Gets each schema document's origin, in the same order as SchemaDocuments; catalog origins remain null.</summary>
+    public ReadOnlyCollection<Uri?> SchemaDocumentUris { get; }
 }
 
 /// <summary>An independently retained WSDL 2.0 fault reference and its declaring fault component.</summary>
@@ -126,6 +130,13 @@ public static partial class ApiOperationDocumentResolver
         var documents = new Dictionary<XElement, (string Namespace, Uri? Origin, HashSet<string> Imports)>();
         var includes = new Dictionary<XElement, List<XElement>>();
         var schemaContexts = new Dictionary<XElement, Dictionary<string, Wsdl20SchemaElementSelection>>();
+        var schemaOrigins = new Dictionary<XElement, Uri?>();
+        var schemaCopies = new Dictionary<XElement, XElement>();
+        var schemaDependencies = new Dictionary<XElement, XElement[]>();
+        var schemaNamespacePeers = new Dictionary<XElement, List<XElement>>();
+        var externalSchemas = new Dictionary<Uri, XElement>();
+        var unavailableSchemas = new HashSet<Uri>();
+        var inlineSchemas = new List<XElement>();
         var loaded = new Dictionary<Uri, XElement>();
         var unavailable = new HashSet<Uri>();
         var incompleteNamespaces = new HashSet<string>(StringComparer.Ordinal);
@@ -147,30 +158,57 @@ public static partial class ApiOperationDocumentResolver
                 await AcquireAsync(new Uri(catalog.Namespace, UriKind.Absolute), catalog.Namespace, null, catalog.Depth, false)
                     .ConfigureAwait(false);
             }
-            foreach (var document in documents.Keys)
-            foreach (var element in document.Descendants())
-            {
-                budget.Work();
-                if (element.Name.Namespace != ns && element.Attribute(ns + "required") is { } required)
+            foreach (var document in documents)
+                foreach (var schema in document.Key.Elements(ns + "types").Elements(
+                    XName.Get("schema", "http://www.w3.org/2001/XMLSchema")))
                 {
-                    var value = required.Value.Trim(' ', '\t', '\r', '\n');
-                    ValidationContext.Require(value is "true" or "false" or "1" or "0", "$", "wsdl.extension_required",
-                        "A WSDL extension's required attribute must be an XML Boolean.");
-                    if (value is "true" or "1")
+                    inlineSchemas.Add(schema);
+                    schemaOrigins.Add(schema, document.Value.Origin);
+                    var copy = NamespaceCompleteWsdlOperation(schema, budget);
+                    // Keep the WSDL ancestors' XML base on the detached schema, without applying its own base twice.
+                    var ancestorBase = schema.Ancestors().FirstOrDefault(ancestor =>
+                        ancestor.Attribute(XNamespace.Xml + "base") is not null);
+                    if (ancestorBase is not null && (document.Value.Origin is not null ||
+                        schema.Ancestors().Any(ancestor => ancestor.Attribute(XNamespace.Xml + "base") is { } xmlBase &&
+                            Uri.TryCreate(xmlBase.Value, UriKind.Absolute, out _))))
                     {
-                        return Failure(ApiOperationResolutionStatus.Unsupported, "wsdl.extension",
-                            "A required WSDL extension needs an explicitly implemented processing policy.");
+                        copy.SetAttributeValue(XNamespace.Xml + "base",
+                            WsdlImportUri(schema, "", document.Value.Origin, budget).AbsoluteUri);
+                    }
+                    schemaCopies.Add(schema, copy);
+                }
+            foreach (var document in documents.Keys)
+                foreach (var element in document.Descendants())
+                {
+                    budget.Work();
+                    if (element.Name.Namespace != ns && element.Attribute(ns + "required") is { } required)
+                    {
+                        var value = required.Value.Trim(' ', '\t', '\r', '\n');
+                        ValidationContext.Require(value is "true" or "false" or "1" or "0", "$", "wsdl.extension_required",
+                            "A WSDL extension's required attribute must be an XML Boolean.");
+                        if (value is "true" or "1")
+                        {
+                            return Failure(ApiOperationResolutionStatus.Unsupported, "wsdl.extension",
+                                "A required WSDL extension needs an explicitly implemented processing policy.");
+                        }
                     }
                 }
+            foreach (var document in documents.Keys)
+            {
+                var needsSchemas = document.Elements(ns + "interface").SelectMany(element => element.Descendants())
+                    .Any(element => element.Name.Namespace == ns && element.Name.LocalName is "input" or "output" or "fault" &&
+                        element.Attribute("element") is { } attribute &&
+                        !attribute.Value.Trim(' ', '\t', '\r', '\n').StartsWith('#'));
+                if (needsSchemas) { _ = await SchemasAsync(document).ConfigureAwait(false); }
             }
             var interfaces = new Dictionary<string, XElement>(StringComparer.Ordinal);
             foreach (var document in documents)
-            foreach (var declaration in document.Key.Elements(ns + "interface"))
-            {
-                var name = Expanded(document.Value.Namespace, Name(declaration), budget);
-                ValidationContext.Require(interfaces.TryAdd(name, declaration), "$/interface", "wsdl.duplicate_interface",
-                    "A WSDL 2.0 interface name must be unique.");
-            }
+                foreach (var declaration in document.Key.Elements(ns + "interface"))
+                {
+                    var name = Expanded(document.Value.Namespace, Name(declaration), budget);
+                    ValidationContext.Require(interfaces.TryAdd(name, declaration), "$/interface", "wsdl.duplicate_interface",
+                        "A WSDL 2.0 interface name must be unique.");
+                }
             var closures = new Dictionary<string, (Dictionary<string, Wsdl20OperationSelection> Operations,
                 Dictionary<string, Wsdl20FaultComponent> Faults, int Depth)>(StringComparer.Ordinal);
             var active = new HashSet<string>(StringComparer.Ordinal);
@@ -421,42 +459,87 @@ public static partial class ApiOperationDocumentResolver
                 }
                 var name = QName(reference, authored, wsdlComponent: false);
                 var containing = reference.Ancestors().Last();
-                var schemas = Schemas(containing);
+                var schemas = schemaContexts[containing];
                 ValidationContext.Require(schemas.TryGetValue(name, out var element), "$/operation", "wsdl20.schema_element",
                     "A message or fault element QName must identify a visible global XML Schema element.");
                 return (name, element);
             }
 
-            Dictionary<string, Wsdl20SchemaElementSelection> Schemas(XElement document)
+            async ValueTask<Dictionary<string, Wsdl20SchemaElementSelection>> SchemasAsync(XElement document)
             {
                 if (schemaContexts.TryGetValue(document, out var cached)) { return cached; }
                 XNamespace xs = "http://www.w3.org/2001/XMLSchema";
                 var visited = new HashSet<XElement>();
-                var roots = new List<(XElement Source, XElement Copy)>();
+                var roots = new List<XElement>();
+                var visible = new HashSet<(XElement Schema, string Namespace)>();
+                var directImports = new List<XElement>();
                 Collect(document);
-                var schemaDocuments = Array.AsReadOnly(roots.Select(root =>
-                    root.Copy.ToString(SaveOptions.DisableFormatting)).ToArray());
+                var importedRoots = new List<(string Namespace, XElement Schema)>();
+                foreach (var import in directImports.OrderBy(import => import.Attribute("schemaLocation") is null))
+                {
+                    var expectedNamespace = import.Attribute("namespace")?.Value.Trim(' ', '\t', '\r', '\n');
+                    ValidationContext.Require(!string.IsNullOrEmpty(expectedNamespace) &&
+                        Uri.IsWellFormedUriString(expectedNamespace, UriKind.RelativeOrAbsolute) &&
+                        !HasRawUriWhitespaceOrControls(expectedNamespace), "$/types/import", "wsdl20.schema_namespace",
+                        "A direct WSDL schema import requires a nonempty, well-formed namespace.");
+                    var dependency = await ResolveSchemaAsync(import, documents[import.Ancestors().Last()].Origin, 0)
+                        .ConfigureAwait(false);
+                    ValidationContext.Require(dependency.Attribute("targetNamespace") is not null &&
+                        SchemaNamespace(dependency) == expectedNamespace, "$/types/import", "wsdl20.schema_namespace",
+                        "A direct WSDL schema import requires a matching declared target namespace.");
+                    importedRoots.Add((expectedNamespace, dependency));
+                }
+                foreach (var rootSchema in roots)
+                {
+                    await LoadSchemaAsync(rootSchema, 0).ConfigureAwait(false);
+                    Expose(rootSchema, SchemaNamespace(rootSchema));
+                }
+                foreach (var (expectedNamespace, dependency) in importedRoots)
+                {
+                    roots.Add(dependency);
+                    await LoadSchemaAsync(dependency, 0).ConfigureAwait(false);
+                    Expose(dependency, SchemaNamespace(dependency));
+                    foreach (var schema in inlineSchemas.Concat(externalSchemas.Values)
+                        .Where(schema => SchemaNamespace(schema) == expectedNamespace).Distinct().ToArray())
+                    {
+                        roots.Add(schema);
+                        await LoadSchemaAsync(schema, 0).ConfigureAwait(false);
+                        Expose(schema, SchemaNamespace(schema));
+                    }
+                }
+                var graph = new HashSet<XElement>();
+                foreach (var rootSchema in roots)
+                {
+                    CheckDepth(rootSchema, 0, []);
+                    Closure(rootSchema);
+                }
+                var ordered = graph.ToArray();
+                var schemaDocuments = Array.AsReadOnly(ordered.Select(rootSchema =>
+                    schemaCopies[rootSchema].ToString(SaveOptions.DisableFormatting)).ToArray());
+                var schemaDocumentUris = Array.AsReadOnly(ordered.Select(rootSchema => schemaOrigins[rootSchema]).ToArray());
                 foreach (var xml in schemaDocuments) { budget.Work(xml.Length); }
                 var result = new Dictionary<string, Wsdl20SchemaElementSelection>(StringComparer.Ordinal);
                 var symbols = new HashSet<(string Kind, string Name)>();
-                foreach (var schema in roots)
-                foreach (var declaration in schema.Source.Elements())
-                {
-                    budget.Work();
-                    if (declaration.Name.Namespace != xs ||
-                        declaration.Name.LocalName is not ("element" or "simpleType" or "complexType")) { continue; }
-                    var name = Expanded(schema.Source.Attribute("targetNamespace")?.Value.Trim(' ', '\t', '\r', '\n') ?? "",
-                        Name(declaration), budget);
-                    var kind = declaration.Name.LocalName == "element" ? "element" : "type";
-                    ValidationContext.Require(symbols.Add((kind, name)), "$/types", "wsdl20.schema_duplicate",
-                        "Inline schemas cannot duplicate global elements or types within their namespace.");
-                    if (kind != "element") { continue; }
-                    result.Add(name, new(name,
-                        NamespaceCompleteWsdlOperation(declaration, budget).ToString(SaveOptions.DisableFormatting),
-                        schemaDocuments,
-                        documents[schema.Source.Ancestors().Last()].Origin));
-                }
-                new XmlSchemaSyntax(budget).ValidateEmbedded(roots.Select(root => root.Copy).ToArray());
+                foreach (var (schema, namespaceName) in visible)
+                    foreach (var declaration in schema.Elements())
+                    {
+                        budget.Work();
+                        if (declaration.Name.Namespace != xs ||
+                            declaration.Name.LocalName is not ("element" or "simpleType" or "complexType")) { continue; }
+                        var name = Expanded(namespaceName,
+                            Name(declaration), budget);
+                        var kind = declaration.Name.LocalName == "element" ? "element" : "type";
+                        ValidationContext.Require(symbols.Add((kind, name)), "$/types", "wsdl20.schema_duplicate",
+                            "Visible schemas cannot duplicate global elements or types within their namespace.");
+                        if (kind != "element") { continue; }
+                        result.Add(name, new(name,
+                            NamespaceCompleteWsdlOperation(declaration, budget).ToString(SaveOptions.DisableFormatting),
+                            schemaDocuments,
+                            schemaOrigins[schema], schemaDocumentUris));
+                    }
+                var links = ordered.ToDictionary(source => schemaCopies[source],
+                    source => schemaDependencies[source].Select(target => schemaCopies[target]).ToArray());
+                new XmlSchemaSyntax(budget).ValidateEmbedded(ordered.Select(source => schemaCopies[source]).ToArray(), links);
                 schemaContexts.Add(document, result);
                 return result;
 
@@ -469,17 +552,191 @@ public static partial class ApiOperationDocumentResolver
                         "A WSDL description can contain at most one types element.");
                     foreach (var type in types)
                     {
-                        if (type.Elements(xs + "import").Any())
+                        foreach (var import in type.Elements(xs + "import"))
                         {
-                            ValidationContext.Fail(DocumentValidationStatus.Unsupported, "$/types", "wsdl20.schema_import",
-                                "This WSDL 2.0 policy does not yet acquire imported XML Schemas.");
+                            directImports.Add(import);
                         }
                         foreach (var schema in type.Elements(xs + "schema"))
                         {
-                            roots.Add((schema, NamespaceCompleteWsdlOperation(schema, budget)));
+                            roots.Add(schema);
                         }
                     }
                     foreach (var included in includes[entry]) { Collect(included); }
+                }
+
+                async ValueTask LoadSchemaAsync(XElement schema, int depth)
+                {
+                    budget.Work();
+                    if (depth > Capabilities.MaxReferenceDepth)
+                    {
+                        ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$/types", "limit.depth",
+                            "The schema dependency depth limit was exceeded.");
+                    }
+                    if (schemaDependencies.ContainsKey(schema)) { return; }
+                    XNamespace xs = "http://www.w3.org/2001/XMLSchema";
+                    var references = schema.Elements().Where(element => element.Name == xs + "include" ||
+                        element.Name == xs + "import").ToArray();
+                    if (schema.Elements(xs + "redefine").Any())
+                    {
+                        ValidationContext.Fail(DocumentValidationStatus.Unsupported, "$/types", "xsd.construct_unsupported",
+                            "Schema redefinition is outside the bounded XSD compilation policy.");
+                    }
+                    var targets = new XElement[references.Length];
+                    schemaDependencies.Add(schema, targets);
+                    var namespacePeers = new List<XElement>();
+                    schemaNamespacePeers.Add(schema, namespacePeers);
+                    foreach (var index in Enumerable.Range(0, references.Length)
+                        .OrderBy(index => references[index].Attribute("schemaLocation") is null))
+                    {
+                        var reference = references[index];
+                        var target = await ResolveSchemaAsync(reference, schemaOrigins[schema], depth + 1).ConfigureAwait(false);
+                        var include = reference.Name == xs + "include";
+                        var expected = include ? SchemaNamespace(schema) :
+                            reference.Attribute("namespace")?.Value.Trim(' ', '\t', '\r', '\n') ?? "";
+                        ValidationContext.Require((SchemaNamespace(target) == expected ||
+                            include && target.Attribute("targetNamespace") is null) &&
+                            (include || expected != SchemaNamespace(schema)), "$/types", "wsdl20.schema_namespace",
+                            "A schema dependency must obey its native include or import namespace rule.");
+                        targets[index] = target;
+                    }
+                    for (var index = 0; index < references.Length; index++)
+                    {
+                        var reference = references[index];
+                        var target = targets[index];
+                        await LoadSchemaAsync(target, depth + 1).ConfigureAwait(false);
+                        if (reference.Name == xs + "import")
+                        {
+                            var expected = reference.Attribute("namespace")?.Value.Trim(' ', '\t', '\r', '\n') ?? "";
+                            var peers = inlineSchemas.Concat(externalSchemas.Values).Where(candidate =>
+                                !ReferenceEquals(candidate, target) && SchemaNamespace(candidate) == expected).Distinct().ToArray();
+                            foreach (var peer in peers)
+                            {
+                                namespacePeers.Add(peer);
+                                await LoadSchemaAsync(peer, depth + 1).ConfigureAwait(false);
+                            }
+                        }
+                    }
+                }
+
+                async ValueTask<XElement> ResolveSchemaAsync(XElement reference, Uri? origin, int depth)
+                {
+                    budget.Work();
+                    var location = reference.Attribute("schemaLocation")?.Value.Trim(' ', '\t', '\r', '\n');
+                    Uri uri;
+                    if (location is null)
+                    {
+                        ValidationContext.Require(reference.Name.LocalName == "import", "$/types", "wsdl20.schema_location",
+                            "An XML Schema include requires a schemaLocation.");
+                        var namespaceName = reference.Attribute("namespace")?.Value.Trim(' ', '\t', '\r', '\n') ?? "";
+                        var inline = inlineSchemas.FirstOrDefault(schema => SchemaNamespace(schema) == namespaceName);
+                        if (inline is not null) { return inline; }
+                        var acquiredSchema = externalSchemas.Values.FirstOrDefault(schema => SchemaNamespace(schema) == namespaceName);
+                        if (acquiredSchema is not null) { return acquiredSchema; }
+                        if (namespaceName.Length == 0)
+                        {
+                            ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$/types", "reference.unresolved",
+                                "No explicitly supplied document resolves the no-namespace schema import.");
+                        }
+                        ValidationContext.Require(
+                            !HasRawUriWhitespaceOrControls(namespaceName) &&
+                            Uri.IsWellFormedUriString(namespaceName, UriKind.RelativeOrAbsolute), "$/types", "wsdl20.schema_namespace",
+                            "A schema import namespace must be well formed.");
+                        if (!Uri.IsWellFormedUriString(namespaceName, UriKind.Absolute))
+                        {
+                            ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$/types", "reference.unresolved",
+                                "A relative namespace has no resolved schema or absolute catalog identifier.");
+                        }
+                        uri = new Uri(namespaceName, UriKind.Absolute);
+                        origin = null;
+                    }
+                    else
+                    {
+                        if (location.Contains('#', StringComparison.Ordinal))
+                        {
+                            ValidationContext.Fail(DocumentValidationStatus.Unsupported, "$/types", "wsdl20.schema_fragment",
+                                "This schema policy does not yet select embedded schemas through location fragments.");
+                        }
+                        uri = WsdlImportUri(reference, location, origin, budget);
+                        origin = uri;
+                    }
+                    if (depth > Capabilities.MaxReferenceDepth)
+                    {
+                        ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$/types", "limit.depth",
+                            "The schema dependency depth limit was exceeded.");
+                    }
+                    if (externalSchemas.TryGetValue(uri, out var cached)) { return cached; }
+                    ReadOnlyMemory<byte>? acquired = null;
+                    if (!unavailableSchemas.Contains(uri))
+                    {
+                        if (++references > Capabilities.MaxReferencedDocuments)
+                        {
+                            ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$/types", "limit.references",
+                                "The shared WSDL and schema dependency count was exceeded.");
+                        }
+                        token.ThrowIfCancellationRequested();
+                        acquired = resolver is null ? null : await resolver(uri.AbsoluteUri, token).ConfigureAwait(false);
+                        token.ThrowIfCancellationRequested();
+                    }
+                    if (acquired is null)
+                    {
+                        unavailableSchemas.Add(uri);
+                        if (location is not null && reference.Name.LocalName == "import")
+                        {
+                            var catalogReference = new XElement(reference);
+                            catalogReference.Attribute("schemaLocation")!.Remove();
+                            return await ResolveSchemaAsync(catalogReference, null, depth).ConfigureAwait(false);
+                        }
+                        ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$/types", "reference.unresolved",
+                            "No explicitly supplied document resolves the schema dependency.");
+                    }
+                    var schemaRoot = ReadWsdlXml(acquired.Value, budget);
+                    ValidationContext.Require(schemaRoot.Name == XName.Get("schema", "http://www.w3.org/2001/XMLSchema"),
+                        "$/types", "xsd.root", "A schema dependency must be an XML Schema document.");
+                    externalSchemas.Add(uri, schemaRoot);
+                    schemaOrigins.Add(schemaRoot, origin);
+                    schemaCopies.Add(schemaRoot, NamespaceCompleteWsdlOperation(schemaRoot, budget));
+                    return schemaRoot;
+                }
+
+                static string SchemaNamespace(XElement schema) =>
+                    schema.Attribute("targetNamespace")?.Value.Trim(' ', '\t', '\r', '\n') ?? "";
+
+                void Expose(XElement schema, string namespaceName)
+                {
+                    budget.Work();
+                    if (!visible.Add((schema, namespaceName))) { return; }
+                    var children = schema.Elements().Where(element => element.Name == xs + "import" ||
+                        element.Name == xs + "include").ToArray();
+                    for (var index = 0; index < children.Length; index++)
+                    {
+                        if (children[index].Name == xs + "include")
+                        {
+                            var target = schemaDependencies[schema][index];
+                            Expose(target, target.Attribute("targetNamespace") is null ? namespaceName : SchemaNamespace(target));
+                        }
+                    }
+                }
+
+                void Closure(XElement schema)
+                {
+                    budget.Work();
+                    if (!graph.Add(schema)) { return; }
+                    foreach (var dependency in schemaDependencies[schema]) { Closure(dependency); }
+                    foreach (var peer in schemaNamespacePeers[schema]) { Closure(peer); }
+                }
+
+                void CheckDepth(XElement schema, int depth, HashSet<XElement> path)
+                {
+                    budget.Work();
+                    if (!path.Add(schema)) { return; }
+                    if (depth > Capabilities.MaxReferenceDepth)
+                    {
+                        ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$/types", "limit.depth",
+                            "The schema dependency depth limit was exceeded, including cached dependencies.");
+                    }
+                    foreach (var dependency in schemaDependencies[schema]) { CheckDepth(dependency, depth + 1, path); }
+                    foreach (var peer in schemaNamespacePeers[schema]) { CheckDepth(peer, depth + 1, path); }
+                    path.Remove(schema);
                 }
             }
         }

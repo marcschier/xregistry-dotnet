@@ -128,14 +128,13 @@ This policy checks the three message-exchange patterns in
 [WSDL 2.0 Adjuncts](https://www.w3.org/TR/2007/REC-wsdl20-adjuncts-20070626/)
 and the five patterns in the
 [additional-MEP Note](https://www.w3.org/TR/2007/NOTE-wsdl20-additional-meps-20070626/)
-with `#any`, `#none` or resolved inline-XSD element content. The Note is non-normative; support for
+with `#any`, `#none` or resolved XSD element content. The Note is non-normative; support for
 its named patterns is part of this implementation's declared policy.
 Placeholder labels and directions retain
 their native meaning; XML child order does not substitute for those labels.
 Invalid names, duplicate or missing interfaces, inheritance cycles, conflicting
 operations and malformed placeholders fail before returning a match.
-Unimplemented schema imports/includes,
-other type systems, custom patterns and required extensions report
+Schema-location fragment selectors, other type systems, custom patterns and required extensions report
 `Unsupported`, never a successful unchecked selection.
 
 Fault references resolve against the operation's declaring interface and its
@@ -181,27 +180,48 @@ bytes remain associated with the requested location rather than an inferred
 post-redirect URI. Selected operations retain their declaring Document's origin.
 
 Message and fault element QNames resolve to named global elements in inline
-XSD 1.0 schemas. WSDL includes expose their schemas; WSDL imports do not expose
-the imported Document's schemas to the importer. Multiple inline schemas can
+or explicitly imported XSD 1.0 schemas. WSDL includes expose their schemas;
+WSDL imports do not expose the imported Document's schemas to the importer.
+Direct `types/xs:import` declarations expose the imported namespace. An inline
+schema's `xs:import` supplies compiler dependencies without making foreign
+elements referenceable by the containing WSDL. Multiple visible schemas can
 share a namespace, but cannot duplicate global elements or global types.
 Element and type names occupy separate symbol spaces, so a type cannot satisfy
 a message's element reference, even when it has the same QName.
 
 `SchemaElements` retains each referenced global element's expanded name,
-declaration XML, containing Document origin and complete inline schema context.
+declaration XML, declaring schema origin and complete acquired schema context.
+`SchemaDocumentUris` records each context Document's origin in the same order as
+`SchemaDocuments`; a namespace catalog lookup retains a null origin rather than
+treating the namespace as a retrieval location.
 Fault references expose their element through `SchemaElement`; `#any` and
 `#none` have no schema element. The shared bounded XSD compiler checks the
-visible inline schemas before selection. Input bytes and nodes already charged
+explicitly linked schema graph before selection, with its network resolver
+disabled. Input bytes and nodes already charged
 by WSDL acquisition are not charged again; copying, reparsing and compilation
-still consume cumulative work. Unsupported XSD constructs, direct schema
-imports and inline-schema imports/includes prevent selection without retrieval.
-This slice does not establish full schema or WSDL validation.
+still consume cumulative work. Schema imports/includes use the same caller
+callback, distinct-acquisition limit and aggregate budgets as WSDL dependencies.
+Locations use the containing schema's origin and inherited `xml:base`. Shared
+and circular dependencies are acquired once; cached chains cannot bypass the
+64-edge depth limit. Includes expose declarations, including native chameleon
+adoption of a no-namespace schema into each containing namespace, without
+rewriting the retained schema. Imports require their declared namespace;
+direct WSDL imports cannot import a no-namespace schema.
+
+Locationless schema imports use resolved namespace Documents, including all
+matching inline Documents needed by the compiler, or ask the callback for the
+namespace URI. Declared location hints are acquired before their dependency
+graphs; unavailable import hints can use resolved namespace Documents or an
+explicit catalog, while includes still require their location's Document.
+Missing schema information reports `Indeterminate`; denied
+dependencies, malformed XML and namespace contradictions prevent partial
+selection. Location fragments and XSD constructs outside the bounded compiler
+policy report `Unsupported`. These checks do not establish full schema or WSDL
+validation.
 
 The actual HTTP workflow retains an older exact Version and selects its inherited
-operation, fault and inline element declarations through an explicit relative include after
-default change and source disposal.
-These checks establish the declared selection policy, not full WSDL 2.0 document
-validation.
+operation, fault and externally imported element declarations through explicit
+relative WSDL and schema dependencies after default change and source disposal.
 
 ## Compatibility
 

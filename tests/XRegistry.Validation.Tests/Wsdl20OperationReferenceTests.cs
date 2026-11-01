@@ -751,8 +751,8 @@ public class Wsdl20OperationReferenceTests
     }
 
     [Test]
-    [Arguments("<xs:import namespace=\"urn:payload\" schemaLocation=\"never.xsd\"/>", "wsdl20.schema_import")]
-    [Arguments("<xs:schema targetNamespace=\"urn:api\"><xs:include schemaLocation=\"never.xsd\"/></xs:schema>", "xsd.embedded_dependency")]
+    [Arguments("<xs:schema targetNamespace=\"urn:api\"><xs:include schemaLocation=\"#inline\"/></xs:schema>", "wsdl20.schema_fragment")]
+    [Arguments("<xs:schema targetNamespace=\"urn:api\"><xs:redefine schemaLocation=\"never.xsd\"/></xs:schema>", "xsd.construct_unsupported")]
     [Arguments("<xs:schema targetNamespace=\"urn:api\"><xs:element name=\"Payload\"><xs:simpleType><xs:restriction base=\"xs:string\"><xs:pattern value=\".*\"/></xs:restriction></xs:simpleType></xs:element></xs:schema>", "xsd.construct_unsupported")]
     public async Task Wsdl20UnimplementedSchemaPoliciesDoNotAcquireDependenciesOrReturnPartialElements(string schema, string code)
     {
@@ -816,6 +816,563 @@ public class Wsdl20OperationReferenceTests
         await Assert.That(result.Wsdl20Operation!.SchemaElements.Count).IsEqualTo(1);
         await Assert.That(result.Wsdl20Operation.SchemaElements[0].ElementName).IsEqualTo("{urn:api}Payload");
         await Assert.That(result.Wsdl20Operation.SchemaElements[0].SchemaDocuments.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task Wsdl20SchemaDependenciesRetainIncludeVisibilityAndForeignCompilerContext(bool exposeForeign)
+    {
+        var root = Document("""
+            <types xmlns:xs="http://www.w3.org/2001/XMLSchema" xml:base="schemas/">
+              <xs:schema targetNamespace="urn:api"><xs:include schemaLocation="parts/main.xsd"/></xs:schema>
+            """ + (exposeForeign ? "<xs:import namespace=\"urn:foreign\" schemaLocation=\"foreign.xsd\"/>" : "") + """
+            </types>
+            <interface name="Port" xmlns:f="urn:foreign"><operation name="Read">
+              <input element="t:Payload"/><output element="
+            """ + (exposeForeign ? "f:Foreign" : "#none") + "\"/></operation></interface>");
+        var main = Encoding.UTF8.GetBytes("""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:f="urn:foreign" targetNamespace="urn:api">
+              <xs:import namespace="urn:foreign" schemaLocation="../foreign.xsd"/>
+              <xs:include schemaLocation="other.xsd"/>
+              <xs:element name="Payload" type="f:Text"/>
+            </xs:schema>
+            """);
+        var other = Encoding.UTF8.GetBytes("""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:api">
+              <xs:include schemaLocation="main.xsd"/>
+              <xs:element name="Other" type="xs:string"/>
+            </xs:schema>
+            """);
+        var foreign = Encoding.UTF8.GetBytes("""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:foreign">
+              <xs:simpleType name="Text"><xs:restriction base="xs:string"/></xs:simpleType>
+              <xs:element name="Foreign" type="xs:string"/>
+            </xs:schema>
+            """);
+        var supplied = new Dictionary<string, byte[]>
+        {
+            ["https://example.test/schemas/parts/main.xsd"] = main,
+            ["https://example.test/schemas/parts/other.xsd"] = other,
+            ["https://example.test/schemas/foreign.xsd"] = foreign
+        };
+        var calls = new List<string>();
+        var result = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml", root,
+            Reference("Port"), new Uri("https://example.test/root.wsdl"), (uri, _) =>
+            {
+                calls.Add(uri);
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(supplied[uri]);
+            });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        var expectedCalls = exposeForeign ? new[] {
+            "https://example.test/schemas/foreign.xsd", "https://example.test/schemas/parts/main.xsd",
+            "https://example.test/schemas/parts/other.xsd" } : [
+            "https://example.test/schemas/parts/main.xsd", "https://example.test/schemas/foreign.xsd",
+            "https://example.test/schemas/parts/other.xsd"];
+        await Assert.That(calls.SequenceEqual(expectedCalls)).IsTrue();
+        var element = result.Wsdl20Operation!.SchemaElements[0];
+        await Assert.That(element.ElementName).IsEqualTo("{urn:api}Payload");
+        await Assert.That(element.DocumentUri).IsEqualTo(new Uri("https://example.test/schemas/parts/main.xsd"));
+        await Assert.That(element.SchemaDocuments.Count).IsEqualTo(4);
+        await Assert.That(XElement.Parse(element.SchemaDocuments[0]).Attribute(XNamespace.Xml + "base")!.Value)
+            .IsEqualTo("https://example.test/schemas/");
+        await Assert.That(element.SchemaDocumentUris.Select(uri => uri!.AbsoluteUri).SequenceEqual([
+            "https://example.test/root.wsdl", "https://example.test/schemas/parts/main.xsd",
+            "https://example.test/schemas/foreign.xsd", "https://example.test/schemas/parts/other.xsd"])).IsTrue();
+        foreach (var bytes in supplied.Values) { Array.Fill(bytes, (byte)'!'); }
+        Array.Fill(root, (byte)'!');
+        await Assert.That(XElement.Parse(element.ElementXml).Attribute("type")!.Value).IsEqualTo("f:Text");
+        await Assert.That(element.SchemaDocuments.Any(xml => xml.Contains("name=\"Text\"", StringComparison.Ordinal))).IsTrue();
+        await Assert.That(result.Wsdl20Operation.SchemaElements.Count).IsEqualTo(exposeForeign ? 2 : 1);
+        if (exposeForeign)
+        {
+            await Assert.That(result.Wsdl20Operation.SchemaElements[1].ElementName).IsEqualTo("{urn:foreign}Foreign");
+            await Assert.That(result.Wsdl20Operation.SchemaElements[1].DocumentUri)
+                .IsEqualTo(new Uri("https://example.test/schemas/foreign.xsd"));
+        }
+    }
+
+    [Test]
+    public async Task Wsdl20InlineImportsDoNotMakeForeignElementsReferenceable()
+    {
+        var result = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml", Document("""
+            <types xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:schema targetNamespace="urn:api">
+              <xs:import namespace="urn:foreign" schemaLocation="foreign.xsd"/>
+            </xs:schema></types>
+            <interface name="Port" xmlns:f="urn:foreign"><operation name="Read">
+              <input element="f:Foreign"/><output element="#none"/>
+            </operation></interface>
+            """), Reference("Port"), new Uri("https://example.test/root.wsdl"), (_, _) =>
+            ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes("""
+                <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:foreign">
+                  <xs:element name="Foreign" type="xs:string"/>
+                </xs:schema>
+                """)));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("wsdl20.schema_element");
+        await Assert.That(result.Wsdl20Operation).IsNull();
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task Wsdl20DirectSchemaCatalogUsesInlineComponentsOrRetainsAnUnknownOrigin(bool inline)
+    {
+        var calls = new List<string>();
+        var schema = """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:payload">
+              <xs:element name="Payload" type="xs:string"/>
+            </xs:schema>
+            """;
+        var root = Document("<types xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">" +
+            "<xs:import namespace=\"urn:payload\"/>" + (inline ? schema : "") + """
+            </types><interface name="Port" xmlns:p="urn:payload"><operation name="Read">
+              <input element="p:Payload"/><output element="#none"/>
+            </operation></interface>
+            """);
+        var result = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml", root, Reference("Port"),
+            new Uri("https://example.test/root.wsdl"), (uri, _) =>
+            {
+                calls.Add(uri);
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes(schema));
+            });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(calls.Count).IsEqualTo(inline ? 0 : 1);
+        if (!inline) { await Assert.That(calls[0]).IsEqualTo("urn:payload"); }
+        var selected = result.Wsdl20Operation!.SchemaElements[0];
+        await Assert.That(selected.ElementName).IsEqualTo("{urn:payload}Payload");
+        await Assert.That(selected.DocumentUri).IsEqualTo(inline ? new Uri("https://example.test/root.wsdl") : null);
+        await Assert.That(selected.SchemaDocumentUris.Count).IsEqualTo(1);
+        await Assert.That(selected.SchemaDocumentUris[0]).IsEqualTo(selected.DocumentUri);
+    }
+
+    [Test]
+    [Arguments("<xs:schema targetNamespace=\"urn:other\"/>", "wsdl20.schema_namespace", ApiOperationResolutionStatus.Invalid)]
+    [Arguments("<wrong/>", "xsd.root", ApiOperationResolutionStatus.Invalid)]
+    [Arguments("<!DOCTYPE x [<!ENTITY e 'unsafe'>]><x>&e;</x>", "wsdl.xml", ApiOperationResolutionStatus.Invalid)]
+    public async Task Wsdl20SchemaDependencyContradictionsNeverReturnPartialSelection(string schema, string code,
+        ApiOperationResolutionStatus status)
+    {
+        var result = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml", Document("""
+            <types xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:schema targetNamespace="urn:api">
+              <xs:include schemaLocation="part.xsd"/><xs:element name="Payload" type="xs:string"/>
+            </xs:schema></types><interface name="Port"><operation name="Read">
+              <input element="t:Payload"/><output element="#none"/>
+            </operation></interface>
+            """), Reference("Port"), new Uri("https://example.test/root.wsdl"), (_, _) =>
+            ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes(
+                schema.Replace("<xs:schema", "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"", StringComparison.Ordinal))));
+        await Assert.That(result.Status).IsEqualTo(status);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        await Assert.That(result.Wsdl20Operation).IsNull();
+    }
+
+    [Test]
+    [Arguments(31)]
+    [Arguments(32)]
+    public async Task Wsdl20SchemaAndWsdlAcquisitionsShareDistinctReferenceLimits(int count)
+    {
+        var calls = new List<string>();
+        var result = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml", Document(
+            "<include location=\"base.wsdl\"/>" +
+            "<types xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:schema targetNamespace=\"urn:api\">" +
+            string.Concat(Enumerable.Range(0, count).Select(index => "<xs:include schemaLocation=\"s" + index + ".xsd\"/>")) +
+            "<xs:element name=\"Payload\" type=\"xs:string\"/></xs:schema></types>" +
+            "<interface name=\"Port\"><operation name=\"Read\"><input element=\"t:Payload\"/><output element=\"#none\"/></operation></interface>"),
+            Reference("Port"), new Uri("https://example.test/root.wsdl"), (uri, _) =>
+            {
+                calls.Add(uri);
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(uri.EndsWith(".wsdl", StringComparison.Ordinal) ?
+                    Document("") : Encoding.UTF8.GetBytes(
+                        "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\" targetNamespace=\"urn:api\"/>"));
+            });
+        await Assert.That(calls.Count).IsEqualTo(32);
+        await Assert.That(result.Status).IsEqualTo(count == 31 ? ApiOperationResolutionStatus.Selected :
+            ApiOperationResolutionStatus.Indeterminate);
+        if (count == 32)
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("limit.references");
+            await Assert.That(result.Wsdl20Operation).IsNull();
+        }
+    }
+
+    [Test]
+    public async Task Wsdl20ChameleonIncludesAdoptEachContainingNamespaceWithoutRewritingSourceSchemas()
+    {
+        var calls = new List<string>();
+        var result = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml", Document("""
+            <types xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:schema targetNamespace="urn:first"><xs:include schemaLocation="shared.xsd"/></xs:schema>
+              <xs:schema targetNamespace="urn:second"><xs:include schemaLocation="shared.xsd"/></xs:schema>
+            </types>
+            <interface name="Port" xmlns:a="urn:first" xmlns:b="urn:second"><operation name="Read">
+              <input element="a:Payload"/><output element="b:Payload"/>
+            </operation></interface>
+            """), Reference("Port"), new Uri("https://example.test/root.wsdl"), (uri, _) =>
+            {
+                calls.Add(uri);
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes("""
+                    <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+                      <xs:simpleType name="Text"><xs:restriction base="xs:string"/></xs:simpleType>
+                      <xs:element name="Payload" type="Text"/>
+                    </xs:schema>
+                    """));
+            });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(calls.Count).IsEqualTo(1);
+        await Assert.That(calls[0]).IsEqualTo("https://example.test/shared.xsd");
+        await Assert.That(result.Wsdl20Operation!.SchemaElements.Select(element => element.ElementName)
+            .SequenceEqual(["{urn:first}Payload", "{urn:second}Payload"])).IsTrue();
+        foreach (var element in result.Wsdl20Operation.SchemaElements)
+        {
+            await Assert.That(element.DocumentUri).IsEqualTo(new Uri(calls[0]));
+            await Assert.That(XElement.Parse(element.ElementXml).Attribute("type")!.Value).IsEqualTo("Text");
+            var chameleon = element.SchemaDocuments.Select(XElement.Parse)
+                .Single(schema => schema.Attribute("targetNamespace") is null);
+            await Assert.That(chameleon.Element(XName.Get("element", "http://www.w3.org/2001/XMLSchema"))!
+                .Attribute("type")!.Value).IsEqualTo("Text");
+            await Assert.That(element.SchemaDocuments.Count).IsEqualTo(3);
+        }
+    }
+
+    [Test]
+    public async Task Wsdl20SchemaResolutionPreservesDenialCancellationAndMissingBase()
+    {
+        var root = Document("""
+            <types xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:schema targetNamespace="urn:api">
+              <xs:include schemaLocation="part.xsd"/><xs:element name="Payload" type="xs:string"/>
+            </xs:schema></types><interface name="Port"><operation name="Read">
+              <input element="t:Payload"/><output element="#none"/>
+            </operation></interface>
+            """);
+        var missingBase = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml", root, Reference("Port"));
+        await Assert.That(missingBase.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(missingBase.Diagnostic!.Code).IsEqualTo("dependency.base");
+        var origin = new Uri("https://example.test/root.wsdl");
+        var missing = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml", root, Reference("Port"), origin);
+        await Assert.That(missing.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(missing.Diagnostic!.Code).IsEqualTo("reference.unresolved");
+        var denied = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml", root, Reference("Port"), origin,
+            (_, _) => throw new UnauthorizedAccessException());
+        await Assert.That(denied.Status).IsEqualTo(ApiOperationResolutionStatus.Denied);
+        await Assert.That(denied.Diagnostic!.Code).IsEqualTo("dependency.denied");
+        using var cancellation = new CancellationTokenSource();
+        await Assert.That(async () => await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml", root,
+            Reference("Port"), origin, (_, _) =>
+            {
+                cancellation.Cancel();
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(null);
+            }, cancellation.Token)).Throws<OperationCanceledException>();
+        await Assert.That(missing.Wsdl20Operation).IsNull();
+        await Assert.That(denied.Wsdl20Operation).IsNull();
+    }
+
+    [Test]
+    public async Task Wsdl20LocationlessSchemaImportsCompileAllResolvedNamespaceDocumentsWithoutExposingThem()
+    {
+        var root = Document("""
+            <import namespace="urn:other" location="other.wsdl"/>
+            <types xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:schema targetNamespace="urn:api" xmlns:f="urn:foreign">
+              <xs:import namespace="urn:foreign"/>
+              <xs:element name="Payload" type="f:Text"/>
+            </xs:schema></types>
+            <interface name="Port"><operation name="Read"><input element="t:Payload"/><output element="#none"/></operation></interface>
+            """);
+        var calls = new List<string>();
+        var result = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml", root, Reference("Port"),
+            new Uri("https://example.test/root.wsdl"), (uri, _) =>
+            {
+                calls.Add(uri);
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Document("""
+                    <types xmlns:xs="http://www.w3.org/2001/XMLSchema">
+                      <xs:schema targetNamespace="urn:foreign"><xs:element name="Foreign" type="xs:string"/></xs:schema>
+                      <xs:schema targetNamespace="urn:foreign"><xs:simpleType name="Text"><xs:restriction base="xs:string"/></xs:simpleType></xs:schema>
+                    </types>
+                    """, "urn:other"));
+            });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(calls.Count).IsEqualTo(1);
+        await Assert.That(calls[0]).IsEqualTo("https://example.test/other.wsdl");
+        var selected = result.Wsdl20Operation!.SchemaElements.Single();
+        await Assert.That(selected.ElementName).IsEqualTo("{urn:api}Payload");
+        await Assert.That(selected.SchemaDocuments.Count).IsEqualTo(3);
+        await Assert.That(selected.SchemaDocuments.Any(xml => xml.Contains("name=\"Text\"", StringComparison.Ordinal))).IsTrue();
+    }
+
+    [Test]
+    [Arguments(0)]
+    [Arguments(1)]
+    public async Task Wsdl20ExternalSchemaBytesUseTheAcquisitionBudgetOnlyOnce(int excess)
+    {
+        var root = Document("""
+            <types xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:import namespace="urn:api" schemaLocation="large.xsd"/></types>
+            <interface name="Port"><operation name="Read"><input element="t:Payload"/><output element="#none"/></operation></interface>
+            """);
+        const string start = "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\" targetNamespace=\"urn:api\"><xs:element name=\"Payload\" type=\"xs:string\"/><!--";
+        const string end = "--></xs:schema>";
+        var bytes = Encoding.UTF8.GetBytes(start + new string('x',
+            ApiOperationDocumentResolver.Capabilities.MaxDocumentBytes + excess - start.Length - end.Length) + end);
+        var calls = 0;
+        var result = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml", root, Reference("Port"),
+            new Uri("https://example.test/root.wsdl"), (_, _) =>
+            {
+                calls++;
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(bytes);
+            });
+        await Assert.That(calls).IsEqualTo(1);
+        await Assert.That(bytes.Length).IsEqualTo(ApiOperationDocumentResolver.Capabilities.MaxDocumentBytes + excess);
+        await Assert.That(result.Status).IsEqualTo(excess == 0 ? ApiOperationResolutionStatus.Selected :
+            ApiOperationResolutionStatus.Indeterminate);
+        if (excess == 1)
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("limit.bytes");
+            await Assert.That(result.Wsdl20Operation).IsNull();
+        }
+        else
+        {
+            await Assert.That(result.Wsdl20Operation!.SchemaElements[0].ElementName).IsEqualTo("{urn:api}Payload");
+        }
+    }
+
+    [Test]
+    [Arguments(64, false)]
+    [Arguments(65, false)]
+    [Arguments(64, true)]
+    [Arguments(65, true)]
+    public async Task Wsdl20SchemaDepthCannotBeBypassedByPreviouslyCachedNamespaceDocuments(int depth, bool reverse)
+    {
+        var schemas = Enumerable.Range(0, depth + 1).Select(index =>
+            "<xs:schema targetNamespace=\"urn:s" + index + "\">" +
+            (index < depth ? "<xs:import namespace=\"urn:s" + (index + 1) + "\"/>" : "") +
+            (index == 0 ? "<xs:element name=\"Payload\" type=\"xs:string\"/>" : "") + "</xs:schema>");
+        var result = await Resolve("<types xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">" +
+            string.Concat(reverse ? schemas.Reverse() : schemas) + "</types>" +
+            "<interface name=\"Port\" xmlns:p=\"urn:s0\"><operation name=\"Read\"><input element=\"p:Payload\"/><output element=\"#none\"/></operation></interface>");
+        await Assert.That(result.Status).IsEqualTo(depth == 64 ? ApiOperationResolutionStatus.Selected :
+            ApiOperationResolutionStatus.Indeterminate);
+        if (depth == 65)
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("limit.depth");
+            await Assert.That(result.Wsdl20Operation).IsNull();
+        }
+        else
+        {
+            await Assert.That(result.Wsdl20Operation!.SchemaElements[0].ElementName).IsEqualTo("{urn:s0}Payload");
+        }
+    }
+
+    [Test]
+    public async Task Wsdl20RequiredExtensionsAreRejectedBeforeAcquiringSchemaDependencies()
+    {
+        var calls = 0;
+        var result = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml", Document("""
+            <types xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:import namespace="urn:api" schemaLocation="part.xsd"/></types>
+            <unknown xmlns="urn:extension" xmlns:w="http://www.w3.org/ns/wsdl" w:required="true"/>
+            <interface name="Port"><operation name="Read"><input element="t:Payload"/><output element="#none"/></operation></interface>
+            """), Reference("Port"), new Uri("https://example.test/root.wsdl"), (_, _) =>
+            {
+                calls++;
+                throw new UnauthorizedAccessException();
+            });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Unsupported);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("wsdl.extension");
+        await Assert.That(calls).IsEqualTo(0);
+        await Assert.That(result.Wsdl20Operation).IsNull();
+    }
+
+    [Test]
+    [Arguments("urn:other")]
+    [Arguments("")]
+    public async Task Wsdl20DirectSchemaImportsRequireTheirDeclaredNamespaceWithoutChameleonAdoption(string namespaceName)
+    {
+        var result = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml", Document("""
+            <types xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:import namespace="urn:api" schemaLocation="part.xsd"/></types>
+            <interface name="Port"><operation name="Read"><input element="t:Payload"/><output element="#none"/></operation></interface>
+            """), Reference("Port"), new Uri("https://example.test/root.wsdl"), (_, _) =>
+            ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes(
+                "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"" +
+                (namespaceName.Length == 0 ? "" : " targetNamespace=\"" + namespaceName + "\"") +
+                "><xs:element name=\"Payload\" type=\"xs:string\"/></xs:schema>")));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("wsdl20.schema_namespace");
+        await Assert.That(result.Wsdl20Operation).IsNull();
+    }
+
+    [Test]
+    public async Task Wsdl20SchemaDependenciesCannotExceedTheSharedTotalByteBudget()
+    {
+        const string start = "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\" targetNamespace=\"urn:api\"><!--";
+        const string end = "--></xs:schema>";
+        var bytes = Encoding.UTF8.GetBytes(start + new string('x',
+            ApiOperationDocumentResolver.Capabilities.MaxDocumentBytes - start.Length - end.Length) + end);
+        var calls = 0;
+        var result = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml", Document("""
+            <types xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:schema targetNamespace="urn:api">
+              <xs:include schemaLocation="a.xsd"/><xs:include schemaLocation="b.xsd"/>
+              <xs:include schemaLocation="c.xsd"/><xs:include schemaLocation="d.xsd"/>
+              <xs:element name="Payload" type="xs:string"/>
+            </xs:schema></types>
+            <interface name="Port"><operation name="Read"><input element="t:Payload"/><output element="#none"/></operation></interface>
+            """), Reference("Port"), new Uri("https://example.test/root.wsdl"), (_, _) =>
+            {
+                calls++;
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(bytes);
+            });
+        await Assert.That(calls).IsEqualTo(4);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("limit.total_bytes");
+        await Assert.That(result.Wsdl20Operation).IsNull();
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task Wsdl20SchemaNamespaceReferencesUseDeclaredLocationHintsWithoutOrderDependentCatalogCalls(bool reverse)
+    {
+        const string inline = """
+            <xs:schema targetNamespace="urn:api" xmlns:f="urn:foreign">
+              <xs:import namespace="urn:foreign"/><xs:element name="Payload" type="f:Text"/>
+            </xs:schema>
+            """;
+        const string import = "<xs:import namespace=\"urn:foreign\" schemaLocation=\"foreign.xsd\"/>";
+        var calls = new List<string>();
+        var result = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml", Document(
+            "<types xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">" + (reverse ? import + inline : inline + import) +
+            "</types><interface name=\"Port\"><operation name=\"Read\"><input element=\"t:Payload\"/><output element=\"#none\"/></operation></interface>"),
+            Reference("Port"), new Uri("https://example.test/root.wsdl"), (uri, _) =>
+            {
+                calls.Add(uri);
+                if (uri != "https://example.test/foreign.xsd") { throw new UnauthorizedAccessException(); }
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes("""
+                    <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:foreign">
+                      <xs:simpleType name="Text"><xs:restriction base="xs:string"/></xs:simpleType>
+                    </xs:schema>
+                    """));
+            });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(calls.Count).IsEqualTo(1);
+        await Assert.That(calls[0]).IsEqualTo("https://example.test/foreign.xsd");
+        await Assert.That(result.Wsdl20Operation!.SchemaElements.Single().ElementName).IsEqualTo("{urn:api}Payload");
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task Wsdl20UnavailableSchemaImportHintsUseResolvedNamespacesOrExplicitCatalogs(bool inline)
+    {
+        const string schema = """
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:api">
+              <xs:element name="Payload" type="xs:string"/>
+            </xs:schema>
+            """;
+        var root = Document("<types xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">" +
+            "<xs:import namespace=\"urn:api\" schemaLocation=\"missing.xsd\"/>" + (inline ? schema : "") +
+            "</types><interface name=\"Port\"><operation name=\"Read\"><input element=\"t:Payload\"/><output element=\"#none\"/></operation></interface>");
+        var calls = new List<string>();
+        var result = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml", root, Reference("Port"),
+            new Uri("https://example.test/root.wsdl"), (uri, _) =>
+            {
+                calls.Add(uri);
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(uri == "urn:api" ?
+                    Encoding.UTF8.GetBytes(schema) : (ReadOnlyMemory<byte>?)null);
+            });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected)
+            .Because(result.Diagnostic?.ToString() ?? "All schema imports resolved.");
+        await Assert.That(calls.Count).IsEqualTo(inline ? 1 : 2);
+        await Assert.That(calls[0]).IsEqualTo("https://example.test/missing.xsd");
+        if (!inline) { await Assert.That(calls[1]).IsEqualTo("urn:api"); }
+        var selected = result.Wsdl20Operation!.SchemaElements.Single();
+        await Assert.That(selected.ElementName).IsEqualTo("{urn:api}Payload");
+        await Assert.That(selected.DocumentUri).IsEqualTo(inline ? new Uri("https://example.test/root.wsdl") : null);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task Wsdl20SchemaImportsAcquireSiblingHintsBeforeTraversingNamespaceDependencies(bool reverse)
+    {
+        const string typesImport = "<xs:import namespace=\"urn:types\" schemaLocation=\"types.xsd\"/>";
+        const string foreignImport = "<xs:import namespace=\"urn:foreign\" schemaLocation=\"foreign.xsd\"/>";
+        var root = Document("<types xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:schema targetNamespace=\"urn:api\" xmlns:q=\"urn:types\">" +
+            (reverse ? foreignImport + typesImport : typesImport + foreignImport) +
+            "<xs:element name=\"Payload\" type=\"q:Text\"/></xs:schema></types>" +
+            "<interface name=\"Port\"><operation name=\"Read\"><input element=\"t:Payload\"/><output element=\"#none\"/></operation></interface>");
+        var calls = new List<string>();
+        var result = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml", root, Reference("Port"),
+            new Uri("https://example.test/root.wsdl"), (uri, _) =>
+            {
+                calls.Add(uri);
+                var schema = uri switch
+                {
+                    "https://example.test/types.xsd" => """
+                        <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:types" xmlns:f="urn:foreign">
+                          <xs:import namespace="urn:foreign"/><xs:simpleType name="Text"><xs:restriction base="f:Base"/></xs:simpleType>
+                        </xs:schema>
+                        """,
+                    "https://example.test/foreign.xsd" => """
+                        <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:foreign">
+                          <xs:simpleType name="Base"><xs:restriction base="xs:string"/></xs:simpleType>
+                        </xs:schema>
+                        """,
+                    _ => throw new UnauthorizedAccessException()
+                };
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes(schema));
+            });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(calls.Count).IsEqualTo(2);
+        await Assert.That(calls[0]).IsEqualTo(reverse ? "https://example.test/foreign.xsd" : "https://example.test/types.xsd");
+        await Assert.That(calls[1]).IsEqualTo(reverse ? "https://example.test/types.xsd" : "https://example.test/foreign.xsd");
+        await Assert.That(result.Wsdl20Operation!.SchemaElements.Single().ElementName).IsEqualTo("{urn:api}Payload");
+        await Assert.That(result.Wsdl20Operation.SchemaElements[0].SchemaDocuments.Count).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task Wsdl20MissingNoNamespaceSchemaInformationIsIndeterminateRatherThanInvalid()
+    {
+        var result = await Resolve("""
+            <types xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:schema targetNamespace="urn:api">
+              <xs:import/><xs:element name="Payload" type="xs:string"/>
+            </xs:schema></types><interface name="Port"><operation name="Read">
+              <input element="t:Payload"/><output element="#none"/>
+            </operation></interface>
+            """);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("reference.unresolved");
+        await Assert.That(result.Wsdl20Operation).IsNull();
+    }
+
+    [Test]
+    [Arguments(true)]
+    [Arguments(false)]
+    public async Task Wsdl20RelativeSchemaNamespaceIdentityIsNotResolvedAsARetrievalLocation(bool supplied)
+    {
+        var calls = new List<string>();
+        var result = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml", Document(
+            "<types xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:import namespace=\"relative\"" +
+            (supplied ? " schemaLocation=\"part.xsd\"" : "") + "/></types>" +
+            "<interface name=\"Port\" xmlns:p=\"relative\"><operation name=\"Read\"><input element=\"p:Payload\"/><output element=\"#none\"/></operation></interface>"),
+            Reference("Port"), new Uri("https://example.test/root.wsdl"), (uri, _) =>
+            {
+                calls.Add(uri);
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes("""
+                    <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="relative">
+                      <xs:element name="Payload" type="xs:string"/>
+                    </xs:schema>
+                    """));
+            });
+        await Assert.That(result.Status).IsEqualTo(supplied ? ApiOperationResolutionStatus.Selected :
+            ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(calls.Count).IsEqualTo(supplied ? 1 : 0);
+        if (supplied)
+        {
+            await Assert.That(calls[0]).IsEqualTo("https://example.test/part.xsd");
+            await Assert.That(result.Wsdl20Operation!.SchemaElements.Single().ElementName).IsEqualTo("{relative}Payload");
+        }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("reference.unresolved");
+            await Assert.That(result.Wsdl20Operation).IsNull();
+        }
     }
 
     private static ValueTask<ApiOperationResolutionResult> Resolve(string interfaces) =>

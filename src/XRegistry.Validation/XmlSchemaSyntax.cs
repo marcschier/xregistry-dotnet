@@ -42,13 +42,14 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
         }
     }
 
-    internal void ValidateEmbedded(IReadOnlyList<XElement> roots)
+    internal void ValidateEmbedded(IReadOnlyList<XElement> roots,
+        IReadOnlyDictionary<XElement, XElement[]>? dependencies = null)
     {
         try
         {
             var schemas = new XmlSchemaSet { XmlResolver = null };
             schemas.ValidationEventHandler += OnValidation;
-            var parsed = new List<XmlSchema>();
+            var parsed = new Dictionary<XElement, XmlSchema>();
             foreach (var root in roots)
             {
                 var bytes = Encoding.UTF8.GetBytes(root.ToString(SaveOptions.DisableFormatting));
@@ -58,15 +59,27 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
                 using var reader = XmlReader.Create(stream, Settings(embedded: true));
                 var schema = XmlSchema.Read(reader, OnValidation);
                 ValidationContext.Require(schema is not null, "$", "xsd.schema", "An XML Schema document is required.");
-                if (schema.Includes.Count > 0)
+                if (schema.Includes.Count > 0 && dependencies is null)
                 {
                     ValidationContext.Fail(DocumentValidationStatus.Unsupported, "$", "xsd.embedded_dependency",
                         "This embedded-schema policy does not resolve schema imports or includes.");
                 }
-                parsed.Add(schema);
+                parsed.Add(root, schema);
             }
             context.Work(CompilationWork());
-            foreach (var schema in parsed) { schemas.Add(schema); }
+            foreach (var (root, schema) in parsed)
+            {
+                if (schema.Includes.Count == 0) { continue; }
+                XElement[]? targets = null;
+                ValidationContext.Require(dependencies is not null && dependencies.TryGetValue(root, out targets) &&
+                    targets.Length == schema.Includes.Count, "$", "xsd.embedded_dependency",
+                    "Each embedded schema dependency requires an explicitly resolved schema.");
+                for (var index = 0; index < schema.Includes.Count; index++)
+                {
+                    ((XmlSchemaExternal)schema.Includes[index]).Schema = parsed[targets[index]];
+                }
+            }
+            foreach (var schema in parsed.Values) { schemas.Add(schema); }
             context.CancellationToken.ThrowIfCancellationRequested();
             schemas.Compile();
             context.CancellationToken.ThrowIfCancellationRequested();
