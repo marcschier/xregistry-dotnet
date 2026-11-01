@@ -120,6 +120,14 @@ Pattern processing charges the authored character count, not expanded range
 size. This checks syntax only; it does not match application values or claim
 complete ECMA-262 regex support. Smithy pattern traits use the same syntax policy.
 
+Outside a character class, `\b` and `\B` are boundary assertions and cannot
+take quantifiers. Inside a class, `\b` remains the backspace character and
+can participate in a range. ASCII-letter `\cA` through `\cz` escapes outside
+classes are parsed as single character atoms, including when quantified.
+Legacy nonletter control escapes remain `Unsupported`. These distinctions
+follow the ECMA-262 assertion and character-escape grammar; they do not add
+pattern evaluation.
+
 Standalone XSD imports, includes and redefinitions use only `DocumentValidationOptions.ResolveReference`.
 Each location resolves against the retrieved containing schema's URI and
 inherited `xml:base`, including a base on the dependency declaration itself.

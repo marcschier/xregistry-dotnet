@@ -29,6 +29,17 @@ internal static class SchemaPattern
                     {
                         ReadHexEscape(pattern, ref i, path);
                     }
+                    else if (pattern[i] == 'c')
+                    {
+                        if (i + 1 >= pattern.Length || !char.IsAsciiLetter(pattern[i + 1])) { Unsupported(path); }
+                        i++;
+                    }
+                    else if (pattern[i] is 'b' or 'B')
+                    {
+                        atom = false;
+                        quantified = false;
+                        break;
+                    }
                     atom = true;
                     quantified = false;
                     break;

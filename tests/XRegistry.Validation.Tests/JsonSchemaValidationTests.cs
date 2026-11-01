@@ -11,6 +11,77 @@ namespace XRegistry.Validation.Tests;
 public class JsonSchemaValidationTests
 {
     [Test]
+    [Arguments(@"\b+")]
+    [Arguments(@"\B*")]
+    [Arguments(@"\b?")]
+    [Arguments(@"\B{1}")]
+    [Arguments(@"\b{0,2}")]
+    [Arguments(@"a\b+")]
+    [Arguments(@"a+\B?")]
+    [Arguments(@"a*?\b*")]
+    [Arguments(@"(?:\b+)")]
+    public async Task JsonSchemaWordBoundaryAssertionsCannotBeQuantified(string pattern)
+    {
+        foreach (var format in new[] { "JsonSchema/draft-07", "JsonSchema/draft/2019-09", "JsonSchema/draft/2020-12" })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync(format,
+                Encoding.UTF8.GetBytes("{\"pattern\":\"" + JsonEncodedText.Encode(pattern) + "\"}"));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+            await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("schema.pattern");
+            await Assert.That(result.Diagnostics.Single().Path).IsEqualTo("$/pattern");
+        }
+    }
+
+    [Test]
+    [Arguments(@"\bword\b")]
+    [Arguments(@"\Bword\B")]
+    [Arguments(@"\b[a-z]+")]
+    [Arguments(@"a+\b")]
+    [Arguments(@"a+?\B")]
+    [Arguments(@"(?:\b)+")]
+    [Arguments(@"[\b]+")]
+    [Arguments(@"\cA+")]
+    [Arguments(@"\cz{1,2}?")]
+    [Arguments(@"\ca*")]
+    [Arguments(@"\\b+")]
+    public async Task JsonSchemaAssertionsGroupsAndControlEscapesRetainTheirAtomKinds(string pattern)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("JsonSchema/draft/2020-12",
+            Encoding.UTF8.GetBytes("{\"pattern\":\"" + JsonEncodedText.Encode(pattern) + "\"}"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(@"\c")]
+    [Arguments(@"\c0")]
+    [Arguments(@"\c_")]
+    [Arguments(@"\c*")]
+    public async Task JsonSchemaLegacyControlEscapeFormsRemainUnsupported(string pattern)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("JsonSchema/draft-07",
+            Encoding.UTF8.GetBytes("{\"pattern\":\"" + JsonEncodedText.Encode(pattern) + "\"}"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Unsupported);
+        await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("schema.pattern_unsupported");
+        await Assert.That(result.Diagnostics.Single().Path).IsEqualTo("$/pattern");
+    }
+
+    [Test]
+    [Arguments(-1, DocumentValidationStatus.Indeterminate)]
+    [Arguments(0, DocumentValidationStatus.Valid)]
+    [Arguments(1, DocumentValidationStatus.Valid)]
+    public async Task JsonSchemaBoundaryAndControlEscapeParsingRetainsExactWorkBounds(int delta, DocumentValidationStatus status)
+    {
+        const string pattern = @"\b\cA+\B";
+        var bytes = Encoding.UTF8.GetBytes("{\"pattern\":\"" + JsonEncodedText.Encode(pattern) + "\"}");
+        var result = await new BuiltInDocumentValidator().ValidateAsync("JsonSchema/draft-07", bytes,
+            new() { MaxWork = bytes.Length + 1 + pattern.Length + delta });
+        await Assert.That(result.Status).IsEqualTo(status);
+        if (status == DocumentValidationStatus.Valid) { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+        else { await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("limit.work"); }
+    }
+
+    [Test]
     public async Task JsonSchemaPatternPropertyKeysUseDecodedCharacterRangeOrdering()
     {
         var validator = new BuiltInDocumentValidator();

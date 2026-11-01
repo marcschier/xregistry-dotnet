@@ -13,6 +13,28 @@ namespace XRegistry.Server.Tests;
 public class BuiltInValidationAdapterTests
 {
     [Test]
+    public async Task WordBoundaryAndControlPatternsPublishAndQuantifiedAssertionsRejectAtomically()
+    {
+        const string schema = """{"type":"string","pattern":"\\b\\cA\u002B\\B"}""";
+        var engine = ValidatingEngine(strict: true, validateCompatibility: false);
+        var created = await Send(engine, RegistryAction.Replace, "/sets/g/schemas/s$details", $$$"""
+            {"versionid":"v1","format":"JsonSchema/draft-07","schema":{{{schema}}}}
+            """);
+        await Assert.That(created.Metadata!.RootElement.GetProperty("formatvalidated").GetBoolean()).IsTrue();
+        using var bytes = (await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/versions/v1")).Document!.OpenRead();
+        using var reader = new StreamReader(bytes, Encoding.UTF8);
+        await Assert.That(await reader.ReadToEndAsync()).IsEqualTo(schema);
+        var before = (await Send(engine, RegistryAction.Read, "/sets/g/schemas/s$details")).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        await ExpectCode(() => Send(engine, RegistryAction.Post, "/sets/g/schemas/s$details", """
+            {"versionid":"v2","format":"JsonSchema/draft-07","schema":{"pattern":"\\b+"}}
+            """), "format_violation");
+        await Assert.That((await Send(engine, RegistryAction.Read, "/sets/g/schemas/s$details")).Metadata!.RootElement.GetRawText())
+            .IsEqualTo(before);
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+    }
+
+    [Test]
     public async Task EscapedCharacterClassPatternsPublishExactlyAndReversedRangesRejectAtomically()
     {
         const string schema = """{"type":"string","pattern":"[\\x41-\\u005a]"}""";
