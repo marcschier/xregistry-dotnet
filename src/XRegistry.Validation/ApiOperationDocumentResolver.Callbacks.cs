@@ -25,13 +25,10 @@ public static partial class ApiOperationDocumentResolver
             return Failure(ApiOperationResolutionStatus.Indeterminate, "dependency.cycle",
                 "A callback operation cycle prevents operationId selection.", location.Pointer);
         }
+        var metadataFailure = ValidateHttpOperationMetadata(location.Operation, location.Pointer, cancellationToken);
+        if (metadataFailure is not null) { return metadataFailure; }
         if (location.Operation.TryGetProperty("operationId", out var id))
         {
-            if (id.ValueKind != JsonValueKind.String)
-            {
-                return Failure(ApiOperationResolutionStatus.Invalid, "document.operation_id",
-                    "An operationId must be a string.", location.Pointer + "/operationId");
-            }
             var nativeId = id.GetString()!;
             operationCounts[nativeId] = Math.Min(2, operationCounts.GetValueOrDefault(nativeId) + 1);
             if (operationCounts[nativeId] > 1 && !string.Equals(nativeId, operationId, StringComparison.Ordinal))
@@ -62,6 +59,42 @@ public static partial class ApiOperationDocumentResolver
             }
         }
         active.Remove(identity);
+        return null;
+    }
+
+    private static ApiOperationResolutionResult? ValidateHttpOperationMetadata(
+        JsonElement operation, string pointer, CancellationToken cancellationToken)
+    {
+        foreach (var field in new[] { "operationId", "summary", "description", "deprecated", "tags" })
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!operation.TryGetProperty(field, out var value)) { continue; }
+            var expected = field switch
+            {
+                "deprecated" => value.ValueKind is JsonValueKind.True or JsonValueKind.False,
+                "tags" => value.ValueKind == JsonValueKind.Array,
+                _ => value.ValueKind == JsonValueKind.String
+            };
+            if (!expected)
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid,
+                    field == "operationId" ? "document.operation_id" : "document.operation_metadata",
+                    $"An HTTP operation {field} must have its declared native JSON type.", pointer + "/" + field);
+            }
+            if (field != "tags") { continue; }
+            var index = 0;
+            foreach (var tag in value.EnumerateArray())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (tag.ValueKind != JsonValueKind.String)
+                {
+                    return Failure(ApiOperationResolutionStatus.Invalid, "document.operation_metadata",
+                        "An HTTP operation tag must be a string.", pointer + "/tags/" +
+                        index.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                }
+                index++;
+            }
+        }
         return null;
     }
 

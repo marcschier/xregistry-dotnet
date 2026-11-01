@@ -556,6 +556,15 @@ document bytes are cached; unused component definitions remain inactive.
 This applies across paths and, for OpenAPI, reachable callbacks and 3.1 webhooks.
 JSON Pointer selection remains a direct selection, not a whole-operation-graph
 validation pass.
+HTTP operation metadata checks apply to every operation reached by named
+lookup and to the selected operation and callback ancestors reached by a
+pointer. Present `operationId`, `summary` and `description` values must be
+strings; `deprecated` must be a boolean and `tags` an array of strings.
+These fields remain optional, empty strings and tag arrays are permitted,
+and tags need not be unique. A malformed unrelated operation prevents named
+selection but does not invalidate a pointer to another operation. Extension
+contents remain opaque. These checks do not establish complete Operation
+Object validation.
 OpenAPI 3.1 operation-ID selection also searches `webhooks`, including referenced
 Path Items. Webhook names are exact strings, not slash-prefixed paths; an `x-`
 name in this map is a webhook, not a Paths specification extension. Duplicate

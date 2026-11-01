@@ -1038,6 +1038,8 @@ public static partial class ApiOperationDocumentResolver
                 return Failure(ApiOperationResolutionStatus.Invalid, "selection.not_operation",
                     "The selected value is not an inline Operation Object.", pathPointer);
             }
+            var metadataFailure = ValidateHttpOperationMetadata(operation, pathPointer, cancellationToken);
+            if (metadataFailure is not null) { return metadataFailure; }
             if (methodIndex == tokens.Count - 1) { return Selected(operation, pathPointer); }
             if (!operation.TryGetProperty("callbacks", out var callbacks) ||
                 callbacks.ValueKind != JsonValueKind.Object ||
