@@ -24,16 +24,18 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
     {
         try
         {
-            Load(bytes, context.Options.DocumentUri?.AbsoluteUri ?? "");
+            var documentUri = context.Options.DocumentUri?.AbsoluteUri ?? "";
+            var fragmentAt = documentUri.IndexOf('#');
+            Load(bytes, fragmentAt < 0 ? documentUri : documentUri[..fragmentAt]);
             var declaredPaths = validatedRoot is null ? null : new HashSet<string>(_documents[0].Visited, StringComparer.Ordinal);
             for (var i = 0; i < _references.Count; i++)
             {
                 var (source, reference, path) = _references[i];
                 context.Work(1, path);
-                var fragmentAt = reference.IndexOf('#');
-                var location = fragmentAt < 0 ? reference : reference[..fragmentAt];
-                var fragment = fragmentAt < 0 ? "" : SchemaJson.DecodeFragment(
-                    reference[(fragmentAt + 1)..], path, "reference.pointer", context);
+                var referenceFragmentAt = reference.IndexOf('#');
+                var location = referenceFragmentAt < 0 ? reference : reference[..referenceFragmentAt];
+                var fragment = referenceFragmentAt < 0 ? "" : SchemaJson.DecodeFragment(
+                    reference[(referenceFragmentAt + 1)..], path, "reference.pointer", context);
                 var target = source;
                 if (location.Length != 0)
                 {
@@ -77,7 +79,7 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
             && !(_draft == 7 && document.Json.RootElement.TryGetProperty("$ref", out _))
             && document.Json.RootElement.TryGetProperty("$id", out var id))
         {
-            document.BaseUri = ResolveUri(uri, SchemaJson.String(id, "$/$id"));
+            document.BaseUri = Identifier(SchemaJson.String(id, "$/$id"), uri, "$/$id");
             ValidationContext.Require(!_byUri.TryGetValue(document.BaseUri, out var existing) || existing == document,
                 "$/$id", "schema.duplicate_id", "Different supplied documents declare the same schema identifier.");
             _byUri[document.BaseUri] = document;
@@ -131,15 +133,10 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
                     }
                     break;
                 case "$id":
-                    CheckUri(SchemaJson.String(value, childPath), childPath, false);
                     if (path != "$")
                     {
+                        Identifier(SchemaJson.String(value, childPath), document.BaseUri, childPath);
                         Unsupported(childPath, "schema.embedded_resource", "Embedded resource identifiers are not implemented.");
-                    }
-                    if (_draft != 7)
-                    {
-                        ValidationContext.Require(!value.GetString()!.TrimEnd('#').Contains('#'), childPath,
-                            "schema.id_fragment", "Modern schema identifiers must not have nonempty fragments.");
                     }
                     break;
                 case "$ref":
@@ -337,6 +334,23 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
             && (char.IsAsciiLetter(anchor[0]) || _draft == 2020 && anchor[0] == '_')
             && anchor.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-' or '.' || _draft == 2019 && c == ':'),
             path, "schema.anchor", "Invalid schema anchor for the selected dialect.");
+
+    private string Identifier(string value, string baseUri, string path)
+    {
+        CheckUri(value, path, false);
+        var resolved = ResolveUri(baseUri, value);
+        if (_draft == 7)
+        {
+            return resolved;
+        }
+        var fragmentAt = value.IndexOf('#');
+        ValidationContext.Require(fragmentAt < 0 || fragmentAt == value.Length - 1,
+            path, "schema.id_fragment", "Modern schema identifiers must not have nonempty fragments.");
+        ValidationContext.Require(Uri.TryCreate(resolved, UriKind.Absolute, out _),
+            path, "schema.id_absolute", "A modern schema identifier must resolve to an absolute URI.");
+        var resolvedFragmentAt = resolved.IndexOf('#');
+        return resolvedFragmentAt < 0 ? resolved : resolved[..resolvedFragmentAt];
+    }
 
     private static void CheckUri(string value, string path, bool absolute)
     {

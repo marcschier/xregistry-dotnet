@@ -10,6 +10,111 @@ namespace XRegistry.Validation.Tests;
 public class JsonSchemaValidationTests
 {
     [Test]
+    [Arguments("https://schemas.test/canonical", "https://schemas.test/canonical")]
+    [Arguments("https://schemas.test/canonical#", "https://schemas.test/canonical")]
+    [Arguments("canonical#", "https://schemas.test/canonical")]
+    [Arguments("#", "https://schemas.test/retrieval")]
+    public async Task ModernCanonicalRootIdsReuseTheSuppliedDocument(string id, string reference)
+    {
+        foreach (var format in new[] { "JsonSchema/draft/2019-09", "JsonSchema/draft/2020-12" })
+        {
+            var calls = 0;
+            var schema = RegistryJson.Create(writer =>
+            {
+                writer.WriteStartObject(); writer.WriteString("$id", id); writer.WriteString("$ref", reference + "#node");
+                writer.WriteStartObject("$defs"); writer.WriteStartObject("target");
+                writer.WriteString("$anchor", "node"); writer.WriteString("type", "string");
+                writer.WriteEndObject(); writer.WriteEndObject(); writer.WriteEndObject();
+            });
+            var result = await new BuiltInDocumentValidator().ValidateAsync(format,
+                Encoding.UTF8.GetBytes(schema.RootElement.GetRawText()), new()
+                {
+                    DocumentUri = new("https://schemas.test/retrieval#captured"),
+                    MaxReferences = 0,
+                    ResolveReference = (_, _) => { calls++; throw new UnauthorizedAccessException(); }
+                });
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+            await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+            await Assert.That(calls).IsEqualTo(0);
+        }
+    }
+
+    [Test]
+    [Arguments("relative", "schema.id_absolute")]
+    [Arguments("", "schema.id_absolute")]
+    [Arguments("#", "schema.id_absolute")]
+    [Arguments("https://schemas.test/root#node", "schema.id_fragment")]
+    [Arguments("https://schemas.test/root##", "schema.uri")]
+    [Arguments("https://schemas.test/%GG", "schema.uri")]
+    public async Task InvalidModernRootIdsRejectBeforeReferenceAcquisition(string id, string code)
+    {
+        foreach (var format in new[] { "JsonSchema/draft/2019-09", "JsonSchema/draft/2020-12" })
+        {
+            var calls = 0;
+            var schema = RegistryJson.Create(writer =>
+            {
+                writer.WriteStartObject(); writer.WriteString("$id", id);
+                writer.WriteString("$ref", "https://never.test/"); writer.WriteEndObject();
+            });
+            var result = await new BuiltInDocumentValidator().ValidateAsync(format,
+                Encoding.UTF8.GetBytes(schema.RootElement.GetRawText()), new()
+                {
+                    ResolveReference = (_, _) => { calls++; throw new UnauthorizedAccessException(); }
+                });
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+            await Assert.That(result.Diagnostics.Single().Code).IsEqualTo(code);
+            await Assert.That(result.Diagnostics.Single().Path).IsEqualTo("$/$id");
+            await Assert.That(calls).IsEqualTo(0);
+        }
+    }
+
+    [Test]
+    [Arguments("JsonSchema/draft/2019-09")]
+    [Arguments("JsonSchema/draft/2020-12")]
+    public async Task RelativeCanonicalIdsResolveDependenciesAgainstTheNewBaseExactlyOnce(string format)
+    {
+        var calls = new List<string>();
+        var result = await new BuiltInDocumentValidator().ValidateAsync(format,
+            """{"$id":"nested/root#","$ref":"part#node"}"""u8.ToArray(), new()
+            {
+                DocumentUri = new("https://schemas.test/retrieval"),
+                ResolveReference = (reference, _) =>
+                {
+                    calls.Add(reference);
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+                        """{"$id":"https://schemas.test/part#","$anchor":"node","type":"string"}"""u8.ToArray());
+                }
+            });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+        await Assert.That(calls.SequenceEqual(["https://schemas.test/nested/part"])).IsTrue();
+    }
+
+    [Test]
+    [Arguments("JsonSchema/draft/2019-09")]
+    [Arguments("JsonSchema/draft/2020-12")]
+    public async Task DistinctDocumentsCannotDeclareTheSameCanonicalIdWithAnEmptyFragment(string format)
+    {
+        var calls = new List<string>();
+        var result = await new BuiltInDocumentValidator().ValidateAsync(format, """
+            {"allOf":[{"$ref":"https://schemas.test/first"},{"$ref":"https://schemas.test/second"}]}
+            """u8.ToArray(), new()
+            {
+                ResolveReference = (reference, _) =>
+                {
+                    calls.Add(reference);
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(reference.EndsWith("first", StringComparison.Ordinal)
+                        ? """{"$id":"https://schemas.test/shared","type":"string"}"""u8.ToArray()
+                        : """{"$id":"https://schemas.test/shared#","type":"integer"}"""u8.ToArray());
+                }
+            });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("schema.duplicate_id");
+        await Assert.That(result.Diagnostics.Single().Path).IsEqualTo("$/$id");
+        await Assert.That(calls.SequenceEqual(["https://schemas.test/first", "https://schemas.test/second"])).IsTrue();
+    }
+
+    [Test]
     [Arguments("JsonSchema/draft/2019-09", true)]
     [Arguments("JsonSchema/draft/2019-09", false)]
     [Arguments("JsonSchema/draft/2020-12", true)]

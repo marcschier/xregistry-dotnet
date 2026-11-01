@@ -66,6 +66,14 @@ outside resource roots. Draft-07 forbids nested dialect declarations entirely.
 The validator does not acquire custom meta-schemas, and an unrecognized
 well-formed `$schema` still reports unsupported processing.
 
+Modern root schema IDs must resolve to absolute URIs; originless relative IDs
+now fail instead of becoming named canonical identities. Empty ID fragments
+are removed for internal lookup, so a reference to the canonical ID reuses
+captured bytes without a callback. Retrieval identity and canonical identity
+remain aliases of one supplied Document; selection preserves authored bytes
+and the caller's retrieval origin. Conflicting canonical IDs fail even when
+one spelling ends with an empty fragment. Embedded resource IDs remain unsupported.
+
 Legacy prepare/replay/incarnation/generation extensions are not standard
 xRegistry HTTP. The in-process persistence/response preparation methods do not
 imply proprietary wire endpoints.

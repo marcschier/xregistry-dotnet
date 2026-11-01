@@ -59,6 +59,18 @@ declarations even with `$id`; modern embedded resources remain unsupported.
 Malformed dialect URIs are `Invalid`, while well-formed unrecognized dialects
 remain `Unsupported`. No custom meta-schema is acquired or evaluated.
 
+Modern root `$id` values are validated before identifier registration and must
+resolve to absolute URIs. Empty fragments are removed from their canonical
+identity; references to that identity reuse the supplied Document without
+acquisition. Relative IDs require an absolute containing retrieval URI.
+The retrieval URI remains a separate alias, with its fragment excluded from
+the acquisition identity. Distinct captured Documents declaring the same
+canonical ID are `Invalid`, including IDs differing only by an empty fragment.
+Authored bytes and the caller's retrieval origin remain unchanged. This follows
+[2019-09 Core section 8.2.2](https://json-schema.org/draft/2019-09/draft-handrews-json-schema-02#rfc.section.8.2.2)
+and [2020-12 Core section 8.2.1](https://json-schema.org/draft/2020-12/draft-bhutton-json-schema-01#section-8.2.1);
+it does not add embedded schema resources.
+
 JSON Schema reference fragments undergo strict UTF-8 percent decoding once
 before choosing JSON Pointer or plain-name anchor resolution. Encoded anchors
 therefore resolve as anchors, and encoded leading slashes select pointers.

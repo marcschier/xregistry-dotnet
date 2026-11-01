@@ -11,6 +11,36 @@ namespace XRegistry.Validation.Tests;
 public class SchemaObjectJsonSelectionTests
 {
     [Test]
+    [Arguments("JsonSchema/draft/2019-09")]
+    [Arguments("JsonSchema/draft/2020-12")]
+    public async Task CanonicalIdAliasSelectionPreservesAuthoredBytesAndRetrievalOrigin(string format)
+    {
+        const string schema = """
+            {"$id":"https://schemas.test/canonical#","$ref":"https://schemas.test/canonical#node",
+             "$defs":{"Value":{"$anchor":"node","type":"string"}}}
+            """;
+        var calls = 0;
+        var result = await SchemaObjectSelector.SelectAsync(format, Encoding.UTF8.GetBytes(schema),
+            "https://schemas.test/retrieval#/$defs/Value", new()
+            {
+                Validation = new()
+                {
+                    DocumentUri = new("https://schemas.test/retrieval"),
+                    MaxReferences = 0,
+                    ResolveReference = (_, _) => { calls++; throw new UnauthorizedAccessException(); }
+                }
+            });
+        await Assert.That(result.Status).IsEqualTo(SchemaObjectSelectionStatus.Selected);
+        await Assert.That(result.Selection!.JsonPointer).IsEqualTo("/$defs/Value");
+        await Assert.That(Encoding.UTF8.GetString(result.Selection.Document.Span)).IsEqualTo(schema);
+        await Assert.That(result.Selection.Json!.Value.GetProperty("type").GetString()).IsEqualTo("string");
+        await Assert.That(result.Selection.DocumentUri!.AbsoluteUri).IsEqualTo("https://schemas.test/retrieval");
+        await Assert.That(result.Selection.DocumentReference).IsEqualTo("https://schemas.test/retrieval");
+        await Assert.That(result.Selection.References.Count).IsEqualTo(0);
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
     [Arguments("JsonSchema/draft-07", """{"$defs":{"Value":{"type":"string"}}}""", "#/$defs/Value", false)]
     [Arguments("JsonSchema/draft/2019-09", """{"$defs":{"Value":{"type":"string"}}}""", "#/$defs/Value", true)]
     [Arguments("JsonSchema/draft/2019-09", """{"prefixItems":[{"type":"string"}]}""", "#/prefixItems/0", false)]
