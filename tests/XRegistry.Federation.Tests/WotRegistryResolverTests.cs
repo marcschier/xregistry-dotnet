@@ -13,6 +13,459 @@ namespace XRegistry.Federation.Tests;
 
 public class WotRegistryResolverTests
 {
+    [Test]
+    [Arguments(false, "1.0.0")]
+    [Arguments(true, "1.0.0")]
+    [Arguments(false, "2.0.0-alpha")]
+    [Arguments(true, "2.0.0-alpha")]
+    public async Task CloudEventsUsesTheCoreDefaultIncludingLowerAndPrereleaseStickyDefaults(
+        bool sticky, string defaultId)
+    {
+        var source = new Source(true);
+        source.Change = (request, metadata) =>
+        {
+            if (request.Target == source.Resource + "/meta")
+            {
+                metadata["entity"]!["defaultversionid"] = defaultId;
+                metadata["entity"]!["defaultversionsticky"] = sticky;
+            }
+            if (request.Target == source.Resource + "/versions" && defaultId != "1.0.0")
+            {
+                metadata["entities"]![defaultId] = new JsonObject
+                {
+                    ["xid"] = request.Target + "/" + defaultId, ["versionid"] = defaultId,
+                    ["wotid"] = Source.Identity
+                };
+            }
+        };
+        var query = WotCloudEventSourceQuery.Parse("wotid=urn:test:device:v1;vendor=%not-interpreted");
+        var result = await WotRegistryResolver.AcquireCloudEventSourceAsync(source, source.Collection, query);
+        var bytes = defaultId == "1.0.0" ? Source.First : Source.Second;
+        await Assert.That(result.Kind).IsEqualTo(WotReferenceTargetKind.ThingDescription);
+        await Assert.That(result.ResourceXid).IsEqualTo(source.Resource);
+        await Assert.That(result.Version.VersionId).IsEqualTo(defaultId);
+        await Assert.That(result.Version.WotId).IsEqualTo(Source.Identity);
+        await Assert.That(result.Version.Profile).IsEqualTo(WotVersionProfile.SemVer);
+        await Assert.That(result.Version.ContentDigest).IsEqualTo(Digest(bytes));
+        await Assert.That(result.Context).IsEqualTo(source.Context);
+        await Assert.That(result.Version.Origin).IsEqualTo(source.Context.Source);
+        using var stored = result.Document.OpenRead();
+        using var copied = new MemoryStream();
+        await stored.CopyToAsync(copied);
+        await Assert.That(copied.ToArray().SequenceEqual(bytes)).IsTrue();
+        await Assert.That(source.Reads.Count(read => read.Operation == FederationOperation.Document)).IsEqualTo(1);
+        await Assert.That(source.Reads.Last().Target).IsEqualTo(source.Resource + "/versions/" + defaultId);
+        await Assert.That(source.Reads.Count).IsEqualTo(4);
+    }
+
+    [Test]
+    [Arguments("1.0.0", false)]
+    [Arguments("2.0.0", false)]
+    [Arguments("2.0.0-alpha", false)]
+    [Arguments("1.0.0", true)]
+    [Arguments("2.0.0", true)]
+    [Arguments("2.0.0-alpha", true)]
+    public async Task CloudEventsExactVersionsDoNotRequireADefaultOrApplyPrereleaseSelection(
+        string version, bool missingDefault)
+    {
+        var source = new Source(true);
+        source.Change = (request, metadata) =>
+        {
+            if (request.Target == source.Resource + "/meta" && missingDefault)
+            {
+                metadata["entity"]!.AsObject().Remove("defaultversionid");
+            }
+            if (request.Target == source.Resource + "/versions")
+            {
+                metadata["entities"]!["2.0.0-alpha"] = new JsonObject
+                {
+                    ["xid"] = request.Target + "/2.0.0-alpha", ["versionid"] = "2.0.0-alpha",
+                    ["wotid"] = Source.Identity
+                };
+            }
+        };
+        var query = WotCloudEventSourceQuery.Parse(WotCloudEventSourceQuery.Encode(Source.Identity, version));
+        var result = await WotRegistryResolver.AcquireCloudEventSourceAsync(source, source.Collection, query);
+        await Assert.That(result.Version.VersionId).IsEqualTo(version);
+        await Assert.That(result.Version.ContentDigest).IsEqualTo(Digest(version == "1.0.0" ? Source.First : Source.Second));
+        await Assert.That(source.Reads.Count(read => read.Operation == FederationOperation.Document)).IsEqualTo(1);
+        await Assert.That(source.Reads.Last().Target).IsEqualTo(source.Resource + "/versions/" + version);
+    }
+
+    [Test]
+    [Arguments(null, true)]
+    [Arguments(null, false)]
+    [Arguments("1.0.1", true)]
+    [Arguments("1.0.1", false)]
+    [Arguments("2.0.0+build", false)]
+    [Arguments("../outside", false)]
+    public async Task CloudEventsMissingVersionOrDefaultIsNotFoundWithoutFallback(string? version, bool missingDefault)
+    {
+        var source = new Source(true);
+        source.Change = (request, metadata) =>
+        {
+            if (request.Target != source.Resource + "/meta") { return; }
+            if (missingDefault) { metadata["entity"]!.AsObject().Remove("defaultversionid"); }
+            else { metadata["entity"]!["defaultversionid"] = "absent"; }
+        };
+        var query = WotCloudEventSourceQuery.Parse(WotCloudEventSourceQuery.Encode(Source.Identity, version));
+        var failure = await Assert.That(async () =>
+            await WotRegistryResolver.AcquireCloudEventSourceAsync(source, source.Collection, query))
+            .Throws<RegistryException>() ?? throw new InvalidOperationException("Expected a missing TD selection.");
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo("not-found");
+        await Assert.That(source.Reads.Count(read => read.Operation == FederationOperation.Document)).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task CloudEventsVersionLookupKeepsCoreCaseSensitivity()
+    {
+        var source = new Source(true);
+        source.Change = (request, metadata) =>
+        {
+            if (request.Target != source.Resource + "/versions") { return; }
+            metadata["entities"]!["2.0.0-alpha"] = new JsonObject
+            {
+                ["xid"] = request.Target + "/2.0.0-alpha", ["versionid"] = "2.0.0-alpha",
+                ["wotid"] = Source.Identity
+            };
+        };
+        var query = WotCloudEventSourceQuery.Parse(WotCloudEventSourceQuery.Encode(Source.Identity, "2.0.0-ALPHA"));
+        var failure = await Assert.That(async () =>
+            await WotRegistryResolver.AcquireCloudEventSourceAsync(source, source.Collection, query))
+            .Throws<RegistryException>() ?? throw new InvalidOperationException("Expected a case-sensitive Version miss.");
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo("not-found");
+        await Assert.That(source.Reads.Count(read => read.Operation == FederationOperation.Document)).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(0)]
+    [Arguments(1)]
+    [Arguments(2)]
+    public async Task CloudEventsLookupUsesExactIdentityAndCompleteVersionMetadata(int missing)
+    {
+        var source = new Source(true);
+        source.Change = (request, metadata) =>
+        {
+            if (request.Target == (missing == 0 ? source.Collection : source.Resource + "/versions") && missing < 2)
+            {
+                metadata["entities"]!.AsObject().Clear();
+            }
+        };
+        var query = WotCloudEventSourceQuery.Parse(WotCloudEventSourceQuery.Encode(
+            missing == 2 ? Source.Identity.ToUpperInvariant() : Source.Identity));
+        var failure = await Assert.That(async () =>
+            await WotRegistryResolver.AcquireCloudEventSourceAsync(source, source.Collection, query))
+            .Throws<RegistryException>() ?? throw new InvalidOperationException("Expected a scoped WoT miss.");
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo("not-found");
+        await Assert.That(source.Reads.Count(read => read.Operation == FederationOperation.Document)).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task CloudEventsIncompleteCollectionsCannotProveAbsenceOrUniqueness(bool versions)
+    {
+        var source = new Source(true);
+        source.Change = (request, metadata) =>
+        {
+            if (request.Target == (versions ? source.Resource + "/versions" : source.Collection))
+            {
+                metadata["complete"] = false;
+            }
+        };
+        var failure = await CloudEventFailure(source);
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        await Assert.That(source.Reads.Count(read => read.Operation == FederationOperation.Document)).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task CloudEventsCompetingResourcesAreRejectedBeforeAcquiringAnyDocument()
+    {
+        var source = new Source(true);
+        source.Change = (request, metadata) =>
+        {
+            if (request.Target != source.Collection) { return; }
+            metadata["entities"]!["competitor"] = new JsonObject { ["xid"] = source.Collection + "/competitor" };
+        };
+        var failure = await CloudEventFailure(source);
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.Ambiguous);
+        await Assert.That(source.Reads.Count).IsEqualTo(5);
+        await Assert.That(source.Reads.Count(read => read.Operation == FederationOperation.Document)).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(0)]
+    [Arguments(1)]
+    [Arguments(2)]
+    [Arguments(3)]
+    [Arguments(4)]
+    [Arguments(5)]
+    public async Task CloudEventsRejectsAliasesAndInconsistentVersionOrDefaultMetadata(int change)
+    {
+        var source = new Source(true);
+        source.Change = (request, metadata) =>
+        {
+            if (request.Target == source.Resource + "/meta")
+            {
+                if (change == 0) { metadata["entity"]!["xref"] = source.Collection + "/other"; }
+                if (change == 3) { metadata["entity"]!["defaultversionsticky"] = null; }
+            }
+            if (request.Target == source.Resource + "/versions")
+            {
+                if (change == 1) { metadata["entities"]!["1.0.0"]!["wotid"] = "urn:test:other"; }
+                if (change == 2) { metadata["entities"]!["1.0.0"]!["versionid"] = "another"; }
+                if (change == 4) { metadata["entities"]!["1.0.0"]!["xid"] = request.Target + "/another"; }
+                if (change == 5) { metadata["xid"] = source.Collection + "/other/versions"; }
+            }
+        };
+        var failure = await CloudEventFailure(source);
+        await Assert.That(failure.Code).IsEqualTo(change == 0
+            ? FederationErrorCode.UnsupportedOperation : FederationErrorCode.InvalidPackage);
+        await Assert.That(source.Reads.Count(read => read.Operation == FederationOperation.Document)).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(FederationErrorCode.PolicyDenied)]
+    [Arguments(FederationErrorCode.NotFound)]
+    [Arguments(FederationErrorCode.Unavailable)]
+    public async Task CloudEventsDocumentFailuresDoNotTryAnotherVersionOrSource(FederationErrorCode code)
+    {
+        var source = new Source(true) { DocumentFailure = code };
+        var failure = await CloudEventFailure(source);
+        await Assert.That(failure.Code).IsEqualTo(code);
+        await Assert.That(source.Reads.Count(read => read.Operation == FederationOperation.Document)).IsEqualTo(1);
+        await Assert.That(source.Reads.Last().Target).IsEqualTo(source.Resource + "/versions/1.0.0");
+    }
+
+    [Test]
+    public async Task CloudEventsMetadataDenialDoesNotBecomeNotFound()
+    {
+        var source = new Source(true);
+        source.Change = (request, _) =>
+        {
+            if (request.Target == source.Resource + "/meta")
+            {
+                throw new FederationException(FederationErrorCode.PolicyDenied, "Metadata access denied.");
+            }
+        };
+        var failure = await CloudEventFailure(source);
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.PolicyDenied);
+        await Assert.That(source.Reads.Count).IsEqualTo(2);
+    }
+
+    [Test]
+    [Arguments(0)]
+    [Arguments(1)]
+    [Arguments(2)]
+    public async Task CloudEventsChangedContextOwnerOrModelRejectsDependentReads(int change)
+    {
+        var source = new Source(true);
+        source.AfterRead = () =>
+        {
+            if (change == 0) { source.Context = new("test", "urn:test:changed"); }
+            if (change == 1) { source.Capabilities = RegistryJson.Parse("""{"federation":{"resolution":"producer"}}""").RootElement; }
+            if (change == 2) { source.Model = LoadModel(); }
+        };
+        var failure = await CloudEventFailure(source);
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InconsistentSnapshot);
+        await Assert.That(source.Reads.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task CloudEventsWrongDocumentOriginOrVersionCannotReturnBytes(bool wrongOrigin)
+    {
+        var source = new Source(true)
+        {
+            WrongDocumentOrigin = wrongOrigin, WrongDocumentPath = !wrongOrigin
+        };
+        var query = WotCloudEventSourceQuery.Parse(WotCloudEventSourceQuery.Encode(Source.Identity, "2.0.0"));
+        var failure = await Assert.That(async () =>
+            await WotRegistryResolver.AcquireCloudEventSourceAsync(source, source.Collection, query))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected substituted document rejection.");
+        await Assert.That(failure.Code).IsEqualTo(wrongOrigin
+            ? FederationErrorCode.InconsistentSnapshot : FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    public async Task CloudEventsExternalDescriptorsAreNotFetched()
+    {
+        var source = new Source(true) { External = true };
+        var failure = await CloudEventFailure(source);
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.Unavailable);
+        await Assert.That(source.Reads.Count).IsEqualTo(4);
+    }
+
+    [Test]
+    [Arguments(0)]
+    [Arguments(1)]
+    [Arguments(2)]
+    [Arguments(3)]
+    [Arguments(4)]
+    [Arguments(5)]
+    public async Task CloudEventsAcquisitionHonorsInclusiveSharedBudgetBoundaries(int bound)
+    {
+        var query = WotCloudEventSourceQuery.Parse(WotCloudEventSourceQuery.Encode(Source.Identity));
+        var reference = new Source(true);
+        var observed = new FederationReadBudget();
+        await WotRegistryResolver.AcquireCloudEventSourceAsync(reference, reference.Collection, query, observed);
+        var limit = bound switch
+        {
+            0 => observed.Requests, 1 => observed.ObjectsRead, 2 => observed.BytesRead,
+            3 => observed.Work, 4 => Source.First.Length, _ => Math.Max(reference.LargestMetadataBytes, Source.First.Length)
+        };
+        for (var delta = -1; delta <= 1; delta++)
+        {
+            var limits = bound switch
+            {
+                0 => new FederationReadLimits(maxRequests: limit + delta),
+                1 => new FederationReadLimits(maxObjects: limit + delta),
+                2 => new FederationReadLimits(maxTotalBytes: limit + delta),
+                3 => new FederationReadLimits(maxWork: limit + delta),
+                4 => new FederationReadLimits(maxResultBytes: checked((int)(limit + delta))),
+                _ => new FederationReadLimits(maxObjectBytes: checked((int)(limit + delta)))
+            };
+            var source = new Source(true);
+            if (delta < 0)
+            {
+                var failure = await CloudEventFailure(source, new(limits));
+                await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+            }
+            else
+            {
+                var result = await WotRegistryResolver.AcquireCloudEventSourceAsync(source, source.Collection, query, new(limits));
+                await Assert.That(result.Version.ContentDigest).IsEqualTo(Digest(Source.First));
+            }
+        }
+    }
+
+    [Test]
+    public async Task CloudEventsRepeatedAcquisitionCannotResetTheSharedBudget()
+    {
+        var query = WotCloudEventSourceQuery.Parse(WotCloudEventSourceQuery.Encode(Source.Identity));
+        var reference = new Source(true);
+        var observed = new FederationReadBudget();
+        await WotRegistryResolver.AcquireCloudEventSourceAsync(reference, reference.Collection, query, observed);
+        var source = new Source(true);
+        var shared = new FederationReadBudget(new(maxRequests: observed.Requests));
+        var result = await WotRegistryResolver.AcquireCloudEventSourceAsync(source, source.Collection, query, shared);
+        var failure = await CloudEventFailure(source, shared);
+        await Assert.That(result.Version.ContentDigest).IsEqualTo(Digest(Source.First));
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        await Assert.That(source.Reads.Count).IsEqualTo(4);
+        await Assert.That(shared.Requests).IsEqualTo(observed.Requests);
+    }
+
+    [Test]
+    [Arguments(0)]
+    [Arguments(1)]
+    [Arguments(4)]
+    public async Task CloudEventsCancellationBeforeOrAfterUncooperativeReadsCannotReturnSuccess(int afterRead)
+    {
+        using var cancellation = new CancellationTokenSource();
+        var source = new Source(true);
+        if (afterRead == 0) { cancellation.Cancel(); }
+        else { source.AfterRead = () => { if (source.Reads.Count == afterRead) { cancellation.Cancel(); } }; }
+        var query = WotCloudEventSourceQuery.Parse(WotCloudEventSourceQuery.Encode(Source.Identity));
+        await Assert.That(async () => await WotRegistryResolver.AcquireCloudEventSourceAsync(source,
+            source.Collection, query, cancellationToken: cancellation.Token)).Throws<OperationCanceledException>();
+        await Assert.That(source.Reads.Count).IsEqualTo(afterRead);
+    }
+
+    [Test]
+    public async Task CloudEventsDefaultChangesDoNotChangeAnExplicitVersionOrPreviouslyAcquiredBytes()
+    {
+        var source = new Source(true);
+        var defaultId = "1.0.0";
+        source.Change = (request, metadata) =>
+        {
+            if (request.Target == source.Resource + "/meta") { metadata["entity"]!["defaultversionid"] = defaultId; }
+        };
+        var query = WotCloudEventSourceQuery.Parse(WotCloudEventSourceQuery.Encode(Source.Identity));
+        var first = await WotRegistryResolver.AcquireCloudEventSourceAsync(source, source.Collection, query);
+        defaultId = "2.0.0";
+        var second = await WotRegistryResolver.AcquireCloudEventSourceAsync(source, source.Collection, query);
+        var pinned = await WotRegistryResolver.AcquireCloudEventSourceAsync(source, source.Collection,
+            WotCloudEventSourceQuery.Parse(WotCloudEventSourceQuery.Encode(Source.Identity, "1.0.0")));
+        await Assert.That(first.Version.VersionId).IsEqualTo("1.0.0");
+        await Assert.That(second.Version.VersionId).IsEqualTo("2.0.0");
+        await Assert.That(pinned.Version.VersionId).IsEqualTo("1.0.0");
+        await Assert.That(pinned.Version.ContentDigest).IsEqualTo(first.Version.ContentDigest);
+        using var retained = first.Document.OpenRead();
+        await Assert.That("sha256:" + Convert.ToHexString(SHA256.HashData(retained)).ToLowerInvariant()).IsEqualTo(Digest(Source.First));
+    }
+
+    [Test]
+    [Arguments(null, "1")]
+    [Arguments("1", "1")]
+    [Arguments("2", "2")]
+    public async Task CloudEventsIncrementalSourcesUseExactCoreSelectionWithoutACompatibilityLineFloor(
+        string? pin, string selected)
+    {
+        var source = new Source(true) { Model = WotRegistryProfiles.Compile(WotVersionProfile.Incremental) };
+        source.Change = (request, metadata) =>
+        {
+            if (request.Target == source.Resource + "/meta") { metadata["entity"]!["defaultversionid"] = "1"; }
+            if (request.Target != source.Resource + "/versions") { return; }
+            var versions = metadata["entities"]!.AsObject();
+            versions.Clear();
+            foreach (var id in new[] { "1", "2" })
+            {
+                versions[id] = new JsonObject
+                {
+                    ["xid"] = request.Target + "/" + id, ["versionid"] = id,
+                    ["wotid"] = Source.Identity, ["compatibilityline"] = "urn:test:line:" + id
+                };
+            }
+        };
+        var query = WotCloudEventSourceQuery.Parse(WotCloudEventSourceQuery.Encode(Source.Identity, pin));
+        var result = await WotRegistryResolver.AcquireCloudEventSourceAsync(source, source.Collection, query);
+        await Assert.That(result.Version.Profile).IsEqualTo(WotVersionProfile.Incremental);
+        await Assert.That(result.Version.VersionId).IsEqualTo(selected);
+        await Assert.That(result.Version.CompatibilityLine).IsEqualTo("urn:test:line:" + selected);
+        await Assert.That(result.Version.ContentDigest).IsEqualTo(Digest(Source.Second));
+        await Assert.That(source.Reads.Count(read => read.Operation == FederationOperation.Document)).IsEqualTo(1);
+        await Assert.That(source.Reads.Last().Target).IsEqualTo(source.Resource + "/versions/" + selected);
+    }
+
+    [Test]
+    public async Task CloudEventsRequiresAnExplicitTdCollectionAndCapturedModelBeforeReads()
+    {
+        var query = WotCloudEventSourceQuery.Parse(WotCloudEventSourceQuery.Encode(Source.Identity));
+        var source = new Source(true);
+        await Assert.That(async () =>
+            await WotRegistryResolver.AcquireCloudEventSourceAsync(source, "/thingdescriptiongroups", query))
+            .Throws<ArgumentException>();
+        var modelSource = new Source();
+        var wrongKind = await CloudEventFailure(modelSource);
+        await Assert.That(wrongKind.Code).IsEqualTo(FederationErrorCode.UnsupportedOperation);
+        source.Model = null;
+        var missingModel = await CloudEventFailure(source);
+        await Assert.That(missingModel.Code).IsEqualTo(FederationErrorCode.UnsupportedOperation);
+        await Assert.That(source.Reads.Count + modelSource.Reads.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task CloudEventsDirectoryAcquisitionRetainsAuthoredBytesAfterSourceDisposal()
+    {
+        var tree = CreateDirectoryTree(description: true, defaultVersionId: "1.0.0");
+        await using var mapping = await DirectoryMapping.OpenAsync(tree);
+        var query = WotCloudEventSourceQuery.Parse(WotCloudEventSourceQuery.Encode(Source.Identity));
+        var result = await WotRegistryResolver.AcquireCloudEventSourceAsync(mapping, "/gs/tenant/models", query);
+        await mapping.DisposeAsync();
+        await Assert.That(result.Kind).IsEqualTo(WotReferenceTargetKind.ThingDescription);
+        await Assert.That(result.Version.VersionId).IsEqualTo("1.0.0");
+        await Assert.That(result.Version.ContentDigest).IsEqualTo(Digest(Source.First));
+        using var retained = result.Document.OpenRead();
+        await Assert.That("sha256:" + Convert.ToHexString(SHA256.HashData(retained)).ToLowerInvariant()).IsEqualTo(Digest(Source.First));
+    }
+
+    private static async Task<FederationException> CloudEventFailure(Source source, FederationReadBudget? budget = null) =>
+        await Assert.That(async () => await WotRegistryResolver.AcquireCloudEventSourceAsync(source, source.Collection,
+            WotCloudEventSourceQuery.Parse(WotCloudEventSourceQuery.Encode(Source.Identity)), budget))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected an explicit CloudEvents source failure.");
+
     private static readonly byte[] FragmentBytes = Encoding.UTF8.GetBytes("""
         {"id":"urn:test:device:v1","version":{"model":"2.0.0"},
         "properties":{"a/b":{"~name":42},"":null,"~1":true,"%2F":"once","a+b":"plus",
@@ -981,10 +1434,12 @@ public class WotRegistryResolverTests
         return RegistryModel.Compile(RegistryJson.FromElement(document.RootElement));
     }
 
-    private static MemoryTreeReader CreateDirectoryTree(byte[]? secondBytes = null)
+    private static MemoryTreeReader CreateDirectoryTree(byte[]? secondBytes = null, bool description = false,
+        string defaultVersionId = "2.0.0")
     {
         var tree = new MemoryTreeReader();
         const string resource = "/gs/tenant/models/assigned";
+        var idName = description ? "thingdescriptionid" : "thingmodelid";
         JsonNode Put(string file, JsonObject record)
         {
             record["format"] = "xregistry-document-tree";
@@ -1008,10 +1463,10 @@ public class WotRegistryResolverTests
         foreach (var (id, file, bytes) in new[] { ("1.0.0", "first.bin", Source.First), ("2.0.0", "second.bin", secondBytes ?? Source.Second) })
         {
             tree.Files.Add(file, bytes);
-            var entity = Entity(resource + "/versions/" + id, "thingmodelid", "assigned");
+            var entity = Entity(resource + "/versions/" + id, idName, "assigned");
             entity["versionid"] = id;
             entity["ancestorid"] = "1.0.0";
-            entity["isdefault"] = id == "2.0.0";
+            entity["isdefault"] = id == defaultVersionId;
             entity["wotid"] = Source.Identity;
             entity["contenttype"] = "application/json";
             versionReferences.Add(Put(id + ".json", new JsonObject
@@ -1029,14 +1484,14 @@ public class WotRegistryResolverTests
             ["kind"] = "collection", ["xid"] = resource + "/versions",
             ["count"] = 2, ["entries"] = versionReferences
         });
-        var meta = Entity(resource + "/meta", "thingmodelid", "assigned");
+        var meta = Entity(resource + "/meta", idName, "assigned");
         meta["readonly"] = false;
-        meta["defaultversionid"] = "2.0.0";
+        meta["defaultversionid"] = defaultVersionId;
         meta["defaultversionsticky"] = false;
         var metaReference = Put("meta.json", new JsonObject { ["kind"] = "meta", ["entity"] = meta });
         var resourceReference = Put("resource.json", new JsonObject
         {
-            ["kind"] = "resource", ["entity"] = new JsonObject { ["xid"] = resource, ["thingmodelid"] = "assigned" },
+            ["kind"] = "resource", ["entity"] = new JsonObject { ["xid"] = resource, [idName] = "assigned" },
             ["meta"] = metaReference, ["collections"] = new JsonArray(versions)
         });
         var resources = Put("resources.json", new JsonObject
@@ -1063,6 +1518,7 @@ public class WotRegistryResolverTests
             "versionmode":"semver","singleversionroot":true,
             "attributes":{"wotid":{"type":"uri","required":true,"matchversions":true}}}}}}}
             """);
+        if (description) { root["modelsource"]!["groups"]!["gs"]!["resources"]!["models"]!["singular"] = "thingdescription"; }
         Put("registry.json", new JsonObject
         {
             ["kind"] = "registry", ["entity"] = root, ["collections"] = new JsonArray(groups),
@@ -1089,6 +1545,7 @@ public class WotRegistryResolverTests
         internal string Resource => Collection + "/assigned";
         internal WotVersionResolutionRequest Request { get; }
         internal List<FederationReadRequest> Reads { get; } = [];
+        internal int LargestMetadataBytes { get; private set; }
         internal byte[] FirstBytes { get; init; } = First;
         internal byte[] SecondBytes { get; init; } = Second;
         internal Action<FederationReadRequest, JsonObject>? Change { get; set; }
@@ -1121,8 +1578,10 @@ public class WotRegistryResolverTests
             {
                 var metadata = Metadata(request);
                 Change?.Invoke(request, metadata);
+                var json = metadata.ToJsonString();
+                LargestMetadataBytes = Math.Max(LargestMetadataBytes, Encoding.UTF8.GetByteCount(json));
                 result = FederationReadResult.FromMetadata(request.Target, Context,
-                    RegistryJson.Parse(metadata.ToJsonString()).RootElement);
+                    RegistryJson.Parse(json).RootElement);
             }
             AfterRead?.Invoke();
             return ValueTask.FromResult(result);
@@ -1158,7 +1617,7 @@ public class WotRegistryResolverTests
             {
                 entities["assigned"] = new JsonObject { ["xid"] = Resource };
             }
-            else if (request.Target == Resource + "/versions")
+            else if (path.Kind == RegistryPathKind.VersionCollection)
             {
                 foreach (var id in new[] { "1.0.0", "2.0.0" })
                 {

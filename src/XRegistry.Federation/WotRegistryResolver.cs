@@ -287,6 +287,31 @@ public static class WotRegistryResolver
         return new Resolution(source, collection, request, budget ?? new(), cancellationToken).RunAsync();
     }
 
+    /// <summary>Acquires the TD source selected by decoded CloudEvents WoT query parameters.</summary>
+    /// <remarks>
+    /// The caller validates the complete source URI-reference and authorizes one Group Resource
+    /// collection. An explicit wotversion selects exactly that Version; otherwise selection uses
+    /// the captured Core default, including a sticky or prerelease default. Missing selections
+    /// report not-found, without ordinary WoT floor selection or fallback. The result contains
+    /// authored source bytes, not a composed resolved TD view suitable for CloudEvents subject.
+    /// </remarks>
+    public static ValueTask<WotResolvedDocument> AcquireCloudEventSourceAsync(IFederationReadSource source,
+        string resourceCollection, WotCloudEventSourceQuery query,
+        FederationReadBudget? budget = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(query);
+        var collection = new FederationReadRequest(FederationOperation.Collection, resourceCollection);
+        if (collection.Parts.Length != 3)
+        {
+            throw new ArgumentException("An explicit Group Resource collection is required.", nameof(resourceCollection));
+        }
+        var request = new WotVersionResolutionRequest(query.WotId, WotReferenceTargetKind.ThingDescription,
+            WotReferenceOperator.ThingDescription, VersionIdPin: query.VersionId);
+        return new Resolution(source, collection, request, budget ?? new(), cancellationToken,
+            useCoreDefaultSelection: true).RunAsync();
+    }
+
     private sealed class Resolution
     {
         private readonly IFederationReadSource _source;
@@ -298,9 +323,11 @@ public static class WotRegistryResolver
         private readonly RegistryModel _model;
         private readonly WotVersionProfile _profile;
         private readonly FederationResolutionOwner _owner;
+        private readonly bool _useCoreDefaultSelection;
 
         internal Resolution(IFederationReadSource source, FederationReadRequest collection,
-            WotVersionResolutionRequest request, FederationReadBudget budget, CancellationToken token)
+            WotVersionResolutionRequest request, FederationReadBudget budget, CancellationToken token,
+            bool useCoreDefaultSelection = false)
         {
             token.ThrowIfCancellationRequested();
             _source = source;
@@ -308,6 +335,7 @@ public static class WotRegistryResolver
             _request = request;
             _budget = budget;
             _token = token;
+            _useCoreDefaultSelection = useCoreDefaultSelection;
             _context = source.Context;
             _owner = FederationCapabilities.GetResolutionOwner(source.Capabilities);
             _model = source.Model ?? throw new FederationException(FederationErrorCode.UnsupportedOperation,
@@ -340,6 +368,7 @@ public static class WotRegistryResolver
             var resources = Members(await MetadataAsync(_collection).ConfigureAwait(false), _collection.Target);
             string? resourceXid = null;
             JsonElement meta = default;
+            List<WotVersionCandidate>? matchedCandidates = null;
             foreach (var member in resources)
             {
                 _token.ThrowIfCancellationRequested();
@@ -352,15 +381,25 @@ public static class WotRegistryResolver
                     throw new FederationException(FederationErrorCode.UnsupportedOperation,
                         "A WoT Resource alias must be resolved to its authorized source before Version selection.");
                 }
-                var defaultVersionId = FederationJson.String(resourceMeta, "defaultversionid");
-                var defaultPath = xid + "/versions/" + Uri.EscapeDataString(defaultVersionId);
-                var defaultVersion = Entity(await MetadataAsync(new(FederationOperation.Entity, defaultPath))
-                    .ConfigureAwait(false), defaultPath);
-                if (FederationJson.String(defaultVersion, "versionid") != defaultVersionId)
+                List<WotVersionCandidate>? resourceCandidates = null;
+                string? wotId;
+                if (_useCoreDefaultSelection)
                 {
-                    throw FederationJson.Invalid("A WoT default Version has a different Version identity.");
+                    (wotId, resourceCandidates) = await ReadVersionsAsync(xid).ConfigureAwait(false);
                 }
-                if (FederationJson.String(defaultVersion, "wotid") != _request.TargetWotId) { continue; }
+                else
+                {
+                    var defaultVersionId = FederationJson.String(resourceMeta, "defaultversionid");
+                    var defaultPath = xid + "/versions/" + Uri.EscapeDataString(defaultVersionId);
+                    var defaultVersion = Entity(await MetadataAsync(new(FederationOperation.Entity, defaultPath))
+                        .ConfigureAwait(false), defaultPath);
+                    if (FederationJson.String(defaultVersion, "versionid") != defaultVersionId)
+                    {
+                        throw FederationJson.Invalid("A WoT default Version has a different Version identity.");
+                    }
+                    wotId = FederationJson.String(defaultVersion, "wotid");
+                }
+                if (wotId != _request.TargetWotId) { continue; }
                 if (resourceXid is not null)
                 {
                     throw new FederationException(FederationErrorCode.Ambiguous,
@@ -368,13 +407,13 @@ public static class WotRegistryResolver
                 }
                 resourceXid = xid;
                 meta = resourceMeta;
+                matchedCandidates = resourceCandidates;
             }
             if (resourceXid is null)
             {
                 throw new RegistryException(new("not-found", "", "No WoT Resource matches in the selected Group."));
             }
 
-            var defaultId = FederationJson.String(meta, "defaultversionid");
             var sticky = false;
             if (meta.TryGetProperty("defaultversionsticky", out var stickyValue))
             {
@@ -386,24 +425,23 @@ public static class WotRegistryResolver
             }
 
             var versionsPath = resourceXid + "/versions";
-            var versions = Members(await MetadataAsync(new(FederationOperation.Collection, versionsPath))
-                .ConfigureAwait(false), versionsPath);
-            var candidates = new List<WotVersionCandidate>();
-            foreach (var member in versions)
+            var candidates = matchedCandidates ??
+                (await ReadVersionsAsync(resourceXid, _request.TargetWotId).ConfigureAwait(false)).Candidates;
+            if (_useCoreDefaultSelection)
             {
-                var id = FederationJson.String(member.Value, "versionid");
-                if (id != member.Name || FederationJson.String(member.Value, "wotid") != _request.TargetWotId)
+                var selectedId = _request.VersionIdPin ??
+                    (meta.TryGetProperty("defaultversionid", out _) ? FederationJson.String(meta, "defaultversionid") : null);
+                var selectedCandidate = candidates.Find(candidate => candidate.VersionId == selectedId);
+                if (selectedCandidate is null)
                 {
-                    throw FederationJson.Invalid("A WoT Version has a different identity from its selected Resource.");
+                    throw new RegistryException(new("not-found", "",
+                        "The CloudEvents TD Version or Core default is not available in the selected Resource."));
                 }
-                candidates.Add(new(id, "", _context.Source)
-                {
-                    Profile = _profile,
-                    CompatibilityLine = member.Value.TryGetProperty("compatibilityline", out _)
-                        ? FederationJson.String(member.Value, "compatibilityline") : null
-                });
+                var acquired = await AcquireAsync(versionsPath, selectedCandidate.VersionId).ConfigureAwait(false);
+                return Complete(resourceXid, selectedCandidate, acquired.Document, acquired.Digest);
             }
 
+            var defaultId = FederationJson.String(meta, "defaultversionid");
             var captured = new WotVersionResource(_request.TargetWotId, _request.TargetKind,
                 defaultId, sticky, candidates) { Profile = _profile };
             var matchingDocuments = new Dictionary<string, FederationDocument>(StringComparer.Ordinal);
@@ -433,15 +471,48 @@ public static class WotRegistryResolver
             {
                 (document, digest) = await AcquireAsync(versionsPath, selected).ConfigureAwait(false);
             }
+            return Complete(resourceXid, candidates.First(candidate => candidate.VersionId == selected), document, digest);
+        }
+
+        private WotResolvedDocument Complete(string resourceXid, WotVersionCandidate selected,
+            FederationDocument document, string digest)
+        {
             _budget.CheckResultBytes(document.Length);
             CheckContext();
             _token.ThrowIfCancellationRequested();
             return new(resourceXid, _request.TargetKind,
-                new(_request.TargetWotId, selected, digest, _context.Source)
+                new(_request.TargetWotId, selected.VersionId, digest, _context.Source)
                 {
                     Profile = _profile,
-                    CompatibilityLine = candidates.First(candidate => candidate.VersionId == selected).CompatibilityLine
+                    CompatibilityLine = selected.CompatibilityLine
                 }, _context, document);
+        }
+
+        private async ValueTask<(string? WotId, List<WotVersionCandidate> Candidates)> ReadVersionsAsync(
+            string resourceXid, string? expectedIdentity = null)
+        {
+            var versionsPath = resourceXid + "/versions";
+            var versions = Members(await MetadataAsync(new(FederationOperation.Collection, versionsPath))
+                .ConfigureAwait(false), versionsPath);
+            var candidates = new List<WotVersionCandidate>();
+            var identity = expectedIdentity;
+            foreach (var member in versions)
+            {
+                var id = FederationJson.String(member.Value, "versionid");
+                var wotId = FederationJson.String(member.Value, "wotid");
+                if (id != member.Name || identity is not null && wotId != identity)
+                {
+                    throw FederationJson.Invalid("A WoT Version has a different identity from its selected Resource.");
+                }
+                identity = wotId;
+                candidates.Add(new(id, "", _context.Source)
+                {
+                    Profile = _profile,
+                    CompatibilityLine = member.Value.TryGetProperty("compatibilityline", out _)
+                        ? FederationJson.String(member.Value, "compatibilityline") : null
+                });
+            }
+            return (identity, candidates);
         }
 
         private async ValueTask<(FederationDocument Document, string Digest)> AcquireAsync(string versionsPath, string id)

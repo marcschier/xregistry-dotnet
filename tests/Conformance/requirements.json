@@ -114565,13 +114565,22 @@
       ],
       "text": "A configured resolver MUST select exactly one Thing Description Resource whose `wotid` equals the decoded identifier within its configured scope. A missing match MUST produce `not-found`; ambiguous matches MUST produce an error rather than selecting an arbitrary Resource. Group-scoped lookup and uniqueness follow [Section 5.3](#53-lookup).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "AcquireCloudEventSourceAsync implements exact identity lookup in one caller-authorized TD Resource collection, with complete Version metadata, missing-match and ambiguity errors, captured model/context checks and finite budgets. DirectoryMapping supplies a public acquired-byte workflow. This remains partial configured-resolver evidence: authored URI/base/context processing and alias provider integration are not implemented by this acquisition API. No resolved TD view or native qualification is claimed.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "CloudEventsLookupUsesExactIdentityAndCompleteVersionMetadata",
+          "CloudEventsCompetingResourcesAreRejectedBeforeAcquiringAnyDocument",
+          "CloudEventsIncompleteCollectionsCannotProveAbsenceOrUniqueness",
+          "CloudEventsRequiresAnExplicitTdCollectionAndCapturedModelBeforeReads",
+          "CloudEventsDirectoryAcquisitionRetainsAuthoredBytesAfterSourceDisposal",
+          "CloudEventsRejectsAliasesAndInconsistentVersionOrDefaultMetadata"
+        ],
         "nativeEvidence": []
       }
     },
@@ -114597,13 +114606,25 @@
       ],
       "text": "When `wotversion` is present, the resolver MUST select that exact Version or fail as `not-found`. When it is absent, the resolver MUST select the Resource's current Core default Version, including a sticky default, or fail as `not-found` if no default is available. It MUST NOT apply the floor or prerelease selection of Section 5.4 to this CloudEvents source selection. References within the selected TD still follow their applicable resolution rules. The unversioned source can therefore resolve to a different view after the default changes.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "AcquireCloudEventSourceAsync selects the exact decoded Version or captured Core default, including lower, sticky and prerelease defaults. Exact selection does not require an available default, does not apply ordinary SemVer or incremental floors, and fails as not-found without fallback. Core Version lookup remains case-sensitive. Repeated acquisition observes a changed default without changing retained bytes or an explicit Version selection. The block remains pending because references within the selected TD still require authored-reference provider integration and resolved-view composition; source acquisition alone does not implement that obligation.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "CloudEventsUsesTheCoreDefaultIncludingLowerAndPrereleaseStickyDefaults",
+          "CloudEventsExactVersionsDoNotRequireADefaultOrApplyPrereleaseSelection",
+          "CloudEventsMissingVersionOrDefaultIsNotFoundWithoutFallback",
+          "CloudEventsVersionLookupKeepsCoreCaseSensitivity",
+          "CloudEventsDefaultChangesDoNotChangeAnExplicitVersionOrPreviouslyAcquiredBytes",
+          "CloudEventsIncrementalSourcesUseExactCoreSelectionWithoutACompatibilityLineFloor",
+          "CloudEventsDocumentFailuresDoNotTryAnotherVersionOrSource",
+          "CloudEventsAcquisitionHonorsInclusiveSharedBudgetBoundaries",
+          "CloudEventsRepeatedAcquisitionCannotResetTheSharedBudget"
+        ],
         "nativeEvidence": []
       }
     },

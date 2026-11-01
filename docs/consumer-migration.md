@@ -20,6 +20,7 @@ complete xRegistry conformance.
 | WoT containing-revision resolution | `XRegistry.Federation.WotRegistryResolver.ResolveLocalAsync` | Resolves a parsed local reference against an already acquired `WotResolvedDocument`. Uses its retained bytes and kind. SemVer floors check the authored version; incremental requirements check the captured revision number and line. It cannot select another Registry Version. |
 | WoT JSON Pointer selection | `XRegistry.Federation.WotRegistryResolver.SelectFragmentAsync` | Applies an RFC 6901 URI-fragment pointer to the acquired document after Version or local-revision selection. Returns the selected JSON value with the containing document's full-byte digest and origin. |
 | CloudEvents WoT source query | `XRegistry.Models.WotCloudEventSourceQuery.Parse` and `Encode` | Parses the raw query without `?` or a fragment and produces canonical standardized parameters from decoded values. Preserves uninterpreted additional query text when parsing. The caller validates the complete source URI-reference; this helper does not select a TD or establish a resolved view. |
+| CloudEvents WoT TD source acquisition | `XRegistry.Federation.WotRegistryResolver.AcquireCloudEventSourceAsync` | Uses decoded query parameters within one authorized TD Resource collection. Selects the exact `wotversion` or the captured Core default, including sticky and prerelease defaults, without ordinary WoT floor selection. Returns authored source bytes with their computed digest and origin, not the resolved TD view required by CloudEvents `subject`. |
 | WoT incremental assignment calculation | `XRegistry.Models.WotIncrementalVersionAllocator.Assign` | Calculates a new integer revision from explicit durable high-water state. It does not publish, persist a counter, activate an incremental endpoint or implement compatibility-line selection. |
 | WoT incremental publication | `XRegistry.Models.WotRegistryProfiles.Compile(WotVersionProfile.Incremental)` with `RegistryEngine` | Provisions a separate fixed-profile model. Publication commits the counter with Documents, metadata and Core state; revision bytes and compatibility lines cannot change. |
 | Generic operation dispatch | `RegistryEngine.ExecuteAsync(RegistryOperation, RegistryOperationContext, CancellationToken)` in `XRegistry.Server` | The engine owns model, lifecycle, versions, validation and atomic change preparation. |
@@ -1373,7 +1374,7 @@ of its explicit floor and the TD's model version. Several type links require
 every explicit floor only when that model version is present. The selection
 helper receives those parsed values; it does not extract links from JSON-LD.
 
-`WotRegistryResolver` reads Resource Meta and default-Version metadata to match
+`WotRegistryResolver.ResolveAsync` reads Resource Meta and default-Version metadata to match
 `wotid`; a native document view does not put Version attributes on the Resource
 itself. It requires complete lookup and Version collections, keeps every read in
 the selected source context, and shares one finite `FederationReadBudget`.
@@ -1381,6 +1382,19 @@ Unpinned and Version-pinned requests acquire document bytes only for the selecte
 Version. A digest pin hashes candidate bytes and selects the highest matching
 Version, ignoring advisory digest fields. Denied, unavailable or inconsistent
 reads fail without trying another Version or source.
+
+`AcquireCloudEventSourceAsync` takes a parsed CloudEvents WoT source query and
+one authorized Thing Description Resource collection. Complete Version metadata
+establishes each Resource's `wotid`, so an explicit `wotversion` does not depend
+on an available default. Without that parameter, selection uses the captured
+Core default even when a higher SemVer exists or the default is a prerelease.
+Missing Resources, exact Versions or defaults report `not-found`; competing
+Resources and incomplete collections fail before document acquisition.
+Additional query parameters remain uninterpreted. This API shares the captured
+model, context, authorization owner and finite read budget checks of ordinary
+acquisition. It returns independently owned authored bytes, not a composed TD.
+Applying CloudEvents `subject` still requires obtaining the resolved TD view;
+source acquisition does not establish publication-view stability or closure.
 
 `ResolveLocalAsync` retains the containing revision even after its source is
 disposed. For SemVer, it checks the stored document's identity, parses exact bytes with
