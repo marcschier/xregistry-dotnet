@@ -11,6 +11,113 @@ namespace XRegistry.Validation.Tests;
 public class ApiOperationReferenceTests
 {
     [Test]
+    [Arguments("definitions")]
+    [Arguments("parameters")]
+    [Arguments("responses")]
+    [Arguments("securityDefinitions")]
+    public async Task SwaggerReusableMapShapesRejectBeforeSelectionOrAcquisition(string collection)
+    {
+        foreach (var value in new[] { "null", "[]", "1", "true", "false", "\"bad\"" })
+        {
+            foreach (var isEntry in new[] { false, true })
+            {
+                foreach (var selector in new[] { "operations/Target", "operations/Missing", "/paths/~1x/get" })
+                {
+                    var document = new JsonObject
+                    {
+                        ["swagger"] = "2.0",
+                        [collection] = isEntry
+                            ? new JsonObject { ["entry/~"] = JsonNode.Parse(value) } : JsonNode.Parse(value),
+                        ["paths"] = new JsonObject
+                        {
+                            ["/x"] = new JsonObject { ["get"] = new JsonObject { ["operationId"] = "Target" } },
+                            ["/remote"] = new JsonObject { ["$ref"] = "https://not-acquired.test/path" }
+                        }
+                    };
+                    var calls = 0;
+                    var result = await ApiOperationDocumentResolver.ResolveAsync("Swagger/2.0", "application/json",
+                        System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                        ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                        resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+                    await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo(isEntry
+                        ? "document.component_value" : "document.component_map");
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo("$/" + collection + (isEntry ? "/entry~1~0" : ""));
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                    await Assert.That(calls).IsEqualTo(0);
+                }
+            }
+        }
+    }
+
+    [Test]
+    public async Task SwaggerUnusedReusableObjectsKeepTheirOwnKeyGrammarAndOpaqueExtensions()
+    {
+        foreach (var empty in new[] { false, true })
+        {
+            var document = new JsonObject
+            {
+                ["swagger"] = "2.0",
+                ["paths"] = new JsonObject { ["/x"] = new JsonObject { ["get"] = new JsonObject { ["operationId"] = "Target" } } },
+                ["components"] = false,
+                ["x-private"] = new JsonObject { ["parameters"] = null }
+            };
+            foreach (var collection in new[] { "definitions", "parameters", "responses", "securityDefinitions" })
+            {
+                document[collection] = empty ? new JsonObject() : new JsonObject
+                {
+                    ["entry/~ é"] = new JsonObject { ["$ref"] = "https://not-acquired.test/unused", ["opaque"] = false }
+                };
+            }
+            foreach (var selector in new[] { "operations/Target", "/paths/~1x/get", "operations/Missing" })
+            {
+                var calls = 0;
+                var result = await ApiOperationDocumentResolver.ResolveAsync("Swagger/2.0", "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                    resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+                await Assert.That(result.Status).IsEqualTo(selector.EndsWith("Missing", StringComparison.Ordinal)
+                    ? ApiOperationResolutionStatus.NotFound : ApiOperationResolutionStatus.Selected);
+                await Assert.That(calls).IsEqualTo(0);
+                if (result.Status == ApiOperationResolutionStatus.Selected)
+                {
+                    await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("Target");
+                    await Assert.That(result.DocumentPath).IsEqualTo("$/paths/~1x/get");
+                }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments(-1)]
+    [Arguments(0)]
+    [Arguments(1)]
+    public async Task SwaggerUnusedReusableObjectsConsumeTheInclusiveDocumentNodeBudget(int excess)
+    {
+        var padding = string.Join(",", Enumerable.Repeat("null",
+            ApiOperationDocumentResolver.Capabilities.MaxDocumentNodes - 9 + excess));
+        var document = """
+            {"swagger":"2.0","paths":{"/x":{"get":{"operationId":"Target"}}},"definitions":{"Unused":{"x-private":[
+            """ + padding + "]}}}";
+        foreach (var selector in new[] { "operations/Target", "/paths/~1x/get" })
+        {
+            var result = ApiOperationDocumentResolver.Resolve("Swagger/2.0", "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document), ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector));
+            await Assert.That(result.Status).IsEqualTo(excess > 0
+                ? ApiOperationResolutionStatus.Indeterminate : ApiOperationResolutionStatus.Selected);
+            if (excess > 0)
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("limit.nodes");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+            else
+            {
+                await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("Target");
+            }
+        }
+    }
+
+    [Test]
     [Arguments(-1)]
     [Arguments(0)]
     [Arguments(1)]

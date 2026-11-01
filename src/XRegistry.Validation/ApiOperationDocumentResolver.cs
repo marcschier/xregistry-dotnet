@@ -489,13 +489,10 @@ public static partial class ApiOperationDocumentResolver
                 "The root swagger value must be '2.0'.", "$/swagger");
         }
 
-        if (format.StartsWith("OpenAPI/", StringComparison.Ordinal))
+        var componentFailure = ValidateApiReusableShapes(format, root, cancellationToken);
+        if (componentFailure is not null)
         {
-            var componentFailure = ValidateOpenApiComponentShapes(format, root, cancellationToken);
-            if (componentFailure is not null)
-            {
-                return componentFailure;
-            }
+            return componentFailure;
         }
         if (format == "OpenAPI/3.1" && root.TryGetProperty("webhooks", out var webhookMap) &&
             webhookMap.ValueKind != JsonValueKind.Object)
@@ -522,10 +519,12 @@ public static partial class ApiOperationDocumentResolver
         return null;
     }
 
-    private static ApiOperationResolutionResult? ValidateOpenApiComponentShapes(string format, JsonElement root,
+    private static ApiOperationResolutionResult? ValidateApiReusableShapes(string format, JsonElement root,
         CancellationToken cancellationToken)
     {
-        if (!root.TryGetProperty("components", out var components))
+        var swagger = format == "Swagger/2.0";
+        var components = root;
+        if (!swagger && !root.TryGetProperty("components", out components))
         {
             return null;
         }
@@ -537,24 +536,27 @@ public static partial class ApiOperationDocumentResolver
         foreach (var collection in components.EnumerateObject())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (collection.Name is not ("schemas" or "responses" or "parameters" or "examples" or
-                "requestBodies" or "headers" or "securitySchemes" or "links" or "callbacks") &&
-                !(format == "OpenAPI/3.1" && collection.Name == "pathItems"))
+            var known = swagger
+                ? collection.Name is "definitions" or "parameters" or "responses" or "securityDefinitions"
+                : collection.Name is "schemas" or "responses" or "parameters" or "examples" or
+                    "requestBodies" or "headers" or "securitySchemes" or "links" or "callbacks" ||
+                    format == "OpenAPI/3.1" && collection.Name == "pathItems";
+            if (!known)
             {
                 continue;
             }
-            var path = "$/components/" + collection.Name;
+            var path = (swagger ? "$/" : "$/components/") + collection.Name;
             if (collection.Value.ValueKind != JsonValueKind.Object)
             {
                 return Failure(ApiOperationResolutionStatus.Invalid, "document.component_map",
-                    "An OpenAPI component collection must be an object.", path);
+                    "An API reusable declaration collection must be an object.", path);
             }
             foreach (var entry in collection.Value.EnumerateObject())
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var entryPath = path + "/" + Escape(entry.Name);
-                if (entry.Name.Length == 0 || entry.Name.Any(static c =>
-                    !char.IsAsciiLetterOrDigit(c) && c is not ('.' or '-' or '_')))
+                if (!swagger && (entry.Name.Length == 0 || entry.Name.Any(static c =>
+                    !char.IsAsciiLetterOrDigit(c) && c is not ('.' or '-' or '_'))))
                 {
                     return Failure(ApiOperationResolutionStatus.Invalid, "document.component_name",
                         "An OpenAPI component name must contain only ASCII letters, digits, dots, hyphens or underscores.",
@@ -565,7 +567,7 @@ public static partial class ApiOperationDocumentResolver
                         entry.Value.ValueKind is JsonValueKind.True or JsonValueKind.False))
                 {
                     return Failure(ApiOperationResolutionStatus.Invalid, "document.component_value",
-                        "An OpenAPI component must be an object; OpenAPI 3.1 schemas may also be booleans.", entryPath);
+                        "An API reusable declaration must be an object; OpenAPI 3.1 schemas may also be booleans.", entryPath);
                 }
             }
         }

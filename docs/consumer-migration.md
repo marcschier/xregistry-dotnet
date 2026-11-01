@@ -585,6 +585,13 @@ and [OpenAPI 3.1.1](https://spec.openapis.org/oas/v3.1.1.html#components-object)
 Empty maps remain valid. Unused object contents and extension values remain
 inactive, but consume the whole-Document byte/node budgets. This shape check
 does not validate every reusable object or acquire unused references.
+Swagger 2.0 applies the same object-map/entry-shape checks to root `definitions`,
+`parameters`, `responses` and `securityDefinitions` before selection.
+It does not inherit OpenAPI 3's component-name restriction or boolean schema
+support. Empty maps remain valid, and unused declaration internals remain
+inactive under the same parsing budgets. This follows the reusable declarations
+in the [Swagger 2.0 specification](https://swagger.io/specification/v2/);
+full Swagger document and schema validation remains unsupported.
 
 For `OpenRPC/1.4`, selection checks every resolved Method Object before returning
 a match. Each method requires a `params` array, including notifications with no
