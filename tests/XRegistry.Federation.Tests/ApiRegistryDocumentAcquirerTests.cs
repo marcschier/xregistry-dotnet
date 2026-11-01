@@ -14,6 +14,199 @@ namespace XRegistry.Federation.Tests;
 public class ApiRegistryDocumentAcquirerTests
 {
     [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task ExternalApiAcquisitionRequiresExplicitAuthorityAndPreservesTheEffectiveOrigin(bool relative)
+    {
+        var source = ExternalSource(relative);
+        var budget = new FederationReadBudget();
+        var calls = new List<Uri>();
+        var bytes = Source.Bytes;
+        var acquired = await ApiRegistryDocumentAcquirer.AcquireAsync(source, Source.Path, budget,
+            resolveExternal: (uri, token) =>
+            {
+                token.ThrowIfCancellationRequested();
+                calls.Add(uri);
+                return ValueTask.FromResult<FederationDocument?>(new(bytes, "application/json",
+                    "https://native.example/api/", "https://effective.example/contracts/api.json"));
+            });
+        await Assert.That(calls.Count).IsEqualTo(1);
+        await Assert.That(calls[0].AbsoluteUri).IsEqualTo("https://external.example/contracts/api.json");
+        await Assert.That(acquired.VersionXid).IsEqualTo(Source.Path);
+        await Assert.That(acquired.Context).IsEqualTo(source.Context);
+        await Assert.That(acquired.Document.Base).IsEqualTo("https://native.example/api/");
+        await Assert.That(acquired.Document.Origin).IsEqualTo("https://effective.example/contracts/api.json");
+        await Assert.That(acquired.ContentDigest).IsEqualTo(
+            "sha256:" + Convert.ToHexString(SHA256.HashData(Source.Bytes)).ToLowerInvariant());
+        await Assert.That(budget.Requests).IsEqualTo(3L);
+        await Assert.That(budget.ObjectsRead).IsEqualTo(3L);
+        Array.Fill(bytes, (byte)'!');
+        using var retained = acquired.Document.OpenRead();
+        using var memory = new MemoryStream();
+        await retained.CopyToAsync(memory);
+        await Assert.That(memory.ToArray().SequenceEqual(Source.Bytes)).IsTrue();
+    }
+
+    [Test]
+    [Arguments("kind", "unknown", FederationErrorCode.InvalidPackage)]
+    [Arguments("uri", "https://other.example/api.json", FederationErrorCode.InconsistentSnapshot)]
+    [Arguments("base", "relative/", FederationErrorCode.InvalidPackage)]
+    [Arguments("base", "https://user:password@external.example/contracts/", FederationErrorCode.PolicyDenied)]
+    public async Task ExternalApiDescriptorFailuresPreventResolverDispatch(
+        string field, string value, FederationErrorCode code)
+    {
+        var source = ExternalSource(relative: true);
+        source.External[field] = value;
+        var calls = 0;
+        var error = await Assert.That(async () =>
+            await ApiRegistryDocumentAcquirer.AcquireAsync(source, Source.Path, resolveExternal: (_, _) =>
+            {
+                calls++;
+                return ValueTask.FromResult<FederationDocument?>(null);
+            })).Throws<FederationException>() ?? throw new InvalidOperationException("Expected descriptor rejection.");
+        await Assert.That(error.Code).IsEqualTo(code);
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("missing", FederationErrorCode.Unavailable)]
+    [Arguments("denied", FederationErrorCode.PolicyDenied)]
+    [Arguments("origin", FederationErrorCode.InvalidPackage)]
+    [Arguments("credentials", FederationErrorCode.PolicyDenied)]
+    [Arguments("media", FederationErrorCode.IntegrityError)]
+    public async Task ExternalApiResolverFailuresNeverReturnARegistryDescriptorAsAcquiredBytes(
+        string failure, FederationErrorCode code)
+    {
+        var source = ExternalSource();
+        var calls = 0;
+        var error = await Assert.That(async () =>
+            await ApiRegistryDocumentAcquirer.AcquireAsync(source, Source.Path, resolveExternal: (_, _) =>
+            {
+                calls++;
+                if (failure == "denied") { throw new UnauthorizedAccessException("Denied."); }
+                return ValueTask.FromResult<FederationDocument?>(failure == "missing" ? null :
+                    new(Source.Bytes, failure == "media" ? "text/plain" : "application/json",
+                        documentOrigin: failure == "origin" ? null : failure == "credentials" ?
+                            "https://user:password@effective.example/api.json" : "https://effective.example/api.json"));
+            })).Throws<FederationException>() ?? throw new InvalidOperationException("Expected external failure.");
+        await Assert.That(error.Code).IsEqualTo(code);
+        await Assert.That(calls).IsEqualTo(1);
+        await Assert.That(source.Reads.Count).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task ExternalApiAcquisitionSharesBudgetsAndChecksCaptureAfterTheCallback()
+    {
+        var calls = 0;
+        var budget = new FederationReadBudget(new(maxRequests: 2));
+        var error = await Assert.That(async () =>
+            await ApiRegistryDocumentAcquirer.AcquireAsync(ExternalSource(), Source.Path, budget,
+                resolveExternal: (_, _) =>
+                {
+                    calls++;
+                    return ValueTask.FromResult<FederationDocument?>(null);
+                })).Throws<FederationException>() ?? throw new InvalidOperationException("Expected external budget rejection.");
+        await Assert.That(error.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        await Assert.That(calls).IsEqualTo(0);
+        var source = ExternalSource();
+        var changed = await Assert.That(async () =>
+            await ApiRegistryDocumentAcquirer.AcquireAsync(source, Source.Path, resolveExternal: (_, _) =>
+            {
+                source.Model = BuiltInRegistryModels.Compile(RegistryModelKind.Api);
+                return ValueTask.FromResult<FederationDocument?>(new(Source.Bytes, "application/json",
+                    documentOrigin: "https://effective.example/api.json"));
+            })).Throws<FederationException>() ?? throw new InvalidOperationException("Expected capture rejection.");
+        await Assert.That(changed.Code).IsEqualTo(FederationErrorCode.InconsistentSnapshot);
+    }
+
+    [Test]
+    public async Task ExternalApiAcquisitionHasInclusiveCumulativeByteObjectAndWorkLimits()
+    {
+        static ValueTask<FederationDocument?> Resolve(Uri uri, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            return ValueTask.FromResult<FederationDocument?>(new(Source.Bytes, "application/json",
+                documentOrigin: "https://effective.example/api.json"));
+        }
+        var source = ExternalSource();
+        var baseline = new FederationReadBudget();
+        await ApiRegistryDocumentAcquirer.AcquireAsync(source, Source.Path, baseline, Resolve);
+        var exact = new FederationReadBudget(new(maxRequests: 3, maxObjects: 3,
+            maxTotalBytes: baseline.BytesRead, maxWork: baseline.Work, maxResultBytes: Source.Bytes.Length));
+        var acquired = await ApiRegistryDocumentAcquirer.AcquireAsync(ExternalSource(), Source.Path, exact, Resolve);
+        await Assert.That(acquired.Document.Length).IsEqualTo((long)Source.Bytes.Length);
+        await Assert.That(exact.BytesRead).IsEqualTo(baseline.BytesRead);
+        foreach (var limits in new[]
+        {
+            new FederationReadLimits(maxObjects: 2),
+            new FederationReadLimits(maxTotalBytes: baseline.BytesRead - 1),
+            new FederationReadLimits(maxWork: baseline.Work - 1),
+            new FederationReadLimits(maxResultBytes: Source.Bytes.Length - 1)
+        })
+        {
+            var error = await Assert.That(async () =>
+                await ApiRegistryDocumentAcquirer.AcquireAsync(ExternalSource(), Source.Path, new(limits), Resolve))
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected external bound rejection.");
+            await Assert.That(error.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        }
+    }
+
+    [Test]
+    public async Task ExternalApiDescriptorNestingIsBoundedBeforeResolverDispatch()
+    {
+        var source = ExternalSource();
+        JsonNode extra = new JsonObject();
+        for (var i = 0; i < 8; i++) { extra = new JsonObject { ["nested"] = extra }; }
+        source.External["extra"] = extra;
+        var calls = 0;
+        var error = await Assert.That(async () =>
+            await ApiRegistryDocumentAcquirer.AcquireAsync(source, Source.Path,
+                new(new(maxJsonDepth: 4)), (_, _) =>
+                {
+                    calls++;
+                    return ValueTask.FromResult<FederationDocument?>(null);
+                })).Throws<FederationException>() ?? throw new InvalidOperationException("Expected descriptor depth rejection.");
+        await Assert.That(error.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task ExternalApiCallbackCancellationAndDefaultRacesPropagateWithoutReplacement()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var cancelled = ExternalSource();
+        await Assert.That(async () =>
+            await ApiRegistryDocumentAcquirer.AcquireAsync(cancelled, Source.Path,
+                cancellationToken: cancellation.Token, resolveExternal: (_, _) =>
+                {
+                    cancellation.Cancel();
+                    return ValueTask.FromResult<FederationDocument?>(null);
+                })).Throws<OperationCanceledException>();
+        var source = ExternalSource();
+        var error = await Assert.That(async () =>
+            await ApiRegistryDocumentAcquirer.AcquireDefaultAsync(source, "/apigroups/g/apis/a",
+                resolveExternal: (_, _) =>
+                {
+                    source.Meta["defaultversionid"] = "2";
+                    return ValueTask.FromResult<FederationDocument?>(new(Source.Bytes, "application/json",
+                        documentOrigin: "https://effective.example/api.json"));
+                })).Throws<FederationException>() ?? throw new InvalidOperationException("Expected external default race.");
+        await Assert.That(error.Code).IsEqualTo(FederationErrorCode.InconsistentSnapshot);
+        await Assert.That(source.Reads.Count).IsEqualTo(4);
+    }
+
+    private static Source ExternalSource(bool relative = false)
+    {
+        var source = new Source { Failure = "external" };
+        var uri = relative ? "api.json" : "https://external.example/contracts/api.json";
+        source.Metadata["apiurl"] = uri;
+        source.External["kind"] = "external";
+        source.External["uri"] = uri;
+        if (relative) { source.External["base"] = "https://external.example/contracts/entry.json"; }
+        return source;
+    }
+
+    [Test]
     [Arguments("1", false)]
     [Arguments("preview:@", true)]
     public async Task ApiDefaultAcquisitionUsesTheDeclaredCoreVersionWithoutSemverSelection(string id, bool sticky)
@@ -380,6 +573,10 @@ public class ApiRegistryDocumentAcquirerTests
             ["xid"] = Path, ["apiid"] = "a", ["versionid"] = "1",
             ["format"] = "openapi/3.1", ["contenttype"] = "application/json"
         };
+        internal JsonObject External { get; } = new()
+        {
+            ["kind"] = "external", ["uri"] = "https://must-not-fetch.invalid/api.json"
+        };
         internal long MetadataLength => Encoding.UTF8.GetByteCount(Metadata.ToJsonString());
         internal List<FederationReadRequest> Reads { get; } = [];
         internal string SelectedPath { get; set; } = Path;
@@ -440,7 +637,7 @@ public class ApiRegistryDocumentAcquirerTests
             if (Failure == "external")
             {
                 return ValueTask.FromResult(FederationReadResult.FromExternalDocument(Path, Context,
-                    RegistryJson.Parse("""{"href":"https://must-not-fetch.invalid/api.json"}""").RootElement));
+                    RegistryJson.Parse(External.ToJsonString()).RootElement));
             }
             if (Change == "context") { Context = new("test", "urn:test:changed"); }
             if (Change == "model") { Model = BuiltInRegistryModels.Compile(RegistryModelKind.Api); }

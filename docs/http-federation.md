@@ -91,7 +91,8 @@ using var source = await HttpFederationReadSource.OpenAsync(
     registryRoot, transportOptions, new() { Limits = budget.Limits },
     budget, cancellation);
 var acquired = await ApiRegistryDocumentAcquirer.AcquireAsync(
-    source, "/apigroups/team/apis/telemetry/versions/1", budget, cancellation);
+    source, "/apigroups/team/apis/telemetry/versions/1", budget,
+    cancellationToken: cancellation);
 ```
 
 The result retains the exact Version XID, complete authored format identifier,
@@ -102,7 +103,7 @@ its retrieval URL as `Document.Origin`. A consumer passes that URL, or the
 applicable native-language base, explicitly to its operation resolver.
 Acquisition does not normalize format spelling or establish language validity.
 
-Missing or denied Versions, external descriptors, wrong identities and changed
+Missing or denied Versions, unauthorized external descriptors, wrong identities and changed
 source/model/resolution-owner captures fail without another Version or source.
 Metadata and acquired bytes consume cumulative request, object, byte and work
 budgets; hashing and output also have finite bounds. Repeated calls cannot
@@ -134,8 +135,38 @@ its relative Path Item `$ref` produces `Indeterminate`. With one, the resolver
 receives the absolute dependency URL resolved against the captured retrieval
 origin; the selected operation reports that dependency's URI. The entry
 Document and supplied dependency bytes remain separate.
-This does not freeze unversioned dependencies,
-implement external-document retrieval or qualify full API language validation.
+This does not freeze unversioned dependencies or qualify full API language validation.
+
+### Authorized external API Documents
+
+Both acquisition methods accept an optional `resolveExternal` callback.
+Without it, an external descriptor remains `Unavailable` and causes no
+outbound retrieval. With it, acquisition checks the descriptor against the
+selected Version's `apiurl`, resolves a relative URL only against its captured
+absolute base, and passes that absolute URL to the caller's resolver.
+Embedded credentials and fragment-bearing retrieval URLs are rejected.
+
+The callback owns transport authorization, redirects and bounded I/O. It
+returns independently owned `FederationDocument` bytes with an absolute
+effective retrieval `Origin`, including any approved redirect, or null when
+the Document cannot be acquired. Missing bytes, denied policy, contradictory
+media types and missing effective origins fail explicitly. The registry
+source context remains separate from the external retrieval location.
+
+Descriptor parsing and one callback invocation consume the shared object,
+request, byte and work budgets; acquired bytes and hashing use those same
+counters. Default and alias rechecks still run after external retrieval.
+Callback cancellation propagates, and a changed captured model/context/owner
+fails before bytes are returned. The callback must bound its own allocations
+and synchronous I/O because acquisition can check returned bytes only after
+the callback completes.
+
+The external HTTP workflow registers an authorized entry URL without fetching
+it, observes the unfetched descriptor, then explicitly retrieves the entry
+through an approved redirect. After source and host disposal, OpenAPI relative
+dependency resolution uses the effective retrieval URL rather than the
+original URL or Core XID. This does not capture dependencies, certify the
+external content as immutable or supply an ambient HTTP resolver.
 
 ## Collections and errors
 

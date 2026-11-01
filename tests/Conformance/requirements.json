@@ -115720,7 +115720,7 @@
       "text": "An API Version identifies an entry document. Dependencies use the native language's `$ref`, import, include, or equivalent constructs. Resolvers MUST apply that language's base-URI and import rules. The initial base is the document retrieval URL for an embedded document and the effective retrieval URL after redirects for an external document, unless a native identifier establishes another base. Publishers MUST account for relative references when relocating documents. Protobuf and Thrift include paths require explicit resolver configuration; namespace names and Smithy shape IDs are not retrieval URLs.",
       "review": {
         "status": "reviewed",
-        "note": "Exact API-Version acquisition retains the captured retrieval origin without inferring a document base. Resource-default acquisition captures Core's declared default, reads that exact Version and rechecks Meta under one source/budget; observed changes fail without retry. One same-model-type local alias is followed and its mapping rechecked; chains, unavailable, wrong-type and nonlocal targets fail without fallback. The actual HTTP OpenAPI workflow proves current, sticky and alias defaults and an explicit dependency resolver receiving a relative $ref resolved against the captured origin after the host stops; without resolver authorization selection is Indeterminate. The supplied dependency bytes and selected operation are separate from the acquired entry document. External descriptors, other language import rules, native base overrides and relocation remain pending.",
+        "note": "Exact API-Version acquisition retains the captured retrieval origin without inferring a document base. Resource-default acquisition captures Core's declared default, reads that exact Version and rechecks Meta under one source/budget; observed changes fail without retry. One same-model-type local alias is followed and its mapping rechecked; chains, unavailable, wrong-type and nonlocal targets fail without fallback. An external descriptor requires an explicit resolver, consistency with Version apiurl and a captured base for relative URLs; acquired bytes retain the effective retrieval origin. The actual HTTP OpenAPI workflows prove current, sticky and alias defaults, unfetched external descriptors, explicit redirect acquisition and relative dependencies resolved against the effective origin after the host stops. Without dependency authorization selection is Indeterminate. The supplied dependency bytes and selected operation remain separate from the entry document. Other language import rules, native base overrides, relocation policies and full API validation remain pending.",
         "roles": [
           "client",
           "producer"
@@ -115734,6 +115734,9 @@
           "ApiRegistryDocumentAcquirerTests.ApiDefaultAcquisitionRejectsChangedSelectionWithoutRetry",
           "ApiRegistryDocumentAcquirerTests.ApiDefaultAcquisitionFollowsOneLocalAliasAndRetainsItsActualVersionOrigin",
           "ApiRegistryDocumentAcquirerTests.ApiDefaultAcquisitionRejectsObservedAliasChangesWithoutReadingTheNewTarget",
+          "HttpTests.HttpExternalApiAcquisitionRetainsTheAuthorizedEffectiveUrlForRelativeDependencies",
+          "ApiRegistryDocumentAcquirerTests.ExternalApiAcquisitionRequiresExplicitAuthorityAndPreservesTheEffectiveOrigin",
+          "ApiRegistryDocumentAcquirerTests.ExternalApiDescriptorFailuresPreventResolverDispatch",
           "ApiRegistryDocumentAcquirerTests.ExactApiAcquisitionRetainsBytesFormatDigestAndDeclaredOriginAfterSourceDisposal",
           "ApiRegistryDocumentAcquirerTests.MissingDeniedAndExternalApiDocumentsNeverSelectADefaultOrAnotherSource"
         ],

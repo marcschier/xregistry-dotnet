@@ -29,6 +29,100 @@ namespace XRegistry.AspNetCore.Tests;
 public class HttpTests
 {
     [Test]
+    public async Task HttpExternalApiAcquisitionRetainsTheAuthorizedEffectiveUrlForRelativeDependencies()
+    {
+        const string entry = """
+            {"openapi":"3.1.1","info":{"title":"External","version":"1"},
+             "paths":{"/value":{"$ref":"operations.json#/Read"}}}
+            """;
+        var externalRequests = 0;
+        await using var host = await TestHost.StartAsync(model: BuiltInRegistryModels.Compile(RegistryModelKind.Api),
+            useBoundPublicRoot: true, documentReferencePolicy: new ExternalApiReferencePolicy(), configureEndpoints: app =>
+            {
+                app.MapGet("/api-entry", () =>
+                {
+                    Interlocked.Increment(ref externalRequests);
+                    return Results.Redirect("/relocated/api.json");
+                });
+                app.MapGet("/relocated/api.json", () =>
+                {
+                    Interlocked.Increment(ref externalRequests);
+                    return Results.Text(entry, "application/json");
+                });
+            });
+        var initialUri = new Uri(host.Client.BaseAddress!, "/api-entry");
+        var effectiveUri = new Uri(host.Client.BaseAddress!, "/relocated/api.json");
+        const string version = "/apigroups/g/apis/a/versions/1";
+        using (var request = new HttpRequestMessage(HttpMethod.Put, version + "$details")
+        {
+            Content = new StringContent(new JsonObject
+            {
+                ["format"] = "OpenAPI/3.1", ["apiurl"] = initialUri.AbsoluteUri,
+                ["contenttype"] = "application/json"
+            }.ToJsonString(), Encoding.UTF8, "application/json")
+        })
+        using (var response = await host.Client.SendAsync(request))
+        {
+            await Assert.That(response.IsSuccessStatusCode).IsTrue()
+                .Because(await response.Content.ReadAsStringAsync());
+        }
+        var budget = new FederationReadBudget();
+        using var source = await HttpFederationReadSource.OpenAsync(host.Client.BaseAddress!,
+            new() { AllowLoopbackHttp = true }, new() { Limits = budget.Limits }, budget);
+        var unfetched = await Assert.That(async () =>
+            await ApiRegistryDocumentAcquirer.AcquireAsync(source, version, budget))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected unfetched descriptor.");
+        await Assert.That(unfetched.Code).IsEqualTo(FederationErrorCode.Unavailable);
+        await Assert.That(externalRequests).IsEqualTo(0);
+        var acquired = await ApiRegistryDocumentAcquirer.AcquireDefaultAsync(source, "/apigroups/g/apis/a", budget,
+            resolveExternal: async (uri, token) =>
+            {
+                if (uri != initialUri) { throw new UnauthorizedAccessException("Only this entry URL is authorized."); }
+                using var response = await host.Client.GetAsync(uri, token);
+                response.EnsureSuccessStatusCode();
+                return new FederationDocument(await response.Content.ReadAsByteArrayAsync(token),
+                    response.Content.Headers.ContentType!.MediaType,
+                    documentOrigin: response.RequestMessage!.RequestUri!.AbsoluteUri);
+            });
+        await Assert.That(externalRequests).IsEqualTo(2);
+        await Assert.That(acquired.VersionXid).IsEqualTo(version);
+        await Assert.That(acquired.Document.Origin).IsEqualTo(effectiveUri.AbsoluteUri);
+        await Assert.That(acquired.Document.Base).IsNull();
+        source.Dispose();
+        await host.DisposeAsync();
+        using var stream = acquired.Document.OpenRead();
+        using var memory = new MemoryStream();
+        await stream.CopyToAsync(memory);
+        var calls = new List<string>();
+        var selected = await ApiOperationDocumentResolver.ResolveAsync(acquired.Format, acquired.Document.ContentType!,
+            memory.ToArray(), ApiOperationReference.Parse(version + "#operations/Read"), effectiveUri,
+            (uri, _) =>
+            {
+                calls.Add(uri);
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+                    Encoding.UTF8.GetBytes("""{"Read":{"get":{"operationId":"Read"}}}"""));
+            });
+        await Assert.That(selected.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(calls.Count).IsEqualTo(1);
+        await Assert.That(calls[0]).IsEqualTo(new Uri(effectiveUri, "operations.json").AbsoluteUri);
+        await Assert.That(selected.DocumentUri!.AbsoluteUri).IsEqualTo(calls[0]);
+    }
+
+    private sealed class ExternalApiReferencePolicy : IRegistryDocumentReferencePolicy
+    {
+        public ValueTask AuthorizeAsync(ClaimsPrincipal caller, Uri reference,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!reference.IsLoopback || reference.Scheme != "http" || reference.AbsolutePath != "/api-entry")
+            {
+                throw new UnauthorizedAccessException("Only the loopback API entry is authorized.");
+            }
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    [Test]
     public async Task ExactHttpApiAcquisitionFeedsOperationSelectionWithoutFollowingTheChangedDefault()
     {
         const string first = """
@@ -1025,7 +1119,7 @@ public class HttpTests
             bool allowCapabilityUpdates = false, IRegistryDocumentReferencePolicy? documentReferencePolicy = null,
             string pathBase = "", IRegistryHostBackend? hostBackend = null, Action<HttpContext>? started = null,
             PublicationOpenedSnapshot? publicationSnapshot = null, Func<HttpContext, Task>? completedAsync = null,
-            bool useBoundPublicRoot = false)
+            bool useBoundPublicRoot = false, Action<WebApplication>? configureEndpoints = null)
         {
             var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { EnvironmentName = "Development", Args = [] });
             builder.Logging.ClearProviders();
@@ -1072,6 +1166,7 @@ public class HttpTests
             }
 
             var publicRoot = new Uri("https://public.example/registry");
+            configureEndpoints?.Invoke(application);
             if (useBoundPublicRoot)
             {
                 application.Map("/starting", () => Results.StatusCode(StatusCodes.Status503ServiceUnavailable));

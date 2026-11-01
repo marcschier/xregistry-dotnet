@@ -7,6 +7,11 @@ using XRegistry.Models;
 
 namespace XRegistry.Federation;
 
+/// <summary>Acquires one explicitly authorized external API document with its effective retrieval origin.</summary>
+/// <remarks>The callback owns redirect authorization and bounded I/O; a locator does not authorize ambient retrieval.</remarks>
+public delegate ValueTask<FederationDocument?> ApiExternalDocumentResolver(
+    Uri documentUri, CancellationToken cancellationToken);
+
 /// <summary>An exact API Version's format, independently owned bytes and captured source evidence.</summary>
 public sealed class ApiAcquiredDocument
 {
@@ -42,7 +47,8 @@ public static class ApiRegistryDocumentAcquirer
     /// The result does not claim format validity, frozen dependencies or an inferred retrieval base.
     /// </remarks>
     public static async ValueTask<ApiAcquiredDocument> AcquireAsync(IFederationReadSource source,
-        string versionXid, FederationReadBudget? budget = null, CancellationToken cancellationToken = default)
+        string versionXid, FederationReadBudget? budget = null, ApiExternalDocumentResolver? resolveExternal = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(versionXid);
@@ -55,13 +61,14 @@ public static class ApiRegistryDocumentAcquirer
         budget ??= new();
         var reads = new CapturedFederationReadScope(source, budget, cancellationToken);
         RequireApi(reads, request);
-        return await AcquireVersionAsync(reads, request, budget, cancellationToken).ConfigureAwait(false);
+        return await AcquireVersionAsync(reads, request, budget, resolveExternal, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Captures a Resource's Core default and acquires that exact Version from the same source.</summary>
     /// <remarks>One local same-type alias is allowed. Observed alias/default changes fail without retry or fallback.</remarks>
     public static async ValueTask<ApiAcquiredDocument> AcquireDefaultAsync(IFederationReadSource source,
-        string resourceXid, FederationReadBudget? budget = null, CancellationToken cancellationToken = default)
+        string resourceXid, FederationReadBudget? budget = null, ApiExternalDocumentResolver? resolveExternal = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(resourceXid);
@@ -96,7 +103,7 @@ public static class ApiRegistryDocumentAcquirer
         var defaultId = DefaultVersion(before, metaRequest.Target, resource.Parts[3]);
         var version = new FederationReadRequest(FederationOperation.Entity,
             resource.Target + "/versions/" + Uri.EscapeDataString(defaultId));
-        var acquired = await AcquireVersionAsync(reads, version, budget, cancellationToken).ConfigureAwait(false);
+        var acquired = await AcquireVersionAsync(reads, version, budget, resolveExternal, cancellationToken).ConfigureAwait(false);
         var after = await reads.MetadataAsync(metaRequest).ConfigureAwait(false);
         if (DefaultVersion(after, metaRequest.Target, resource.Parts[3]) != defaultId)
         {
@@ -162,7 +169,8 @@ public static class ApiRegistryDocumentAcquirer
     }
 
     private static async ValueTask<ApiAcquiredDocument> AcquireVersionAsync(CapturedFederationReadScope reads,
-        FederationReadRequest request, FederationReadBudget budget, CancellationToken cancellationToken)
+        FederationReadRequest request, FederationReadBudget budget, ApiExternalDocumentResolver? resolveExternal,
+        CancellationToken cancellationToken)
     {
         var versionXid = request.Target;
         var metadata = await reads.MetadataAsync(request).ConfigureAwait(false);
@@ -184,8 +192,39 @@ public static class ApiRegistryDocumentAcquirer
             throw FederationJson.FromCore(exception);
         }
         var result = await reads.ReadAsync(new(FederationOperation.Document, versionXid)).ConfigureAwait(false);
-        var document = result.Document ?? throw new FederationException(FederationErrorCode.Unavailable,
-            "The selected API Version has no acquired bytes; external descriptors are not fetched.");
+        var document = result.Document;
+        if (document is null)
+        {
+            if (resolveExternal is null || result.ExternalDocument.ValueKind != JsonValueKind.Object)
+            {
+                throw new FederationException(FederationErrorCode.Unavailable,
+                    "The selected API Version has no acquired bytes; no external resolver is authorized.");
+            }
+            var descriptor = reads.Metadata(result.ExternalDocument);
+            var uri = ExternalUri(descriptor, entity);
+            reads.Check();
+            budget.ChargeRequest();
+            try
+            {
+                document = await resolveExternal(uri, cancellationToken).ConfigureAwait(false);
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                throw new FederationException(FederationErrorCode.PolicyDenied,
+                    "Caller policy denied external API document acquisition.", innerException: exception);
+            }
+            reads.Check();
+            if (document is null)
+            {
+                throw new FederationException(FederationErrorCode.Unavailable,
+                    "The authorized external resolver did not acquire the selected API document.");
+            }
+            if (!Uri.TryCreate(document.Origin, UriKind.Absolute, out var effective) || effective.Fragment.Length != 0)
+            {
+                throw FederationJson.Invalid("An external API document must retain its effective absolute retrieval origin.");
+            }
+            FederationJson.AbsoluteUri(document.Origin!);
+        }
         if (entity.TryGetProperty("contenttype", out _) &&
             !string.Equals(FederationJson.String(entity, "contenttype"), document.ContentType,
                 StringComparison.OrdinalIgnoreCase))
@@ -203,5 +242,40 @@ public static class ApiRegistryDocumentAcquirer
         reads.Check();
         return new(versionXid, format, "sha256:" + Convert.ToHexString(digest).ToLowerInvariant(),
             reads.Context, document);
+    }
+
+    private static Uri ExternalUri(JsonElement descriptor, JsonElement metadata)
+    {
+        if (FederationJson.String(descriptor, "kind") != "external")
+        {
+            throw FederationJson.Invalid("An API external descriptor must declare kind external.");
+        }
+        var reference = FederationJson.String(descriptor, "uri");
+        if (FederationJson.String(metadata, "apiurl") != reference)
+        {
+            throw new FederationException(FederationErrorCode.InconsistentSnapshot,
+                "The external API descriptor differs from its selected Version URL.");
+        }
+        FederationJson.UriReference(reference);
+        Uri uri;
+        if (Uri.TryCreate(reference, UriKind.Absolute, out var absolute))
+        {
+            uri = absolute;
+        }
+        else
+        {
+            var declaredBase = FederationJson.String(descriptor, "base");
+            var baseUri = FederationJson.AbsoluteUri(declaredBase);
+            if (!Uri.TryCreate(baseUri, reference, out var resolved))
+            {
+                throw FederationJson.Invalid("A relative external API URL requires an absolute captured base.");
+            }
+            uri = resolved;
+        }
+        if (uri.Fragment.Length != 0)
+        {
+            throw FederationJson.Invalid("An external API retrieval URL cannot contain a fragment.");
+        }
+        return FederationJson.AbsoluteUri(uri.AbsoluteUri);
     }
 }

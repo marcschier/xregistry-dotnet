@@ -62,15 +62,21 @@ internal sealed class CapturedFederationReadScope
     internal async ValueTask<JsonElement> MetadataAsync(FederationReadRequest request)
     {
         var result = await ReadAsync(request).ConfigureAwait(false);
-        FederationJson.RequireObject(result.Metadata);
-        var count = Encoding.UTF8.GetByteCount(result.Metadata.GetRawText());
+        return Metadata(result.Metadata);
+    }
+
+    internal JsonElement Metadata(JsonElement value)
+    {
+        Check();
+        FederationJson.RequireObject(value);
+        var count = Encoding.UTF8.GetByteCount(value.GetRawText());
         _budget.CheckObjectBytes(count);
         _budget.ChargeBytes(count);
         _budget.ChargeObject();
         RegistryJson parsed;
         try
         {
-            parsed = RegistryJson.FromElement(result.Metadata, new RegistryJsonLimits
+            parsed = RegistryJson.FromElement(value, new RegistryJsonLimits
             {
                 MaxBytes = _budget.Limits.MaxObjectBytes,
                 MaxDepth = _budget.Limits.MaxJsonDepth,
