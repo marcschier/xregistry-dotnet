@@ -13,6 +13,36 @@ namespace XRegistry.Server.Tests;
 public class BuiltInValidationAdapterTests
 {
     [Test]
+    [Arguments("JsonSchema/draft-07", """{"$defs":{"ignored":{"type":"invalid","$ref":"never"}},"deprecated":null}""", """{"definitions":null}""")]
+    [Arguments("JsonSchema/draft/2019-09", """{"prefixItems":[{"$ref":"never"}],"$dynamicRef":null}""", """{"items":null}""")]
+    [Arguments("JsonSchema/draft/2020-12", """{"additionalItems":{"type":"invalid","$ref":"never"}}""", """{"prefixItems":null}""")]
+    public async Task UnknownDialectKeywordsPublishWithAuthoredBytesWhileKnownKeywordFailuresRemainAtomic(
+        string format, string schema, string invalid)
+    {
+        var calls = 0;
+        var engine = ValidatingEngine(strict: true, validateCompatibility: false, validationOptions: new()
+        {
+            ResolveReference = (_, _) => { calls++; throw new UnauthorizedAccessException(); }
+        });
+        var created = await Send(engine, RegistryAction.Replace, "/sets/g/schemas/s$details", $$$"""
+            {"versionid":"v1","format":"{{{format}}}","schema":{{{schema}}}}
+            """);
+        await Assert.That(created.Metadata!.RootElement.GetProperty("formatvalidated").GetBoolean()).IsTrue();
+        using var bytes = (await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/versions/v1")).Document!.OpenRead();
+        using var reader = new StreamReader(bytes, Encoding.UTF8);
+        await Assert.That(await reader.ReadToEndAsync()).IsEqualTo(schema);
+        var before = (await Send(engine, RegistryAction.Read, "/sets/g/schemas/s$details")).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        await ExpectCode(() => Send(engine, RegistryAction.Post, "/sets/g/schemas/s$details", $$$"""
+            {"versionid":"v2","format":"{{{format}}}","schema":{{{invalid}}}}
+            """), "format_violation");
+        await Assert.That((await Send(engine, RegistryAction.Read, "/sets/g/schemas/s$details")).Metadata!.RootElement.GetRawText())
+            .IsEqualTo(before);
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
     public async Task DraftSevenIgnoredReferenceSiblingsPublishWithoutChangingAuthoredDocumentBytes()
     {
         const string schema = """{"$ref":"https://schemas.test/target","type":"invalid","$id":42,"properties":{"ignored":{"$ref":"https://never.test/"}}}""";

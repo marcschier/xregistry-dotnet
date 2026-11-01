@@ -23,6 +23,21 @@ checks, including targets located inside otherwise ignored sibling content.
 Modern dialects continue to check `$ref` siblings. This does not add embedded
 resource IDs or dynamic reference evaluation.
 
+Keyword recognition follows the selected standard dialect. Draft-07 treats
+later keywords, including `$defs`, `$anchor`, dependent/unevaluated keywords
+and dynamic references, as unknown annotation content. The 2019-09 dialect
+likewise ignores `prefixItems`, `$dynamicRef` and `$dynamicAnchor`; 2020-12
+ignores `additionalItems`. Unknown content does not declare schema positions,
+register anchors or acquire nested references, but still consumes the whole
+Document's parsing budgets. Recognized keywords retain their shape checks,
+and recognized dynamic constructs remain `Unsupported`.
+The modern standard meta-schemas reserve `definitions` and `dependencies`
+with their legacy shapes, so those checks remain in place. See
+[draft-07 Core section 4.3.1](https://json-schema.org/draft-07/draft-handrews-json-schema-01#rfc.section.4.3.1),
+the [2019-09 meta-schema](https://json-schema.org/draft/2019-09/schema)
+and the [2020-12 meta-schema](https://json-schema.org/draft/2020-12/schema).
+This policy does not implement custom vocabularies or instance annotation output.
+
 JSON Schema reference fragments undergo strict UTF-8 percent decoding once
 before choosing JSON Pointer or plain-name anchor resolution. Encoded anchors
 therefore resolve as anchors, and encoded leading slashes select pointers.

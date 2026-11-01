@@ -11,6 +11,32 @@ namespace XRegistry.Validation.Tests;
 public class SchemaObjectJsonSelectionTests
 {
     [Test]
+    [Arguments("JsonSchema/draft-07", """{"$defs":{"Value":{"type":"string"}}}""", "#/$defs/Value", false)]
+    [Arguments("JsonSchema/draft/2019-09", """{"$defs":{"Value":{"type":"string"}}}""", "#/$defs/Value", true)]
+    [Arguments("JsonSchema/draft/2019-09", """{"prefixItems":[{"type":"string"}]}""", "#/prefixItems/0", false)]
+    [Arguments("JsonSchema/draft/2020-12", """{"prefixItems":[{"type":"string"}]}""", "#/prefixItems/0", true)]
+    [Arguments("JsonSchema/draft/2019-09", """{"additionalItems":{"type":"string"}}""", "#/additionalItems", true)]
+    [Arguments("JsonSchema/draft/2020-12", """{"additionalItems":{"type":"string"}}""", "#/additionalItems", false)]
+    public async Task UnknownDialectContentIsNotADeclaredSchemaPosition(
+        string format, string schema, string fragment, bool selected)
+    {
+        var result = await SchemaObjectSelector.SelectAsync(format, Encoding.UTF8.GetBytes(schema), "schema.json" + fragment);
+        await Assert.That(result.Status).IsEqualTo(selected
+            ? SchemaObjectSelectionStatus.Selected : SchemaObjectSelectionStatus.Invalid);
+        if (selected)
+        {
+            await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+            await Assert.That(result.Selection!.JsonPointer).IsEqualTo(fragment[1..]);
+            await Assert.That(result.Selection.Json!.Value.GetProperty("type").GetString()).IsEqualTo("string");
+        }
+        else
+        {
+            await Assert.That(result.Selection).IsNull();
+            await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("selection.not_type");
+        }
+    }
+
+    [Test]
     public async Task JsonStructureWithoutSuffixUsesItsDeclaredRootAndNotTheFirstDefinition()
     {
         var result = await SchemaObjectSelector.SelectAsync("JsonStructure/draft-04", """

@@ -40,6 +40,17 @@ fragments once before choosing pointer or anchor resolution, so encoded anchor
 names no longer enter the pointer path. Malformed URI spellings and invalid
 UTF-8 fail before acquisition; callbacks receive fragment-free references.
 
+Keywords absent from the selected JSON Schema dialect now remain annotation
+content instead of being interpreted under another draft's rules. Draft-07
+ignores later `$defs`, dependent/unevaluated and dynamic keywords; 2019-09
+ignores `prefixItems`, `$dynamicRef` and `$dynamicAnchor`; 2020-12 ignores
+`additionalItems`.
+Their contents cannot be selected as declared schema positions and do not
+register anchors or dispatch dependency callbacks. Whole-Document budgets
+still apply, and recognized keywords retain their checks. Modern reserved
+`definitions` and `dependencies` shapes remain checked. Recognized dynamic
+reference semantics remain unsupported; this is not custom-vocabulary support.
+
 Legacy prepare/replay/incarnation/generation extensions are not standard
 xRegistry HTTP. The in-process persistence/response preparation methods do not
 imply proprietary wire endpoints.

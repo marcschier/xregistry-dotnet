@@ -143,8 +143,7 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
                     CheckUri(reference, childPath, false);
                     _references.Add((document, reference, childPath));
                     break;
-                case "$anchor":
-                    Modern(childPath);
+                case "$anchor" when _draft != 7:
                     var anchor = SchemaJson.String(value, childPath);
                     ValidationContext.Require(anchor.Length > 0 && (char.IsAsciiLetter(anchor[0]) || anchor[0] == '_')
                         && anchor.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-' or '.'), childPath,
@@ -152,18 +151,17 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
                     ValidationContext.Require(document.Anchors.TryAdd(anchor, path), childPath,
                         "schema.duplicate_anchor", "A schema anchor must be unique within a document.");
                     break;
-                case "$dynamicRef":
-                case "$recursiveRef":
-                case "$dynamicAnchor":
+                case "$dynamicRef" when _draft == 2020:
+                case "$recursiveRef" when _draft != 7:
+                case "$dynamicAnchor" when _draft == 2020:
                     SchemaJson.String(value, childPath);
                     Unsupported(childPath, "schema.dynamic_reference", "Dynamic/recursive reference semantics are not implemented.");
                     break;
-                case "$recursiveAnchor":
+                case "$recursiveAnchor" when _draft != 7:
                     SchemaJson.Boolean(value, childPath);
                     Unsupported(childPath, "schema.dynamic_reference", "Dynamic/recursive reference semantics are not implemented.");
                     break;
-                case "$vocabulary":
-                    Modern(childPath);
+                case "$vocabulary" when _draft != 7:
                     SchemaJson.Object(value, childPath);
                     foreach (var vocabulary in value.EnumerateObject())
                     {
@@ -192,11 +190,9 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
                         CheckType(SchemaJson.String(value, childPath), childPath);
                     }
                     break;
-                case "$defs":
-                    Modern(childPath);
+                case "$defs" when _draft != 7:
                     goto case "properties";
-                case "dependentSchemas":
-                    Modern(childPath);
+                case "dependentSchemas" when _draft != 7:
                     goto case "properties";
                 case "properties":
                 case "definitions":
@@ -225,8 +221,7 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
                         }
                     }
                     break;
-                case "dependentRequired":
-                    Modern(childPath);
+                case "dependentRequired" when _draft != 7:
                     SchemaJson.Object(value, childPath);
                     foreach (var child in value.EnumerateObject())
                     {
@@ -247,9 +242,8 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
                     var multiple = JsonNumber.Read(value, context, childPath);
                     ValidationContext.Require(!multiple.Negative && !multiple.IsZero, childPath, "schema.positive", "A positive number is required.");
                     break;
-                case "maxContains":
-                case "minContains":
-                    Modern(childPath);
+                case "maxContains" when _draft != 7:
+                case "minContains" when _draft != 7:
                     goto case "minItems";
                 case "minItems":
                 case "maxItems":
@@ -261,11 +255,7 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
                     ValidationContext.Require(!number.Negative && number.IsInteger, childPath,
                         "schema.nonnegative_integer", "A nonnegative integer is required.");
                     break;
-                case "prefixItems":
-                    if (_draft != 2020)
-                    {
-                        Unsupported(childPath, "schema.keyword_version", "prefixItems requires draft 2020-12.");
-                    }
+                case "prefixItems" when _draft == 2020:
                     SchemaArray(value, document, childPath);
                     break;
                 case "items":
@@ -281,17 +271,16 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
                 case "oneOf":
                     SchemaArray(value, document, childPath);
                     break;
-                case "unevaluatedItems":
-                case "unevaluatedProperties":
-                case "contentSchema":
-                    Modern(childPath);
+                case "unevaluatedItems" when _draft != 7:
+                case "unevaluatedProperties" when _draft != 7:
+                case "contentSchema" when _draft != 7:
                     goto case "not";
                 case "not":
                 case "if":
                 case "then":
                 case "else":
                 case "contains":
-                case "additionalItems":
+                case "additionalItems" when _draft != 2020:
                 case "additionalProperties":
                 case "propertyNames":
                     Validate(value, document, childPath);
@@ -306,7 +295,7 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
                     break;
                 case "readOnly":
                 case "writeOnly":
-                case "deprecated":
+                case "deprecated" when _draft != 7:
                 case "uniqueItems":
                     SchemaJson.Boolean(value, childPath);
                     break;
@@ -336,14 +325,6 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
         for (var i = 0; i < value.GetArrayLength(); i++)
         {
             Validate(value[i], document, SchemaJson.Path(path, i.ToString(CultureInfo.InvariantCulture)));
-        }
-    }
-
-    private void Modern(string path)
-    {
-        if (_draft == 7)
-        {
-            Unsupported(path, "schema.keyword_version", "This keyword requires a modern JSON Schema dialect.");
         }
     }
 

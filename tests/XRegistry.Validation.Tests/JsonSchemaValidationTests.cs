@@ -10,6 +10,151 @@ namespace XRegistry.Validation.Tests;
 public class JsonSchemaValidationTests
 {
     [Test]
+    [Arguments("JsonSchema/draft-07", "$defs")]
+    [Arguments("JsonSchema/draft-07", "$anchor")]
+    [Arguments("JsonSchema/draft-07", "$vocabulary")]
+    [Arguments("JsonSchema/draft-07", "$dynamicRef")]
+    [Arguments("JsonSchema/draft-07", "$dynamicAnchor")]
+    [Arguments("JsonSchema/draft-07", "$recursiveRef")]
+    [Arguments("JsonSchema/draft-07", "$recursiveAnchor")]
+    [Arguments("JsonSchema/draft-07", "dependentSchemas")]
+    [Arguments("JsonSchema/draft-07", "dependentRequired")]
+    [Arguments("JsonSchema/draft-07", "minContains")]
+    [Arguments("JsonSchema/draft-07", "maxContains")]
+    [Arguments("JsonSchema/draft-07", "unevaluatedItems")]
+    [Arguments("JsonSchema/draft-07", "unevaluatedProperties")]
+    [Arguments("JsonSchema/draft-07", "contentSchema")]
+    [Arguments("JsonSchema/draft-07", "prefixItems")]
+    [Arguments("JsonSchema/draft-07", "deprecated")]
+    [Arguments("JsonSchema/draft/2019-09", "$dynamicRef")]
+    [Arguments("JsonSchema/draft/2019-09", "$dynamicAnchor")]
+    [Arguments("JsonSchema/draft/2019-09", "prefixItems")]
+    [Arguments("JsonSchema/draft/2020-12", "additionalItems")]
+    public async Task KeywordsAbsentFromSelectedDialectDoNotValidateTheirAnnotationValues(string format, string keyword)
+    {
+        var schema = RegistryJson.Create(writer =>
+        {
+            writer.WriteStartObject(); writer.WriteNull(keyword); writer.WriteEndObject();
+        });
+        var result = await new BuiltInDocumentValidator().ValidateAsync(format,
+            Encoding.UTF8.GetBytes(schema.RootElement.GetRawText()));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("JsonSchema/draft/2019-09", "$defs", "schema.object")]
+    [Arguments("JsonSchema/draft/2019-09", "$anchor", "schema.string")]
+    [Arguments("JsonSchema/draft/2019-09", "$vocabulary", "schema.object")]
+    [Arguments("JsonSchema/draft/2020-12", "$dynamicRef", "schema.string")]
+    [Arguments("JsonSchema/draft/2020-12", "$dynamicAnchor", "schema.string")]
+    [Arguments("JsonSchema/draft/2019-09", "$recursiveRef", "schema.string")]
+    [Arguments("JsonSchema/draft/2019-09", "$recursiveAnchor", "schema.boolean")]
+    [Arguments("JsonSchema/draft/2019-09", "dependentSchemas", "schema.object")]
+    [Arguments("JsonSchema/draft/2019-09", "dependentRequired", "schema.object")]
+    [Arguments("JsonSchema/draft/2019-09", "minContains", "schema.number")]
+    [Arguments("JsonSchema/draft/2019-09", "maxContains", "schema.number")]
+    [Arguments("JsonSchema/draft/2019-09", "unevaluatedItems", "schema.object")]
+    [Arguments("JsonSchema/draft/2019-09", "unevaluatedProperties", "schema.object")]
+    [Arguments("JsonSchema/draft/2019-09", "contentSchema", "schema.object")]
+    [Arguments("JsonSchema/draft/2020-12", "prefixItems", "schema.array")]
+    [Arguments("JsonSchema/draft/2019-09", "deprecated", "schema.boolean")]
+    [Arguments("JsonSchema/draft-07", "additionalItems", "schema.object")]
+    [Arguments("JsonSchema/draft/2019-09", "additionalItems", "schema.object")]
+    public async Task SelectedDialectStillValidatesRecognizedKeywordShapes(string format, string keyword, string code)
+    {
+        var schema = RegistryJson.Create(writer =>
+        {
+            writer.WriteStartObject(); writer.WriteNull(keyword); writer.WriteEndObject();
+        });
+        var result = await new BuiltInDocumentValidator().ValidateAsync(format,
+            Encoding.UTF8.GetBytes(schema.RootElement.GetRawText()));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics.Single().Code).IsEqualTo(code);
+        await Assert.That(result.Diagnostics.Single().Path).IsEqualTo("$/" + keyword);
+    }
+
+    [Test]
+    [Arguments("JsonSchema/draft-07", """{"$defs":{"ignored":{"type":"invalid","$ref":"never"}}}""")]
+    [Arguments("JsonSchema/draft-07", """{"dependentSchemas":{"ignored":{"$ref":"never"}}}""")]
+    [Arguments("JsonSchema/draft-07", """{"contentSchema":{"$ref":"never"},"unevaluatedItems":{"$ref":"never"},"unevaluatedProperties":{"$ref":"never"}}""")]
+    [Arguments("JsonSchema/draft-07", """{"$dynamicRef":"never","$recursiveRef":"never"}""")]
+    [Arguments("JsonSchema/draft/2019-09", """{"prefixItems":[{"$anchor":"ignored","$ref":"never"}],"$dynamicRef":"never"}""")]
+    [Arguments("JsonSchema/draft/2020-12", """{"additionalItems":{"$anchor":"ignored","$ref":"never"}}""")]
+    public async Task UnknownDialectSubschemasNeverAcquireDependencies(string format, string schema)
+    {
+        var calls = 0;
+        var result = await new BuiltInDocumentValidator().ValidateAsync(format, Encoding.UTF8.GetBytes(schema), new()
+        {
+            MaxReferences = 0,
+            ResolveReference = (_, _) => { calls++; throw new UnauthorizedAccessException(); }
+        });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(4, 64, DocumentValidationStatus.Indeterminate, "limit.nodes")]
+    [Arguments(5, 64, DocumentValidationStatus.Valid, "")]
+    [Arguments(6, 64, DocumentValidationStatus.Valid, "")]
+    [Arguments(100, 3, DocumentValidationStatus.Indeterminate, "limit.depth")]
+    [Arguments(100, 4, DocumentValidationStatus.Valid, "")]
+    [Arguments(100, 5, DocumentValidationStatus.Valid, "")]
+    public async Task UnknownDialectContentStillConsumesWholeDocumentBudgets(
+        int nodes, int depth, DocumentValidationStatus status, string code)
+    {
+        var calls = 0;
+        var result = await new BuiltInDocumentValidator().ValidateAsync("JsonSchema/draft-07",
+            """{"$defs":{"ignored":{"type":"invalid","$ref":"never"}}}"""u8.ToArray(), new()
+            {
+                MaxNodes = nodes,
+                MaxDepth = depth,
+                ResolveReference = (_, _) => { calls++; throw new UnauthorizedAccessException(); }
+            });
+        await Assert.That(result.Status).IsEqualTo(status);
+        if (code.Length == 0) { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+        else { await Assert.That(result.Diagnostics.Single().Code).IsEqualTo(code); }
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("JsonSchema/draft/2019-09", """{"prefixItems":[{"$anchor":"ignored"}],"$ref":"#ignored"}""")]
+    [Arguments("JsonSchema/draft/2020-12", """{"additionalItems":{"$anchor":"ignored"},"$ref":"#ignored"}""")]
+    public async Task AnchorsInsideUnknownDialectKeywordsAreNotRegistered(string format, string schema)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync(format, Encoding.UTF8.GetBytes(schema));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("reference.not_found");
+        await Assert.That(result.Diagnostics.Single().Path).IsEqualTo("$/$ref");
+    }
+
+    [Test]
+    [Arguments("JsonSchema/draft/2019-09", """{"$recursiveRef":"#"}""")]
+    [Arguments("JsonSchema/draft/2019-09", """{"$recursiveAnchor":true}""")]
+    [Arguments("JsonSchema/draft/2020-12", """{"$dynamicRef":"#node"}""")]
+    [Arguments("JsonSchema/draft/2020-12", """{"$dynamicAnchor":"node"}""")]
+    public async Task RecognizedDynamicKeywordsRemainExplicitlyUnsupported(string format, string schema)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync(format, Encoding.UTF8.GetBytes(schema));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Unsupported);
+        await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("schema.dynamic_reference");
+    }
+
+    [Test]
+    [Arguments("JsonSchema/draft/2019-09")]
+    [Arguments("JsonSchema/draft/2020-12")]
+    public async Task DeprecatedReservedDefinitionsAndDependenciesRetainMetaSchemaChecks(string format)
+    {
+        foreach (var schema in new[] { """{"definitions":null}""", """{"dependencies":null}""" })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync(format, Encoding.UTF8.GetBytes(schema));
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+            await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("schema.object");
+        }
+    }
+
+    [Test]
     [Arguments("""{"$ref":"target","type":"invalid","$id":42,"pattern":"[","$schema":false}""")]
     [Arguments("""{"$id":"https://wrong.test/","$ref":"target","properties":{"ignored":{"$ref":"never"}}}""")]
     [Arguments("""{"$ref":"target","$defs":{"ignored":{"$dynamicRef":"#never"}},"required":42}""")]
