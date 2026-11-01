@@ -91,7 +91,15 @@ wrong bases, repeated group self-references and namespace contradictions fail
 compilation. Caller acquisition is required even for annotation-only
 redefinitions. WSDL exposes original global elements and retains the replacement
 and original schema context without flattening the effective type into the
-selected declaration. This does not add instance validation or pattern support.
+selected declaration. This does not add instance validation.
+
+Pattern declaration compilation now checks XSD grammar before native compilation
+to reject .NET-only lookaround, backreferences and lazy quantifiers. Text,
+finite repetition and nesting consume bounded work. WSDL retains separate
+authored facets without matching application values. Schema graphs combining
+patterns with any enumeration or element/attribute default or fixed value remain
+unsupported, even when those declarations are unrelated. This prevents native
+compilation from entering pattern matching without a qualified deadline.
 
 For `Protobuf/2` and `Protobuf/3`, schema validation checks declaration names
 in their containing scope. Fields, oneofs, nested types and enum values cannot

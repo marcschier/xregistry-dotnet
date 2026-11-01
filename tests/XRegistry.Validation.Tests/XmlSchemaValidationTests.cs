@@ -10,6 +10,154 @@ namespace XRegistry.Validation.Tests;
 public class XmlSchemaValidationTests
 {
     [Test]
+    [Arguments("")]
+    [Arguments("[0-9]{5}(-[0-9]{4})?")]
+    [Arguments("[a-z-[aeiou]]+")]
+    [Arguments(@"\i\c*")]
+    [Arguments(@"\p{Lu}\p{Ll}*")]
+    [Arguments("a|b")]
+    [Arguments("(a+)+")]
+    [Arguments("a{0,0}")]
+    [Arguments("a{2,}")]
+    [Arguments(@"a\{12\}")]
+    [Arguments("a{0002,0003}")]
+    [Arguments(@"\p{IsBasicLatin}+")]
+    [Arguments("[^a-z]")]
+    [Arguments("(|a)")]
+    [Arguments("[-a]")]
+    [Arguments("[a-]")]
+    [Arguments(@"\p{L}+")]
+    public async Task PatternFacetsCompileNativeXsdDeclarationsWithoutMatchingValues(string pattern)
+    {
+        var escaped = System.Security.SecurityElement.Escape(pattern);
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(
+            "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:simpleType name=\"Value\">" +
+            $"<xs:restriction base=\"xs:string\"><xs:pattern value=\"{escaped}\"/></xs:restriction></xs:simpleType></xs:schema>"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("[")]
+    [Arguments("(")]
+    [Arguments(@"\")]
+    [Arguments("a{3,2}")]
+    [Arguments(@"\p{NotACategory}")]
+    [Arguments("(?=a)")]
+    [Arguments(@"(a)\1")]
+    [Arguments("a{,2}")]
+    [Arguments("a??")]
+    [Arguments(@"\p{Cs}")]
+    [Arguments(@"\p{_xmlC}")]
+    [Arguments(@"a\b")]
+    [Arguments("a{+2}")]
+    [Arguments("a{2,3,4}")]
+    [Arguments("[a-[b]c]")]
+    [Arguments("[a-b-c]")]
+    [Arguments(@"[\d-a]")]
+    [Arguments(@"[a-\d]")]
+    public async Task PatternFacetsRejectMalformedNativeRegularExpressions(string pattern)
+    {
+        var escaped = System.Security.SecurityElement.Escape(pattern);
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(
+            "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:simpleType name=\"Value\">" +
+            $"<xs:restriction base=\"xs:string\"><xs:pattern value=\"{escaped}\"/></xs:restriction></xs:simpleType></xs:schema>"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("xsd.schema");
+    }
+
+    [Test]
+    [Arguments("a{18446744073709551616}")]
+    [Arguments("(a{10000}){10000}")]
+    public async Task PatternRepetitionsCannotOverflowOrBypassCompilationReservations(string pattern)
+    {
+        var calls = 0;
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(
+            "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:include schemaLocation=\"never.xsd\"/>" +
+            $"<xs:simpleType name=\"Value\"><xs:restriction base=\"xs:string\"><xs:pattern value=\"{pattern}\"/>" +
+            "</xs:restriction></xs:simpleType></xs:schema>"),
+            new() { ResolveReference = (_, _) => { calls++; throw new UnauthorizedAccessException(); } });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Indeterminate);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("limit.work");
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(-1, DocumentValidationStatus.Indeterminate)]
+    [Arguments(0, DocumentValidationStatus.Valid)]
+    [Arguments(1, DocumentValidationStatus.Valid)]
+    public async Task PatternTextReservationsHonorTheExactCumulativeWorkBoundary(
+        int delta, DocumentValidationStatus expected)
+    {
+        var bytes = Encoding.UTF8.GetBytes("""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:simpleType name="Value">
+              <xs:restriction base="xs:string"><xs:pattern value="a"/></xs:restriction>
+            </xs:simpleType></xs:schema>
+            """);
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", bytes,
+            new() { MaxWork = bytes.Length * 2L + 23 + delta });
+        await Assert.That(result.Status).IsEqualTo(expected);
+        if (expected == DocumentValidationStatus.Indeterminate)
+        {
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("limit.work");
+        }
+    }
+
+    [Test]
+    [Arguments("""<xs:enumeration value="a"/>""", "")]
+    [Arguments("", """<xs:element name="root" type="Value" default="a"/>""")]
+    [Arguments("", """<xs:attribute name="root" type="Value" fixed="a"/>""")]
+    public async Task PatternCompilationNeverEvaluatesAuthoredSchemaValues(string facets, string declarations)
+    {
+        var calls = 0;
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(
+            "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:include schemaLocation=\"never.xsd\"/>" +
+            "<xs:simpleType name=\"Value\"><xs:restriction base=\"xs:string\"><xs:pattern value=\"(a+)+\"/>" +
+            facets + "</xs:restriction></xs:simpleType>" + declarations + "</xs:schema>"),
+            new() { ResolveReference = (_, _) => { calls++; throw new UnauthorizedAccessException(); } });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Unsupported);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("xsd.pattern_value_unsupported");
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task ImportedPatternValueInteractionsRemainExplicitlyUnsupported()
+    {
+        var calls = new List<string>();
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes("""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:include schemaLocation="base.xsd"/>
+              <xs:simpleType name="Value"><xs:restriction base="Base"><xs:enumeration value="a"/></xs:restriction></xs:simpleType>
+            </xs:schema>
+            """), new()
+        {
+            ResolveReference = (reference, _) =>
+            {
+                calls.Add(reference);
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes("""
+                    <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+                      <xs:simpleType name="Base"><xs:restriction base="xs:string"><xs:pattern value="(a+)+"/></xs:restriction></xs:simpleType>
+                    </xs:schema>
+                    """));
+            }
+        });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Unsupported);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("xsd.pattern_value_unsupported");
+        await Assert.That(calls.SequenceEqual(["base.xsd"])).IsTrue();
+    }
+
+    [Test]
+    public async Task PatternNestingIsBoundedBeforeNativeCompilation()
+    {
+        var pattern = new string('(', 65) + "a" + new string(')', 65);
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(
+            "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:simpleType name=\"Value\">" +
+            $"<xs:restriction base=\"xs:string\"><xs:pattern value=\"{pattern}\"/></xs:restriction></xs:simpleType></xs:schema>"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Indeterminate);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("limit.depth");
+    }
+
+    [Test]
     public async Task MissingRedefinitionDependenciesNeverBecomeSuccessfulUncheckedCompilation()
     {
         var calls = 0;
@@ -428,20 +576,20 @@ public class XmlSchemaValidationTests
     }
 
     [Test]
-    public async Task NamedGroupsCannotHideUnsupportedPatternsBeforeDependencyAcquisition()
+    public async Task NamedGroupsCannotHideOversizedPatternsBeforeDependencyAcquisition()
     {
         var calls = 0;
         var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes("""
             <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
               <xs:include schemaLocation="never.xsd"/>
               <xs:group name="Fields"><xs:sequence><xs:element name="x"><xs:simpleType>
-                <xs:restriction base="xs:string"><xs:pattern value=".*"/></xs:restriction>
+                <xs:restriction base="xs:string"><xs:pattern value="a{18446744073709551616}"/></xs:restriction>
               </xs:simpleType></xs:element></xs:sequence></xs:group>
               <xs:complexType name="Row"><xs:group ref="Fields"/></xs:complexType>
             </xs:schema>
             """), new() { ResolveReference = (_, _) => { calls++; throw new UnauthorizedAccessException(); } });
-        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Unsupported);
-        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("xsd.construct_unsupported");
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Indeterminate);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("limit.work");
         await Assert.That(calls).IsEqualTo(0);
     }
 
@@ -682,19 +830,19 @@ public class XmlSchemaValidationTests
     }
 
     [Test]
-    public async Task ChoiceParticlesCannotHideUnsupportedMemberConstructsBeforeAcquisition()
+    public async Task ChoiceParticlesCannotHideOversizedPatternsBeforeAcquisition()
     {
         var calls = 0;
         var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes("""
             <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
               <xs:include schemaLocation="never.xsd"/>
               <xs:element name="root"><xs:complexType><xs:choice>
-                <xs:element name="value"><xs:simpleType><xs:restriction base="xs:string"><xs:pattern value=".*"/></xs:restriction></xs:simpleType></xs:element>
+                <xs:element name="value"><xs:simpleType><xs:restriction base="xs:string"><xs:pattern value="a{18446744073709551616}"/></xs:restriction></xs:simpleType></xs:element>
               </xs:choice></xs:complexType></xs:element>
             </xs:schema>
             """), new() { ResolveReference = (_, _) => { calls++; throw new UnauthorizedAccessException(); } });
-        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Unsupported);
-        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("xsd.construct_unsupported");
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Indeterminate);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("limit.work");
         await Assert.That(calls).IsEqualTo(0);
     }
 
@@ -787,19 +935,19 @@ public class XmlSchemaValidationTests
     }
 
     [Test]
-    public async Task UnionMembersCannotHideUnsupportedPatternsOrTriggerDependencyAcquisition()
+    public async Task UnionMembersCannotHideOversizedPatternsOrTriggerDependencyAcquisition()
     {
         var calls = 0;
         var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes("""
             <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
               <xs:include schemaLocation="never.xsd"/>
               <xs:simpleType name="Value"><xs:union memberTypes="xs:int">
-                <xs:simpleType><xs:restriction base="xs:string"><xs:pattern value=".*"/></xs:restriction></xs:simpleType>
+                <xs:simpleType><xs:restriction base="xs:string"><xs:pattern value="a{18446744073709551616}"/></xs:restriction></xs:simpleType>
               </xs:union></xs:simpleType>
             </xs:schema>
             """), new() { ResolveReference = (_, _) => { calls++; throw new UnauthorizedAccessException(); } });
-        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Unsupported);
-        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("xsd.construct_unsupported");
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Indeterminate);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("limit.work");
         await Assert.That(calls).IsEqualTo(0);
     }
 
@@ -955,7 +1103,7 @@ public class XmlSchemaValidationTests
     [Arguments("""<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="age" type="xs:int"/><xs:element name="age" type="xs:string"/></xs:schema>""", DocumentValidationStatus.Invalid)]
     [Arguments("""<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="p"><xs:complexType><xs:sequence><xs:element name="x" minOccurs="2" maxOccurs="1"/></xs:sequence></xs:complexType></xs:element></xs:schema>""", DocumentValidationStatus.Invalid)]
     [Arguments("""<!DOCTYPE schema [<!ENTITY x SYSTEM "file:///C:/secret">]><schema xmlns="http://www.w3.org/2001/XMLSchema">&x;</schema>""", DocumentValidationStatus.Invalid)]
-    [Arguments("""<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:simpleType name="S"><xs:restriction base="xs:string"><xs:pattern value="(a+)+"/></xs:restriction></xs:simpleType></xs:schema>""", DocumentValidationStatus.Unsupported)]
+    [Arguments("""<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:simpleType name="S"><xs:restriction base="xs:string"><xs:pattern value="(a+)+"/></xs:restriction></xs:simpleType></xs:schema>""", DocumentValidationStatus.Valid)]
     [Arguments("""<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:include schemaLocation="https://schemas.test/external.xsd"/></xs:schema>""", DocumentValidationStatus.Indeterminate)]
     public async Task SchemaCompilationIsHardenedAndNotJustXmlParsing(string schema, DocumentValidationStatus expected)
     {

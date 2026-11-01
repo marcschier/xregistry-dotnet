@@ -788,6 +788,42 @@ public class Wsdl20OperationReferenceTests
     }
 
     [Test]
+    public async Task Wsdl20PatternFacetsRemainAuthoredWithoutInstanceMatching()
+    {
+        var result = await Resolve("""
+            <types xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:schema targetNamespace="urn:api">
+              <xs:element name="Payload"><xs:simpleType><xs:restriction base="xs:string">
+                <xs:pattern value="[a-z-[aeiou]]{2,4}"/><xs:pattern value="\i\c*"/>
+              </xs:restriction></xs:simpleType></xs:element>
+            </xs:schema></types>
+            <interface name="Port"><operation name="Read"><input element="t:Payload"/><output element="#none"/></operation></interface>
+            """);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        var schema = result.Wsdl20Operation!.SchemaElements.Single();
+        var xs = XNamespace.Get("http://www.w3.org/2001/XMLSchema");
+        await Assert.That(XElement.Parse(schema.ElementXml).Descendants(xs + "pattern")
+            .Select(pattern => pattern.Attribute("value")!.Value).SequenceEqual(["[a-z-[aeiou]]{2,4}", @"\i\c*"])).IsTrue();
+        await Assert.That(schema.ElementName).IsEqualTo("{urn:api}Payload");
+    }
+
+    [Test]
+    [Arguments("(?=a)", "", ApiOperationResolutionStatus.Invalid, "xsd.schema")]
+    [Arguments("(a+)+", """<xs:enumeration value="a"/>""", ApiOperationResolutionStatus.Unsupported, "xsd.pattern_value_unsupported")]
+    [Arguments("a{18446744073709551616}", "", ApiOperationResolutionStatus.Indeterminate, "limit.work")]
+    public async Task Wsdl20PatternFailuresNeverReturnPartialMessageElements(
+        string pattern, string facet, ApiOperationResolutionStatus expected, string code)
+    {
+        var result = await Resolve(
+            "<types xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:schema targetNamespace=\"urn:api\">" +
+            "<xs:element name=\"Payload\"><xs:simpleType><xs:restriction base=\"xs:string\">" +
+            $"<xs:pattern value=\"{pattern}\"/>{facet}</xs:restriction></xs:simpleType></xs:element></xs:schema></types>" +
+            "<interface name=\"Port\"><operation name=\"Read\"><input element=\"t:Payload\"/><output element=\"#none\"/></operation></interface>");
+        await Assert.That(result.Status).IsEqualTo(expected);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        await Assert.That(result.Wsdl20Operation).IsNull();
+    }
+
+    [Test]
     public async Task Wsdl20RedefinitionExposesOriginalElementsWithOwnedReplacementContext()
     {
         var calls = new List<string>();
@@ -933,7 +969,6 @@ public class Wsdl20OperationReferenceTests
 
     [Test]
     [Arguments("<xs:schema targetNamespace=\"urn:api\"><xs:include schemaLocation=\"#xpointer(//xs:schema)\"/></xs:schema>", "wsdl20.schema_fragment")]
-    [Arguments("<xs:schema targetNamespace=\"urn:api\"><xs:element name=\"Payload\"><xs:simpleType><xs:restriction base=\"xs:string\"><xs:pattern value=\".*\"/></xs:restriction></xs:simpleType></xs:element></xs:schema>", "xsd.construct_unsupported")]
     public async Task Wsdl20UnimplementedSchemaPoliciesDoNotAcquireDependenciesOrReturnPartialElements(string schema, string code)
     {
         var calls = 0;

@@ -16,6 +16,8 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
     private readonly Dictionary<XmlSchema, List<XmlSchema>> _dependencies = [];
     private long _elements;
     private long _occurrenceCost = 1;
+    private bool _hasPatterns;
+    private bool _hasPatternValues;
 
     internal async ValueTask ValidateAsync(ReadOnlyMemory<byte> bytes)
     {
@@ -250,8 +252,19 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
             {
                 if (reader.LocalName == "pattern")
                 {
-                    ValidationContext.Fail(DocumentValidationStatus.Unsupported, "$", "xsd.construct_unsupported",
-                        $"The '{reader.LocalName}' construct is outside the bounded XSD compilation policy.");
+                    _hasPatterns = true;
+                    PreflightPattern(reader.GetAttribute("value") ?? "");
+                }
+                if (reader.LocalName == "enumeration" ||
+                    reader.LocalName is "element" or "attribute" &&
+                    (reader.GetAttribute("default") is not null || reader.GetAttribute("fixed") is not null))
+                {
+                    _hasPatternValues = true;
+                }
+                if (_hasPatterns && _hasPatternValues)
+                {
+                    ValidationContext.Fail(DocumentValidationStatus.Unsupported, "$", "xsd.pattern_value_unsupported",
+                        "Schemas combining patterns with enumerations or default/fixed values require unqualified pattern matching.");
                 }
                 var minimum = Occurrence(reader.GetAttribute("minOccurs"), allowUnbounded: false);
                 var maximum = Occurrence(reader.GetAttribute("maxOccurs"), allowUnbounded: true);
@@ -314,14 +327,162 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
         }
         ValidationContext.Require(sawRoot, "$", "xsd.root", "An XML Schema root is required.");
 
-        void ReserveExpansion(long members, string construct)
+    }
+
+    private void ReserveExpansion(long members, string construct)
+    {
+        if (members > context.Options.MaxWork / _occurrenceCost)
         {
-            if (members > context.Options.MaxWork / _occurrenceCost)
+            ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$", "limit.work",
+                $"XML Schema {construct} expansion exceeds the compilation budget.");
+        }
+        _occurrenceCost *= Math.Max(1, members);
+    }
+
+    private void PreflightPattern(string text)
+    {
+        var length = text.Length + 1L;
+        if (length > context.Options.MaxWork / length)
+        {
+            ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$", "limit.work",
+                "XML Schema pattern compilation exceeds the conservative text budget.");
+        }
+        context.Work(length * length);
+        var index = 0;
+        Expression(1);
+        Require(index == text.Length);
+
+        void Require(bool condition) => ValidationContext.Require(condition, "$", "xsd.schema",
+            "The pattern must use XML Schema 1.0 regular-expression grammar.");
+
+        void Depth(int depth)
+        {
+            context.Work();
+            if (depth > context.Options.MaxDepth)
             {
-                ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$", "limit.work",
-                    $"XML Schema {construct} expansion exceeds the compilation budget.");
+                ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$", "limit.depth",
+                    "XML Schema pattern nesting exceeds the depth limit.");
             }
-            _occurrenceCost *= Math.Max(1, members);
+        }
+
+        void Expression(int depth)
+        {
+            Depth(depth);
+            while (index < text.Length && text[index] != ')')
+            {
+                context.Work();
+                if (text[index] == '|') { index++; continue; }
+                var character = text[index++];
+                switch (character)
+                {
+                    case '(':
+                        Expression(depth + 1);
+                        Require(index < text.Length && text[index++] == ')');
+                        break;
+                    case '[':
+                        CharacterClass(depth + 1);
+                        break;
+                    case '\\':
+                        Escape();
+                        break;
+                    default:
+                        Require(character is not ('?' or '*' or '+' or '{' or '}' or ']'));
+                        break;
+                }
+                if (index < text.Length && text[index] is '?' or '*' or '+') { index++; }
+                else if (index < text.Length && text[index] == '{')
+                {
+                    index++;
+                    var minimum = Quantity();
+                    var maximum = minimum;
+                    if (index < text.Length && text[index] == ',')
+                    {
+                        index++;
+                        maximum = index < text.Length && text[index] == '}' ? minimum : Quantity();
+                    }
+                    Require(index < text.Length && text[index++] == '}' && maximum >= minimum);
+                    ReserveExpansion(Math.Max(minimum, maximum), "pattern repetition");
+                }
+            }
+        }
+
+        long Quantity()
+        {
+            var start = index;
+            while (index < text.Length && text[index] is >= '0' and <= '9') { index++; }
+            Require(index > start);
+            return Occurrence(text[start..index], allowUnbounded: false);
+        }
+
+        void CharacterClass(int depth)
+        {
+            Depth(depth);
+            if (index < text.Length && text[index] == '^') { index++; }
+            var members = 0;
+            while (index < text.Length && text[index] != ']')
+            {
+                context.Work();
+                if (members > 0 && text[index] == '-' && index + 1 < text.Length && text[index + 1] == '[')
+                {
+                    index += 2;
+                    CharacterClass(depth + 1);
+                    Require(index < text.Length && text[index] == ']');
+                    break;
+                }
+                if (text[index] == '-')
+                {
+                    Require(members == 0 || index + 1 < text.Length && text[index + 1] == ']');
+                    index++;
+                }
+                else
+                {
+                    var single = ClassUnit();
+                    if (index + 1 < text.Length && text[index] == '-' && text[index + 1] is not (']' or '['))
+                    {
+                        index++;
+                        Require(single && ClassUnit());
+                    }
+                }
+                members++;
+            }
+            Require(members > 0 && index < text.Length && text[index++] == ']');
+        }
+
+        bool ClassUnit()
+        {
+            Require(index < text.Length);
+            var character = text[index++];
+            Require(character is not ('[' or ']' or '-'));
+            return character != '\\' || Escape();
+        }
+
+        bool Escape()
+        {
+            Require(index < text.Length);
+            var character = text[index++];
+            if (character is 'p' or 'P')
+            {
+                Require(index < text.Length && text[index++] == '{');
+                var start = index;
+                while (index < text.Length && text[index] != '}') { index++; }
+                Require(index > start && index < text.Length && text[start..index] != "Cs");
+                var property = text[start..index];
+                var category = property is "L" or "Lu" or "Ll" or "Lt" or "Lm" or "Lo" or
+                    "M" or "Mn" or "Mc" or "Me" or "N" or "Nd" or "Nl" or "No" or
+                    "P" or "Pc" or "Pd" or "Ps" or "Pe" or "Pi" or "Pf" or "Po" or
+                    "Z" or "Zs" or "Zl" or "Zp" or "S" or "Sm" or "Sc" or "Sk" or "So" or
+                    "C" or "Cc" or "Cf" or "Co" or "Cn";
+                var block = property.StartsWith("Is", StringComparison.Ordinal) && property.Length > 2;
+                foreach (var nameCharacter in property.AsSpan(Math.Min(2, property.Length)))
+                {
+                    block &= nameCharacter is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9' or '-';
+                }
+                Require(category || block);
+                index++;
+                return false;
+            }
+            Require("nrt\\|.?*+(){}-[]^sSdDwWiIcC".Contains(character, StringComparison.Ordinal));
+            return !"sSdDwWiIcC".Contains(character, StringComparison.Ordinal);
         }
     }
 

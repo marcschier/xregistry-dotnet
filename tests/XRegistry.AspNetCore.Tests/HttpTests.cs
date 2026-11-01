@@ -61,7 +61,9 @@ public class HttpTests
                 <xs:element name="Unknown" type="xs:boolean"/>
               </xs:choice></xs:group>
               <xs:element name="Payload"><xs:complexType><xs:all>
-                <xs:element name="Name" type="xs:string"/>
+                <xs:element name="Name"><xs:simpleType><xs:restriction base="xs:string">
+                  <xs:pattern value="\i\c*"/>
+                </xs:restriction></xs:simpleType></xs:element>
                 <xs:element name="Age" minOccurs="0"><xs:complexType><xs:complexContent><xs:extension base="p:AgeBase">
                   <xs:group ref="p:AgeFields"/><xs:attributeGroup ref="p:AgeAttributes"/>
                 </xs:extension></xs:complexContent></xs:complexType></xs:element>
@@ -153,6 +155,7 @@ public class HttpTests
         await Assert.That(payload.ElementXml.Contains("ref=\"p:AgeAttributes\"", StringComparison.Ordinal)).IsTrue();
         await Assert.That(payload.ElementXml.Contains("name=\"Names\"", StringComparison.Ordinal)).IsTrue();
         await Assert.That(payload.ElementXml.Contains("xpath=\"p:Name\"", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(payload.ElementXml.Contains("value=\"\\i\\c*\"", StringComparison.Ordinal)).IsTrue();
         var missing = await ApiOperationDocumentResolver.ResolveAsync(acquired.Format, acquired.Document.ContentType!,
             memory.ToArray(), ApiOperationReference.Parse(version +
                 "#interfaces/%7Burn:api%7DNewPort/operations/%7Burn:api%7DRead"),

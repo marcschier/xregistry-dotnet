@@ -117254,6 +117254,8 @@
           "Wsdl20OperationReferenceTests.Wsdl20NamedGroupsRetainReferencesAndDefinitionsWithoutFlattening",
           "Wsdl20OperationReferenceTests.Wsdl20IdentityConstraintsRemainOwnedSchemaDeclarations",
           "Wsdl20OperationReferenceTests.Wsdl20RedefinitionExposesOriginalElementsWithOwnedReplacementContext",
+          "Wsdl20OperationReferenceTests.Wsdl20PatternFacetsRemainAuthoredWithoutInstanceMatching",
+          "Wsdl20OperationReferenceTests.Wsdl20PatternFailuresNeverReturnPartialMessageElements",
           "Wsdl20OperationReferenceTests.Wsdl20HugeOccurrenceIntegersNeverReachUnreservedSchemaCompilation",
           "Wsdl20OperationReferenceTests.Wsdl20SchemaDependenciesRetainIncludeVisibilityAndForeignCompilerContext",
           "Wsdl20OperationReferenceTests.Wsdl20InlineImportsDoNotMakeForeignElementsReferenceable",

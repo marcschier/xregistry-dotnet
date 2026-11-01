@@ -56,8 +56,8 @@ This does not enable the explicitly unsupported compiler constructs.
 XSD 1.0 union simple types can use ordered `memberTypes` QNames, inline simple
 types, list members and nested unions. The native compiler resolves supplied
 member types and rejects missing types, complex-type members and cyclic type
-definitions. Unsupported constructs inside a member, including patterns, still
-prevent compilation. Union member counts contribute multiplicatively to the
+definitions. Unqualified pattern-value matching inside a member still prevents
+compilation. Union member counts contribute multiplicatively to the
 structural work reservation, including repeated references, so nested unions
 cannot reach unreserved expansion. Exhausted reservations report `limit.work`.
 This conservative bound can leave a valid schema unchecked.
@@ -86,8 +86,8 @@ structural reservation for base/local composition, bounding chains before
 native compilation. This conservative reservation can leave valid derivations
 unchecked. WSDL selection retains the authored base QName, local declaration
 and complete schema context rather than flattening inherited particles.
-Patterns remain outside the compiler policy; extension does not bypass that
-boundary.
+Unqualified pattern-value matching remains outside the compiler policy;
+extension does not bypass that boundary.
 
 Named XSD model groups and attribute groups use native QName resolution,
 including caller-resolved imported definitions. Model groups retain sequence,
@@ -124,6 +124,26 @@ even for annotation-only redefinitions; unavailable targets remain unresolved.
 WSDL exposes original global elements while retaining both schema documents and
 the authored replacement context. It does not rewrite retained element XML
 with the effective redefined type or generate application instances.
+
+XSD pattern facets undergo a grammar check before native compilation because
+the native compiler also accepts .NET-only regex forms. Lookaround,
+backreferences, lazy quantifiers and omitted lower repetition bounds are
+invalid XSD patterns. The grammar check retains XSD escapes, Unicode categories,
+character-class subtraction, alternation and grouped repetitions. Native
+compilation checks character ranges and available Unicode properties.
+Each pattern reserves `(character count + 1)^2` work; finite repetition bounds
+multiply the existing structural reservation with overflow-safe parsing.
+Pattern nesting shares the depth limit. Exhaustion leaves the schema unchecked
+rather than reaching unreserved native compilation.
+
+This policy does not match pattern values. Native schema compilation can
+otherwise evaluate defaults, fixed values and enumeration facets against
+patterns without a matching deadline. A schema graph containing both a pattern
+and any enumeration or element/attribute default or fixed value therefore
+reports `Unsupported` with `xsd.pattern_value_unsupported`, including when the
+declarations are unrelated or occur in different acquired Documents.
+WSDL retains authored pattern text and separate facets; it does not rewrite
+anchors, combine facets or validate application values.
 
 Protobuf map declarations reserve their synthetic entry symbol in the containing
 message: `foo` reserves `FooEntry`, and `map_field` reserves `MapFieldEntry`.
