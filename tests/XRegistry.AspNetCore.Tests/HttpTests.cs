@@ -21,11 +21,65 @@ using TUnit.Core;
 using XRegistry.Models;
 using XRegistry.Publication;
 using XRegistry.Server;
+using XRegistry.Validation;
 
 namespace XRegistry.AspNetCore.Tests;
 
 public class HttpTests
 {
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task HttpSchemaVersionsSupportDirectAndEmbeddedNamedSelectorsWithoutRefetching(bool protobuf)
+    {
+        var format = protobuf ? "Protobuf/3" : "Avro/1.11.0";
+        var schema = protobuf
+            ? """syntax="proto3"; message TelemetryEvent { string value=1; }"""
+            : """{"type":"record","name":"TelemetryEvent","fields":[]}""";
+        await using var host = await TestHost.StartAsync(model: BuiltInRegistryModels.Compile(RegistryModelKind.Schema),
+            resourceValidator: new BuiltInRegistryResourceValidator());
+        using var publish = new HttpRequestMessage(HttpMethod.Put, "/schemagroups/g/schemas/s/versions/1")
+        {
+            Content = new StringContent(schema, Encoding.UTF8, protobuf ? "text/plain" : "application/json")
+        };
+        publish.Headers.TryAddWithoutValidation("xRegistry-format", format);
+        using var created = await host.Client.SendAsync(publish);
+        await Assert.That(created.StatusCode).IsEqualTo(HttpStatusCode.Created);
+        const string versionPath = "/schemagroups/g/schemas/s/versions/1";
+        using var directRead = await host.Client.GetAsync(versionPath);
+        await Assert.That(directRead.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        var bytes = await directRead.Content.ReadAsByteArrayAsync();
+        await Assert.That(Encoding.UTF8.GetString(bytes)).IsEqualTo(schema);
+        var directUri = versionPath + "#TelemetryEvent";
+        var direct = await SchemaObjectSelector.SelectAsync(format, bytes, directUri);
+        await Assert.That(direct.Status).IsEqualTo(SchemaObjectSelectionStatus.Selected);
+        await Assert.That(direct.Selection!.DocumentReference).IsEqualTo(versionPath);
+        await Assert.That(direct.Selection.TypeName).IsEqualTo("TelemetryEvent");
+
+        const string detailsPath = versionPath + "$details?inline=schema";
+        using var embeddedRead = await host.Client.GetAsync(detailsPath);
+        await Assert.That(embeddedRead.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        var container = await embeddedRead.Content.ReadAsByteArrayAsync();
+        var metadata = RegistryJson.Parse(container).RootElement;
+        await Assert.That(metadata.GetProperty("versionid").GetString()).IsEqualTo("1");
+        await Assert.That(metadata.GetProperty("format").GetString()).IsEqualTo(format);
+        await Assert.That(metadata.GetProperty("schema").ValueKind).IsEqualTo(protobuf
+            ? System.Text.Json.JsonValueKind.String : System.Text.Json.JsonValueKind.Object);
+        var reference = detailsPath + "#/schema";
+        var embedded = await SchemaObjectSelector.SelectEmbeddedAsync(format, container, reference + ":TelemetryEvent",
+            new() { DocumentReference = reference });
+        await Assert.That(embedded.Status).IsEqualTo(SchemaObjectSelectionStatus.Selected);
+        await Assert.That(embedded.Selection!.TypeName).IsEqualTo(direct.Selection.TypeName);
+        await Assert.That(embedded.Selection.Kind).IsEqualTo(direct.Selection.Kind);
+        await Assert.That(Encoding.UTF8.GetString(embedded.Selection.Document.Span)).IsEqualTo(schema);
+        await host.DisposeAsync();
+        var retained = await SchemaObjectSelector.SelectEmbeddedAsync(format, container, reference + ":TelemetryEvent",
+            new() { DocumentReference = reference });
+        await Assert.That(retained.Status).IsEqualTo(SchemaObjectSelectionStatus.Selected);
+        await Assert.That(retained.Selection!.TypeName).IsEqualTo("TelemetryEvent");
+        await Assert.That(Encoding.UTF8.GetString(retained.Selection.Document.Span)).IsEqualTo(schema);
+    }
+
     [Test]
     public async Task PublicationProjectionRequiresReadOnlyBackendAndEnforcesItsResponseBudget()
     {

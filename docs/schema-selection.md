@@ -185,6 +185,14 @@ declarations return `NotFound`; a wrong schema representation returns
 `Invalid` with `selection.not_schema`. Acquisition authorization and dependency
 base-URI policy remain with the caller.
 
+The live HTTP workflow publishes a Schema Version through `MapXRegistry` and
+reads that exact Version's schema bytes before direct `#Name` selection.
+It also reads the Version's `$details?inline=schema` representation and applies
+`#/schema:Name` to the acquired container. Both selections retain the same
+declaration after the host stops; neither requires another read. This covers
+explicit Version acquisition and selection, not automatic dispatch from
+arbitrary Message metadata or a remote-source authorization policy.
+
 ## Bounded XML selectors
 
 Supported structural paths have one leading `/` or `//`, followed by child steps.

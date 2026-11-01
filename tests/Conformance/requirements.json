@@ -103519,7 +103519,8 @@
           "DirectRegistryRootReferencesUseHashNamesRatherThanCompoundColons",
           "AvroOptionalRootAndQualifiedRecordsHaveLiteralIdentities",
           "AvroSelectionDistinguishesAmbiguousWrongKindMissingAndInvalidNames",
-          "AvroWithoutSuffixNeverFallsBackToANestedRecord"
+          "AvroWithoutSuffixNeverFallsBackToANestedRecord",
+          "HttpSchemaVersionsSupportDirectAndEmbeddedNamedSelectorsWithoutRefetching"
         ],
         "nativeEvidence": []
       }
@@ -103561,7 +103562,8 @@
           "EmbeddedSchemaRepresentationMustMatchTheDeclaredFormat",
           "EmbeddedTotalByteLimitIncludesContainerAndExtractedSchema",
           "EmbeddedNodeLimitsIncludeBothParsingStages",
-          "EmbeddedSelectionValidatesTheCompleteContainer"
+          "EmbeddedSelectionValidatesTheCompleteContainer",
+          "HttpSchemaVersionsSupportDirectAndEmbeddedNamedSelectorsWithoutRefetching"
         ],
         "nativeEvidence": []
       }
@@ -103600,7 +103602,8 @@
           "ProtobufRequiresAMessageSuffixEvenWithOnlyOneMessage",
           "ProtobufNeverSelectsEnumsCommentsOrAnAmbiguousFirstMessage",
           "ProtobufImportsProvideContextButAreNotContainedRootDeclarations",
-          "ProtobufTwoSelectsTheDeclaredMessage"
+          "ProtobufTwoSelectsTheDeclaredMessage",
+          "HttpSchemaVersionsSupportDirectAndEmbeddedNamedSelectorsWithoutRefetching"
         ],
         "nativeEvidence": []
       }
@@ -103642,7 +103645,8 @@
           "EmbeddedSelectionRequiresExplicitPointerContextAndPropagatesCancellation",
           "EmbeddedInputByteLimitsApplyToTheWholeContainer",
           "EmbeddedPointerStepLimitHasAnInclusiveBoundary",
-          "EmbeddedWorkAndDepthLimitsCannotBeBypassedByASmallSchema"
+          "EmbeddedWorkAndDepthLimitsCannotBeBypassedByASmallSchema",
+          "HttpSchemaVersionsSupportDirectAndEmbeddedNamedSelectorsWithoutRefetching"
         ],
         "nativeEvidence": []
       }
