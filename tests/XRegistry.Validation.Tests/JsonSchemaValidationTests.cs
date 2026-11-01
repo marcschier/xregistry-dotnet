@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text;
+using System.Text.Json;
 using TUnit.Assertions;
 using TUnit.Core;
 
@@ -9,6 +10,89 @@ namespace XRegistry.Validation.Tests;
 
 public class JsonSchemaValidationTests
 {
+    [Test]
+    public async Task JsonSchemaPatternPropertyKeysUseDecodedCharacterRangeOrdering()
+    {
+        var validator = new BuiltInDocumentValidator();
+        var valid = await validator.ValidateAsync("JsonSchema/draft-07",
+            """{"patternProperties":{"[\\x41-\\u005a]":{"type":"string"}}}"""u8.ToArray());
+        var invalid = await validator.ValidateAsync("JsonSchema/draft-07",
+            """{"patternProperties":{"[\\x5a-\\u0041]":{"type":"string"}}}"""u8.ToArray());
+        await Assert.That(valid.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(invalid.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(invalid.Diagnostics.Single().Code).IsEqualTo("schema.pattern");
+        await Assert.That(invalid.Diagnostics.Single().Path).IsEqualTo("$/patternProperties");
+    }
+
+    [Test]
+    [Arguments(@"[\x41-\x5a]")]
+    [Arguments(@"[\u0041-\u005A]")]
+    [Arguments(@"[A-\u005a]")]
+    [Arguments(@"[\x41-Z]")]
+    [Arguments(@"[\uD800-\uDFFF]")]
+    [Arguments(@"[^\x00-\x1f]")]
+    [Arguments(@"[\b-\t]")]
+    [Arguments(@"[\n-\r]")]
+    [Arguments(@"[\cA-\cZ]")]
+    [Arguments(@"[\0-\x09]")]
+    [Arguments(@"[\d\w\s]")]
+    [Arguments(@"[\x2d]")]
+    [Arguments(@"[\[-\]]")]
+    [Arguments(@"[\x41-]")]
+    [Arguments(@"[]")]
+    [Arguments(@"[^]")]
+    public async Task JsonSchemaPatternsDecodeSupportedClassCharactersBeforeRangeComparison(string pattern)
+    {
+        foreach (var format in new[] { "JsonSchema/draft-07", "JsonSchema/draft/2019-09", "JsonSchema/draft/2020-12" })
+        {
+            var schema = Encoding.UTF8.GetBytes("{\"pattern\":\"" + JsonEncodedText.Encode(pattern) + "\"}");
+            var result = await new BuiltInDocumentValidator().ValidateAsync(format, schema);
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+            await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+        }
+    }
+
+    [Test]
+    [Arguments(@"[\x5a-\x41]", DocumentValidationStatus.Invalid)]
+    [Arguments(@"[\u005A-\u0041]", DocumentValidationStatus.Invalid)]
+    [Arguments(@"[Z-\x41]", DocumentValidationStatus.Invalid)]
+    [Arguments(@"[\r-\n]", DocumentValidationStatus.Invalid)]
+    [Arguments(@"[\cZ-\cA]", DocumentValidationStatus.Invalid)]
+    [Arguments(@"[\x0]", DocumentValidationStatus.Invalid)]
+    [Arguments(@"[\u001]", DocumentValidationStatus.Invalid)]
+    [Arguments(@"[\u00xz]", DocumentValidationStatus.Invalid)]
+    [Arguments(@"[\c]", DocumentValidationStatus.Invalid)]
+    [Arguments(@"[\x41", DocumentValidationStatus.Invalid)]
+    [Arguments(@"[\d-Z]", DocumentValidationStatus.Unsupported)]
+    [Arguments(@"[A-\w]", DocumentValidationStatus.Unsupported)]
+    [Arguments(@"[\p{L}]", DocumentValidationStatus.Unsupported)]
+    [Arguments(@"[\01]", DocumentValidationStatus.Unsupported)]
+    [Arguments(@"\01", DocumentValidationStatus.Unsupported)]
+    public async Task JsonSchemaClassRangeFailuresRemainExplicit(string pattern, DocumentValidationStatus status)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("JsonSchema/draft/2020-12",
+            Encoding.UTF8.GetBytes("{\"pattern\":\"" + JsonEncodedText.Encode(pattern) + "\"}"));
+        await Assert.That(result.Status).IsEqualTo(status);
+        await Assert.That(result.Diagnostics.Single().Code).IsEqualTo(
+            status == DocumentValidationStatus.Invalid ? "schema.pattern" : "schema.pattern_unsupported");
+        await Assert.That(result.Diagnostics.Single().Path).IsEqualTo("$/pattern");
+    }
+
+    [Test]
+    [Arguments(-1, DocumentValidationStatus.Indeterminate)]
+    [Arguments(0, DocumentValidationStatus.Valid)]
+    [Arguments(1, DocumentValidationStatus.Valid)]
+    public async Task JsonSchemaEscapedClassCharactersRetainTheExactPatternWorkBudget(int delta, DocumentValidationStatus status)
+    {
+        const string pattern = @"[\x41-\u005a]";
+        var bytes = Encoding.UTF8.GetBytes("{\"pattern\":\"" + JsonEncodedText.Encode(pattern) + "\"}");
+        var result = await new BuiltInDocumentValidator().ValidateAsync("JsonSchema/draft-07", bytes,
+            new() { MaxWork = bytes.Length + 1 + pattern.Length + delta });
+        await Assert.That(result.Status).IsEqualTo(status);
+        if (status == DocumentValidationStatus.Valid) { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+        else { await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("limit.work"); }
+    }
+
     [Test]
     public async Task DraftSevenNamedSchemasRetainContainingPointerRoots()
     {

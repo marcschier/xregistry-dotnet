@@ -109,6 +109,17 @@ Malformed URI spellings and invalid UTF-8 fail before callback dispatch.
 Callbacks receive fragment-free references; alternate encoded spellings reuse
 the acquired Document. These checks validate schemas, not application instances.
 
+The shared bounded ECMA-262 pattern parser accepts two-digit `\xHH` and
+four-digit `\uHHHH` escapes inside character classes, including range
+endpoints. Range ordering compares decoded UTF-16 code units; escaped
+controls and backspace have their character-class meaning. Reversed ranges
+and malformed fixed-width escapes are `Invalid`. Character-set escapes can
+appear in a class, but using them as range endpoints remains `Unsupported`,
+as do Unicode property escapes, backreferences and legacy octal escapes.
+Pattern processing charges the authored character count, not expanded range
+size. This checks syntax only; it does not match application values or claim
+complete ECMA-262 regex support. Smithy pattern traits use the same syntax policy.
+
 Standalone XSD imports, includes and redefinitions use only `DocumentValidationOptions.ResolveReference`.
 Each location resolves against the retrieved containing schema's URI and
 inherited `xml:base`, including a base on the dependency declaration itself.

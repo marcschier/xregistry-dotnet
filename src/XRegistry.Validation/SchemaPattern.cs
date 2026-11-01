@@ -20,24 +20,21 @@ internal static class SchemaPattern
             {
                 case '\\':
                     ValidationContext.Require(++i < pattern.Length, path, "schema.pattern", "Incomplete regular-expression escape.");
-                    if (char.IsAsciiDigit(pattern[i]) && pattern[i] != '0' || pattern[i] is 'k' or 'p' or 'P')
+                    if (char.IsAsciiDigit(pattern[i]) && pattern[i] != '0' || pattern[i] is 'k' or 'p' or 'P'
+                        || pattern[i] == '0' && i + 1 < pattern.Length && char.IsAsciiDigit(pattern[i + 1]))
                     {
                         Unsupported(path);
                     }
                     if (pattern[i] is 'u' or 'x')
                     {
-                        var length = pattern[i] == 'u' ? 4 : 2;
-                        for (var j = 0; j < length; j++)
-                        {
-                            ValidationContext.Require(++i < pattern.Length && char.IsAsciiHexDigit(pattern[i]),
-                                path, "schema.pattern", "Invalid hexadecimal regular-expression escape.");
-                        }
+                        ReadHexEscape(pattern, ref i, path);
                     }
                     atom = true;
                     quantified = false;
                     break;
                 case '[':
                     var closed = false;
+                    if (i + 1 < pattern.Length && pattern[i + 1] == '^') { i++; }
                     for (++i; i < pattern.Length; i++)
                     {
                         if (pattern[i] == ']')
@@ -45,22 +42,13 @@ internal static class SchemaPattern
                             closed = true;
                             break;
                         }
-                        if (pattern[i] == '\\')
+                        var start = ReadClassCharacter(pattern, ref i, path);
+                        if (i + 2 < pattern.Length && pattern[i + 1] == '-' && pattern[i + 2] != ']')
                         {
-                            ValidationContext.Require(++i < pattern.Length, path, "schema.pattern", "Incomplete character-class escape.");
-                            if (pattern[i] is 'u' or 'x' or 'p' or 'P')
-                            {
-                                Unsupported(path);
-                            }
-                        }
-                        else if (i + 2 < pattern.Length && pattern[i + 1] == '-' && pattern[i + 2] != ']')
-                        {
-                            if (pattern[i + 2] == '\\')
-                            {
-                                Unsupported(path);
-                            }
-                            ValidationContext.Require(pattern[i] <= pattern[i + 2], path, "schema.pattern", "A character range is reversed.");
                             i += 2;
+                            var endCharacter = ReadClassCharacter(pattern, ref i, path);
+                            if (start is null || endCharacter is null) { Unsupported(path); }
+                            ValidationContext.Require(start <= endCharacter, path, "schema.pattern", "A character range is reversed.");
                         }
                     }
                     ValidationContext.Require(closed, path, "schema.pattern", "An unclosed character class was found.");
@@ -131,6 +119,48 @@ internal static class SchemaPattern
             }
         }
         ValidationContext.Require(groups == 0, path, "schema.pattern", "An unclosed regular-expression group was found.");
+    }
+
+    private static int ReadHexEscape(string pattern, ref int index, string path)
+    {
+        var length = pattern[index] == 'u' ? 4 : 2;
+        var value = 0;
+        for (var i = 0; i < length; i++)
+        {
+            ValidationContext.Require(++index < pattern.Length && char.IsAsciiHexDigit(pattern[index]),
+                path, "schema.pattern", "Invalid hexadecimal regular-expression escape.");
+            var digit = pattern[index];
+            value = value * 16 + (digit <= '9' ? digit - '0' : (digit | 32) - 'a' + 10);
+        }
+        return value;
+    }
+
+    private static int? ReadClassCharacter(string pattern, ref int index, string path)
+    {
+        if (pattern[index] != '\\') { return pattern[index]; }
+        ValidationContext.Require(++index < pattern.Length, path, "schema.pattern", "Incomplete character-class escape.");
+        var escaped = pattern[index];
+        if (escaped is 'u' or 'x') { return ReadHexEscape(pattern, ref index, path); }
+        if (escaped is 'p' or 'P' or 'k' || char.IsAsciiDigit(escaped) && escaped != '0') { Unsupported(path); }
+        if (escaped == '0' && index + 1 < pattern.Length && char.IsAsciiDigit(pattern[index + 1])) { Unsupported(path); }
+        if (escaped is 'd' or 'D' or 's' or 'S' or 'w' or 'W') { return null; }
+        if (escaped == 'c')
+        {
+            ValidationContext.Require(++index < pattern.Length && char.IsAsciiLetter(pattern[index]),
+                path, "schema.pattern", "A control escape requires an ASCII letter.");
+            return pattern[index] % 32;
+        }
+        return escaped switch
+        {
+            'b' => 8,
+            'f' => 12,
+            'n' => 10,
+            'r' => 13,
+            't' => 9,
+            'v' => 11,
+            '0' => 0,
+            _ => escaped
+        };
     }
 
     private static void Unsupported(string path)
