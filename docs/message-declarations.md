@@ -64,6 +64,14 @@ coercing them to a flag, including in compatible models that use `any` for this
 field. Stored `true` and `false` remain distinct; a Core null patch clears the
 optional field before validating the resulting Message metadata.
 
+Native HTTP path, MQTT topic/response-topic, Kafka topic/key and NATS
+subject/reply-to fields remain strings, including in compatible models that
+declare them as `any`. Domain validation rejects non-string shapes and preserves
+authored Level-1 templates. HTTP `query` is a map of string values, not an array
+of declaration objects; empty maps and empty string values remain valid.
+Runtime substitution and agreement of repeated variables still belong to the
+application that creates the message.
+
 Server completion calls the same pure domain implementation after Core
 validation, only for explicitly Message-compatible Resources. Rejected writes
 and patches publish no partial metadata or outbox changes. Other custom models

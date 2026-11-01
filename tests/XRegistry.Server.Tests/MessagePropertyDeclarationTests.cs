@@ -14,6 +14,84 @@ namespace XRegistry.Server.Tests;
 public class MessagePropertyDeclarationTests
 {
     [Test]
+    [Arguments("HTTP", "path", "/orders/{device}")]
+    [Arguments("MQTT/3.1.1", "topic_name", "orders/{device}")]
+    [Arguments("MQTT/5.0", "topic_name", "orders/{device}")]
+    [Arguments("MQTT/5.0", "response_topic", "replies/{device}")]
+    [Arguments("MQTT/5.0", "content_type", "application/json")]
+    [Arguments("KAFKA", "topic", "orders/{device}")]
+    [Arguments("KAFKA", "key", "{device}")]
+    [Arguments("NATS", "subject", "orders.{device}")]
+    [Arguments("NATS", "reply-to", "replies.{device}")]
+    public async Task OpaqueProtocolTextFieldsRejectInvalidWritesAndRetainAuthoredTemplates(
+        string protocol, string field, string valid)
+    {
+        using var packaged = BuiltInRegistryModels.LoadSource(RegistryModelKind.Message);
+        var model = JsonNode.Parse(packaged.RootElement.GetRawText())!;
+        var options = model["groups"]!["messagegroups"]!["resources"]!["messages"]!["attributes"]!
+            ["protocol"]!["ifvalues"]![protocol]!["siblingattributes"]!["protocoloptions"]!.AsObject();
+        options["attributes"]![field]!["type"] = "any";
+        var store = new InMemoryRegistryPersistence();
+        var engine = Create(model.ToJsonString(), store);
+        const string path = "/messagegroups/g/messages/m";
+        string Metadata(string value) => new JsonObject
+        {
+            ["protocol"] = protocol, ["protocoloptions"] = new JsonObject { [field] = JsonNode.Parse(value) }
+        }.ToJsonString();
+        await ExpectCode(() => Send(engine, RegistryAction.Replace, path, Metadata("1")), "invalid_attribute");
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(0);
+        var created = await Send(engine, RegistryAction.Replace, path, Metadata(JsonValue.Create(valid)!.ToJsonString()));
+        await Assert.That(created.Metadata!.RootElement.GetProperty("protocoloptions").GetProperty(field).GetString()).IsEqualTo(valid);
+        var before = (await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        foreach (var invalid in new[] { "false", "[]", """{"value":"orders"}""" })
+        {
+            await ExpectCode(() => Send(engine, RegistryAction.Patch, path, Metadata(invalid)), "invalid_attribute");
+            await Assert.That((await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText()).IsEqualTo(before);
+            await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        }
+        var restarted = Create(model.ToJsonString(), store);
+        await Assert.That((await Send(restarted, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText()).IsEqualTo(before);
+        var cleared = await Send(engine, RegistryAction.Patch, path, Metadata("null"));
+        await Assert.That(cleared.Metadata!.RootElement.GetProperty("protocoloptions").TryGetProperty(field, out _)).IsFalse();
+        var restored = await Send(engine, RegistryAction.Patch, path, Metadata(JsonValue.Create(valid)!.ToJsonString()));
+        await Assert.That(restored.Metadata!.RootElement.GetProperty("protocoloptions").GetProperty(field).GetString()).IsEqualTo(valid);
+    }
+
+    [Test]
+    public async Task OpaqueHttpQueryMapRejectsInvalidShapesAtomicallyAndRetainsLiteralValues()
+    {
+        using var packaged = BuiltInRegistryModels.LoadSource(RegistryModelKind.Message);
+        var model = JsonNode.Parse(packaged.RootElement.GetRawText())!;
+        var options = model["groups"]!["messagegroups"]!["resources"]!["messages"]!["attributes"]!
+            ["protocol"]!["ifvalues"]!["HTTP"]!["siblingattributes"]!["protocoloptions"]!.AsObject();
+        options["attributes"]!["query"] = new JsonObject { ["type"] = "any" };
+        var store = new InMemoryRegistryPersistence();
+        var engine = Create(model.ToJsonString(), store);
+        const string path = "/messagegroups/g/messages/m";
+        string Metadata(string query) => """{"protocol":"HTTP","protocoloptions":{"query":""" + query + "}}";
+        await ExpectCode(() => Send(engine, RegistryAction.Replace, path, Metadata("[]")), "invalid_attribute");
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(0);
+        const string valid = """{"q":"","a~/b":"orders/{device}"}""";
+        var created = await Send(engine, RegistryAction.Replace, path, Metadata(valid));
+        await Assert.That(created.Metadata!.RootElement.GetProperty("protocoloptions").GetProperty("query").GetRawText()).IsEqualTo(valid);
+        var before = (await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        foreach (var invalid in new[] { "[]", """{"q":1}""", """{"q":false}""", """{"q":[]}""" })
+        {
+            await ExpectCode(() => Send(engine, RegistryAction.Patch, path, Metadata(invalid)), "invalid_attribute");
+            await Assert.That((await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText()).IsEqualTo(before);
+            await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        }
+        var restarted = Create(model.ToJsonString(), store);
+        await Assert.That((await Send(restarted, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText()).IsEqualTo(before);
+        var cleared = await Send(engine, RegistryAction.Patch, path, Metadata("null"));
+        await Assert.That(cleared.Metadata!.RootElement.GetProperty("protocoloptions").TryGetProperty("query", out _)).IsFalse();
+        var restored = await Send(engine, RegistryAction.Patch, path, Metadata("{}"));
+        await Assert.That(restored.Metadata!.RootElement.GetProperty("protocoloptions").GetProperty("query").GetRawText()).IsEqualTo("{}");
+    }
+
+    [Test]
     [Arguments("MQTT/3.1.1")]
     [Arguments("MQTT/5.0")]
     public async Task OpaqueMqttRetainRejectsCoercionAndPreservesAtomicReversalAndRestart(string protocol)

@@ -102868,9 +102868,13 @@
       ],
       "text": "The values of all `string`, `symbol`, and `uritemplate`-typed properties and user properties MAY contain placeholders using the [RFC6570][RFC6570] Level 1 URI Template syntax. When the same placeholder is used in multiple properties, the value of the placeholder is assumed to be identical.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read with the MQTT table: retain is Boolean in both versions; topic_name/response_topic are native text, correlation_data is binary and content_type declares MIME text. Domain validation now enforces native Boolean/text shapes independently of typed models. MqttRetainMustBeANativeBooleanForBothProtocolVersions and NativeProtocolTextFieldsRejectNonStringShapesAndPreserveTemplates cover direct admission and exact paths; opaque public tests cover atomic writes, authored spelling, reversal and restart. Existing header tests preserve user-property array order and duplicate names. TemplateLiteral validates Level-1 grammar without substitution. Repeated-placeholder equality and actual PUBLISH creation remain producer runtime obligations, not storage/materialization behavior. Model correlation_data/content_type spelling differences and full qualification remain explicit review work.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -102934,9 +102938,13 @@
       ],
       "text": "The values of all `string`-, `symbol`-, and `uritemplate`-typed properties and headers MAY contain placeholders using the [RFC6570][RFC6570] Level 1 URI Template syntax. When the same placeholder is used in multiple properties, the value of the placeholder is assumed to be identical.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read with the Kafka table and key exclusion: topic/key retain native string shapes, key_base64 retains canonical binary text and header values retain their own declaration rules. NativeProtocolTextFieldsRejectNonStringShapesAndPreserveTemplates and OpaqueProtocolTextFieldsRejectInvalidWritesAndRetainAuthoredTemplates prove direct/public native text admission and unchanged templates. Existing binary/header and key-exclusion tests remain applicable. TemplateLiteral validates grammar without substituting variables; repeated-variable equality belongs to actual message production. Kafka partition type/range and transport/runtime qualification remain unfinished.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -102965,9 +102973,13 @@
       ],
       "text": "The values of all `string`-, `symbol`-, and `uritemplate`-typed properties and headers MAY contain placeholders using the [RFC6570][RFC6570] Level 1 URI Template syntax. When the same placeholder is used in multiple properties, the value of the placeholder is assumed to be identical.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read with the NATS table: subject/reply-to are native template strings; headers remain an ordered array of declarations. NativeProtocolTextFieldsRejectNonStringShapesAndPreserveTemplates and OpaqueProtocolTextFieldsRejectInvalidWritesAndRetainAuthoredTemplates prove native string admission, exact paths, authored template retention, atomic invalid writes and reversal/restart. Existing header cases preserve duplicate names/order. TemplateLiteral checks Level-1 grammar without runtime substitution. Equality of repeated variables and HPUB creation/consumption remain application runtime obligations; no NATS network qualification is claimed.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",

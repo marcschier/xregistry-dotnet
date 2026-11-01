@@ -10,6 +10,69 @@ namespace XRegistry.Models.Tests;
 public class MessageEndpointRuntimeRulesTests
 {
     [Test]
+    [Arguments("HTTP", "path", "/orders/{device}")]
+    [Arguments("MQTT/3.1.1", "topic_name", "orders/{device}")]
+    [Arguments("MQTT/5.0", "topic_name", "orders/{device}")]
+    [Arguments("MQTT/5.0", "response_topic", "replies/{device}")]
+    [Arguments("MQTT/5.0", "content_type", "application/json")]
+    [Arguments("KAFKA", "topic", "orders/{device}")]
+    [Arguments("Kafka", "key", "{device}")]
+    [Arguments("NATS", "subject", "orders.{device}")]
+    [Arguments("NATS", "reply-to", "replies.{device}")]
+    public async Task NativeProtocolTextFieldsRejectNonStringShapesAndPreserveTemplates(
+        string protocol, string field, string valid)
+    {
+        RegistryJson Metadata(string value) => RegistryJson.Parse(new JsonObject
+        {
+            ["protocol"] = protocol, ["protocoloptions"] = new JsonObject { [field] = JsonNode.Parse(value) }
+        }.ToJsonString());
+        foreach (var invalid in new[] { "0", "true", "[]", "{}", """{"value":"orders"}""" })
+        {
+            var error = await Assert.That(() => RegistryDomainRules.CompleteMessageMetadata(Metadata(invalid)))
+                .Throws<RegistryException>();
+            await Assert.That(error!.Diagnostic.Code).IsEqualTo("invalid_attribute");
+            await Assert.That(error.Diagnostic.Path).IsEqualTo("/protocoloptions/" + field);
+        }
+        var completed = RegistryDomainRules.CompleteMessageMetadata(Metadata(JsonValue.Create(valid)!.ToJsonString()));
+        await Assert.That(completed.RootElement.GetProperty("protocoloptions").GetProperty(field).GetString()).IsEqualTo(valid);
+        var optionalNull = RegistryDomainRules.CompleteMessageMetadata(Metadata("null"));
+        await Assert.That(optionalNull.RootElement.GetProperty("protocoloptions").GetProperty(field).GetRawText()).IsEqualTo("null");
+        var absent = RegistryDomainRules.CompleteMessageMetadata(RegistryJson.Parse(new JsonObject
+        {
+            ["protocol"] = protocol, ["protocoloptions"] = new JsonObject()
+        }.ToJsonString()));
+        await Assert.That(absent.RootElement.GetProperty("protocoloptions").TryGetProperty(field, out _)).IsFalse();
+    }
+
+    [Test]
+    [Arguments("[]", "/protocoloptions/query")]
+    [Arguments("true", "/protocoloptions/query")]
+    [Arguments("\"query\"", "/protocoloptions/query")]
+    [Arguments("""{"q":1}""", "/protocoloptions/query/q")]
+    [Arguments("""{"q":true}""", "/protocoloptions/query/q")]
+    [Arguments("""{"q":[]}""", "/protocoloptions/query/q")]
+    [Arguments("""{"q":{"value":"orders"}}""", "/protocoloptions/query/q")]
+    [Arguments("""{"q":null}""", "/protocoloptions/query/q")]
+    [Arguments("""{"a~/b":false}""", "/protocoloptions/query/a~0~1b")]
+    public async Task HttpQueryRequiresAStringMapWithExactMemberDiagnostics(string query, string errorPath)
+    {
+        var metadata = RegistryJson.Parse("""{"protocol":"HTTP","protocoloptions":{"query":""" + query + "}}");
+        var error = await Assert.That(() => RegistryDomainRules.CompleteMessageMetadata(metadata)).Throws<RegistryException>();
+        await Assert.That(error!.Diagnostic.Code).IsEqualTo("invalid_attribute");
+        await Assert.That(error.Diagnostic.Path).IsEqualTo(errorPath);
+    }
+
+    [Test]
+    [Arguments("{}")]
+    [Arguments("""{"q":"","a~/b":"orders/{device}"}""")]
+    public async Task HttpQueryPreservesEmptyMapsKeysAndTemplateValues(string query)
+    {
+        var metadata = RegistryJson.Parse("""{"protocol":"HTTP","protocoloptions":{"query":""" + query + "}}");
+        var completed = RegistryDomainRules.CompleteMessageMetadata(metadata);
+        await Assert.That(completed.RootElement.GetProperty("protocoloptions").GetProperty("query").GetRawText()).IsEqualTo(query);
+    }
+
+    [Test]
     [Arguments("true", true)]
     [Arguments("false", true)]
     [Arguments("null", false)]
@@ -23,6 +86,11 @@ public class MessageEndpointRuntimeRulesTests
     {
         foreach (var protocol in new[] { "MQTT/3.1.1", "MQTT/5.0", "mqtt/5.0" })
         {
+            var absent = RegistryDomainRules.CompleteMessageMetadata(RegistryJson.Parse(new JsonObject
+            {
+                ["protocol"] = protocol, ["protocoloptions"] = new JsonObject()
+            }.ToJsonString()));
+            await Assert.That(absent.RootElement.GetProperty("protocoloptions").TryGetProperty("retain", out _)).IsFalse();
             var input = RegistryJson.Parse(new JsonObject
             {
                 ["protocol"] = protocol,

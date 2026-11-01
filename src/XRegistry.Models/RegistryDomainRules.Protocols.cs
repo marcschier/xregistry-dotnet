@@ -27,6 +27,19 @@ public static partial class RegistryDomainRules
         }
 
         var protocol = OptionalText(message, "protocol", "/protocol");
+        string[] textFields = protocol?.ToUpperInvariant() switch
+        {
+            "HTTP" => ["path", "method", "status"],
+            "MQTT/3.1.1" => ["topic_name"],
+            "MQTT/5.0" => ["topic_name", "response_topic", "content_type"],
+            "KAFKA" => ["topic", "key"],
+            "NATS" => ["subject", "reply-to"],
+            _ => []
+        };
+        foreach (var name in textFields)
+        {
+            _ = OptionalText(options, name, At("/protocoloptions", name), nonempty: false);
+        }
         string[] fields = protocol?.ToUpperInvariant() switch
         {
             "HTTP" => ["headers", "query", "path", "method", "status"],
@@ -80,6 +93,22 @@ public static partial class RegistryDomainRules
 
         if (SelectorIs(message, "protocol", "HTTP"))
         {
+            if (Present(options, "query"))
+            {
+                var query = options.GetProperty("query");
+                if (query.ValueKind != JsonValueKind.Object)
+                {
+                    throw Invalid("HTTP query declarations must be a map of string values.", "/protocoloptions/query");
+                }
+                foreach (var parameter in query.EnumerateObject())
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (parameter.Value.ValueKind != JsonValueKind.String)
+                    {
+                        throw Invalid("An HTTP query value must be a string.", At("/protocoloptions/query", parameter.Name));
+                    }
+                }
+            }
             if (OptionalText(options, "status", "/protocoloptions/status", nonempty: false) is { } status)
             {
                 if (Present(options, "method"))
