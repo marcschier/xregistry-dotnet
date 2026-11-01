@@ -14,6 +14,73 @@ namespace XRegistry.Server.Tests;
 public class MessagePropertyDeclarationTests
 {
     [Test]
+    public async Task UnversionedMqttCannotBypassMessageOrGroupDomainAdmission()
+    {
+        using var packaged = BuiltInRegistryModels.LoadSource(RegistryModelKind.Message);
+        var model = JsonNode.Parse(packaged.RootElement.GetRawText())!;
+        var attributes = model["groups"]!["messagegroups"]!["resources"]!["messages"]!["attributes"]!.AsObject();
+        attributes["protocol"]!.AsObject().Remove("ifvalues");
+        attributes["protocoloptions"] = new JsonObject { ["type"] = "any" };
+        var store = new InMemoryRegistryPersistence();
+        var engine = Create(model.ToJsonString(), store);
+        const string group = "/messagegroups/g";
+        const string message = "/messagegroups/g/messages/m";
+        await ExpectCode(() => Send(engine, RegistryAction.Replace, group, """{"protocol":"MQTT"}"""), "invalid_attribute");
+        await ExpectCode(() => Send(engine, RegistryAction.Replace, message,
+            """{"protocol":"mqtt","protocoloptions":{}}"""), "invalid_attribute");
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(0);
+        await Send(engine, RegistryAction.Replace, group, """{"protocol":"MQTT/5.0"}""");
+        await Send(engine, RegistryAction.Replace, message, """{"protocol":"MQTT/5.0","protocoloptions":{"retain":false}}""");
+        var groupBefore = (await Send(engine, RegistryAction.Read, group)).Metadata!.RootElement.GetRawText();
+        var messageBefore = (await Send(engine, RegistryAction.Read, message)).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        await ExpectCode(() => Send(engine, RegistryAction.Patch, group, """{"protocol":"MQTT"}"""), "invalid_attribute");
+        await ExpectCode(() => Send(engine, RegistryAction.Patch, message, """{"protocol":"mqtt"}"""), "invalid_attribute");
+        await Assert.That((await Send(engine, RegistryAction.Read, group)).Metadata!.RootElement.GetRawText()).IsEqualTo(groupBefore);
+        await Assert.That((await Send(engine, RegistryAction.Read, message)).Metadata!.RootElement.GetRawText()).IsEqualTo(messageBefore);
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        var restarted = Create(model.ToJsonString(), store);
+        await Assert.That((await Send(restarted, RegistryAction.Read, group)).Metadata!.RootElement.GetRawText()).IsEqualTo(groupBefore);
+        await Assert.That((await Send(restarted, RegistryAction.Read, message)).Metadata!.RootElement.GetRawText()).IsEqualTo(messageBefore);
+    }
+
+    [Test]
+    public async Task OpaqueKafkaPartitionRejectsNonIntegersWithoutChangingStoredState()
+    {
+        using var packaged = BuiltInRegistryModels.LoadSource(RegistryModelKind.Message);
+        var model = JsonNode.Parse(packaged.RootElement.GetRawText())!;
+        model["groups"]!["messagegroups"]!["resources"]!["messages"]!["attributes"]!
+            ["protocol"]!["ifvalues"]!["KAFKA"]!["siblingattributes"]!["protocoloptions"]!["attributes"]!["partition"]!["type"] = "any";
+        var store = new InMemoryRegistryPersistence();
+        var engine = Create(model.ToJsonString(), store);
+        const string path = "/messagegroups/g/messages/m";
+        string Metadata(string value) => """{"protocol":"KAFKA","protocoloptions":{"partition":""" + value + "}}";
+        await ExpectCode(() => Send(engine, RegistryAction.Replace, path, Metadata("1.5")), "invalid_attribute");
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(0);
+        await Send(engine, RegistryAction.Replace, path, Metadata("0"));
+        var before = (await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        foreach (var invalid in new[] { "1e-1", "\"1\"", "false", "[]", "{}" })
+        {
+            await ExpectCode(() => Send(engine, RegistryAction.Patch, path, Metadata(invalid)), "invalid_attribute");
+            await Assert.That((await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText()).IsEqualTo(before);
+            await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        }
+        foreach (var value in new[] { "1.0", "1e2", "0" })
+        {
+            var updated = await Send(engine, RegistryAction.Patch, path, Metadata(value));
+            await Assert.That(RegistryNumber.FromElement(updated.Metadata!.RootElement.GetProperty("protocoloptions").GetProperty("partition")).IsInteger).IsTrue();
+            await Assert.That(updated.Metadata.RootElement.GetProperty("protocoloptions").GetProperty("partition").GetDecimal())
+                .IsEqualTo(value == "1e2" ? 100m : value == "1.0" ? 1m : 0m);
+        }
+        var restarted = Create(model.ToJsonString(), store);
+        await Assert.That((await Send(restarted, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText())
+            .IsEqualTo((await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText());
+        var cleared = await Send(engine, RegistryAction.Patch, path, Metadata("null"));
+        await Assert.That(cleared.Metadata!.RootElement.GetProperty("protocoloptions").TryGetProperty("partition", out _)).IsFalse();
+    }
+
+    [Test]
     [Arguments("HTTP", "path", "/orders/{device}")]
     [Arguments("MQTT/3.1.1", "topic_name", "orders/{device}")]
     [Arguments("MQTT/5.0", "topic_name", "orders/{device}")]

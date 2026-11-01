@@ -72,6 +72,17 @@ of declaration objects; empty maps and empty string values remain valid.
 Runtime substitution and agreement of repeated variables still belong to the
 application that creates the message.
 
+Kafka `partition` also retains its native integer representation when a
+compatible model declares the field as `any`. Fractional numbers and non-number
+JSON values reject before publication. Integral decimal and exponent spellings
+remain valid under Core integer semantics; this check does not discover broker
+partitions or establish that a selected partition exists.
+
+Message and Message Group protocol selectors require a version for MQTT,
+whose 3.1.1 and 5.0 declarations differ. Bare `MQTT` rejects rather than
+bypassing both versions' checks. Versioned and custom selector spellings remain
+unchanged. This Message rule does not change Endpoint selector admission.
+
 Server completion calls the same pure domain implementation after Core
 validation, only for explicitly Message-compatible Resources. Rejected writes
 and patches publish no partial metadata or outbox changes. Other custom models

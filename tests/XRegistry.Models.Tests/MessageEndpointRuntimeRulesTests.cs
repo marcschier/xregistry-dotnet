@@ -10,6 +10,77 @@ namespace XRegistry.Models.Tests;
 public class MessageEndpointRuntimeRulesTests
 {
     [Test]
+    [Arguments("MQTT/3.1.1")]
+    [Arguments("mqtt/5.0")]
+    [Arguments("HTTP")]
+    [Arguments("CustomTransport")]
+    [Arguments("CustomTransport/9")]
+    public async Task MessageProtocolSelectorVersionRulesPreserveSupportedAndCustomNames(string protocol)
+    {
+        var metadata = RegistryJson.Parse(new JsonObject
+        {
+            ["protocol"] = protocol, ["protocoloptions"] = new JsonObject()
+        }.ToJsonString());
+        var completed = RegistryDomainRules.CompleteMessageMetadata(metadata);
+        await Assert.That(completed.RootElement.GetProperty("protocol").GetString()).IsEqualTo(protocol);
+        await Assert.That(() => RegistryDomainRules.ValidateMessageGroupMetadata(metadata.RootElement)).ThrowsNothing();
+    }
+
+    [Test]
+    public async Task MessageMqttVersionRuleDoesNotChangeEndpointSelectorAdmission()
+    {
+        var endpoint = RegistryJson.Parse("""{"usage":["producer"],"protocol":"MQTT","protocoloptions":{}}""");
+        await Assert.That(() => RegistryDomainRules.ValidateEndpointMetadata(endpoint.RootElement)).ThrowsNothing();
+    }
+
+    [Test]
+    [Arguments("MQTT")]
+    [Arguments("mqtt")]
+    public async Task MessageAndGroupMqttSelectorsRequireTheIncompatibleVersion(string protocol)
+    {
+        var metadata = RegistryJson.Parse(new JsonObject
+        {
+            ["protocol"] = protocol, ["protocoloptions"] = new JsonObject()
+        }.ToJsonString());
+        var messageError = await Assert.That(() => RegistryDomainRules.ValidateMessageMetadata(metadata.RootElement))
+            .Throws<RegistryException>();
+        await Assert.That(messageError!.Diagnostic.Path).IsEqualTo("/protocol");
+        var groupError = await Assert.That(() => RegistryDomainRules.ValidateMessageGroupMetadata(metadata.RootElement))
+            .Throws<RegistryException>();
+        await Assert.That(groupError!.Diagnostic.Code).IsEqualTo("invalid_attribute");
+        await Assert.That(groupError.Diagnostic.Path).IsEqualTo("/protocol");
+    }
+
+    [Test]
+    [Arguments("0", true)]
+    [Arguments("1", true)]
+    [Arguments("1.0", true)]
+    [Arguments("1e2", true)]
+    [Arguments("1.5", false)]
+    [Arguments("1e-1", false)]
+    [Arguments("\"1\"", false)]
+    [Arguments("true", false)]
+    [Arguments("[]", false)]
+    [Arguments("{}", false)]
+    [Arguments("null", false)]
+    public async Task KafkaPartitionRetainsNativeIntegerSemanticsWithoutCoercion(string value, bool valid)
+    {
+        var metadata = RegistryJson.Parse("""{"protocol":"Kafka","protocoloptions":{"partition":""" + value + "}}");
+        if (valid)
+        {
+            var completed = RegistryDomainRules.CompleteMessageMetadata(metadata);
+            await Assert.That(completed.RootElement.GetProperty("protocoloptions").GetProperty("partition").GetRawText())
+                .IsEqualTo(value);
+        }
+        else
+        {
+            var error = await Assert.That(() => RegistryDomainRules.CompleteMessageMetadata(metadata)).Throws<RegistryException>();
+            await Assert.That(error!.Diagnostic.Code).IsEqualTo("invalid_attribute");
+            await Assert.That(error.Diagnostic.Path).IsEqualTo("/protocoloptions/partition");
+        }
+    }
+
+    [Test]
     [Arguments("HTTP", "path", "/orders/{device}")]
     [Arguments("MQTT/3.1.1", "topic_name", "orders/{device}")]
     [Arguments("MQTT/5.0", "topic_name", "orders/{device}")]

@@ -100542,9 +100542,13 @@
       ],
       "text": "- Description: Identifies a common, transport protocol-independent message metadata format. Message metadata envelopes are referenced by name and version as `<NAME>/<VERSION>`. This specification defines a set of common [metadata envelope names](#metadata-envelopes) that MUST be used for the given envelopes, but applications MAY define extensions for other envelopes on their own. All messages inside a group MUST use this same envelope.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read with Message Group and Resource envelope definitions. ValidateMessageGroupMetadata and ValidateMessageStrings apply nonempty versioned selectors without rewriting case. RegistryDomainRules.Groups checks owning-group agreement, borrowed targets and reverse mutations. MessageGroupEnvelopeMustBeDeclaredByItsChildren, GroupSelectorChangesValidateExistingChildrenAndAtomicFinalValues and DomainGroupContractsValidateBorrowedMessagesAndReverseMutations provide public contract evidence. Other envelope names remain extensions; this registry does not infer transport/runtime support from a selector. Full alias/locality qualification remains separate.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -100604,9 +100608,13 @@
       ],
       "text": "- If present, MUST follow the naming convention `<NAME>/<VERSION>`, whereby `<NAME>` is the name of the metadata envelope and `<VERSION>` is the version of the metadata envelope.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "ValidateMessageGroupMetadata uses the version-required selector validator also used by Message metadata. Empty names/versions and unversioned envelopes reject; valid authored spelling is retained. Read with the adjacent nonempty/case-insensitive rule and CloudEvents declaration requirements. MessageStringsEnforceOnlyDeclaredDomainConstraints and MessageGroupEnvelopeMustBeDeclaredByItsChildren cover the direct and public boundaries. This does not change Endpoint envelope rules or certify custom envelope implementations.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -100636,9 +100644,13 @@
       ],
       "text": "- Description: Identifies a transport protocol to be bound to for this Message. Protocols are referenced by name and version as `<NAME>/<VERSION>`. This specification defines a set of common [message protocol names](#message-protocols) that MUST be used for the given protocols, but applications MAY define extensions for other protocols on their own. All messages inside a group MUST use this same protocol.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read with the common protocol name list and optional Resource protocol rule. Known names activate native declaration rules case-insensitively; custom names retain extension admission. Message ProtocolSelector validation rejects bare MQTT because supported incompatible versions use different options. DomainGroupContractsRejectIncompatibleChildProtocols and GroupSelectorChangesValidateExistingChildrenAndAtomicFinalValues cover owning-group consistency and atomic reverse changes. UnboundMessagesRemainUsableWithinProtocolBoundGroups captures the optional Resource selector boundary; no transport acquisition occurs. HTTP heading/name inconsistency and full borrowed-reference qualification remain explicit review work.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -100699,9 +100711,13 @@
       ],
       "text": "- If present, MUST follow the naming convention `<NAME>` or `<NAME>/<VERSION>`, whereby `<NAME>` is the name of the protocol and `<VERSION>` is the version of protocol. The version is REQUIRED if multiple, mutually incompatible versions of the protocol exist and protocol options differ between versions.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The shared Message/Message Group protocol validator now rejects unversioned MQTT without assigning guessed versions or changing Endpoint admission. MessageAndGroupMqttSelectorsRequireTheIncompatibleVersion proves exact errors; MessageProtocolSelectorVersionRulesPreserveSupportedAndCustomNames retains known versioned/custom spellings; MessageMqttVersionRuleDoesNotChangeEndpointSelectorAdmission proves scope. UnversionedMqttCannotBypassMessageOrGroupDomainAdmission removes conditional Core branches in a compatible test model and proves domain-only invalid creation/patch atomicity and restart. Unsupported custom version compatibility cannot be inferred from its name; full protocol qualification remains pending.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",

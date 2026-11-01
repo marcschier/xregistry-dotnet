@@ -88,6 +88,11 @@ public static partial class RegistryDomainRules
         }
         if (SelectorIs(message, "protocol", "KAFKA"))
         {
+            if (options.TryGetProperty("partition", out var partition) &&
+                (partition.ValueKind != JsonValueKind.Number || !RegistryNumber.FromElement(partition).IsInteger))
+            {
+                throw Invalid("The Kafka partition declaration must be an integer.", "/protocoloptions/partition");
+            }
             ProtocolBinary(options, "key_base64");
         }
 

@@ -17,7 +17,7 @@ public static partial class RegistryDomainRules
         cancellationToken.ThrowIfCancellationRequested();
         RequireMetadataObject(group);
         ValidateSelector(group, "envelope", true);
-        ValidateSelector(group, "protocol", false);
+        ValidateMessageProtocolSelector(group);
     }
 
     /// <summary>Checks common Endpoint rules and authored option shapes/templates without consumer protocol checks or acquisition.</summary>
@@ -120,7 +120,7 @@ public static partial class RegistryDomainRules
     private static void ValidateMessageStrings(JsonElement message, CancellationToken cancellationToken)
     {
         ValidateSelector(message, "envelope", true);
-        ValidateSelector(message, "protocol", false);
+        ValidateMessageProtocolSelector(message);
         ValidateSelector(message, "dataschemaformat", true);
         if (OptionalText(message, "dataschemauri", "/dataschemauri", nonempty: false) is not null)
         {
@@ -201,6 +201,15 @@ public static partial class RegistryDomainRules
                     index++;
                 }
             }
+        }
+    }
+
+    private static void ValidateMessageProtocolSelector(JsonElement metadata)
+    {
+        ValidateSelector(metadata, "protocol", false);
+        if (SelectorIs(metadata, "protocol", "MQTT"))
+        {
+            throw Invalid("The MQTT Message protocol selector requires a version.", "/protocol");
         }
     }
 
