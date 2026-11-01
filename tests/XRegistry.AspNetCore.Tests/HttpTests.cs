@@ -93,7 +93,8 @@ public class HttpTests
         await Assert.That(selected.Operation.GetProperty("operationId").GetString()).IsEqualTo("Read");
         await Assert.That(selected.DocumentPath).IsEqualTo("$/Read/get");
         await Assert.That(selected.DocumentUri!.AbsoluteUri).IsEqualTo(dependencyUri);
-        await Assert.That(calls.ToArray()).IsEquivalentTo([dependencyUri]);
+        await Assert.That(calls.Count).IsEqualTo(1);
+        await Assert.That(calls[0]).IsEqualTo(dependencyUri);
         var missing = await ApiOperationDocumentResolver.ResolveAsync(acquired.Format, acquired.Document.ContentType!,
             bytes, ApiOperationReference.Parse(version + "#operations/ReadNew"), new Uri(acquired.Document.Origin!),
             ResolveDependency);

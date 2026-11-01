@@ -42,8 +42,8 @@ public class ApiRegistryDocumentAcquirerTests
         await Assert.That(result.Document.ContentType).IsEqualTo("application/json");
         await Assert.That(result.Document.Base).IsEqualTo("https://authored.example/apis/");
         await Assert.That(result.Document.Origin).IsEqualTo("https://authored.example/apis/entry.json");
-        await Assert.That(source.Reads.Select(r => r.Operation).ToArray())
-            .IsEquivalentTo([FederationOperation.Entity, FederationOperation.Document]);
+        await Assert.That(source.Reads.Select(r => r.Operation)
+            .SequenceEqual([FederationOperation.Entity, FederationOperation.Document])).IsTrue();
         await Assert.That(source.Reads.All(r => r.Target == Source.Path)).IsTrue();
         source.Disposed = true;
         Array.Fill(source.InputBytes, (byte)'!');
