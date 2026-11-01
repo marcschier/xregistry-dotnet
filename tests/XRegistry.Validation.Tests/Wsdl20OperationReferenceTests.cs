@@ -751,6 +751,42 @@ public class Wsdl20OperationReferenceTests
     }
 
     [Test]
+    public async Task Wsdl20AllContentModelsRetainTheirNativeSchemaWithoutInventingMessageAlternatives()
+    {
+        var result = await Resolve("""
+            <types xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:schema targetNamespace="urn:api">
+              <xs:element name="Payload"><xs:complexType><xs:all>
+                <xs:element name="name" type="xs:string"/><xs:element name="age" type="xs:int" minOccurs="0"/>
+              </xs:all></xs:complexType></xs:element>
+            </xs:schema></types>
+            <interface name="Port"><operation name="Read"><input element="t:Payload"/><output element="#none"/></operation></interface>
+            """);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        var schema = result.Wsdl20Operation!.SchemaElements.Single();
+        await Assert.That(schema.ElementName).IsEqualTo("{urn:api}Payload");
+        await Assert.That(XElement.Parse(schema.ElementXml).Descendants(
+            XName.Get("all", "http://www.w3.org/2001/XMLSchema")).Count()).IsEqualTo(1);
+        await Assert.That(schema.SchemaDocuments.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    [Arguments("minOccurs")]
+    [Arguments("maxOccurs")]
+    public async Task Wsdl20HugeOccurrenceIntegersNeverReachUnreservedSchemaCompilation(string attribute)
+    {
+        var additional = attribute == "minOccurs" ? " maxOccurs=\"unbounded\"" : "";
+        var result = await Resolve(
+            "<types xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:schema targetNamespace=\"urn:api\">" +
+            "<xs:element name=\"Payload\"><xs:complexType><xs:sequence><xs:element name=\"Child\" " +
+            attribute + "=\"18446744073709551616\"" + additional +
+            "/></xs:sequence></xs:complexType></xs:element></xs:schema></types>" +
+            "<interface name=\"Port\"><operation name=\"Read\"><input element=\"t:Payload\"/><output element=\"#none\"/></operation></interface>");
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo("limit.work");
+        await Assert.That(result.Wsdl20Operation).IsNull();
+    }
+
+    [Test]
     [Arguments("<xs:schema targetNamespace=\"urn:api\"><xs:include schemaLocation=\"#xpointer(//xs:schema)\"/></xs:schema>", "wsdl20.schema_fragment")]
     [Arguments("<xs:schema targetNamespace=\"urn:api\"><xs:redefine schemaLocation=\"never.xsd\"/></xs:schema>", "xsd.construct_unsupported")]
     [Arguments("<xs:schema targetNamespace=\"urn:api\"><xs:element name=\"Payload\"><xs:simpleType><xs:restriction base=\"xs:string\"><xs:pattern value=\".*\"/></xs:restriction></xs:simpleType></xs:element></xs:schema>", "xsd.construct_unsupported")]

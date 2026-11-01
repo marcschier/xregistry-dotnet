@@ -10,6 +10,124 @@ namespace XRegistry.Validation.Tests;
 public class XmlSchemaValidationTests
 {
     [Test]
+    [Arguments("")]
+    [Arguments("minOccurs=\"0\"")]
+    [Arguments("minOccurs=\"0\" maxOccurs=\"1\"")]
+    public async Task AllContentModelsCompileWithNativeOptionalAndRequiredElements(string occurrence)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes($"""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:element name="person"><xs:complexType><xs:all {occurrence}>
+                <xs:element name="name" type="xs:string"/>
+                <xs:element name="age" type="xs:int" minOccurs="0"/>
+              </xs:all></xs:complexType></xs:element>
+            </xs:schema>
+            """));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("<xs:all maxOccurs=\"2\"><xs:element name=\"x\"/></xs:all>")]
+    [Arguments("<xs:all minOccurs=\"2\"><xs:element name=\"x\"/></xs:all>")]
+    [Arguments("<xs:all><xs:element name=\"x\" maxOccurs=\"2\"/></xs:all>")]
+    [Arguments("<xs:all><xs:sequence><xs:element name=\"x\"/></xs:sequence></xs:all>")]
+    [Arguments("<xs:sequence><xs:all><xs:element name=\"x\"/></xs:all></xs:sequence>")]
+    [Arguments("<xs:all><xs:element name=\"x\"/><xs:element name=\"x\"/></xs:all>")]
+    public async Task AllContentModelsRejectInvalidNativeParticleConstraints(string content)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(
+            "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"person\"><xs:complexType>" +
+            content + "</xs:complexType></xs:element></xs:schema>"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("xsd.schema");
+    }
+
+    [Test]
+    [Arguments(0)]
+    [Arguments(1)]
+    [Arguments(32)]
+    [Arguments(128)]
+    public async Task AllContentModelsUseBoundedNativeCompilationAcrossEmptyAndLargerGroups(int count)
+    {
+        var elements = string.Concat(Enumerable.Range(0, count).Select(index =>
+            $"<xs:element name=\"child{index}\" type=\"xs:string\" minOccurs=\"0\"/>"));
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(
+            "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"root\"><xs:complexType><xs:all>" +
+            elements + "</xs:all></xs:complexType></xs:element></xs:schema>"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("minOccurs", "18446744073709551616")]
+    [Arguments("maxOccurs", "18446744073709551616")]
+    [Arguments("maxOccurs", "+18446744073709551616")]
+    [Arguments("maxOccurs", "  18446744073709551616  ")]
+    [Arguments("minOccurs", "00018446744073709551616")]
+    public async Task ArbitraryWidthOccurrenceIntegersCannotBypassPreflightWorkReservation(string attribute, string value)
+    {
+        var additional = attribute == "minOccurs" ? "maxOccurs=\"unbounded\"" : "";
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes($"""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:element name="person"><xs:complexType><xs:sequence>
+                <xs:element name="x" {attribute}="{value}" {additional}/>
+              </xs:sequence></xs:complexType></xs:element>
+            </xs:schema>
+            """));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Indeterminate);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("limit.work");
+    }
+
+    [Test]
+    [Arguments("0", DocumentValidationStatus.Valid)]
+    [Arguments("1", DocumentValidationStatus.Valid)]
+    [Arguments("+2", DocumentValidationStatus.Valid)]
+    [Arguments("  002  ", DocumentValidationStatus.Valid)]
+    [Arguments("-0", DocumentValidationStatus.Valid)]
+    [Arguments("-1", DocumentValidationStatus.Invalid)]
+    [Arguments("+", DocumentValidationStatus.Invalid)]
+    [Arguments("1e2", DocumentValidationStatus.Invalid)]
+    [Arguments("1.0", DocumentValidationStatus.Invalid)]
+    [Arguments("1 0", DocumentValidationStatus.Invalid)]
+    public async Task OccurrenceParsingRetainsXmlIntegerLexicalSemantics(string value, DocumentValidationStatus expected)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes($"""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:element name="person"><xs:complexType><xs:sequence>
+                <xs:element name="x" minOccurs="0" maxOccurs="{value}"/>
+              </xs:sequence></xs:complexType></xs:element>
+            </xs:schema>
+            """));
+        await Assert.That(result.Status).IsEqualTo(expected);
+        if (expected == DocumentValidationStatus.Invalid)
+        {
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("xsd.schema");
+        }
+    }
+
+    [Test]
+    [Arguments(1, DocumentValidationStatus.Valid)]
+    [Arguments(999, DocumentValidationStatus.Indeterminate)]
+    [Arguments(1000, DocumentValidationStatus.Indeterminate)]
+    public async Task OccurrenceReservationChecksBothNumericAndStructuralWorkBeforeNativeCompilation(
+        int repetitions, DocumentValidationStatus expected)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes($"""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:element name="person"><xs:complexType><xs:sequence>
+                <xs:element name="x" maxOccurs="{repetitions}"/>
+              </xs:sequence></xs:complexType></xs:element>
+            </xs:schema>
+            """), new() { MaxWork = 999 });
+        await Assert.That(result.Status).IsEqualTo(expected);
+        if (expected == DocumentValidationStatus.Indeterminate)
+        {
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("limit.work");
+        }
+    }
+
+    [Test]
     [Arguments("""<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="age" type="xs:int"/></xs:schema>""", DocumentValidationStatus.Valid)]
     [Arguments("""<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="p"><xs:complexType><xs:sequence><xs:element name="name" type="xs:string"/><xs:element name="age" type="xs:int" minOccurs="0"/></xs:sequence></xs:complexType></xs:element></xs:schema>""", DocumentValidationStatus.Valid)]
     [Arguments("""<person/>""", DocumentValidationStatus.Invalid)]

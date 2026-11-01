@@ -52,7 +52,10 @@ public class HttpTests
             """;
         const string schema = """
             <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" id="schema" targetNamespace="urn:payload">
-              <xs:element name="Payload" type="xs:string"/><xs:element name="Failure" type="xs:string"/>
+              <xs:element name="Payload"><xs:complexType><xs:all>
+                <xs:element name="Name" type="xs:string"/><xs:element name="Age" type="xs:int" minOccurs="0"/>
+              </xs:all></xs:complexType></xs:element>
+              <xs:element name="Failure" type="xs:string"/>
             </xs:schema>
             """;
         var second = first.Replace("name=\"Port\"", "name=\"NewPort\"", StringComparison.Ordinal);
@@ -118,6 +121,8 @@ public class HttpTests
         await Assert.That(fault.SchemaElement.SchemaDocumentUris[0]).IsEqualTo(schemaUri);
         await Assert.That(fault.SchemaElement.SchemaDocuments[0].Contains("name=\"Payload\"", StringComparison.Ordinal)).IsTrue();
         await Assert.That(selected.Wsdl20Operation.SchemaElements.Count).IsEqualTo(2);
+        var payload = selected.Wsdl20Operation.SchemaElements.Single(element => element.ElementName == "{urn:payload}Payload");
+        await Assert.That(payload.ElementXml.Contains("<xs:all>", StringComparison.Ordinal)).IsTrue();
         var missing = await ApiOperationDocumentResolver.ResolveAsync(acquired.Format, acquired.Document.ContentType!,
             memory.ToArray(), ApiOperationReference.Parse(version +
                 "#interfaces/%7Burn:api%7DNewPort/operations/%7Burn:api%7DRead"),

@@ -35,6 +35,25 @@ graph traversal and compilation consume the shared work budget. Cancellation
 propagates without dispatching later references. These acquisition rules do not
 enable additional XSD constructs or qualify complete XSD 1.0 conformance.
 
+The bounded compiler accepts XSD 1.0 `xs:all` content models and checks their
+native particle constraints: children are element declarations, the group occurs
+at most once, and each child occurs at most once. Optional elements retain
+`minOccurs="0"`; invalid group placement, duplicate element declarations and
+illegal occurrence values fail schema compilation. This validates schema
+declarations, not application instances. WSDL 2.0 element selection shares that
+compiler and retains the authored `xs:all` rather than translating its children
+into separate message choices.
+
+Finite occurrence reservations parse both `minOccurs` and `maxOccurs` using
+XML Schema integer syntax, including whitespace, signs and leading zeros.
+Arbitrary-width values cannot bypass the budget through integer overflow.
+The larger finite occurrence value contributes to the cumulative structural
+reservation; `maxOccurs="unbounded"` still reserves a finite minimum.
+Oversized reservations report `Indeterminate` with `limit.work` before
+compilation. Malformed or negative occurrence values report `Invalid`.
+This does not enable `xs:choice`, type derivation, identity constraints or
+the other explicitly unsupported compiler constructs.
+
 Protobuf map declarations reserve their synthetic entry symbol in the containing
 message: `foo` reserves `FooEntry`, and `map_field` reserves `MapFieldEntry`.
 An authored message, enum, field, oneof or another map cannot reuse that symbol,

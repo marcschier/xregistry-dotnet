@@ -43,6 +43,13 @@ no origin or XML base is supplied. Shared/circular schemas reuse acquired bytes,
 and cached chains still undergo the complete graph-depth check. Standalone
 location fragments remain unsupported. See [the validation policy](validation.md).
 
+The shared bounded XSD compiler accepts `xs:all` with native optional/required
+element and group-placement checks. WSDL selection retains those declarations
+as schema data. Finite minimum and maximum occurrences use overflow-safe XML
+integer parsing and cumulative work reservations; values beyond the budget
+remain unchecked rather than reaching unreserved compilation. Choice models,
+type derivation and identity constraints remain unsupported.
+
 For `Protobuf/2` and `Protobuf/3`, schema validation checks declaration names
 in their containing scope. Fields, oneofs, nested types and enum values cannot
 reuse a name in the same message; enum values share their enum's containing

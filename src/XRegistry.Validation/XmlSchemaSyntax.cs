@@ -237,24 +237,16 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
             _elements++;
             if (reader.NamespaceURI == Namespace)
             {
-                if (reader.LocalName is "pattern" or "redefine" or "choice" or "all" or "union"
+                if (reader.LocalName is "pattern" or "redefine" or "choice" or "union"
                     or "complexContent" or "key" or "keyref" or "unique"
                     || reader.LocalName is "group" or "attributeGroup" && reader.GetAttribute("ref") is not null)
                 {
                     ValidationContext.Fail(DocumentValidationStatus.Unsupported, "$", "xsd.construct_unsupported",
                         $"The '{reader.LocalName}' construct is outside the bounded XSD compilation policy.");
                 }
-                var maxOccurs = reader.GetAttribute("maxOccurs");
-                if (maxOccurs is not null and not "unbounded"
-                    && ulong.TryParse(maxOccurs, NumberStyles.None, CultureInfo.InvariantCulture, out var repetitions))
-                {
-                    if (repetitions > (ulong)(context.Options.MaxWork / _occurrenceCost))
-                    {
-                        ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$", "limit.work",
-                            "XML Schema occurrence expansion exceeds the compilation budget.");
-                    }
-                    _occurrenceCost *= (long)Math.Max(1, repetitions);
-                }
+                var minimum = Occurrence(reader.GetAttribute("minOccurs"), allowUnbounded: false);
+                var maximum = Occurrence(reader.GetAttribute("maxOccurs"), allowUnbounded: true);
+                _occurrenceCost *= Math.Max(1, Math.Max(minimum, maximum));
             }
             for (var i = 0; i < reader.AttributeCount; i++)
             {
@@ -263,6 +255,42 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
             }
         }
         ValidationContext.Require(sawRoot, "$", "xsd.root", "An XML Schema root is required.");
+    }
+
+    private long Occurrence(string? text, bool allowUnbounded)
+    {
+        if (text is null) { return 1; }
+        context.Work(text.Length + 1L);
+        var value = text.AsSpan().Trim(" \t\r\n");
+        if (allowUnbounded && value.SequenceEqual("unbounded")) { return 1; }
+        var negative = value.Length > 0 && value[0] == '-';
+        if (value.Length > 0 && value[0] is '+' or '-') { value = value[1..]; }
+        ValidationContext.Require(value.Length > 0, "$", "xsd.schema",
+            "Schema occurrence values must be nonnegative integers or permitted unbounded values.");
+        var limit = context.Options.MaxWork / _occurrenceCost;
+        long result = 0;
+        var exceeded = false;
+        var nonzero = false;
+        foreach (var character in value)
+        {
+            ValidationContext.Require(character is >= '0' and <= '9', "$", "xsd.schema",
+                "Schema occurrence values must use XML Schema integer syntax.");
+            var digit = character - '0';
+            nonzero |= digit != 0;
+            if (result > limit / 10 || result == limit / 10 && digit > limit % 10)
+            {
+                exceeded = true;
+            }
+            else if (!exceeded) { result = result * 10 + digit; }
+        }
+        ValidationContext.Require(!negative || !nonzero, "$", "xsd.schema",
+            "Schema occurrence values cannot be negative.");
+        if (exceeded)
+        {
+            ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$", "limit.work",
+                "XML Schema occurrence expansion exceeds the compilation budget.");
+        }
+        return result;
     }
 
     private long CompilationWork()
