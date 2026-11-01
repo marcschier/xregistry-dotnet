@@ -36,6 +36,13 @@ Legacy prepare/replay/incarnation/generation extensions are not standard
 xRegistry HTTP. The in-process persistence/response preparation methods do not
 imply proprietary wire endpoints.
 
+Standalone XSD validation resolves caller-supplied dependencies with each
+containing schema's retrieval URI and inherited XML base. Namespace catalogs
+do not supply retrieval origins; named-reference lookup remains available when
+no origin or XML base is supplied. Shared/circular schemas reuse acquired bytes,
+and cached chains still undergo the complete graph-depth check. Standalone
+location fragments remain unsupported. See [the validation policy](validation.md).
+
 For `Protobuf/2` and `Protobuf/3`, schema validation checks declaration names
 in their containing scope. Fields, oneofs, nested types and enum values cannot
 reuse a name in the same message; enum values share their enum's containing

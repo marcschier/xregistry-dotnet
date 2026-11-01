@@ -15,6 +15,26 @@ successful validation.
 | gRPC | `gRPC/proto3` uses the Proto3 policy and requires at least one service declared in the supplied root document. Imported source uses its declared syntax. Descriptor sets are unsupported. Source-method selection is available separately through `ApiOperationDocumentResolver`. |
 | JSON Structure | Draft-04 Core document/type/namespace/reference/union/compound grammar and bounded primitive restrictions. Required extensions, inheritance and unqualified extended primitive const/enum rules are unsupported. |
 
+Standalone XSD imports and includes use only `DocumentValidationOptions.ResolveReference`.
+Each location resolves against the retrieved containing schema's URI and
+inherited `xml:base`, including a base on the dependency declaration itself.
+Rooted and network-path locations require an absolute base; they never become
+filesystem paths. Without a Document URI or XML base, ordinary relative locations
+retain named-reference callback lookup. A relative XML base without a containing
+absolute origin reports `Indeterminate`; an authored absolute XML base can
+establish that origin.
+
+Locationless imports use the namespace as an explicit catalog key, not a
+retrieval origin for the catalog's relative dependencies. Malformed retrieval
+spellings fail before callback dispatch. Standalone schema-location fragments
+remain `Unsupported`; this validator does not borrow the WSDL fragment selector.
+Shared and circular dependencies reuse parsed schemas and input-byte charges.
+The completed graph is depth-checked before native schema compilation, so
+acquiring shorter paths first cannot hide a longer cached chain. XML parsing,
+graph traversal and compilation consume the shared work budget. Cancellation
+propagates without dispatching later references. These acquisition rules do not
+enable additional XSD constructs or qualify complete XSD 1.0 conformance.
+
 Protobuf map declarations reserve their synthetic entry symbol in the containing
 message: `foo` reserves `FooEntry`, and `map_field` reserves `MapFieldEntry`.
 An authored message, enum, field, oneof or another map cannot reuse that symbol,
