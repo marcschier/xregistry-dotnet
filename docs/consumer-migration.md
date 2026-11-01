@@ -48,7 +48,7 @@ element and group-placement checks. WSDL selection retains those declarations
 as schema data. Finite minimum and maximum occurrences use overflow-safe XML
 integer parsing and cumulative work reservations; values beyond the budget
 remain unchecked rather than reaching unreserved compilation.
-Complex-type derivation and identity constraints remain unsupported.
+Identity constraints remain unsupported.
 
 Union simple types use the native XSD compiler with ordered named, inline,
 list and nested members. Missing or invalid member types fail compilation;
@@ -61,6 +61,13 @@ counts, including nested choices, contribute to the bounded compiler's
 structural reservation; compiler warnings remain unchecked results.
 WSDL selection retains the choice XML within one global message element,
 without choosing instance content or adding operation candidates.
+
+Complex content supports native extension and restriction checks, including
+caller-resolved imported bases. Base/local composition contributes a factor
+of two per declaration to the cumulative structural reservation; long chains
+can therefore remain unchecked. WSDL selection preserves base references and
+complete schema context without flattening inherited particles. Unsupported
+constructs within derived content still prevent compilation.
 
 For `Protobuf/2` and `Protobuf/3`, schema validation checks declaration names
 in their containing scope. Fields, oneofs, nested types and enum values cannot

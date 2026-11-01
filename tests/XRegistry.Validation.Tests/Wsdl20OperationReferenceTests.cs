@@ -788,6 +788,30 @@ public class Wsdl20OperationReferenceTests
     }
 
     [Test]
+    public async Task Wsdl20ComplexContentRetainsBaseAndDerivedDeclarationsWithoutFlatteningParticles()
+    {
+        var result = await Resolve("""
+            <types xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:schema targetNamespace="urn:api">
+              <xs:complexType name="Base"><xs:sequence><xs:element name="first"/></xs:sequence></xs:complexType>
+              <xs:element name="Payload"><xs:complexType><xs:complexContent><xs:extension base="t:Base">
+                <xs:sequence><xs:element name="next"/></xs:sequence>
+              </xs:extension></xs:complexContent></xs:complexType></xs:element>
+            </xs:schema></types>
+            <interface name="Port"><operation name="Read"><input element="t:Payload"/><output element="#none"/></operation></interface>
+            """);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        var schema = result.Wsdl20Operation!.SchemaElements.Single();
+        await Assert.That(schema.ElementName).IsEqualTo("{urn:api}Payload");
+        var declaration = XElement.Parse(schema.ElementXml);
+        var extension = declaration.Descendants(XName.Get("extension", "http://www.w3.org/2001/XMLSchema")).Single();
+        await Assert.That(extension.Attribute("base")!.Value).IsEqualTo("t:Base");
+        await Assert.That(declaration.Descendants(XName.Get("element", "http://www.w3.org/2001/XMLSchema"))
+            .Select(element => element.Attribute("name")!.Value).SequenceEqual(["next"])).IsTrue();
+        await Assert.That(XElement.Parse(schema.SchemaDocuments.Single()).Elements(
+            XName.Get("complexType", "http://www.w3.org/2001/XMLSchema")).Single().Attribute("name")!.Value).IsEqualTo("Base");
+    }
+
+    [Test]
     public async Task Wsdl20ChoiceParticlesRemainOneNativeGlobalMessageElement()
     {
         var result = await Resolve("""

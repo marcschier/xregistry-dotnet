@@ -51,13 +51,14 @@ public class HttpTests
             </description>
             """;
         const string schema = """
-            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" id="schema" targetNamespace="urn:payload">
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:payload" id="schema" targetNamespace="urn:payload">
+              <xs:complexType name="AgeBase"/>
               <xs:element name="Payload"><xs:complexType><xs:all>
                 <xs:element name="Name" type="xs:string"/>
-                <xs:element name="Age" minOccurs="0"><xs:complexType><xs:choice>
+                <xs:element name="Age" minOccurs="0"><xs:complexType><xs:complexContent><xs:extension base="p:AgeBase"><xs:choice>
                   <xs:element name="Number"><xs:simpleType><xs:union memberTypes="xs:int xs:boolean"/></xs:simpleType></xs:element>
                   <xs:element name="Unknown" type="xs:boolean"/>
-                </xs:choice></xs:complexType></xs:element>
+                </xs:choice></xs:extension></xs:complexContent></xs:complexType></xs:element>
               </xs:all></xs:complexType></xs:element>
               <xs:element name="Failure" type="xs:string"/>
             </xs:schema>
@@ -129,6 +130,8 @@ public class HttpTests
         await Assert.That(payload.ElementXml.Contains("<xs:all>", StringComparison.Ordinal)).IsTrue();
         await Assert.That(payload.ElementXml.Contains("memberTypes=\"xs:int xs:boolean\"", StringComparison.Ordinal)).IsTrue();
         await Assert.That(payload.ElementXml.Contains("<xs:choice>", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(payload.ElementXml.Contains("base=\"p:AgeBase\"", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(payload.SchemaDocuments.Single().Contains("name=\"AgeBase\"", StringComparison.Ordinal)).IsTrue();
         var missing = await ApiOperationDocumentResolver.ResolveAsync(acquired.Format, acquired.Document.ContentType!,
             memory.ToArray(), ApiOperationReference.Parse(version +
                 "#interfaces/%7Burn:api%7DNewPort/operations/%7Burn:api%7DRead"),

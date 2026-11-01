@@ -10,6 +10,123 @@ namespace XRegistry.Validation.Tests;
 public class XmlSchemaValidationTests
 {
     [Test]
+    [Arguments("""
+        <xs:complexType name="Base"><xs:sequence><xs:element name="first"/></xs:sequence><xs:attribute name="id" type="xs:int" use="required"/></xs:complexType>
+        <xs:complexType name="Derived"><xs:complexContent><xs:extension base="Base"><xs:sequence><xs:element name="next"/></xs:sequence><xs:attribute name="flag" type="xs:boolean"/></xs:extension></xs:complexContent></xs:complexType>
+        """)]
+    [Arguments("""
+        <xs:complexType name="Base"><xs:sequence><xs:element name="first" minOccurs="0" maxOccurs="3"/></xs:sequence><xs:attribute name="id" type="xs:int" use="required"/><xs:attribute name="note" type="xs:string"/></xs:complexType>
+        <xs:complexType name="Derived"><xs:complexContent><xs:restriction base="Base"><xs:sequence><xs:element name="first" maxOccurs="2"/></xs:sequence><xs:attribute name="id" type="xs:int" use="required"/><xs:attribute name="note" use="prohibited"/></xs:restriction></xs:complexContent></xs:complexType>
+        """)]
+    [Arguments("""
+        <xs:complexType name="Base" mixed="true"><xs:sequence><xs:element name="first"/></xs:sequence></xs:complexType>
+        <xs:complexType name="Derived"><xs:complexContent mixed="true"><xs:extension base="Base"><xs:sequence><xs:element name="next"/></xs:sequence></xs:extension></xs:complexContent></xs:complexType>
+        """)]
+    [Arguments("""
+        <xs:complexType name="Base"/>
+        <xs:complexType name="Derived"><xs:complexContent><xs:extension base="Base"/></xs:complexContent></xs:complexType>
+        """)]
+    public async Task ComplexContentCompilesNativeExtensionRestrictionMixedAndEmptyModels(string types)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(
+            "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">" + types +
+            "<xs:element name=\"root\" type=\"Derived\"/></xs:schema>"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("""
+        <xs:complexType name="Derived"><xs:complexContent><xs:extension base="Missing"/></xs:complexContent></xs:complexType>
+        """)]
+    [Arguments("""
+        <xs:complexType name="Derived"><xs:complexContent><xs:extension base="xs:string"/></xs:complexContent></xs:complexType>
+        """)]
+    [Arguments("""
+        <xs:complexType name="Derived"><xs:complexContent><xs:extension base="Derived"/></xs:complexContent></xs:complexType>
+        """)]
+    [Arguments("""
+        <xs:complexType name="Base"><xs:complexContent><xs:extension base="Derived"/></xs:complexContent></xs:complexType>
+        <xs:complexType name="Derived"><xs:complexContent><xs:extension base="Base"/></xs:complexContent></xs:complexType>
+        """)]
+    [Arguments("""
+        <xs:complexType name="Base" final="extension"/>
+        <xs:complexType name="Derived"><xs:complexContent><xs:extension base="Base"/></xs:complexContent></xs:complexType>
+        """)]
+    [Arguments("""
+        <xs:complexType name="Base" final="restriction"/>
+        <xs:complexType name="Derived"><xs:complexContent><xs:restriction base="Base"/></xs:complexContent></xs:complexType>
+        """)]
+    [Arguments("""
+        <xs:complexType name="Base"><xs:sequence><xs:element name="first" type="xs:int"/></xs:sequence></xs:complexType>
+        <xs:complexType name="Derived"><xs:complexContent><xs:restriction base="Base"><xs:sequence><xs:element name="first" type="xs:string"/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType>
+        """)]
+    [Arguments("""
+        <xs:complexType name="Base"><xs:attribute name="id" use="required"/></xs:complexType>
+        <xs:complexType name="Derived"><xs:complexContent><xs:restriction base="Base"><xs:attribute name="id" use="prohibited"/></xs:restriction></xs:complexContent></xs:complexType>
+        """)]
+    [Arguments("""
+        <xs:complexType name="Base"><xs:sequence><xs:element name="first"/></xs:sequence></xs:complexType>
+        <xs:complexType name="Derived"><xs:complexContent mixed="true"><xs:extension base="Base"/></xs:complexContent></xs:complexType>
+        """)]
+    public async Task ComplexContentRejectsNativeBaseCyclesFinalAndRestrictionContradictions(string types)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(
+            "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">" + types +
+            "<xs:element name=\"root\" type=\"Derived\"/></xs:schema>"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("xsd.schema");
+    }
+
+    [Test]
+    [Arguments(2, DocumentValidationStatus.Valid)]
+    [Arguments(16, DocumentValidationStatus.Indeterminate)]
+    public async Task ComplexContentChainsReserveBaseCompositionBeforeNativeCompilation(
+        int count, DocumentValidationStatus expected)
+    {
+        var types = new StringBuilder("<xs:complexType name=\"T0\"/>");
+        for (var index = 1; index <= count; index++)
+        {
+            types.Append(System.Globalization.CultureInfo.InvariantCulture,
+                $"<xs:complexType name=\"T{index}\"><xs:complexContent><xs:extension base=\"T{index - 1}\"/></xs:complexContent></xs:complexType>");
+        }
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(
+            "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">" + types + "</xs:schema>"));
+        await Assert.That(result.Status).IsEqualTo(expected);
+        if (expected == DocumentValidationStatus.Indeterminate)
+        {
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("limit.work");
+        }
+    }
+
+    [Test]
+    public async Task ComplexContentImportsResolveNativeBaseTypesOnlyThroughCallerAcquisition()
+    {
+        var references = new List<string>();
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes("""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:b="urn:base">
+              <xs:import namespace="urn:base" schemaLocation="base.xsd"/>
+              <xs:complexType name="Derived"><xs:complexContent><xs:extension base="b:Base"><xs:sequence><xs:element name="next"/></xs:sequence></xs:extension></xs:complexContent></xs:complexType>
+              <xs:element name="root" type="Derived"/>
+            </xs:schema>
+            """), new()
+        {
+            DocumentUri = new("https://schemas.example/root.xsd"),
+            ResolveReference = (reference, _) =>
+            {
+                references.Add(reference);
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes("""
+                        <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:base">
+                          <xs:complexType name="Base"><xs:sequence><xs:element name="first" type="xs:int"/></xs:sequence></xs:complexType>
+                        </xs:schema>
+                        """));
+            }
+        });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(references.Single()).IsEqualTo("https://schemas.example/base.xsd");
+    }
+
+    [Test]
     [Arguments("""<xs:choice><xs:element name="x" type="xs:int"/></xs:choice>""")]
     [Arguments("""<xs:choice minOccurs="0" maxOccurs="unbounded"><xs:element name="x" type="xs:int"/><xs:element name="y" type="xs:boolean"/></xs:choice>""")]
     [Arguments("""<xs:sequence><xs:choice><xs:element name="x"/><xs:sequence><xs:element name="y"/><xs:element name="z"/></xs:sequence></xs:choice><xs:element name="end"/></xs:sequence>""")]

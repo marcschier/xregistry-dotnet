@@ -51,7 +51,7 @@ The larger finite occurrence value contributes to the cumulative structural
 reservation; `maxOccurs="unbounded"` still reserves a finite minimum.
 Oversized reservations report `Indeterminate` with `limit.work` before
 compilation. Malformed or negative occurrence values report `Invalid`.
-This does not enable complex-type derivation, identity constraints or
+This does not enable identity constraints or
 the other explicitly unsupported compiler constructs.
 
 XSD 1.0 union simple types can use ordered `memberTypes` QNames, inline simple
@@ -77,6 +77,18 @@ conservative policy can leave valid schemas unchecked when reservations exceed
 the budget. Unsupported constructs inside a branch still prevent compilation.
 WSDL selection returns one global message element with its owned choice XML,
 without selecting an instance branch or creating additional operation candidates.
+
+XSD 1.0 complex content uses native extension and restriction checks for
+base types, particles, mixed content, attributes and derivation prohibitions.
+Missing or cyclic bases and invalid restrictions fail compilation. Imported
+bases use the same caller-resolved schema graph; the compiler cannot retrieve
+them independently. Each complex-content declaration doubles the cumulative
+structural reservation for base/local composition, bounding chains before
+native compilation. This conservative reservation can leave valid derivations
+unchecked. WSDL selection retains the authored base QName, local declaration
+and complete schema context rather than flattening inherited particles.
+Patterns, referenced groups, identity constraints and redefinitions remain
+outside the compiler policy; extension does not bypass that boundary.
 
 Protobuf map declarations reserve their synthetic entry symbol in the containing
 message: `foo` reserves `FooEntry`, and `map_field` reserves `MapFieldEntry`.
