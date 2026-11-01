@@ -40,7 +40,7 @@ public class HttpTests
         const string dependency = """
             <description xmlns="http://www.w3.org/ns/wsdl" xmlns:t="urn:api" xmlns:p="urn:payload" targetNamespace="urn:api">
               <types xmlns:xs="http://www.w3.org/2001/XMLSchema">
-                <xs:import namespace="urn:payload" schemaLocation="payload.xsd#schema"/>
+                <xs:import namespace="urn:payload" schemaLocation="payload.xsd#element(missing)element(schema)"/>
               </types>
               <interface name="Base" styleDefault="urn:style">
                 <fault name="Failure" element="p:Failure"/>
@@ -224,7 +224,8 @@ public class HttpTests
         {
             Content = new StringContent(new JsonObject
             {
-                ["format"] = "OpenAPI/3.1", ["apiurl"] = initialUri.AbsoluteUri,
+                ["format"] = "OpenAPI/3.1",
+                ["apiurl"] = initialUri.AbsoluteUri,
                 ["contenttype"] = "application/json"
             }.ToJsonString(), Encoding.UTF8, "application/json")
         })

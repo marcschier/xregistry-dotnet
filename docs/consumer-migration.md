@@ -354,12 +354,19 @@ schemas and share the WSDL budgets, distinct-acquisition count and 64-edge depth
 schema links with network resolution disabled, without recharging acquired
 bytes or nodes. Namespace catalogs retain unknown origins; missing dependencies
 prevent partial selection. Schema locations can select an embedded schema by
-XSD `id` or `xml:id`. The callback receives the fragment-free URI; multiple
+XSD `id`, `xml:id` or the W3C `element()` scheme's ID and positive child
+sequences. Absolute sequences start at the Document root with `/1`;
+only element children count. Pointer parts use first-success evaluation,
+skipping unknown schemes and nonmatching `element()` data. A located element
+of the wrong kind is invalid and cannot fall through to a later schema.
+Percent decoding precedes framework parsing and its circumflex escapes.
+Malformed framework syntax is invalid before acquisition; no matching
+supported part is indeterminate. The callback receives the fragment-free URI; multiple
 fragments reuse captured bytes, and relative dependencies keep the selected
 schema's containing origin and inherited XML base. Fragment-only references
 without an origin or XML base use their authored Document. Missing IDs are
 indeterminate; duplicate IDs and wrong-kind targets are invalid. Empty
-fragments, XPointer schemes, other type systems,
+fragments, XPath `xpointer()` expressions, other type systems,
 custom patterns and unimplemented XSD constructs remain unsupported; see
 [WSDL 2.0 selection](validation.md#wsdl-20-operation-selection).
 

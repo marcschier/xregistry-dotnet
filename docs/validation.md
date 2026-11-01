@@ -134,7 +134,7 @@ Placeholder labels and directions retain
 their native meaning; XML child order does not substitute for those labels.
 Invalid names, duplicate or missing interfaces, inheritance cycles, conflicting
 operations and malformed placeholders fail before returning a match.
-Unimplemented XPointer schemes, other type systems, custom patterns and required extensions report
+Pointers containing only unimplemented schemes, other type systems, custom patterns and required extensions report
 `Unsupported`, never a successful unchecked selection.
 
 Fault references resolve against the operation's declaring interface and its
@@ -220,7 +220,9 @@ policy report `Unsupported`. These checks do not establish full schema or WSDL
 validation.
 
 Schema locations can select an embedded schema with an XML ID shorthand
-fragment, such as `other.wsdl#payload`. The fragment matches an XSD `id` or
+fragment, such as `other.wsdl#payload`, or the W3C
+[`element()` scheme](https://www.w3.org/TR/2003/REC-xptr-element-20030325/).
+An ID matches an XSD `id` or
 `xml:id` and must identify one schema element; duplicate IDs and targets of
 the wrong kind prevent selection. Fragment decoding does not change the
 schema's namespace identity. The callback receives only the fragment-free
@@ -233,12 +235,27 @@ that base. Without an origin or XML base, a fragment-only reference can select
 the authored Document's own inline schema without acquisition. Retained schema
 context includes inherited XML bases when known. An external XML container
 supplies only the selected schema, not its WSDL interfaces. Missing Documents
-or IDs report `Indeterminate`; empty fragments and XPointer schemes remain
-`Unsupported`. This is the declared XML ID policy, not full XPointer support.
+or selected elements report `Indeterminate`.
+
+`element(payload)` selects an ID; `element(payload/2)` selects its second
+element child, and `element(/1/2)` selects the root's second element child.
+Text, comments and processing instructions do not count as children.
+Following the
+[XPointer Framework](https://www.w3.org/TR/2003/REC-xptr-framework-20030325/),
+pointer parts are tried in authored order. Unknown schemes are skipped;
+invalid `element()` data and missing targets permit the next part to run.
+The first located element stops evaluation, even when it is not a schema.
+An out-of-range ordinal never selects a nearby element. Percent decoding occurs
+once before framework parsing; scheme data accepts balanced parentheses and
+the `^^`, `^(` and `^)` escapes. Malformed framework syntax is invalid before
+retrieval. If no supported part locates an element, selection is indeterminate;
+empty fragments and pointers containing only unsupported schemes remain
+unsupported. This policy does not evaluate XPath `xpointer()` expressions,
+process DTD IDs or infer ID types from application schemas.
 
 The actual HTTP workflow retains an older exact Version and selects its inherited
 operation, fault and externally imported element declarations through explicit
-relative WSDL and XML ID schema-fragment dependencies after default change and
+relative WSDL and `element()` schema-fragment dependencies after default change and
 source disposal.
 
 ## Compatibility

@@ -4,6 +4,7 @@
 using System.Xml;
 using System.Xml.Linq;
 using System.Collections.ObjectModel;
+using System.Text;
 
 namespace XRegistry.Validation;
 
@@ -725,12 +726,12 @@ public static partial class ApiOperationDocumentResolver
                         "$/types", "dependency.uri",
                         "A schema location must be a well-formed URI reference.");
                     var fragment = Uri.UnescapeDataString(rawFragment);
-                    if (fragment.Contains('(', StringComparison.Ordinal) || fragment.Length == 0)
+                    if (fragment.Length == 0)
                     {
                         ValidationContext.Fail(DocumentValidationStatus.Unsupported, "$/types", "wsdl20.schema_fragment",
-                            "This schema fragment policy supports XML ID shorthand, not empty fragments or XPointer schemes.");
+                            "An empty fragment does not select an embedded schema.");
                     }
-                    XmlConvert.VerifyNCName(fragment);
+                    var pointerParts = ParseSchemaPointer(fragment);
                     var documentPart = location[..separator];
                     XElement container;
                     Uri? retrieval = null;
@@ -763,25 +764,59 @@ public static partial class ApiOperationDocumentResolver
                             schemaContainers.Add(retrieval, container);
                         }
                     }
-                    var matches = new List<XElement>();
-                    foreach (var element in container.DescendantsAndSelf())
+                    XElement? selected = null;
+                    foreach (var (id, steps) in pointerParts)
                     {
                         budget.Work();
-                        if (element.Attribute(XNamespace.Xml + "id")?.Value.Trim(' ', '\t', '\r', '\n') == fragment ||
-                            element.Name.NamespaceName == "http://www.w3.org/2001/XMLSchema" &&
-                            element.Attribute("id")?.Value.Trim(' ', '\t', '\r', '\n') == fragment)
+                        XElement? candidate = container;
+                        var firstStep = 0;
+                        if (id.Length == 0)
                         {
-                            matches.Add(element);
+                            if (steps[0] != "1") { continue; }
+                            firstStep = 1;
                         }
+                        else
+                        {
+                            var matches = new List<XElement>();
+                            foreach (var element in container.DescendantsAndSelf())
+                            {
+                                budget.Work();
+                                if (element.Attribute(XNamespace.Xml + "id")?.Value.Trim(' ', '\t', '\r', '\n') == id ||
+                                    element.Name.NamespaceName == "http://www.w3.org/2001/XMLSchema" &&
+                                    element.Attribute("id")?.Value.Trim(' ', '\t', '\r', '\n') == id)
+                                {
+                                    matches.Add(element);
+                                }
+                            }
+                            ValidationContext.Require(matches.Count <= 1, "$/types", "wsdl20.schema_fragment_duplicate",
+                                "A schema fragment identifier must identify one element in its containing document.");
+                            candidate = matches.SingleOrDefault();
+                        }
+                        for (var index = firstStep; candidate is not null && index < steps.Length; index++)
+                        {
+                            budget.Work(steps[index].Length + 1L);
+                            if (!int.TryParse(steps[index], System.Globalization.NumberStyles.None,
+                                System.Globalization.CultureInfo.InvariantCulture, out var ordinal))
+                            {
+                                candidate = null;
+                                break;
+                            }
+                            var childIndex = 0;
+                            XElement? next = null;
+                            foreach (var child in candidate.Elements())
+                            {
+                                budget.Work();
+                                if (++childIndex == ordinal) { next = child; break; }
+                            }
+                            candidate = next;
+                        }
+                        if (candidate is not null) { selected = candidate; break; }
                     }
-                    ValidationContext.Require(matches.Count <= 1, "$/types", "wsdl20.schema_fragment_duplicate",
-                        "A schema fragment identifier must identify one element in its containing document.");
-                    if (matches.Count == 0)
+                    if (selected is null)
                     {
                         ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$/types", "reference.unresolved",
                             "The schema location fragment does not identify an element in its captured document.");
                     }
-                    var selected = matches[0];
                     ValidationContext.Require(selected.Name == XName.Get("schema", "http://www.w3.org/2001/XMLSchema"),
                         "$/types", "xsd.root", "A schema location fragment must identify an XML Schema schema element.");
                     if (schemaOrigins.TryAdd(selected, retrieval))
@@ -795,6 +830,86 @@ public static partial class ApiOperationDocumentResolver
                         schemaCopies.Add(selected, copy);
                     }
                     return selected;
+                }
+
+                List<(string Id, string[] Steps)> ParseSchemaPointer(string fragment)
+                {
+                    budget.Work(fragment.Length + 1L);
+                    var parts = new List<(string Id, string[] Steps)>();
+                    if (!fragment.Contains('(', StringComparison.Ordinal))
+                    {
+                        XmlConvert.VerifyNCName(fragment);
+                        parts.Add((fragment, []));
+                        return parts;
+                    }
+                    var offset = 0;
+                    var understood = false;
+                    while (offset < fragment.Length)
+                    {
+                        var start = offset;
+                        while (offset < fragment.Length && fragment[offset] != '(') { offset++; }
+                        ValidationContext.Require(offset < fragment.Length, "$/types", "xpointer.syntax",
+                            "Each scheme-based pointer part requires parenthesized data.");
+                        var scheme = fragment[start..offset];
+                        var names = scheme.Split(':');
+                        ValidationContext.Require(names.Length is 1 or 2, "$/types", "xpointer.syntax",
+                            "An XPointer scheme name must be a QName.");
+                        foreach (var name in names) { XmlConvert.VerifyNCName(name); }
+                        offset++;
+                        var nesting = 1;
+                        var data = new StringBuilder();
+                        while (offset < fragment.Length && nesting > 0)
+                        {
+                            budget.Work();
+                            var character = fragment[offset++];
+                            if (character == '^')
+                            {
+                                ValidationContext.Require(offset < fragment.Length && fragment[offset] is '^' or '(' or ')',
+                                    "$/types", "xpointer.syntax", "An XPointer circumflex must escape a circumflex or parenthesis.");
+                                data.Append(fragment[offset++]);
+                            }
+                            else if (character == '(') { nesting++; data.Append(character); }
+                            else if (character == ')')
+                            {
+                                if (--nesting > 0) { data.Append(character); }
+                            }
+                            else { data.Append(character); }
+                        }
+                        ValidationContext.Require(nesting == 0, "$/types", "xpointer.syntax",
+                            "An XPointer scheme's parentheses must be balanced.");
+                        if (scheme == "element")
+                        {
+                            understood = true;
+                            var tokens = data.ToString().Split('/');
+                            var id = tokens[0];
+                            var valid = id.Length > 0 || tokens.Length > 1;
+                            if (id.Length > 0)
+                            {
+                                try { XmlConvert.VerifyNCName(id); }
+                                catch (XmlException) { valid = false; }
+                            }
+                            foreach (var step in tokens.Skip(1))
+                            {
+                                budget.Work(step.Length + 1L);
+                                valid &= step.Length > 0 && step[0] is >= '1' and <= '9' &&
+                                    step.All(character => character is >= '0' and <= '9');
+                            }
+                            // Invalid element() data identifies no subresource; later pointer parts can still succeed.
+                            if (valid) { parts.Add((id, tokens.Skip(1).ToArray())); }
+                        }
+                        if (offset < fragment.Length)
+                        {
+                            while (offset < fragment.Length && fragment[offset] is ' ' or '\t' or '\r' or '\n') { offset++; }
+                            ValidationContext.Require(offset < fragment.Length, "$/types", "xpointer.syntax",
+                                "XPointer whitespace must separate pointer parts, not follow the final part.");
+                        }
+                    }
+                    if (!understood)
+                    {
+                        ValidationContext.Fail(DocumentValidationStatus.Unsupported, "$/types", "wsdl20.schema_fragment",
+                            "No supported XPointer scheme can select a schema; this policy supports element() and XML ID shorthand.");
+                    }
+                    return parts;
                 }
 
                 static string SchemaNamespace(XElement schema) =>
