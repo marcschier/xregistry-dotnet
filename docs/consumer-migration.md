@@ -627,8 +627,15 @@ whereas OpenAPI scopes treat every key as a scope name. Empty flow and scope
 maps remain permitted. OpenAPI Reference Objects are not resolved by this
 inline check; Swagger Security Definitions do not permit a Reference Object
 in place of a Security Scheme. These checks do not qualify URL/URI syntax,
-HTTP authentication tokens, scope membership or effective referenced schemes,
+scope membership or effective referenced schemes,
 and never retrieve discovery or OAuth addresses.
+Inline OpenAPI HTTP authentication scheme names must be nonempty RFC 7235
+tokens. The shared token check also serves callback header expressions; spaces,
+controls, non-ASCII characters and token separators are rejected without
+dependency retrieval. Unknown schemes and all permitted token punctuation
+remain accepted, and authored case is not normalized. Registration and runtime
+authentication support are not checked. Swagger basic authentication does not
+inherit the OpenAPI `scheme` field.
 OpenAPI 3.1 operation-ID selection also searches `webhooks`, including referenced
 Path Items. Webhook names are exact strings, not slash-prefixed paths; an `x-`
 name in this map is a webhook, not a Paths specification extension. Duplicate

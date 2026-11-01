@@ -278,6 +278,11 @@ public static partial class ApiOperationDocumentResolver
             case "http":
                 failure = ValidateSecurityString(scheme, "scheme", pointer, required: true);
                 if (failure is not null) { return failure; }
+                if (!IsHttpToken(scheme.GetProperty("scheme").GetString()!))
+                {
+                    return InvalidSecurityScheme("An HTTP authentication scheme name must be a nonempty RFC token.",
+                        pointer + "/scheme");
+                }
                 return string.Equals(scheme.GetProperty("scheme").GetString(), "bearer", StringComparison.OrdinalIgnoreCase)
                     ? ValidateSecurityString(scheme, "bearerFormat", pointer, required: false) : null;
             case "openIdConnect":
@@ -485,17 +490,7 @@ public static partial class ApiOperationDocumentResolver
 
         if (expression.StartsWith("header.", StringComparison.Ordinal))
         {
-            var token = expression[7..];
-            if (token.IsEmpty) { return false; }
-            foreach (var character in token)
-            {
-                if (!char.IsAsciiLetterOrDigit(character) &&
-                    !"!#$%&'*+-.^_`|~".Contains(character))
-                {
-                    return false;
-                }
-            }
-            return true;
+            return IsHttpToken(expression[7..]);
         }
         if (expression.StartsWith("query.", StringComparison.Ordinal) ||
             expression.StartsWith("path.", StringComparison.Ordinal))
@@ -503,6 +498,7 @@ public static partial class ApiOperationDocumentResolver
             // JSON decoding has already checked the RFC 7159 CHAR production.
             return true;
         }
+
         if (expression.SequenceEqual("body")) { return true; }
         if (!expression.StartsWith("body#", StringComparison.Ordinal)) { return false; }
         var pointer = expression[5..];
@@ -510,6 +506,19 @@ public static partial class ApiOperationDocumentResolver
         for (var index = 0; index < pointer.Length; index++)
         {
             if (pointer[index] == '~' && (++index >= pointer.Length || pointer[index] is not ('0' or '1')))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static bool IsHttpToken(ReadOnlySpan<char> token)
+    {
+        if (token.IsEmpty) { return false; }
+        foreach (var character in token)
+        {
+            if (!char.IsAsciiLetterOrDigit(character) && !"!#$%&'*+-.^_`|~".Contains(character))
             {
                 return false;
             }

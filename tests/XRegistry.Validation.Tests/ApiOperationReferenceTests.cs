@@ -11,6 +11,113 @@ namespace XRegistry.Validation.Tests;
 public class ApiOperationReferenceTests
 {
     [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task HttpAuthenticationSchemeNamesRequireRfcTokenSyntaxBeforeSelection(string format, string version)
+    {
+        var invalid = new List<string> { "", "Basic Bearer", " Basic", "Bearer ", "é", "Basic\u007f", "Basic\u0080" };
+        for (var character = 0; character < 128; character++)
+        {
+            if (!char.IsAsciiLetterOrDigit((char)character) && !"!#$%&'*+-.^_`|~".Contains((char)character))
+            {
+                invalid.Add("A" + (char)character + "Z");
+            }
+        }
+        foreach (var scheme in invalid)
+        {
+            var document = new JsonObject
+            {
+                ["openapi"] = version,
+                ["components"] = new JsonObject { ["securitySchemes"] = new JsonObject
+                    { ["Unused"] = new JsonObject { ["type"] = "http", ["scheme"] = scheme } } },
+                ["paths"] = new JsonObject
+                {
+                    ["/items"] = new JsonObject { ["get"] = new JsonObject { ["operationId"] = "Target" } },
+                    ["/remote"] = new JsonObject { ["$ref"] = "https://not-acquired.test/path" }
+                }
+            };
+            foreach (var selector in new[] { "operations/Target", "operations/Missing", "/paths/~1items/get" })
+            {
+                var calls = 0;
+                var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                    resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+                await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.security_scheme");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo("$/components/securitySchemes/Unused/scheme");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                await Assert.That(calls).IsEqualTo(0);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task HttpAuthenticationSchemeTokensPreserveCaseOpenNamesAndPunctuation(string format, string version)
+    {
+        var schemes = new List<string> { "bAsIc", "BeArEr", "Unregistered-Scheme", "AZaz09!#$%&'*+-.^_`|~" };
+        for (var character = 0; character < 128; character++)
+        {
+            if (char.IsAsciiLetterOrDigit((char)character) || "!#$%&'*+-.^_`|~".Contains((char)character))
+            {
+                schemes.Add(((char)character).ToString());
+            }
+        }
+        foreach (var scheme in schemes)
+        {
+            var operation = JsonNode.Parse("""{"operationId":"Target","security":[{"Auth":[]}]}""")!;
+            var document = new JsonObject
+            {
+                ["openapi"] = version,
+                ["components"] = new JsonObject { ["securitySchemes"] = new JsonObject
+                    { ["Auth"] = new JsonObject { ["type"] = "http", ["scheme"] = scheme, ["bearerFormat"] = "" } } },
+                ["paths"] = new JsonObject { ["/items"] = new JsonObject { ["get"] = operation } }
+            };
+            foreach (var selector in new[] { "operations/Target", "/paths/~1items/get" })
+            {
+                var result = ApiOperationDocumentResolver.Resolve(format, "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector));
+                await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+                await Assert.That(JsonNode.DeepEquals(operation, JsonNode.Parse(result.Operation.GetRawText()))).IsTrue();
+            }
+        }
+        var swagger = ApiOperationDocumentResolver.Resolve("Swagger/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes("""
+                {"swagger":"2.0","securityDefinitions":{"Basic":{"type":"basic","scheme":false}},
+                 "paths":{"/items":{"get":{"operationId":"Target","security":[{"Basic":[]}]}}}}
+                """), ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"));
+        await Assert.That(swagger.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+    }
+
+    [Test]
+    public async Task HttpAuthenticationTokenAdmissionRechecksAfterReplacement()
+    {
+        var document = JsonNode.Parse("""
+            {"openapi":"3.1.1","components":{"securitySchemes":{"Auth":{"type":"http","scheme":"basic"}}},
+             "paths":{"/items":{"get":{"operationId":"Target","security":[{"Auth":[]}]}}}}
+            """)!;
+        foreach (var scheme in new[] { "basic", "basic bearer", "BeArEr" })
+        {
+            document["components"]!["securitySchemes"]!["Auth"]!["scheme"] = scheme;
+            var result = ApiOperationDocumentResolver.Resolve("OpenAPI/3.1", "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"));
+            await Assert.That(result.Status).IsEqualTo(scheme == "basic bearer"
+                ? ApiOperationResolutionStatus.Invalid : ApiOperationResolutionStatus.Selected);
+            if (scheme == "basic bearer")
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.security_scheme");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo("$/components/securitySchemes/Auth/scheme");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+            else { await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("Target"); }
+        }
+    }
+
+    [Test]
     [Arguments("OpenAPI/3.0", "openapi", "3.0.4")]
     [Arguments("OpenAPI/3.1", "openapi", "3.1.1")]
     [Arguments("Swagger/2.0", "swagger", "2.0")]
