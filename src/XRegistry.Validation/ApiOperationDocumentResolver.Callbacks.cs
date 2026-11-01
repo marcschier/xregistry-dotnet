@@ -252,6 +252,113 @@ public static partial class ApiOperationDocumentResolver
         return null;
     }
 
+    private static ApiOperationResolutionResult? ValidateHttpSecurityScheme(JsonElement scheme, string pointer,
+        string format, CancellationToken cancellationToken)
+    {
+        var swagger = format == "Swagger/2.0";
+        if (!swagger && scheme.TryGetProperty("$ref", out _)) { return null; }
+        var failure = ValidateSecurityString(scheme, "type", pointer, required: true);
+        if (failure is not null) { return failure; }
+        var type = scheme.GetProperty("type").GetString()!;
+        var valid = swagger ? type is "basic" or "apiKey" or "oauth2"
+            : type is "apiKey" or "http" or "oauth2" or "openIdConnect" ||
+                format == "OpenAPI/3.1" && type == "mutualTLS";
+        if (!valid) { return InvalidSecurityScheme("The security scheme type is not declared by the selected API format.", pointer + "/type"); }
+        failure = ValidateSecurityString(scheme, "description", pointer, required: false);
+        if (failure is not null) { return failure; }
+        switch (type)
+        {
+            case "apiKey":
+                failure = ValidateSecurityString(scheme, "name", pointer, required: true) ??
+                    ValidateSecurityString(scheme, "in", pointer, required: true);
+                if (failure is not null) { return failure; }
+                var location = scheme.GetProperty("in").GetString();
+                return location is "query" or "header" || !swagger && location == "cookie"
+                    ? null : InvalidSecurityScheme("The API key location is not declared by the selected API format.", pointer + "/in");
+            case "http":
+                failure = ValidateSecurityString(scheme, "scheme", pointer, required: true);
+                if (failure is not null) { return failure; }
+                return string.Equals(scheme.GetProperty("scheme").GetString(), "bearer", StringComparison.OrdinalIgnoreCase)
+                    ? ValidateSecurityString(scheme, "bearerFormat", pointer, required: false) : null;
+            case "openIdConnect":
+                return ValidateSecurityString(scheme, "openIdConnectUrl", pointer, required: true);
+            case "oauth2":
+                if (swagger)
+                {
+                    failure = ValidateSecurityString(scheme, "flow", pointer, required: true);
+                    if (failure is not null) { return failure; }
+                    var flow = scheme.GetProperty("flow").GetString()!;
+                    if (flow is not ("implicit" or "password" or "application" or "accessCode"))
+                    {
+                        return InvalidSecurityScheme("The Swagger OAuth flow is not a declared flow name.", pointer + "/flow");
+                    }
+                    return ValidateHttpOAuthFlow(scheme, pointer, flow, swagger, cancellationToken);
+                }
+                if (!scheme.TryGetProperty("flows", out var flows) || flows.ValueKind != JsonValueKind.Object)
+                {
+                    return InvalidSecurityScheme("An OAuth security scheme requires a flows object.", pointer + "/flows");
+                }
+                foreach (var flow in flows.EnumerateObject())
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (flow.Name is not ("implicit" or "password" or "clientCredentials" or "authorizationCode")) { continue; }
+                    var flowPointer = pointer + "/flows/" + Escape(flow.Name);
+                    if (flow.Value.ValueKind != JsonValueKind.Object)
+                    {
+                        return InvalidSecurityScheme("An OAuth flow declaration must be an object.", flowPointer);
+                    }
+                    failure = ValidateHttpOAuthFlow(flow.Value, flowPointer, flow.Name, swagger, cancellationToken);
+                    if (failure is not null) { return failure; }
+                }
+                return null;
+            default:
+                return null;
+        }
+    }
+
+    private static ApiOperationResolutionResult? ValidateHttpOAuthFlow(JsonElement value, string pointer,
+        string flow, bool swagger, CancellationToken cancellationToken)
+    {
+        var failure = ValidateSecurityString(value, "authorizationUrl", pointer,
+            required: flow is "implicit" or "accessCode" or "authorizationCode") ??
+            ValidateSecurityString(value, "tokenUrl", pointer, required: flow != "implicit");
+        if (failure is not null) { return failure; }
+        if (!swagger)
+        {
+            failure = ValidateSecurityString(value, "refreshUrl", pointer, required: false);
+            if (failure is not null) { return failure; }
+        }
+        if (!value.TryGetProperty("scopes", out var scopes) || scopes.ValueKind != JsonValueKind.Object)
+        {
+            return InvalidSecurityScheme("An OAuth flow requires a scopes object.", pointer + "/scopes");
+        }
+        foreach (var scope in scopes.EnumerateObject())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (swagger && scope.Name.StartsWith("x-", StringComparison.Ordinal)) { continue; }
+            if (scope.Value.ValueKind != JsonValueKind.String)
+            {
+                return InvalidSecurityScheme("An OAuth scope description must be a string.",
+                    pointer + "/scopes/" + Escape(scope.Name));
+            }
+        }
+        return null;
+    }
+
+    private static ApiOperationResolutionResult? ValidateSecurityString(
+        JsonElement value, string field, string pointer, bool required)
+    {
+        if (!value.TryGetProperty(field, out var declaration))
+        {
+            return required ? InvalidSecurityScheme($"A security declaration requires a string {field}.", pointer + "/" + field) : null;
+        }
+        return declaration.ValueKind == JsonValueKind.String ? null :
+            InvalidSecurityScheme($"A security declaration {field} must be a string.", pointer + "/" + field);
+    }
+
+    private static ApiOperationResolutionResult InvalidSecurityScheme(string message, string pointer) =>
+        Failure(ApiOperationResolutionStatus.Invalid, "document.security_scheme", message, pointer);
+
     private static ApiOperationResolutionResult? ValidateHttpSecurityNames(JsonElement value, string pointer,
         JsonElement entry, bool swagger, CancellationToken cancellationToken)
     {

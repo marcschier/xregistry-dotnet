@@ -650,6 +650,11 @@ public static partial class ApiOperationDocumentResolver
                     return Failure(ApiOperationResolutionStatus.Invalid, "document.component_value",
                         "An API reusable declaration must be an object; OpenAPI 3.1 schemas may also be booleans.", entryPath);
                 }
+                if (collection.Name == (swagger ? "securityDefinitions" : "securitySchemes"))
+                {
+                    var schemeFailure = ValidateHttpSecurityScheme(entry.Value, entryPath, format, cancellationToken);
+                    if (schemeFailure is not null) { return schemeFailure; }
+                }
             }
         }
         return null;

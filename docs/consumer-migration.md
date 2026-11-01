@@ -610,8 +610,25 @@ document cannot supply a missing entry declaration. Names remain case-sensitive.
 Missing names report `Invalid` at the requirement property without acquiring
 scheme references. Declared reference objects are not dereferenced by this name
 check, and unused declarations remain inactive. This does not validate effective
-scheme types or OAuth scopes, apply version-specific role rules or authorize
+referenced scheme types or OAuth scopes, apply version-specific role rules or authorize
 requests.
+Inline Security Scheme declarations are checked before selection, even when
+unused. Types follow the selected format: Swagger supports `basic`, `apiKey`
+and `oauth2`; OpenAPI supports `apiKey`, `http`, `oauth2` and `openIdConnect`,
+with `mutualTLS` added in 3.1. Optional descriptions must be strings. API keys
+require string names and format-specific locations; HTTP schemes require a
+string scheme, with string `bearerFormat` when present for case-insensitive
+`bearer`. OpenID discovery addresses must be strings, not retrieval requests.
+Swagger OAuth declarations require a recognized flow, its required URL fields
+and a scopes object. OpenAPI OAuth declarations require a flows object; known
+flow entries must be objects with their required URL fields and scopes.
+Scope descriptions are strings; Swagger scopes retain opaque `x-` extensions,
+whereas OpenAPI scopes treat every key as a scope name. Empty flow and scope
+maps remain permitted. OpenAPI Reference Objects are not resolved by this
+inline check; Swagger Security Definitions do not permit a Reference Object
+in place of a Security Scheme. These checks do not qualify URL/URI syntax,
+HTTP authentication tokens, scope membership or effective referenced schemes,
+and never retrieve discovery or OAuth addresses.
 OpenAPI 3.1 operation-ID selection also searches `webhooks`, including referenced
 Path Items. Webhook names are exact strings, not slash-prefixed paths; an `x-`
 name in this map is a webhook, not a Paths specification extension. Duplicate

@@ -11,6 +11,219 @@ namespace XRegistry.Validation.Tests;
 public class ApiOperationReferenceTests
 {
     [Test]
+    [Arguments("OpenAPI/3.0", "openapi", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "openapi", "3.1.1")]
+    [Arguments("Swagger/2.0", "swagger", "2.0")]
+    public async Task HttpInlineSecuritySchemesRejectMalformedRequiredFieldsBeforeSelection(
+        string format, string versionField, string version)
+    {
+        var invalid = new List<(string Json, string Suffix)>
+        {
+            ("{}", "/type"), ("""{"type":null}""", "/type"),
+            ("""{"type":false}""", "/type"), ("""{"type":"APIKEY"}""", "/type"),
+            ("""{"type":"unknown"}""", "/type"),
+            ("""{"type":"apiKey","name":"key","in":"header","description":1}""", "/description"),
+            ("""{"type":"apiKey","in":"header"}""", "/name"),
+            ("""{"type":"apiKey","name":false,"in":"header"}""", "/name"),
+            ("""{"type":"apiKey","name":"key"}""", "/in"),
+            ("""{"type":"apiKey","name":"key","in":null}""", "/in"),
+            ("""{"type":"apiKey","name":"key","in":"body"}""", "/in")
+        };
+        if (format == "Swagger/2.0")
+        {
+            invalid.Add(("""{"$ref":"https://not-acquired.test/scheme"}""", "/type"));
+            invalid.Add(("""{"type":"http","scheme":"basic"}""", "/type"));
+            invalid.Add(("""{"type":"apiKey","name":"key","in":"cookie"}""", "/in"));
+            invalid.Add(("""{"type":"oauth2"}""", "/flow"));
+            invalid.Add(("""{"type":"oauth2","flow":"clientCredentials"}""", "/flow"));
+            invalid.Add(("""{"type":"oauth2","flow":"implicit","scopes":{}}""", "/authorizationUrl"));
+            invalid.Add(("""{"type":"oauth2","flow":"application","scopes":{}}""", "/tokenUrl"));
+            invalid.Add(("""{"type":"oauth2","flow":"accessCode","authorizationUrl":"a","tokenUrl":"t"}""", "/scopes"));
+            invalid.Add(("""{"type":"oauth2","flow":"password","tokenUrl":"t","scopes":{"read":false}}""", "/scopes/read"));
+        }
+        else
+        {
+            invalid.Add(("""{"type":"basic"}""", "/type"));
+            if (format == "OpenAPI/3.0") { invalid.Add(("""{"type":"mutualTLS"}""", "/type")); }
+            invalid.Add(("""{"type":"http"}""", "/scheme"));
+            invalid.Add(("""{"type":"http","scheme":false}""", "/scheme"));
+            invalid.Add(("""{"type":"http","scheme":"bearer","bearerFormat":false}""", "/bearerFormat"));
+            invalid.Add(("""{"type":"openIdConnect"}""", "/openIdConnectUrl"));
+            invalid.Add(("""{"type":"openIdConnect","openIdConnectUrl":false}""", "/openIdConnectUrl"));
+            invalid.Add(("""{"type":"oauth2"}""", "/flows"));
+            invalid.Add(("""{"type":"oauth2","flows":[]}""", "/flows"));
+            invalid.Add(("""{"type":"oauth2","flows":{"implicit":false}}""", "/flows/implicit"));
+            invalid.Add(("""{"type":"oauth2","flows":{"implicit":{"scopes":{}}}}""", "/flows/implicit/authorizationUrl"));
+            invalid.Add(("""{"type":"oauth2","flows":{"clientCredentials":{"scopes":{}}}}""", "/flows/clientCredentials/tokenUrl"));
+            invalid.Add(("""{"type":"oauth2","flows":{"password":{"tokenUrl":"t"}}}""", "/flows/password/scopes"));
+            invalid.Add(("""{"type":"oauth2","flows":{"authorizationCode":{"authorizationUrl":"a","tokenUrl":"t","scopes":{"read/~":false}}}}""",
+                "/flows/authorizationCode/scopes/read~1~0"));
+            invalid.Add(("""{"type":"oauth2","flows":{"implicit":{"authorizationUrl":"a","scopes":{},"refreshUrl":1}}}""",
+                "/flows/implicit/refreshUrl"));
+            invalid.Add(("""{"type":"oauth2","flows":{"implicit":{"authorizationUrl":"a","scopes":{"x-scope":false}}}}""",
+                "/flows/implicit/scopes/x-scope"));
+        }
+        foreach (var bad in new[] { "null", "false", "1", "[]", "{}" })
+        {
+            foreach (var field in new[] { "type", "name", "in", "description" })
+            {
+                var scheme = JsonNode.Parse("""{"type":"apiKey","name":"key","in":"header","description":""}""")!;
+                scheme[field] = JsonNode.Parse(bad);
+                invalid.Add((scheme.ToJsonString(), "/" + field));
+            }
+            if (format == "Swagger/2.0")
+            {
+                foreach (var field in new[] { "flow", "authorizationUrl", "tokenUrl", "scopes" })
+                {
+                    if (field == "scopes" && bad == "{}") { continue; }
+                    var scheme = JsonNode.Parse("""{"type":"oauth2","flow":"accessCode","authorizationUrl":"a","tokenUrl":"t","scopes":{}}""")!;
+                    scheme[field] = JsonNode.Parse(bad);
+                    invalid.Add((scheme.ToJsonString(), "/" + field));
+                }
+            }
+            else
+            {
+                var http = JsonNode.Parse("""{"type":"http","scheme":"BeArEr","bearerFormat":""}""")!;
+                foreach (var field in new[] { "scheme", "bearerFormat" })
+                {
+                    var scheme = http.DeepClone();
+                    scheme[field] = JsonNode.Parse(bad);
+                    invalid.Add((scheme.ToJsonString(), "/" + field));
+                }
+                foreach (var field in new[] { "authorizationUrl", "tokenUrl", "refreshUrl", "scopes" })
+                {
+                    if (field == "scopes" && bad == "{}") { continue; }
+                    var scheme = JsonNode.Parse("""{"type":"oauth2","flows":{"authorizationCode":{"authorizationUrl":"a","tokenUrl":"t","refreshUrl":"","scopes":{}}}}""")!;
+                    scheme["flows"]!["authorizationCode"]![field] = JsonNode.Parse(bad);
+                    invalid.Add((scheme.ToJsonString(), "/flows/authorizationCode/" + field));
+                }
+            }
+        }
+        foreach (var (json, suffix) in invalid)
+        {
+            foreach (var selector in new[] { "operations/Target", "operations/Missing", "/paths/~1items/get" })
+            {
+                var document = new JsonObject
+                {
+                    [versionField] = version,
+                    ["paths"] = new JsonObject
+                    {
+                        ["/items"] = new JsonObject { ["get"] = new JsonObject { ["operationId"] = "Target" } },
+                        ["/remote"] = new JsonObject { ["$ref"] = "https://not-acquired.test/path" }
+                    }
+                };
+                var schemes = new JsonObject { ["Unused"] = JsonNode.Parse(json) };
+                if (format == "Swagger/2.0") { document["securityDefinitions"] = schemes; }
+                else { document["components"] = new JsonObject { ["securitySchemes"] = schemes }; }
+                var calls = 0;
+                var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                    resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+                await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.security_scheme");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo((format == "Swagger/2.0"
+                    ? "$/securityDefinitions/Unused" : "$/components/securitySchemes/Unused") + suffix);
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                await Assert.That(calls).IsEqualTo(0);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "openapi", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "openapi", "3.1.1")]
+    [Arguments("Swagger/2.0", "swagger", "2.0")]
+    public async Task HttpInlineSecuritySchemesPreserveFormatTypesFlowsAndOpaqueExtensions(
+        string format, string versionField, string version)
+    {
+        var schemes = new JsonObject
+        {
+            ["Key"] = JsonNode.Parse("""{"type":"apiKey","name":"","in":"query","description":"","x-data":{"$ref":"https://not-acquired.test"}}""")
+        };
+        if (format == "Swagger/2.0")
+        {
+            schemes["Basic"] = new JsonObject { ["type"] = "basic" };
+            foreach (var flow in new[] { "implicit", "password", "application", "accessCode" })
+            {
+                schemes[flow] = new JsonObject
+                {
+                    ["type"] = "oauth2", ["flow"] = flow, ["authorizationUrl"] = "relative/auth",
+                    ["tokenUrl"] = "relative/token",
+                    ["scopes"] = JsonNode.Parse("""{"read/~":"","x-private":{"$ref":"https://not-acquired.test"}}""")
+                };
+            }
+        }
+        else
+        {
+            schemes["Http"] = JsonNode.Parse("""{"type":"http","scheme":"CustomAuth","bearerFormat":"opaque"}""");
+            schemes["Bearer"] = JsonNode.Parse("""{"type":"http","scheme":"BeArEr","bearerFormat":""}""");
+            schemes["Cookie"] = JsonNode.Parse("""{"type":"apiKey","name":"key","in":"cookie"}""");
+            schemes["Discovery"] = JsonNode.Parse("""{"type":"openIdConnect","openIdConnectUrl":"relative/discovery"}""");
+            schemes["Ref"] = JsonNode.Parse("""{"$ref":"https://not-acquired.test/scheme"}""");
+            schemes["EmptyFlows"] = JsonNode.Parse("""{"type":"oauth2","flows":{}}""");
+            var flows = new JsonObject { ["x-private"] = false };
+            foreach (var flow in new[] { "implicit", "password", "clientCredentials", "authorizationCode" })
+            {
+                flows[flow] = JsonNode.Parse("""{"authorizationUrl":"relative/auth","tokenUrl":"relative/token","refreshUrl":"","scopes":{"read/~":"","x-scope":"scope"}}""");
+            }
+            schemes["OAuth"] = new JsonObject { ["type"] = "oauth2", ["flows"] = flows };
+            if (format == "OpenAPI/3.1") { schemes["Tls"] = new JsonObject { ["type"] = "mutualTLS" }; }
+        }
+        var operation = JsonNode.Parse("""{"operationId":"Target","security":[{},{"Key":[]}]}""");
+        var document = new JsonObject
+        {
+            [versionField] = version,
+            ["paths"] = new JsonObject { ["/items"] = new JsonObject { ["get"] = operation } }
+        };
+        if (format == "Swagger/2.0") { document["securityDefinitions"] = schemes; }
+        else { document["components"] = new JsonObject { ["securitySchemes"] = schemes }; }
+        foreach (var selector in new[] { "operations/Target", "/paths/~1items/get", "operations/Missing" })
+        {
+            var calls = 0;
+            var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+            await Assert.That(result.Status).IsEqualTo(selector.EndsWith("Missing", StringComparison.Ordinal)
+                ? ApiOperationResolutionStatus.NotFound : ApiOperationResolutionStatus.Selected);
+            await Assert.That(calls).IsEqualTo(0);
+            if (result.Status == ApiOperationResolutionStatus.Selected)
+            {
+                await Assert.That(JsonNode.DeepEquals(operation, JsonNode.Parse(result.Operation.GetRawText()))).IsTrue();
+            }
+        }
+    }
+
+    [Test]
+    public async Task HttpInlineSecuritySchemeAdmissionRechecksAfterDeclarationReplacement()
+    {
+        var document = JsonNode.Parse("""
+            {"openapi":"3.1.1","components":{"securitySchemes":{
+                "Used":{"type":"http","scheme":"basic"},"Unused":{"type":"mutualTLS"}}},
+             "paths":{"/items":{"get":{"operationId":"Target","security":[{"Used":[]}]}}}}
+            """)!;
+        var selector = ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target");
+        foreach (var bad in new[] { false, true, false })
+        {
+            document["components"]!["securitySchemes"]!["Unused"] = bad
+                ? new JsonObject { ["type"] = "apiKey", ["name"] = "key" }
+                : new JsonObject { ["type"] = "mutualTLS" };
+            var result = ApiOperationDocumentResolver.Resolve("OpenAPI/3.1", "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()), selector);
+            await Assert.That(result.Status).IsEqualTo(bad
+                ? ApiOperationResolutionStatus.Invalid : ApiOperationResolutionStatus.Selected);
+            if (bad)
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.security_scheme");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo("$/components/securitySchemes/Unused/in");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+            else { await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("Target"); }
+        }
+    }
+
+    [Test]
     [Arguments(false)]
     [Arguments(true)]
     public async Task HttpSecurityNameBindingChecksCallbackAncestorsAndChildren(bool ancestor)
@@ -246,7 +459,9 @@ public class ApiOperationReferenceTests
                 ["security"] = JsonNode.Parse("""[{"oauth":["root"]}]"""),
                 ["paths"] = new JsonObject { ["/items"] = new JsonObject { ["get"] = operation.DeepClone() } }
             };
-            var schemes = JsonNode.Parse("""{"oauth":{"type":"oauth2"}}""");
+            var schemes = format == "Swagger/2.0"
+                ? JsonNode.Parse("""{"oauth":{"type":"oauth2","flow":"implicit","authorizationUrl":"auth","scopes":{}}}""")
+                : JsonNode.Parse("""{"oauth":{"type":"oauth2","flows":{}}}""");
             if (format == "Swagger/2.0") { document["securityDefinitions"] = schemes; }
             else { document["components"] = new JsonObject { ["securitySchemes"] = schemes }; }
             foreach (var referenced in new[] { false, true })
@@ -1540,7 +1755,9 @@ public class ApiOperationReferenceTests
             {
                 document[collection] = empty ? new JsonObject() : new JsonObject
                 {
-                    ["entry/~ é"] = new JsonObject { ["$ref"] = "https://not-acquired.test/unused", ["opaque"] = false }
+                    ["entry/~ é"] = collection == "securityDefinitions"
+                        ? new JsonObject { ["type"] = "basic", ["x-private"] = new JsonObject { ["$ref"] = "https://not-acquired.test/unused" } }
+                        : new JsonObject { ["$ref"] = "https://not-acquired.test/unused", ["opaque"] = false }
                 };
             }
             foreach (var selector in new[] { "operations/Target", "/paths/~1x/get", "operations/Missing" })
