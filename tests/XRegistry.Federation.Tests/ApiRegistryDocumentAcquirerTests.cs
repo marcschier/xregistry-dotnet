@@ -52,7 +52,6 @@ public class ApiRegistryDocumentAcquirerTests
     [Arguments("xid", "/apigroups/g/apis/other/meta", FederationErrorCode.InvalidPackage)]
     [Arguments("apiid", "other", FederationErrorCode.InvalidPackage)]
     [Arguments("defaultversionid", "", FederationErrorCode.InvalidPackage)]
-    [Arguments("xref", "/apigroups/g/apis/other", FederationErrorCode.UnsupportedOperation)]
     public async Task ApiDefaultMetadataFailuresPreventVersionReads(string field, string value, FederationErrorCode code)
     {
         var source = new Source();
@@ -118,6 +117,95 @@ public class ApiRegistryDocumentAcquirerTests
             await ApiRegistryDocumentAcquirer.AcquireDefaultAsync(cancelled, "/apigroups/g/apis/a",
                 cancellationToken: cancellation.Token)).Throws<OperationCanceledException>();
         await Assert.That(cancelled.Reads.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task ApiDefaultAcquisitionFollowsOneLocalAliasAndRetainsItsActualVersionOrigin()
+    {
+        var source = AliasSource();
+        var budget = new FederationReadBudget();
+        var acquired = await ApiRegistryDocumentAcquirer.AcquireDefaultAsync(source, "/apigroups/g/apis/a", budget);
+        await Assert.That(acquired.VersionXid).IsEqualTo("/apigroups/g/apis/b/versions/1");
+        await Assert.That(acquired.Document.Origin).IsEqualTo(source.DocumentOrigin);
+        await Assert.That(source.Reads.Select(r => r.Target).SequenceEqual([
+            "/apigroups/g/apis/a/meta", "/apigroups/g/apis/b/meta",
+            "/apigroups/g/apis/b/versions/1", "/apigroups/g/apis/b/versions/1",
+            "/apigroups/g/apis/b/meta", "/apigroups/g/apis/a/meta"])).IsTrue();
+        await Assert.That(budget.Requests).IsEqualTo(6L);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task ApiDefaultAcquisitionRejectsObservedAliasChangesWithoutReadingTheNewTarget(bool remove)
+    {
+        var source = AliasSource(changeAlias: true, removeAlias: remove);
+        var error = await Assert.That(async () =>
+            await ApiRegistryDocumentAcquirer.AcquireDefaultAsync(source, "/apigroups/g/apis/a"))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected alias race rejection.");
+        await Assert.That(error.Code).IsEqualTo(FederationErrorCode.InconsistentSnapshot);
+        await Assert.That(source.Reads.Count).IsEqualTo(6);
+        await Assert.That(source.Reads.Any(r => r.Target.Contains("/other/", StringComparison.Ordinal))).IsFalse();
+    }
+
+    [Test]
+    public async Task ApiDefaultAcquisitionDoesNotReplaceAnUnavailableAliasTargetOrSkipItsFinalRecheck()
+    {
+        var source = AliasSource();
+        source.MissingMeta = "/apigroups/g/apis/b/meta";
+        var missing = await Assert.That(async () =>
+            await ApiRegistryDocumentAcquirer.AcquireDefaultAsync(source, "/apigroups/g/apis/a"))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected target failure.");
+        await Assert.That(missing.Code).IsEqualTo(FederationErrorCode.NotFound);
+        await Assert.That(source.Reads.Count).IsEqualTo(2);
+        var bounded = AliasSource();
+        var limit = await Assert.That(async () =>
+            await ApiRegistryDocumentAcquirer.AcquireDefaultAsync(bounded, "/apigroups/g/apis/a",
+                new(new(maxRequests: 5))))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected alias recheck exhaustion.");
+        await Assert.That(limit.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        await Assert.That(bounded.Reads.Count).IsEqualTo(5);
+    }
+
+    [Test]
+    [Arguments("/schemagroups/g/schemas/b")]
+    [Arguments("/apigroups/g/apis/b/versions/1")]
+    [Arguments("https://must-not-fetch.invalid/apigroups/g/apis/b")]
+    public async Task ApiDefaultAcquisitionRejectsWrongTypeAndNonlocalAliasTargetsBeforeReadingThem(string target)
+    {
+        var source = new Source();
+        source.Meta["xref"] = target;
+        var error = await Assert.That(async () =>
+            await ApiRegistryDocumentAcquirer.AcquireDefaultAsync(source, "/apigroups/g/apis/a"))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected alias target rejection.");
+        await Assert.That(error.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(source.Reads.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task ApiDefaultAcquisitionRejectsAliasChainsBeforeAnyVersionRead()
+    {
+        var source = AliasSource();
+        source.ExtraMeta["/apigroups/g/apis/b/meta"]["xref"] = "/apigroups/g/apis/a";
+        var error = await Assert.That(async () =>
+            await ApiRegistryDocumentAcquirer.AcquireDefaultAsync(source, "/apigroups/g/apis/a"))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected alias chain rejection.");
+        await Assert.That(error.Code).IsEqualTo(FederationErrorCode.UnsupportedOperation);
+        await Assert.That(source.Reads.Count).IsEqualTo(2);
+    }
+
+    private static Source AliasSource(bool changeAlias = false, bool removeAlias = false)
+    {
+        var source = new Source { ChangeAlias = changeAlias, RemoveAlias = removeAlias };
+        source.Meta["xref"] = "/apigroups/g/apis/b";
+        source.ExtraMeta.Add("/apigroups/g/apis/b/meta", new()
+        {
+            ["xid"] = "/apigroups/g/apis/b/meta", ["apiid"] = "b", ["defaultversionid"] = "1"
+        });
+        source.SelectedPath = "/apigroups/g/apis/b/versions/1";
+        source.Metadata["xid"] = source.SelectedPath;
+        source.Metadata["apiid"] = "b";
+        return source;
     }
 
     [Test]
@@ -296,6 +384,10 @@ public class ApiRegistryDocumentAcquirerTests
         internal List<FederationReadRequest> Reads { get; } = [];
         internal string SelectedPath { get; set; } = Path;
         internal bool ChangeDefault { get; init; }
+        internal bool ChangeAlias { get; init; }
+        internal bool RemoveAlias { get; init; }
+        internal string? MissingMeta { get; set; }
+        internal Dictionary<string, JsonObject> ExtraMeta { get; } = new(StringComparer.Ordinal);
         internal JsonObject Meta { get; } = new()
         {
             ["xid"] = "/apigroups/g/apis/a/meta", ["apiid"] = "a", ["defaultversionid"] = "1"
@@ -314,11 +406,25 @@ public class ApiRegistryDocumentAcquirerTests
             ObjectDisposedException.ThrowIf(Disposed, this);
             Reads.Add(request);
             Cancellation?.Cancel();
+            if (request.Target == MissingMeta)
+            {
+                throw new FederationException(FederationErrorCode.NotFound, "Missing alias target.");
+            }
             if (request.Target == "/apigroups/g/apis/a/meta")
             {
                 if (ChangeDefault && Reads.Count > 1) { Meta["defaultversionid"] = "2"; }
+                if (ChangeAlias && Reads.Count > 1)
+                {
+                    if (RemoveAlias) { Meta.Remove("xref"); }
+                    else { Meta["xref"] = "/apigroups/g/apis/other"; }
+                }
                 return ValueTask.FromResult(FederationReadResult.FromMetadata(request.Target, Context,
                     RegistryJson.Parse(Meta.ToJsonString()).RootElement));
+            }
+            if (ExtraMeta.TryGetValue(request.Target, out var extra))
+            {
+                return ValueTask.FromResult(FederationReadResult.FromMetadata(request.Target, Context,
+                    RegistryJson.Parse(extra.ToJsonString()).RootElement));
             }
             if (request.Operation == FederationOperation.Entity)
             {

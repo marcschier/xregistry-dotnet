@@ -86,6 +86,20 @@ public class HttpTests
         var stickyDefault = await ApiRegistryDocumentAcquirer.AcquireDefaultAsync(source, "/apigroups/g/apis/a", budget);
         await Assert.That(stickyDefault.VersionXid).IsEqualTo(version);
         await Assert.That(stickyDefault.ContentDigest).IsEqualTo(acquired.ContentDigest);
+        using (var aliasRequest = new HttpRequestMessage(HttpMethod.Put, "/apigroups/g/apis/alias$details")
+        {
+            Content = new StringContent("""{"meta":{"xref":"/apigroups/g/apis/a"}}""",
+                Encoding.UTF8, "application/json")
+        })
+        using (var response = await host.Client.SendAsync(aliasRequest))
+        {
+            await Assert.That(response.IsSuccessStatusCode).IsTrue()
+                .Because(await response.Content.ReadAsStringAsync());
+        }
+        var aliasDefault = await ApiRegistryDocumentAcquirer.AcquireDefaultAsync(source, "/apigroups/g/apis/alias", budget);
+        await Assert.That(aliasDefault.VersionXid).IsEqualTo(version);
+        await Assert.That(aliasDefault.Document.Origin).IsEqualTo(acquired.Document.Origin);
+        await Assert.That(aliasDefault.ContentDigest).IsEqualTo(acquired.ContentDigest);
         var reference = ApiOperationReference.Parse(version + "#operations/Read");
         source.Dispose();
         await host.DisposeAsync();

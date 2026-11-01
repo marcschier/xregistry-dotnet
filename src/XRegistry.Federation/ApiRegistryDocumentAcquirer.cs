@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Security.Cryptography;
+using System.Text.Json;
 using XRegistry.Models;
 
 namespace XRegistry.Federation;
@@ -31,7 +32,7 @@ public sealed class ApiAcquiredDocument
     public FederationDocument Document { get; }
 }
 
-/// <summary>Acquires an explicitly selected API Version without dependency retrieval or API invocation.</summary>
+/// <summary>Acquires exact or captured Core-default API Versions without dependency retrieval or invocation.</summary>
 public static class ApiRegistryDocumentAcquirer
 {
     /// <summary>Reads exact Version metadata and document bytes from one caller-authorized source.</summary>
@@ -58,7 +59,7 @@ public static class ApiRegistryDocumentAcquirer
     }
 
     /// <summary>Captures a Resource's Core default and acquires that exact Version from the same source.</summary>
-    /// <remarks>Aliases are not resolved. An observed default change fails without retry or fallback.</remarks>
+    /// <remarks>One local same-type alias is allowed. Observed alias/default changes fail without retry or fallback.</remarks>
     public static async ValueTask<ApiAcquiredDocument> AcquireDefaultAsync(IFederationReadSource source,
         string resourceXid, FederationReadBudget? budget = null, CancellationToken cancellationToken = default)
     {
@@ -75,9 +76,26 @@ public static class ApiRegistryDocumentAcquirer
         RequireApi(reads, resource);
         var metaRequest = new FederationReadRequest(FederationOperation.Entity, resourceXid + "/meta");
         var before = await reads.MetadataAsync(metaRequest).ConfigureAwait(false);
+        var originalMeta = metaRequest;
+        var originalId = resource.Parts[3];
+        var alias = Alias(before, originalMeta.Target, originalId);
+        if (alias is not null)
+        {
+            var target = new FederationReadRequest(FederationOperation.Entity, alias);
+            if (target.Parts.Length != 4 ||
+                !ReferenceEquals(DocumentTreeFormat.Resource(reads.Model, resource.Parts),
+                    DocumentTreeFormat.Resource(reads.Model, target.Parts)))
+            {
+                throw FederationJson.Invalid("The API alias does not identify the same local Resource model type.");
+            }
+            budget.CheckHops(1);
+            resource = target;
+            metaRequest = new(FederationOperation.Entity, alias + "/meta");
+            before = await reads.MetadataAsync(metaRequest).ConfigureAwait(false);
+        }
         var defaultId = DefaultVersion(before, metaRequest.Target, resource.Parts[3]);
         var version = new FederationReadRequest(FederationOperation.Entity,
-            resourceXid + "/versions/" + Uri.EscapeDataString(defaultId));
+            resource.Target + "/versions/" + Uri.EscapeDataString(defaultId));
         var acquired = await AcquireVersionAsync(reads, version, budget, cancellationToken).ConfigureAwait(false);
         var after = await reads.MetadataAsync(metaRequest).ConfigureAwait(false);
         if (DefaultVersion(after, metaRequest.Target, resource.Parts[3]) != defaultId)
@@ -85,11 +103,21 @@ public static class ApiRegistryDocumentAcquirer
             throw new FederationException(FederationErrorCode.InconsistentSnapshot,
                 "The API Resource default changed during acquisition.");
         }
+        if (alias is not null)
+        {
+            var rechecked = await reads.MetadataAsync(originalMeta).ConfigureAwait(false);
+            var currentAlias = Alias(rechecked, originalMeta.Target, originalId);
+            if (currentAlias is null || !FederationSyntax.SameXid(currentAlias, alias))
+            {
+                throw new FederationException(FederationErrorCode.InconsistentSnapshot,
+                    "The API alias target changed during acquisition.");
+            }
+        }
         reads.Check();
         return acquired;
     }
 
-    private static string DefaultVersion(System.Text.Json.JsonElement metadata, string metaXid, string apiId)
+    private static JsonElement MetaEntity(JsonElement metadata, string metaXid, string apiId)
     {
         var entity = metadata.TryGetProperty("entity", out var nested) ? nested : metadata;
         if (!FederationSyntax.SameXid(FederationJson.String(entity, "xid"), metaXid) ||
@@ -97,10 +125,22 @@ public static class ApiRegistryDocumentAcquirer
         {
             throw FederationJson.Invalid("API Resource Meta identifies a different entity.");
         }
+        return entity;
+    }
+
+    private static string? Alias(JsonElement metadata, string metaXid, string apiId)
+    {
+        var entity = MetaEntity(metadata, metaXid, apiId);
+        return entity.TryGetProperty("xref", out _) ? FederationJson.String(entity, "xref") : null;
+    }
+
+    private static string DefaultVersion(JsonElement metadata, string metaXid, string apiId)
+    {
+        var entity = MetaEntity(metadata, metaXid, apiId);
         if (entity.TryGetProperty("xref", out _))
         {
             throw new FederationException(FederationErrorCode.UnsupportedOperation,
-                "An API alias must be resolved to its authorized source before default acquisition.");
+                "API alias chains are not supported during default acquisition.");
         }
         var id = FederationJson.String(entity, "defaultversionid");
         if (id.Length == 0)

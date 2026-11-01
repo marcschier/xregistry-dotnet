@@ -113,12 +113,18 @@ captures Core's `defaultversionid`, acquires that exact Version, then reads
 Meta again. It follows a sticky or prerelease default without applying SemVer
 selection. An observed default change produces `InconsistentSnapshot`; a
 missing selected Version fails without choosing a replacement. Aliases must
-be resolved to their authorized source before this operation.
+identify the same compiled Resource type in the selected local source.
+One local `xref` is followed; chains, wrong-type and nonlocal targets fail
+before Version acquisition. The result identifies the target's exact Version
+and retains its Document origin rather than inventing an alias retrieval URL.
 
 Both Meta reads and exact-Version acquisition use the same captured source
 and cumulative budget. Exhaustion before the final Meta check is a failure,
 not an unchecked success. These observations do not eliminate ABA changes
 or establish a transaction across live HTTP reads.
+For an alias, the target default and original alias mapping are both rechecked.
+Retargeting or removing the alias during acquisition fails without reading
+the new target or returning previously acquired bytes.
 
 The live HTTP workflow publishes two API Versions, acquires the older exact
 Version after the default changes, verifies the current and sticky Core
