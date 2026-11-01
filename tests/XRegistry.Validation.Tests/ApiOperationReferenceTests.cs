@@ -11,6 +11,94 @@ namespace XRegistry.Validation.Tests;
 public class ApiOperationReferenceTests
 {
     [Test]
+    [Arguments("OpenAPI/3.0", "openapi", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "openapi", "3.1.1")]
+    public async Task IdenticalTemplatedPathHierarchiesCannotReturnPartialOperationSelections(
+        string format, string versionField, string version)
+    {
+        foreach (var (first, second) in new[]
+        {
+            ("/pets/{id}", "/pets/{name}"),
+            ("/{kind}/{id}", "/{type}/{name}"),
+            ("/pets/{id}/owners/{owner}", "/pets/{pet}/owners/{person}"),
+            ("/pets/prefix-{id}.json", "/pets/prefix-{name}.json")
+        })
+        {
+            foreach (var reverse in new[] { false, true })
+            {
+                var paths = new JsonObject
+                {
+                    ["/control"] = new JsonObject { ["get"] = new JsonObject { ["operationId"] = "Target" } }
+                };
+                paths[reverse ? second : first] = new JsonObject();
+                paths[reverse ? first : second] = new JsonObject();
+                paths["/remote"] = new JsonObject { ["$ref"] = "https://not-acquired.test/path" };
+                var document = new JsonObject { [versionField] = version, ["paths"] = paths };
+                foreach (var selector in new[] { "operations/Target", "operations/Missing", "/paths/~1control/get" })
+                {
+                    var calls = 0;
+                    var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                        System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                        ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                        resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+                    await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.path_template_conflict");
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo("$/paths/" +
+                        (reverse ? first : second).Replace("~", "~0").Replace("/", "~1"));
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                    await Assert.That(calls).IsEqualTo(0);
+                }
+            }
+        }
+    }
+
+    [Test]
+    public async Task SwaggerDoesNotInheritOpenApiTemplateHierarchyRestrictions()
+    {
+        var document = """
+            {"swagger":"2.0","paths":{"/pets/{id}":{"get":{"operationId":"Target"}},"/pets/{name}":{}}}
+            """u8.ToArray();
+        foreach (var selector in new[] { "operations/Target", "/paths/~1pets~1%7Bid%7D/get" })
+        {
+            var result = ApiOperationDocumentResolver.Resolve("Swagger/2.0", "application/json", document,
+                ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector));
+            await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+            await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("Target");
+            await Assert.That(result.DocumentPath).IsEqualTo("$/paths/~1pets~1{id}/get");
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "openapi", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "openapi", "3.1.1")]
+    [Arguments("Swagger/2.0", "swagger", "2.0")]
+    public async Task DistinctAndAmbiguousPathHierarchiesAreNotIdenticalTemplates(
+        string format, string versionField, string version)
+    {
+        var paths = new JsonObject
+        {
+            ["/pets/{id}"] = new JsonObject { ["get"] = new JsonObject { ["operationId"] = "Target" } },
+            ["/pets/mine"] = new JsonObject(),
+            ["/pets/{id}/owners"] = new JsonObject(),
+            ["/{entity}/me"] = new JsonObject(),
+            ["/books/{id}"] = new JsonObject(),
+            ["/Pets/{name}"] = new JsonObject(),
+            ["/pets/{id}/"] = new JsonObject(),
+            ["x-template/{id}"] = new JsonObject { ["/pets/{name}"] = true }
+        };
+        var document = new JsonObject { [versionField] = version, ["paths"] = paths };
+        foreach (var selector in new[] { "operations/Target", "/paths/~1pets~1%7Bid%7D/get" })
+        {
+            var result = ApiOperationDocumentResolver.Resolve(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector));
+            await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+            await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("Target");
+            await Assert.That(result.DocumentPath).IsEqualTo("$/paths/~1pets~1{id}/get");
+        }
+    }
+
+    [Test]
     [Arguments("definitions")]
     [Arguments("parameters")]
     [Arguments("responses")]

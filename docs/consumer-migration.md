@@ -523,6 +523,16 @@ OpenAPI and Swagger `paths` entries must start with `/`; `x-` entries are
 specification extensions. Operation-ID selection ignores extension payloads,
 including apparent operations or references inside them. Under `paths`, a JSON
 Pointer must select an HTTP method beneath a slash-prefixed path, not extension data.
+OpenAPI rejects templated paths with identical hierarchies that
+differ only in placeholder names before named or pointer selection. Reversing
+declaration order does not permit a partial result or dependency acquisition.
+Literal path text remains case-sensitive, and concrete paths may coexist with
+templates. Distinct ambiguous hierarchies such as `/{entity}/me` and
+`/books/{id}` remain permitted; the resolver does not choose runtime URL
+matching precedence. This checks the Paths Object identity rule, not the
+complete path-template or parameter-declaration grammar.
+Swagger 2.0 does not declare the same prohibition, so that format does not
+inherit this OpenAPI rule.
 OpenAPI 3.1 operation-ID selection also searches `webhooks`, including referenced
 Path Items. Webhook names are exact strings, not slash-prefixed paths; an `x-`
 name in this map is a webhook, not a Paths specification extension. Duplicate

@@ -212,6 +212,9 @@ public static partial class ApiOperationDocumentResolver
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
     private static partial Regex OpenApiVersion();
 
+    [GeneratedRegex(@"\{[^{}]+\}", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
+    private static partial Regex PathTemplateExpression();
+
     /// <summary>Gets the exact optional resolution features available from this implementation.</summary>
     public static ApiOperationResolverCapabilities Capabilities { get; } = new();
 
@@ -515,6 +518,25 @@ public static partial class ApiOperationDocumentResolver
         {
             return Failure(ApiOperationResolutionStatus.Invalid, "document.paths",
                 "The API document must contain a paths object.", "$/paths");
+        }
+        if (format != "Swagger/2.0")
+        {
+            var pathHierarchies = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var path in paths.EnumerateObject())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!path.Name.StartsWith('/'))
+                {
+                    continue;
+                }
+                var hierarchy = PathTemplateExpression().Replace(path.Name, "{}");
+                if (!pathHierarchies.Add(hierarchy))
+                {
+                    return Failure(ApiOperationResolutionStatus.Invalid, "document.path_template_conflict",
+                        "Templated paths with the same hierarchy cannot differ only in template parameter names.",
+                        "$/paths/" + Escape(path.Name));
+                }
+            }
         }
         return null;
     }
