@@ -11,12 +11,12 @@ not evidence that the client/server implements them. Keyword extraction can
 combine multiple obligations and miss procedural or artifact-only requirements;
 each family requires explicit semantic coverage review.
 
-Historical pinned files: **318**. Historical normative documents: **17**. Combined extracted blocks: **4233**.
+Historical pinned files: **318**. Historical normative documents: **17**. Combined extracted blocks: **4248**.
 
 Historical sources and their reviews are retained separately from the
 successor composition; new source-qualified requirements do not inherit
 historical implementation claims.
-Successor files: **51**. Successor normative documents: **22**. Selected informative designs: **1**.
+Successor files: **96**. Successor normative documents: **22**. Selected informative designs: **1**.
 
 A selected informative design is an implementation target, not an adopted
 standard. Its obligations still require explicit semantic review.
@@ -35,29 +35,29 @@ it does not transfer historical qualification to a successor.
 
 | Family | Blocks | Reviewed | Qualified |
 | --- | ---: | ---: | ---: |
-| api | 53 | 6 | 0 |
+| api | 53 | 0 | 0 |
 | catalog | 141 | 141 | 0 |
 | cloudevents | 8 | 4 | 0 |
-| core | 1209 | 892 | 19 |
+| core | 1209 | 602 | 8 |
 | endpoint | 189 | 95 | 0 |
 | events | 144 | 59 | 0 |
 | federation | 120 | 56 | 0 |
 | file | 41 | 19 | 0 |
 | git | 39 | 18 | 0 |
-| http | 520 | 275 | 0 |
+| http | 520 | 258 | 0 |
 | http-federation | 84 | 36 | 0 |
 | mapping | 95 | 39 | 0 |
-| media-endpoints | 7 | 7 | 0 |
+| media-endpoints | 7 | 0 | 0 |
 | message | 178 | 91 | 0 |
-| model | 487 | 274 | 0 |
+| model | 487 | 241 | 0 |
 | oci | 140 | 60 | 0 |
 | opcua | 205 | 0 | 0 |
 | openusd | 122 | 59 | 0 |
 | pagination | 88 | 36 | 0 |
 | publication | 65 | 0 | 0 |
 | registry | 143 | 0 | 0 |
-| schema | 45 | 21 | 0 |
-| wot | 110 | 5 | 0 |
+| schema | 47 | 21 | 0 |
+| wot | 123 | 0 | 0 |
 
 ## Artifacts and procedural coverage
 

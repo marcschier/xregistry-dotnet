@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
 import importlib.util
 from pathlib import Path
 import sys
@@ -24,6 +25,8 @@ DRAFT = "811de7d20711dd3edc8c676ae634adebee235188"
 CLOSURE = "514f6eacd6297821e949dcb81a03e2943f5cb88e"
 API = "5f9d0134407927c0fae3b95e0aa844548e3756d6"
 MEDIA = "9613f002c82c9568fbefc5f1f0cf0490d6df572a"
+CURRENT_MERGED = "d290b1ec38d9e5436decb5ba0854f2321401a118"
+CURRENT_DRAFT = "d757328e4e3ca70761244b4a77cacba6bfb5599b"
 
 
 def sources() -> list[dict]:
@@ -99,7 +102,25 @@ def sources() -> list[dict]:
     for entry in draft["files"]:
         if entry["path"] in replaced_paths:
             entry["role"] = "review-only"
-    result = [merged, draft, closure, api, media]
+    current_merged = deepcopy(merged)
+    current_merged.update(id="upstream-d290b1ec", commit=CURRENT_MERGED)
+    current_draft = deepcopy(draft)
+    current_draft.update(id="pr571-d757328e", commit=CURRENT_DRAFT)
+    current_roles = {entry["path"]: entry["role"] for entry in closure["files"]}
+    for entry in current_draft["files"]:
+        entry["role"] = current_roles.get(entry["path"], entry["role"])
+    for path in (
+        "workingdrafts/models/wot/samples/README.md",
+        "workingdrafts/models/wot/samples/cloudevents.json",
+        "workingdrafts/models/wot/tests/test_wot_examples.py",
+    ):
+        current_draft["files"].append({
+            "path": path, "owner": "wot", "kind": "artifact", "role": "review-only",
+        })
+    for source in (merged, draft, closure):
+        for entry in source["files"]:
+            entry["role"] = "review-only"
+    result = [merged, draft, closure, api, media, current_merged, current_draft]
     for source in result:
         source["files"].append({"path": "LICENSE", "owner": "license", "kind": "license", "role": "review-only"})
     return result

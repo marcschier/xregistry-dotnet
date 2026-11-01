@@ -142,6 +142,22 @@ line-ending conversion.
 
 ## Review workflow
 
+The active successor composition uses merged upstream `d290b1ec` and draft
+PR #571 `d757328e`, while retaining the earlier source sets as review-only
+evidence. PR #715 and #716 remain separate review-only inputs. Refreshing the
+composition does not transfer implementation or qualification claims to the
+new source-qualified requirements, even when their text is unchanged.
+
+After an intentional source refresh, use
+`python eng\specification\manage.py generate --retire-superseded` to archive
+requirements from retained sources that are now review-only. This explicit
+operation verifies each retired clause against its original source and writes
+a content-addressed review archive under `tests/Conformance/Reviews`. The active
+ledger records the archive's path and hash; later generation verifies those
+bytes. Historical clauses and missing or modified source evidence cannot be
+retired through this command. Ordinary generation still rejects disappearing
+requirements.
+
 `generate` extracts uppercase normative keywords from prose blocks and table
 rows in the seventeen explicitly listed normative documents. It records
 content-derived IDs, exact line ranges, section paths, source hashes and family

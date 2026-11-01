@@ -319,7 +319,7 @@ class ProvenanceAndReviewTests(unittest.TestCase):
         sources = {source["id"]: source for source in freezer.sources()}
         self.assertEqual(set(sources), {
             "upstream-4a7e7f5e", "pr571-811de7d2", "pr571-514f6eac",
-            "pr715-5f9d0134", "pr716-9613f002",
+            "pr715-5f9d0134", "pr716-9613f002", "upstream-d290b1ec", "pr571-d757328e",
         })
         prior = sources["pr571-811de7d2"]
         current = sources["pr571-514f6eac"]
@@ -331,12 +331,62 @@ class ProvenanceAndReviewTests(unittest.TestCase):
             "workingdrafts/publication/design/design.md": "selected-design",
         }
         old_roles = {entry["path"]: entry["role"] for entry in prior["files"]}
-        new_roles = {entry["path"]: entry["role"] for entry in current["files"]}
-        self.assertEqual(new_roles, expected | {"LICENSE": "review-only"})
+        new_roles = {entry["path"]: entry["role"] for entry in sources["pr571-d757328e"]["files"]}
+        self.assertTrue(all(entry["role"] == "review-only" for entry in current["files"]))
         for path in expected:
             self.assertEqual(old_roles[path], "review-only", path)
+            self.assertEqual(new_roles[path], expected[path], path)
         self.assertEqual(old_roles["workingdrafts/models/wot/model.json"], "review-only")
-        self.assertEqual(old_roles["workingdrafts/bindings/oci.md"], "normative")
+        self.assertEqual(old_roles["workingdrafts/bindings/oci.md"], "review-only")
+        self.assertEqual(new_roles["workingdrafts/bindings/oci.md"], "normative")
+        self.assertEqual(sources["upstream-d290b1ec"]["commit"], freezer.CURRENT_MERGED)
+        self.assertEqual(sources["pr571-d757328e"]["commit"], freezer.CURRENT_DRAFT)
+        self.assertEqual(new_roles["workingdrafts/models/wot/samples/cloudevents.json"], "review-only")
+
+    def test_explicit_successor_retirement_preserves_reviews_and_verifies_archive_bytes(self) -> None:
+        manifest = self.pin_successors()
+        ledger = tool.generate_ledger(self.root, tool.verify_corpus(self.root))
+        row = next(row for row in ledger["requirements"] if row["source"].get("role") == "normative")
+        row["review"] = {"status": "reviewed", "note": "Retained old contract.", "roles": ["client"]}
+        row["implementation"] = {"status": "implemented", "testIds": ["ExactBytes"], "nativeEvidence": []}
+        self.write_json(tool.LEDGER, ledger)
+        manifest["composition"][0]["role"] = "review-only"
+        self.write_successors(manifest)
+        lock = tool.verify_corpus(self.root)
+        with self.assertRaisesRegex(tool.SpecificationError, "disappeared"):
+            tool.generate_ledger(self.root, lock)
+        refreshed = tool.generate_ledger(self.root, lock, retire_superseded=True)
+        self.assertNotIn(row["id"], [entry["id"] for entry in refreshed["requirements"]])
+        archive = refreshed["supersededReviews"][0]
+        path = self.root / archive["file"]
+        archived = tool.read_json(path)
+        self.assertEqual(archived["requirements"], [row])
+        self.assertEqual(archived["successorsSha256"], ledger["successorsSha256"])
+        self.assertEqual(tool.sha256(path.read_bytes()), archive["sha256"])
+        self.write_json(tool.LEDGER, refreshed)
+        self.assertEqual(tool.generate_ledger(self.root, lock), refreshed)
+        self.assertEqual(tool.generate_ledger(self.root, lock, retire_superseded=True), refreshed)
+        path.write_bytes(path.read_bytes() + b" ")
+        with self.assertRaisesRegex(tool.SpecificationError, "archive is missing or changed"):
+            tool.generate_ledger(self.root, lock)
+
+    def test_retirement_cannot_hide_historical_or_forged_requirements(self) -> None:
+        manifest = self.pin_successors()
+        ledger = tool.generate_ledger(self.root, tool.verify_corpus(self.root))
+        historical = ledger["requirements"][0]
+        historical["id"] = "invented-historical-id"
+        self.write_json(tool.LEDGER, ledger)
+        with self.assertRaisesRegex(tool.SpecificationError, "without a retained superseded source"):
+            tool.generate_ledger(self.root, self.lock, retire_superseded=True)
+        ledger["requirements"].pop(0)
+        row = next(row for row in ledger["requirements"] if row["source"].get("role") == "normative")
+        row["text"] = "Forged obligation MUST disappear."
+        self.write_json(tool.LEDGER, ledger)
+        manifest["composition"][0]["role"] = "review-only"
+        self.write_successors(manifest)
+        with self.assertRaisesRegex(tool.SpecificationError, "does not match its retained source"):
+            tool.generate_ledger(self.root, tool.verify_corpus(self.root), retire_superseded=True)
+        self.assertFalse((self.root / "tests/Conformance/Reviews").exists())
 
     def test_successor_acquisition_failure_does_not_change_selected_sources(self) -> None:
         self.pin_successors()

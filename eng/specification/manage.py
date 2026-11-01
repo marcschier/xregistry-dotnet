@@ -671,8 +671,10 @@ def validate_review(row: dict[str, Any]) -> None:
             raise SpecificationError(f"Invalid native evidence: {row.get('id')}")
 
 
-def generate_ledger(root: Path, lock: dict[str, Any]) -> dict[str, Any]:
+def generate_ledger(root: Path, lock: dict[str, Any], *, retire_superseded: bool = False) -> dict[str, Any]:
     previous: dict[str, dict[str, Any]] = {}
+    archives: list[dict[str, str]] = []
+    previous_successor_hash = None
     semantic_reviewed = False
     correction_hash = sha256((root / CORRECTIONS).read_bytes()) if (root / CORRECTIONS).exists() else None
     successors = successor_sources(root, lock)
@@ -689,6 +691,22 @@ def generate_ledger(root: Path, lock: dict[str, Any]) -> dict[str, Any]:
         ):
             raise SpecificationError("Invalid existing requirement ledger.")
         semantic_reviewed = old["semanticCoverageReviewed"]
+        previous_successor_hash = old.get("successorsSha256")
+        archives = old.get("supersededReviews", [])
+        if not isinstance(archives, list):
+            raise SpecificationError("Invalid superseded review inventory.")
+        for archive in archives:
+            if (
+                not isinstance(archive, dict)
+                or set(archive) != {"file", "sha256"}
+                or not isinstance(archive["sha256"], str)
+                or not HASH.fullmatch(archive["sha256"])
+                or archive["file"] != f"tests/Conformance/Reviews/{archive['sha256']}.json"
+            ):
+                raise SpecificationError("Invalid superseded review descriptor.")
+            path = contained(root, archive["file"])
+            if not path.is_file() or sha256(path.read_bytes()) != archive["sha256"]:
+                raise SpecificationError("Superseded review archive is missing or changed.")
         corrections_changed = old.get("correctionsSha256") != correction_hash
         if semantic_reviewed and corrections_changed:
             raise SpecificationError("The corrected specification baseline changed; reset and repeat semantic coverage review explicitly.")
@@ -736,6 +754,40 @@ def generate_ledger(root: Path, lock: dict[str, Any]) -> dict[str, Any]:
                 row["review"] = old["review"]
                 row["implementation"] = old["implementation"]
             rows.append(row)
+    if previous and retire_superseded:
+        candidates = {source["file"]: source for source in successors if source["role"] == "review-only"}
+        extracted_sources: dict[str, dict[str, Any]] = {}
+        for old in previous.values():
+            source = candidates.get(old["source"]["path"])
+            if source is None or old["source"].get("role") not in ("normative", "selected-design"):
+                raise SpecificationError(f"Cannot retire a requirement without a retained superseded source: {old['id']}")
+            if source["file"] not in extracted_sources:
+                extracted = extract_requirements(
+                    source["file"], contained(root, source["file"]).read_text(encoding="utf-8"),
+                    source["sha256"], source["owner"])
+                extracted_sources[source["file"]] = {row["id"]: row for row in extracted}
+            original = extracted_sources[source["file"]].get(old["id"])
+            expected_source = {
+                **(original["source"] if original is not None else {}),
+                **{key: source[key] for key in ("repository", "commit", "status", "sourceId")},
+                "role": old["source"]["role"], "originalPath": source["path"],
+            }
+            if original is None or old["source"] != expected_source or any(
+                old[key] != original[key] for key in ("text", "owner", "strengths")
+            ):
+                raise SpecificationError(f"Superseded requirement does not match its retained source: {old['id']}")
+        archive_bytes = encoded({
+            "schemaVersion": 1, "successorsSha256": previous_successor_hash,
+            "requirements": list(previous.values()),
+        })
+        digest = sha256(archive_bytes)
+        archive_file = f"tests/Conformance/Reviews/{digest}.json"
+        archive_path = contained(root, archive_file)
+        if archive_path.exists() and archive_path.read_bytes() != archive_bytes:
+            raise SpecificationError("Refusing to overwrite a superseded review archive.")
+        write_output(archive_path, archive_bytes)
+        archives = [*archives, {"file": archive_file, "sha256": digest}]
+        previous.clear()
     if previous:
         raise SpecificationError(
             "Existing requirements disappeared; review the baseline change explicitly: "
@@ -751,6 +803,8 @@ def generate_ledger(root: Path, lock: dict[str, Any]) -> dict[str, Any]:
     }
     if successor_hash is not None:
         result["successorsSha256"] = successor_hash
+    if archives:
+        result["supersededReviews"] = archives
     return result
 
 
@@ -969,15 +1023,19 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("operation", choices=("import", "verify", "generate", "check", "release", "status"))
     parser.add_argument("--snapshot", type=Path)
+    parser.add_argument("--retire-superseded", action="store_true",
+                        help="Generate only: archive requirements whose retained successor source is now review-only.")
     args = parser.parse_args(argv)
     try:
+        if args.retire_superseded and args.operation != "generate":
+            raise SpecificationError("--retire-superseded requires generate.")
         if args.operation == "import":
             if args.snapshot is None:
                 raise SpecificationError("Import requires --snapshot.")
             import_snapshot(ROOT, args.snapshot)
         lock = verify_corpus(ROOT)
         if args.operation != "verify":
-            ledger = generate_ledger(ROOT, lock)
+            ledger = generate_ledger(ROOT, lock, retire_superseded=args.retire_superseded)
             if args.operation == "status":
                 sys.stdout.buffer.write(encoded(accounting(ledger, lock)))
                 return 0
