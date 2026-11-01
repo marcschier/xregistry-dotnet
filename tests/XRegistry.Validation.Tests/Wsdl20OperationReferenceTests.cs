@@ -788,6 +788,33 @@ public class Wsdl20OperationReferenceTests
     }
 
     [Test]
+    public async Task Wsdl20IdentityConstraintsRemainOwnedSchemaDeclarations()
+    {
+        var result = await Resolve("""
+            <types xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:schema targetNamespace="urn:api">
+              <xs:element name="Payload">
+                <xs:key name="Identity"><xs:selector xpath="t:item"/><xs:field xpath="@id"/><xs:field xpath="@region"/></xs:key>
+                <xs:keyref name="Reference" refer="t:Identity"><xs:selector xpath="t:other"/><xs:field xpath="@id"/><xs:field xpath="@region"/></xs:keyref>
+              </xs:element>
+            </xs:schema></types>
+            <interface name="Port"><operation name="Read"><input element="t:Payload"/><output element="#none"/></operation></interface>
+            """);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        var schema = result.Wsdl20Operation!.SchemaElements.Single();
+        await Assert.That(schema.ElementName).IsEqualTo("{urn:api}Payload");
+        var declaration = XElement.Parse(schema.ElementXml);
+        var xs = XNamespace.Get("http://www.w3.org/2001/XMLSchema");
+        var key = declaration.Element(xs + "key")!;
+        var reference = declaration.Element(xs + "keyref")!;
+        await Assert.That(key.Attribute("name")!.Value).IsEqualTo("Identity");
+        await Assert.That(key.Element(xs + "selector")!.Attribute("xpath")!.Value).IsEqualTo("t:item");
+        await Assert.That(reference.Attribute("refer")!.Value).IsEqualTo("t:Identity");
+        await Assert.That(reference.Elements(xs + "field").Select(field => field.Attribute("xpath")!.Value)
+            .SequenceEqual(["@id", "@region"])).IsTrue();
+        await Assert.That(schema.SchemaDocuments.Single().Contains("name=\"Reference\"", StringComparison.Ordinal)).IsTrue();
+    }
+
+    [Test]
     public async Task Wsdl20NamedGroupsRetainReferencesAndDefinitionsWithoutFlattening()
     {
         var result = await Resolve("""

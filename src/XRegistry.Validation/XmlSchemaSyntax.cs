@@ -247,8 +247,7 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
             _elements++;
             if (reader.NamespaceURI == Namespace)
             {
-                if (reader.LocalName is "pattern" or "redefine"
-                    or "key" or "keyref" or "unique")
+                if (reader.LocalName is "pattern" or "redefine")
                 {
                     ValidationContext.Fail(DocumentValidationStatus.Unsupported, "$", "xsd.construct_unsupported",
                         $"The '{reader.LocalName}' construct is outside the bounded XSD compilation policy.");
@@ -263,6 +262,16 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
                 if (reader.LocalName is "group" or "attributeGroup" && reader.GetAttribute("ref") is not null)
                 {
                     ReserveExpansion(2, "named group reference");
+                }
+                if (reader.LocalName is "selector" or "field")
+                {
+                    var length = (reader.GetAttribute("xpath")?.Length ?? 0) + 1L;
+                    if (length > context.Options.MaxWork / length)
+                    {
+                        ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$", "limit.work",
+                            "XML Schema identity XPath compilation exceeds the conservative text budget.");
+                    }
+                    context.Work(length * length);
                 }
                 if (reader.LocalName is "element" or "choice" or "sequence" or "any" or "group" &&
                     choiceBranches.ContainsKey(reader.Depth - 1))

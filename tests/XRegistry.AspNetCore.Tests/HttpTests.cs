@@ -63,7 +63,9 @@ public class HttpTests
                 <xs:element name="Age" minOccurs="0"><xs:complexType><xs:complexContent><xs:extension base="p:AgeBase">
                   <xs:group ref="p:AgeFields"/><xs:attributeGroup ref="p:AgeAttributes"/>
                 </xs:extension></xs:complexContent></xs:complexType></xs:element>
-              </xs:all></xs:complexType></xs:element>
+              </xs:all></xs:complexType>
+                <xs:unique name="Names"><xs:selector xpath="p:Name"/><xs:field xpath="."/></xs:unique>
+              </xs:element>
               <xs:element name="Failure" type="xs:string"/>
             </xs:schema>
             """;
@@ -138,6 +140,8 @@ public class HttpTests
         await Assert.That(payload.SchemaDocuments.Single().Contains("name=\"AgeBase\"", StringComparison.Ordinal)).IsTrue();
         await Assert.That(payload.ElementXml.Contains("ref=\"p:AgeFields\"", StringComparison.Ordinal)).IsTrue();
         await Assert.That(payload.ElementXml.Contains("ref=\"p:AgeAttributes\"", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(payload.ElementXml.Contains("name=\"Names\"", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(payload.ElementXml.Contains("xpath=\"p:Name\"", StringComparison.Ordinal)).IsTrue();
         var missing = await ApiOperationDocumentResolver.ResolveAsync(acquired.Format, acquired.Document.ContentType!,
             memory.ToArray(), ApiOperationReference.Parse(version +
                 "#interfaces/%7Burn:api%7DNewPort/operations/%7Burn:api%7DRead"),

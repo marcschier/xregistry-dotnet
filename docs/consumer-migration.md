@@ -48,7 +48,6 @@ element and group-placement checks. WSDL selection retains those declarations
 as schema data. Finite minimum and maximum occurrences use overflow-safe XML
 integer parsing and cumulative work reservations; values beyond the budget
 remain unchecked rather than reaching unreserved compilation.
-Identity constraints remain unsupported.
 
 Union simple types use the native XSD compiler with ordered named, inline,
 list and nested members. Missing or invalid member types fail compilation;
@@ -76,6 +75,14 @@ reference contributes a factor of two to the structural reservation, including
 repeated uses, so valid large expansions can remain unchecked. WSDL retains
 authored references and the complete schema context rather than flattening
 group definitions into the selected element.
+
+Identity-constraint declarations now compile through the native XSD 1.0
+selector/field grammar and key-reference checks. Every XPath expression reserves
+`(character count + 1)^2` work before dependency acquisition; exhausted budgets
+leave the schema unchecked. Imported keys require caller acquisition, and
+referenced QNames are not retrieval URLs. WSDL retains authored selectors,
+ordered fields and key references. Schema compilation does not evaluate
+instance uniqueness, required key values or referential integrity.
 
 For `Protobuf/2` and `Protobuf/3`, schema validation checks declaration names
 in their containing scope. Fields, oneofs, nested types and enum values cannot

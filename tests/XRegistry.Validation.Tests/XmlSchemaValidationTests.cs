@@ -10,6 +10,139 @@ namespace XRegistry.Validation.Tests;
 public class XmlSchemaValidationTests
 {
     [Test]
+    [Arguments("key", ".//item", "@id")]
+    [Arguments("unique", "item | other", "@id")]
+    [Arguments("key", ".", ".")]
+    [Arguments("unique", "child::item", "attribute::id")]
+    [Arguments("key", ".//p:item | p:other", "@p:id")]
+    [Arguments("unique", "*", "p:value/@id")]
+    public async Task IdentityConstraintsCompileNativeRestrictedXPath(
+        string kind, string selector, string field)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(
+            "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\" xmlns:p=\"urn:items\">" +
+            $"<xs:element name=\"root\"><xs:{kind} name=\"Identity\"><xs:selector xpath=\"{selector}\"/>" +
+            $"<xs:field xpath=\"{field}\"/></xs:{kind}></xs:element></xs:schema>"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("key")]
+    [Arguments("unique")]
+    public async Task KeyReferencesCompileForwardAndCompositeTargets(string kind)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(
+            "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"root\">" +
+            "<xs:keyref name=\"Reference\" refer=\"Identity\"><xs:selector xpath=\"other\"/>" +
+            "<xs:field xpath=\"@id\"/><xs:field xpath=\"@region\"/></xs:keyref>" +
+            $"<xs:{kind} name=\"Identity\"><xs:selector xpath=\"item\"/>" +
+            $"<xs:field xpath=\"@id\"/><xs:field xpath=\"@region\"/></xs:{kind}>" +
+            "</xs:element></xs:schema>"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("""<xs:key name="K"><xs:selector xpath="item"/></xs:key>""")]
+    [Arguments("""<xs:unique name="K"><xs:field xpath="@id"/></xs:unique>""")]
+    [Arguments("""<xs:key name="K"><xs:selector xpath="@id"/><xs:field xpath="@id"/></xs:key>""")]
+    [Arguments("""<xs:key name="K"><xs:selector xpath="item[1]"/><xs:field xpath="@id"/></xs:key>""")]
+    [Arguments("""<xs:key name="K"><xs:selector xpath="../item"/><xs:field xpath="@id"/></xs:key>""")]
+    [Arguments("""<xs:key name="K"><xs:selector xpath="item"/><xs:field xpath="count(@id)"/></xs:key>""")]
+    [Arguments("""<xs:key name="K"><xs:selector xpath="q:item"/><xs:field xpath="@id"/></xs:key>""")]
+    [Arguments("""<xs:keyref name="R" refer="Missing"><xs:selector xpath="item"/><xs:field xpath="@id"/></xs:keyref>""")]
+    [Arguments("""
+        <xs:key name="K"><xs:selector xpath="item"/><xs:field xpath="@id"/></xs:key>
+        <xs:keyref name="R" refer="K"><xs:selector xpath="other"/><xs:field xpath="@id"/><xs:field xpath="@region"/></xs:keyref>
+        """)]
+    [Arguments("""
+        <xs:key name="K"><xs:selector xpath="item"/><xs:field xpath="@id"/></xs:key>
+        <xs:unique name="K"><xs:selector xpath="other"/><xs:field xpath="@id"/></xs:unique>
+        """)]
+    [Arguments("""
+        <xs:keyref name="R" refer="R"><xs:selector xpath="item"/><xs:field xpath="@id"/></xs:keyref>
+        """)]
+    public async Task IdentityConstraintsRejectMalformedXPathMissingKeysAndFieldContradictions(string constraints)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(
+            "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"root\">" +
+            constraints + "</xs:element></xs:schema>"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("xsd.schema");
+    }
+
+    [Test]
+    [Arguments(-1, DocumentValidationStatus.Indeterminate)]
+    [Arguments(0, DocumentValidationStatus.Valid)]
+    [Arguments(1, DocumentValidationStatus.Valid)]
+    public async Task IdentityXPathReservationsHonorTheExactCumulativeWorkBoundary(
+        int delta, DocumentValidationStatus expected)
+    {
+        var bytes = Encoding.UTF8.GetBytes("""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:element name="root"><xs:key name="K"><xs:selector xpath="item"/><xs:field xpath="@id"/></xs:key></xs:element>
+            </xs:schema>
+            """);
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", bytes,
+            new() { MaxWork = bytes.Length * 2L + 25 + 25 + 16 + 1 + delta });
+        await Assert.That(result.Status).IsEqualTo(expected);
+        if (expected == DocumentValidationStatus.Indeterminate)
+        {
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("limit.work");
+        }
+    }
+
+    [Test]
+    public async Task ImportedIdentityKeysUseCallerAcquisitionAndNeverRetrieveReferQNames()
+    {
+        var calls = new List<string>();
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes("""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:b="urn:base">
+              <xs:import namespace="urn:base" schemaLocation="base.xsd"/>
+              <xs:element name="root"><xs:keyref name="R" refer="b:Identity">
+                <xs:selector xpath="item"/><xs:field xpath="@id"/>
+              </xs:keyref></xs:element>
+            </xs:schema>
+            """), new()
+        {
+            DocumentUri = new("https://schemas.example/root.xsd"),
+            ResolveReference = (reference, _) =>
+            {
+                calls.Add(reference);
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes("""
+                    <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:base">
+                      <xs:element name="base"><xs:key name="Identity">
+                        <xs:selector xpath="item"/><xs:field xpath="@id"/>
+                      </xs:key></xs:element>
+                    </xs:schema>
+                    """));
+            }
+        });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(calls.SequenceEqual(["https://schemas.example/base.xsd"])).IsTrue();
+    }
+
+    [Test]
+    [Arguments("selector")]
+    [Arguments("field")]
+    public async Task IdentityXPathTextReservesWorkBeforeDependencyAcquisition(string kind)
+    {
+        var calls = 0;
+        var longPath = string.Join("/", Enumerable.Repeat("item", 1000));
+        var selector = kind == "selector" ? longPath : "item";
+        var field = kind == "field" ? longPath : "@id";
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(
+            "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:include schemaLocation=\"never.xsd\"/>" +
+            $"<xs:element name=\"root\"><xs:key name=\"K\"><xs:selector xpath=\"{selector}\"/>" +
+            $"<xs:field xpath=\"{field}\"/></xs:key></xs:element></xs:schema>"),
+            new() { ResolveReference = (_, _) => { calls++; throw new UnauthorizedAccessException(); } });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Indeterminate);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("limit.work");
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
     [Arguments("""
         <xs:group name="Fields"><xs:sequence><xs:element name="x"/></xs:sequence></xs:group>
         <xs:complexType name="Row"><xs:group ref="Fields"/></xs:complexType>

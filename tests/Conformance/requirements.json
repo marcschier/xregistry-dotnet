@@ -117252,6 +117252,7 @@
           "Wsdl20OperationReferenceTests.Wsdl20ChoiceParticlesRemainOneNativeGlobalMessageElement",
           "Wsdl20OperationReferenceTests.Wsdl20ComplexContentRetainsBaseAndDerivedDeclarationsWithoutFlatteningParticles",
           "Wsdl20OperationReferenceTests.Wsdl20NamedGroupsRetainReferencesAndDefinitionsWithoutFlattening",
+          "Wsdl20OperationReferenceTests.Wsdl20IdentityConstraintsRemainOwnedSchemaDeclarations",
           "Wsdl20OperationReferenceTests.Wsdl20HugeOccurrenceIntegersNeverReachUnreservedSchemaCompilation",
           "Wsdl20OperationReferenceTests.Wsdl20SchemaDependenciesRetainIncludeVisibilityAndForeignCompilerContext",
           "Wsdl20OperationReferenceTests.Wsdl20InlineImportsDoNotMakeForeignElementsReferenceable",

@@ -51,8 +51,7 @@ The larger finite occurrence value contributes to the cumulative structural
 reservation; `maxOccurs="unbounded"` still reserves a finite minimum.
 Oversized reservations report `Indeterminate` with `limit.work` before
 compilation. Malformed or negative occurrence values report `Invalid`.
-This does not enable identity constraints or
-the other explicitly unsupported compiler constructs.
+This does not enable the explicitly unsupported compiler constructs.
 
 XSD 1.0 union simple types can use ordered `memberTypes` QNames, inline simple
 types, list members and nested unions. The native compiler resolves supplied
@@ -87,7 +86,7 @@ structural reservation for base/local composition, bounding chains before
 native compilation. This conservative reservation can leave valid derivations
 unchecked. WSDL selection retains the authored base QName, local declaration
 and complete schema context rather than flattening inherited particles.
-Patterns, identity constraints and redefinitions remain
+Patterns and redefinitions remain
 outside the compiler policy; extension does not bypass that boundary.
 
 Named XSD model groups and attribute groups use native QName resolution,
@@ -100,6 +99,18 @@ including repeated references and references within definitions, so cached
 definitions cannot bypass expansion limits. Valid long chains may remain
 unchecked under this conservative bound. WSDL retains references and complete
 schema context without copying group members into the selected declaration.
+
+XSD 1.0 `key`, `unique` and `keyref` declarations use the native compiler's
+restricted selector and field XPath grammar. It rejects missing selectors or
+fields, malformed paths, undeclared prefixes, duplicate constraint names,
+missing referenced keys and unequal key/keyref field counts. Forward references
+and caller-resolved imported keys remain available. XPath text reserves
+`(character count + 1)^2` work before dependency acquisition; all
+declarations share the cumulative work budget. Long paths can therefore remain
+unchecked. WSDL preserves selectors, ordered fields and referenced QNames in
+the owned schema declaration. This checks schema definitions only: it does not
+evaluate XPath against application instances, enforce instance uniqueness or
+establish that an instance's key references resolve.
 
 Protobuf map declarations reserve their synthetic entry symbol in the containing
 message: `foo` reserves `FooEntry`, and `map_field` reserves `MapFieldEntry`.
