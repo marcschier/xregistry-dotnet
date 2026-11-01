@@ -587,6 +587,16 @@ absent. Repeated references create separate method occurrences, so retrieval
 caching does not waive uniqueness. Unused component definitions do not create
 method occurrences.
 
+The root `components` declaration must be an object. Its seven standard
+collections must be object maps, with object entries except that `schemas`
+also accepts booleans. Malformed declarations fail before Method-reference
+acquisition. Empty collections are accepted. Unused component contents and
+extension values do not activate references or undergo method-contract
+validation, but all their bytes and JSON values consume the operation-wide
+budgets. This follows the
+[OpenRPC Components declaration](https://spec.open-rpc.org/#components);
+it does not establish complete component or JSON Schema validation.
+
 Parameters require distinct exact names and an object or boolean `schema`.
 Required parameters must precede optional parameters; an omitted `required`
 flag means optional. Results use the same content-descriptor shape. Errors

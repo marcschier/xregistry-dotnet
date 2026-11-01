@@ -17517,6 +17517,129 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
+    [Arguments("schemas")]
+    [Arguments("links")]
+    [Arguments("errors")]
+    [Arguments("examples")]
+    [Arguments("examplePairings")]
+    [Arguments("contentDescriptors")]
+    [Arguments("tags")]
+    public async Task OpenRpcUnusedComponentObjectsDoNotActivateDefinitionsOrReferences(string collection)
+    {
+        var document = JsonNode.Parse("""
+            {"openrpc":"1.4.0","info":{"title":"API","version":"1"},
+              "methods":[{"name":"Target","params":[]}],"components":{}}
+            """)!.AsObject();
+        document["components"]![collection] = new JsonObject
+        {
+            ["unused/~"] = new JsonObject { ["$ref"] = "https://not-acquired.test/missing", ["type"] = 0 },
+            ["empty"] = new JsonObject()
+        };
+        var calls = 0;
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenRPC/1.4", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+            resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.DocumentPath).IsEqualTo("$/methods/0");
+        await Assert.That(result.Operation.GetRawText()).IsEqualTo(document["methods"]![0]!.ToJsonString());
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("""null""", "$/components", "document.components")]
+    [Arguments("""[]""", "$/components", "document.components")]
+    [Arguments("""1""", "$/components", "document.components")]
+    [Arguments("""{"schemas":[]}""", "$/components/schemas", "document.component_map")]
+    [Arguments("""{"links":false}""", "$/components/links", "document.component_map")]
+    [Arguments("""{"errors":null}""", "$/components/errors", "document.component_map")]
+    [Arguments("""{"examples":"bad"}""", "$/components/examples", "document.component_map")]
+    [Arguments("""{"examplePairings":1}""", "$/components/examplePairings", "document.component_map")]
+    [Arguments("""{"contentDescriptors":[]}""", "$/components/contentDescriptors", "document.component_map")]
+    [Arguments("""{"tags":null}""", "$/components/tags", "document.component_map")]
+    [Arguments("""{"schemas":{"bad/~":null}}""", "$/components/schemas/bad~1~0", "document.component_value")]
+    [Arguments("""{"schemas":{"bad/~":[]}}""", "$/components/schemas/bad~1~0", "document.component_value")]
+    [Arguments("""{"schemas":{"bad/~":"string"}}""", "$/components/schemas/bad~1~0", "document.component_value")]
+    [Arguments("""{"schemas":{"bad/~":1}}""", "$/components/schemas/bad~1~0", "document.component_value")]
+    [Arguments("""{"links":{"bad/~":true}}""", "$/components/links/bad~1~0", "document.component_value")]
+    [Arguments("""{"errors":{"bad/~":false}}""", "$/components/errors/bad~1~0", "document.component_value")]
+    [Arguments("""{"examples":{"bad/~":null}}""", "$/components/examples/bad~1~0", "document.component_value")]
+    [Arguments("""{"examplePairings":{"bad/~":[]}}""", "$/components/examplePairings/bad~1~0", "document.component_value")]
+    [Arguments("""{"contentDescriptors":{"bad/~":0}}""", "$/components/contentDescriptors/bad~1~0", "document.component_value")]
+    [Arguments("""{"tags":{"bad/~":""}}""", "$/components/tags/bad~1~0", "document.component_value")]
+    public async Task OpenRpcMalformedUnusedComponentDeclarationsFailBeforeMethodAcquisition(
+        string components, string path, string code)
+    {
+        var document = JsonNode.Parse("""
+            {"openrpc":"1.4.0","info":{"title":"API","version":"1"},
+              "methods":[{"$ref":"https://not-acquired.test/method"}]}
+            """)!.AsObject();
+        document["components"] = JsonNode.Parse(components);
+        var calls = 0;
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenRPC/1.4", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+            resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+        await Assert.That(result.Diagnostic.Path).IsEqualTo(path);
+        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("Target", ApiOperationResolutionStatus.Selected)]
+    [Arguments("Missing", ApiOperationResolutionStatus.NotFound)]
+    public async Task OpenRpcEmptyCollectionsBooleanSchemasAndExtensionsPreserveSelection(
+        string name, ApiOperationResolutionStatus status)
+    {
+        var result = ApiOperationDocumentResolver.Resolve("OpenRPC/1.4", "application/json", """
+            {"openrpc":"1.4.0","info":{"title":"API","version":"1"},
+              "methods":[{"name":"Target","params":[]}],"components":{
+                "schemas":{"yes":true,"no":false},"links":{},"errors":{},"examples":{},
+                "examplePairings":{},"contentDescriptors":{},"tags":{},
+                "x-private":{"schemas":null,"$ref":"https://not-acquired.test/extension"}}}
+            """u8.ToArray(), ApiOperationReference.Parse("/apigroups/g/apis/a#operations/" + name));
+        await Assert.That(result.Status).IsEqualTo(status);
+        if (status == ApiOperationResolutionStatus.Selected)
+        {
+            await Assert.That(result.Operation.GetRawText()).IsEqualTo("""{"name":"Target","params":[]}""");
+        }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("selection.not_found");
+        }
+    }
+
+    [Test]
+    [Arguments(-1, ApiOperationResolutionStatus.Selected)]
+    [Arguments(0, ApiOperationResolutionStatus.Selected)]
+    [Arguments(1, ApiOperationResolutionStatus.Indeterminate)]
+    public async Task OpenRpcUnusedComponentExtensionsRetainTheInclusiveWholeDocumentNodeBudget(
+        int excess, ApiOperationResolutionStatus status)
+    {
+        var padding = string.Join(",", Enumerable.Repeat("null",
+            ApiOperationDocumentResolver.Capabilities.MaxDocumentNodes - 13 + excess));
+        var document = """
+            {"openrpc":"1.4.0","info":{"title":"API","version":"1"},"methods":[{"name":"Target","params":[]}],
+              "components":{"schemas":{"unused":{}},"x-private":[
+            """ + padding + "]}}";
+        var result = ApiOperationDocumentResolver.Resolve("OpenRPC/1.4", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"));
+        await Assert.That(result.Status).IsEqualTo(status);
+        if (status == ApiOperationResolutionStatus.Selected)
+        {
+            await Assert.That(result.Operation.GetRawText()).IsEqualTo("""{"name":"Target","params":[]}""");
+        }
+        else
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("limit.nodes");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
     [Arguments("Target", true)]
     [Arguments("Missing", true)]
     [Arguments("Target", false)]

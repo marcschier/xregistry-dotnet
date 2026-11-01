@@ -10,6 +10,7 @@ public static partial class ApiOperationDocumentResolver
 {
     private static void ValidateOpenRpcDocumentMetadata(JsonElement root, ValidationContext budget)
     {
+        ValidateOpenRpcComponents(root, budget);
         ValidateOpenRpcServers(root, "$", budget);
         ValidateOpenRpcDocumentation(root, "$");
         ValidateOpenRpcOptionalString(root, "$schema", "$");
@@ -31,6 +32,30 @@ public static partial class ApiOperationDocumentResolver
             ValidateOpenRpcOptionalString(metadata, "url", path);
             ValidateOpenRpcUrl(metadata, "url", path);
             if (member == "contact") { ValidateOpenRpcOptionalString(metadata, "email", path); }
+        }
+    }
+
+    private static void ValidateOpenRpcComponents(JsonElement root, ValidationContext budget)
+    {
+        if (!root.TryGetProperty("components", out var components)) { return; }
+        ValidationContext.Require(components.ValueKind == JsonValueKind.Object, "$/components",
+            "document.components", "OpenRPC components must be an object.");
+        foreach (var member in new[] { "schemas", "links", "errors", "examples", "examplePairings", "contentDescriptors", "tags" })
+        {
+            if (!components.TryGetProperty(member, out var entries)) { continue; }
+            var path = "$/components/" + member;
+            budget.Work(path: path);
+            ValidationContext.Require(entries.ValueKind == JsonValueKind.Object, path,
+                "document.component_map", "An OpenRPC component collection must be an object.");
+            foreach (var entry in entries.EnumerateObject())
+            {
+                var entryPath = path + "/" + Escape(entry.Name);
+                budget.Work(path: entryPath);
+                ValidationContext.Require(entry.Value.ValueKind == JsonValueKind.Object ||
+                    member == "schemas" && entry.Value.ValueKind is JsonValueKind.True or JsonValueKind.False,
+                    entryPath, "document.component_value",
+                    "An OpenRPC component must be an object, or a boolean for a Schema Object.");
+            }
         }
     }
 
