@@ -116,7 +116,8 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
         var targets = new List<XmlSchema>();
         _dependencies.Add(schema, targets);
         var declarations = root.Elements().Where(element => element.Name == XName.Get("import", Namespace) ||
-            element.Name == XName.Get("include", Namespace)).ToArray();
+            element.Name == XName.Get("include", Namespace) ||
+            element.Name == XName.Get("redefine", Namespace)).ToArray();
         ValidationContext.Require(declarations.Length == schema.Includes.Count, "$", "xsd.schema",
             "Every schema dependency must correspond to its authored declaration.");
         for (var index = 0; index < schema.Includes.Count; index++)
@@ -247,7 +248,7 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
             _elements++;
             if (reader.NamespaceURI == Namespace)
             {
-                if (reader.LocalName is "pattern" or "redefine")
+                if (reader.LocalName == "pattern")
                 {
                     ValidationContext.Fail(DocumentValidationStatus.Unsupported, "$", "xsd.construct_unsupported",
                         $"The '{reader.LocalName}' construct is outside the bounded XSD compilation policy.");
@@ -258,6 +259,10 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
                 if (reader.LocalName == "complexContent")
                 {
                     ReserveExpansion(2, "base/local content composition");
+                }
+                if (reader.LocalName == "redefine")
+                {
+                    ReserveExpansion(2, "schema redefinition composition");
                 }
                 if (reader.LocalName is "group" or "attributeGroup" && reader.GetAttribute("ref") is not null)
                 {

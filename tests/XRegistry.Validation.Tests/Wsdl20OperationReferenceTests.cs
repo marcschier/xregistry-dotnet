@@ -788,6 +788,38 @@ public class Wsdl20OperationReferenceTests
     }
 
     [Test]
+    public async Task Wsdl20RedefinitionExposesOriginalElementsWithOwnedReplacementContext()
+    {
+        var calls = new List<string>();
+        var result = await ApiOperationDocumentResolver.ResolveAsync("WSDL/2.0", "application/xml",
+            Document("""
+                <types xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:schema targetNamespace="urn:api">
+                  <xs:redefine schemaLocation="base.xsd"><xs:simpleType name="Value">
+                    <xs:restriction base="t:Value"><xs:maxLength value="4"/></xs:restriction>
+                  </xs:simpleType></xs:redefine>
+                </xs:schema></types>
+                <interface name="Port"><operation name="Read"><input element="t:Payload"/><output element="#none"/></operation></interface>
+                """), Reference("Port"), new Uri("https://example.test/root.wsdl"), (uri, _) =>
+            {
+                calls.Add(uri);
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes("""
+                    <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="urn:api" targetNamespace="urn:api">
+                      <xs:simpleType name="Value"><xs:restriction base="xs:string"/></xs:simpleType>
+                      <xs:element name="Payload" type="t:Value"/>
+                    </xs:schema>
+                    """));
+            });
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        var schema = result.Wsdl20Operation!.SchemaElements.Single();
+        await Assert.That(schema.ElementName).IsEqualTo("{urn:api}Payload");
+        await Assert.That(schema.DocumentUri!.AbsoluteUri).IsEqualTo("https://example.test/base.xsd");
+        await Assert.That(schema.SchemaDocuments.Count).IsEqualTo(2);
+        await Assert.That(schema.SchemaDocuments.Any(xml => xml.Contains("maxLength", StringComparison.Ordinal))).IsTrue();
+        await Assert.That(schema.ElementXml.Contains("type=\"t:Value\"", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(calls.SequenceEqual(["https://example.test/base.xsd"])).IsTrue();
+    }
+
+    [Test]
     public async Task Wsdl20IdentityConstraintsRemainOwnedSchemaDeclarations()
     {
         var result = await Resolve("""
@@ -901,7 +933,6 @@ public class Wsdl20OperationReferenceTests
 
     [Test]
     [Arguments("<xs:schema targetNamespace=\"urn:api\"><xs:include schemaLocation=\"#xpointer(//xs:schema)\"/></xs:schema>", "wsdl20.schema_fragment")]
-    [Arguments("<xs:schema targetNamespace=\"urn:api\"><xs:redefine schemaLocation=\"never.xsd\"/></xs:schema>", "xsd.construct_unsupported")]
     [Arguments("<xs:schema targetNamespace=\"urn:api\"><xs:element name=\"Payload\"><xs:simpleType><xs:restriction base=\"xs:string\"><xs:pattern value=\".*\"/></xs:restriction></xs:simpleType></xs:element></xs:schema>", "xsd.construct_unsupported")]
     public async Task Wsdl20UnimplementedSchemaPoliciesDoNotAcquireDependenciesOrReturnPartialElements(string schema, string code)
     {

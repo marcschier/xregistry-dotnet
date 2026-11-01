@@ -577,12 +577,7 @@ public static partial class ApiOperationDocumentResolver
                     if (schemaDependencies.ContainsKey(schema)) { return; }
                     XNamespace xs = "http://www.w3.org/2001/XMLSchema";
                     var references = schema.Elements().Where(element => element.Name == xs + "include" ||
-                        element.Name == xs + "import").ToArray();
-                    if (schema.Elements(xs + "redefine").Any())
-                    {
-                        ValidationContext.Fail(DocumentValidationStatus.Unsupported, "$/types", "xsd.construct_unsupported",
-                            "Schema redefinition is outside the bounded XSD compilation policy.");
-                    }
+                        element.Name == xs + "import" || element.Name == xs + "redefine").ToArray();
                     var targets = new XElement[references.Length];
                     schemaDependencies.Add(schema, targets);
                     var namespacePeers = new List<XElement>();
@@ -592,7 +587,7 @@ public static partial class ApiOperationDocumentResolver
                     {
                         var reference = references[index];
                         var target = await ResolveSchemaAsync(reference, schemaOrigins[schema], depth + 1).ConfigureAwait(false);
-                        var include = reference.Name == xs + "include";
+                        var include = reference.Name == xs + "include" || reference.Name == xs + "redefine";
                         var expected = include ? SchemaNamespace(schema) :
                             reference.Attribute("namespace")?.Value.Trim(' ', '\t', '\r', '\n') ?? "";
                         ValidationContext.Require((SchemaNamespace(target) == expected ||
@@ -920,10 +915,10 @@ public static partial class ApiOperationDocumentResolver
                     budget.Work();
                     if (!visible.Add((schema, namespaceName))) { return; }
                     var children = schema.Elements().Where(element => element.Name == xs + "import" ||
-                        element.Name == xs + "include").ToArray();
+                        element.Name == xs + "include" || element.Name == xs + "redefine").ToArray();
                     for (var index = 0; index < children.Length; index++)
                     {
-                        if (children[index].Name == xs + "include")
+                        if (children[index].Name == xs + "include" || children[index].Name == xs + "redefine")
                         {
                             var target = schemaDependencies[schema][index];
                             Expose(target, target.Attribute("targetNamespace") is null ? namespaceName : SchemaNamespace(target));

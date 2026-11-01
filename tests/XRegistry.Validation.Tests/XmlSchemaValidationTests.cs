@@ -10,6 +10,158 @@ namespace XRegistry.Validation.Tests;
 public class XmlSchemaValidationTests
 {
     [Test]
+    public async Task MissingRedefinitionDependenciesNeverBecomeSuccessfulUncheckedCompilation()
+    {
+        var calls = 0;
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes("""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:redefine schemaLocation="base.xsd"><xs:simpleType name="Value"><xs:restriction base="Value"/></xs:simpleType></xs:redefine>
+            </xs:schema>
+            """), new()
+        {
+            ResolveReference = (_, _) =>
+            {
+                calls++;
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(null);
+            }
+        });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Indeterminate);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("reference.unresolved");
+        await Assert.That(calls).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task RedefinitionAcquisitionPropagatesCallerDenial()
+    {
+        var calls = 0;
+        await Assert.That(async () => await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0",
+            Encoding.UTF8.GetBytes("""
+                <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+                  <xs:redefine schemaLocation="base.xsd"><xs:simpleType name="Value"><xs:restriction base="Value"/></xs:simpleType></xs:redefine>
+                </xs:schema>
+                """), new()
+            {
+                ResolveReference = (_, _) => { calls++; throw new UnauthorizedAccessException(); }
+            })).Throws<UnauthorizedAccessException>();
+        await Assert.That(calls).IsEqualTo(1);
+    }
+
+    [Test]
+    [Arguments(null, DocumentValidationStatus.Valid)]
+    [Arguments("urn:other", DocumentValidationStatus.Invalid)]
+    public async Task RedefinitionsApplyNativeChameleonAndNamespaceRules(string? targetNamespace,
+        DocumentValidationStatus expected)
+    {
+        var namespaceAttribute = targetNamespace is null ? "" : $" targetNamespace=\"{targetNamespace}\"";
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes("""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="urn:target" targetNamespace="urn:target">
+              <xs:redefine schemaLocation="base.xsd"><xs:simpleType name="Value">
+                <xs:restriction base="t:Value"><xs:maxLength value="4"/></xs:restriction>
+              </xs:simpleType></xs:redefine><xs:element name="root" type="t:Value"/>
+            </xs:schema>
+            """), new()
+        {
+            ResolveReference = (_, _) => ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes(
+                "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"" + namespaceAttribute +
+                "><xs:simpleType name=\"Value\"><xs:restriction base=\"xs:string\"/></xs:simpleType></xs:schema>"))
+        });
+        await Assert.That(result.Status).IsEqualTo(expected);
+        if (expected == DocumentValidationStatus.Invalid)
+        {
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("xsd.schema");
+        }
+    }
+
+    [Test]
+    [Arguments(2, DocumentValidationStatus.Valid)]
+    [Arguments(16, DocumentValidationStatus.Indeterminate)]
+    public async Task RedefinitionChainsReserveCompositionBeforeNativeCompilation(
+        int count, DocumentValidationStatus expected)
+    {
+        var calls = new List<string>();
+        string Schema(int index) => "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">" +
+            (index == 0 ? "<xs:simpleType name=\"Value\"><xs:restriction base=\"xs:string\"/></xs:simpleType>" :
+                $"<xs:redefine schemaLocation=\"s{index - 1}.xsd\"><xs:simpleType name=\"Value\">" +
+                "<xs:restriction base=\"Value\"><xs:maxLength value=\"4\"/></xs:restriction></xs:simpleType></xs:redefine>") +
+            "</xs:schema>";
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(Schema(count)),
+            new()
+            {
+                ResolveReference = (reference, _) =>
+                {
+                    calls.Add(reference);
+                    var index = int.Parse(reference.AsSpan(1, reference.Length - 5),
+                        System.Globalization.CultureInfo.InvariantCulture);
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes(Schema(index)));
+                }
+            });
+        await Assert.That(result.Status).IsEqualTo(expected);
+        await Assert.That(calls.Count).IsEqualTo(count);
+        if (expected == DocumentValidationStatus.Indeterminate)
+        {
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("limit.work");
+        }
+    }
+
+    [Test]
+    [Arguments("""
+        <xs:simpleType name="Value"><xs:restriction base="Value"><xs:maxLength value="4"/></xs:restriction></xs:simpleType>
+        """, """<xs:simpleType name="Value"><xs:restriction base="xs:string"/></xs:simpleType>""")]
+    [Arguments("""
+        <xs:complexType name="Value"><xs:complexContent><xs:extension base="Value"><xs:sequence><xs:element name="next"/></xs:sequence></xs:extension></xs:complexContent></xs:complexType>
+        """, """<xs:complexType name="Value"><xs:sequence><xs:element name="first"/></xs:sequence></xs:complexType>""")]
+    [Arguments("""
+        <xs:group name="Value"><xs:sequence><xs:group ref="Value"/><xs:element name="next"/></xs:sequence></xs:group>
+        """, """<xs:group name="Value"><xs:sequence><xs:element name="first"/></xs:sequence></xs:group>""")]
+    [Arguments("""
+        <xs:attributeGroup name="Value"><xs:attributeGroup ref="Value"/><xs:attribute name="next"/></xs:attributeGroup>
+        """, """<xs:attributeGroup name="Value"><xs:attribute name="first"/></xs:attributeGroup>""")]
+    public async Task RedefinitionsCompileNativeTypesAndGroupSelfReferences(string replacement, string original)
+    {
+        var calls = new List<string>();
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(
+            "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:redefine schemaLocation=\"base.xsd\">" +
+            replacement + "</xs:redefine></xs:schema>"), new()
+            {
+                DocumentUri = new("https://schemas.example/root.xsd"),
+                ResolveReference = (reference, _) =>
+                {
+                    calls.Add(reference);
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes(
+                        "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">" + original + "</xs:schema>"));
+                }
+            });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+        await Assert.That(calls.SequenceEqual(["https://schemas.example/base.xsd"])).IsTrue();
+    }
+
+    [Test]
+    [Arguments("""<xs:simpleType name="Missing"><xs:restriction base="Missing"/></xs:simpleType>""")]
+    [Arguments("""<xs:simpleType name="Value"><xs:restriction base="xs:string"/></xs:simpleType>""")]
+    [Arguments("""<xs:complexType name="Missing"><xs:complexContent><xs:extension base="Missing"/></xs:complexContent></xs:complexType>""")]
+    [Arguments("""<xs:group name="G"><xs:sequence><xs:group ref="G"/><xs:group ref="G"/></xs:sequence></xs:group>""")]
+    [Arguments("""<xs:group name="G"><xs:sequence><xs:group ref="G" maxOccurs="2"/></xs:sequence></xs:group>""")]
+    [Arguments("""<xs:attributeGroup name="A"><xs:attributeGroup ref="A"/><xs:attributeGroup ref="A"/></xs:attributeGroup>""")]
+    public async Task RedefinitionsRejectMissingOriginalsWrongBasesAndRepeatedSelfReferences(string replacement)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(
+            "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:redefine schemaLocation=\"base.xsd\">" +
+            replacement + "</xs:redefine></xs:schema>"), new()
+            {
+                ResolveReference = (_, _) => ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes("""
+                <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+                  <xs:simpleType name="Value"><xs:restriction base="xs:string"/></xs:simpleType>
+                  <xs:group name="G"><xs:sequence><xs:element name="first"/></xs:sequence></xs:group>
+                  <xs:attributeGroup name="A"><xs:attribute name="first"/></xs:attributeGroup>
+                </xs:schema>
+                """))
+            });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("xsd.schema");
+    }
+
+    [Test]
     [Arguments("key", ".//item", "@id")]
     [Arguments("unique", "item | other", "@id")]
     [Arguments("key", ".", ".")]

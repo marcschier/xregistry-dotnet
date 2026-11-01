@@ -84,6 +84,15 @@ referenced QNames are not retrieval URLs. WSDL retains authored selectors,
 ordered fields and key references. Schema compilation does not evaluate
 instance uniqueness, required key values or referential integrity.
 
+Schema redefinition now shares explicit caller acquisition and native XSD
+derivation checks. Every `redefine` contributes a factor of two to the cumulative
+structural reservation; long chains can remain unchecked. Missing originals,
+wrong bases, repeated group self-references and namespace contradictions fail
+compilation. Caller acquisition is required even for annotation-only
+redefinitions. WSDL exposes original global elements and retains the replacement
+and original schema context without flattening the effective type into the
+selected declaration. This does not add instance validation or pattern support.
+
 For `Protobuf/2` and `Protobuf/3`, schema validation checks declaration names
 in their containing scope. Fields, oneofs, nested types and enum values cannot
 reuse a name in the same message; enum values share their enum's containing

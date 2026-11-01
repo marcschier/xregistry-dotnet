@@ -52,7 +52,9 @@ public class HttpTests
             """;
         const string schema = """
             <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:payload" id="schema" targetNamespace="urn:payload">
-              <xs:complexType name="AgeBase"/>
+              <xs:redefine schemaLocation="age-base.xsd"><xs:complexType name="AgeBase">
+                <xs:complexContent><xs:extension base="p:AgeBase"><xs:attribute name="source" type="xs:string"/></xs:extension></xs:complexContent>
+              </xs:complexType></xs:redefine>
               <xs:attributeGroup name="AgeAttributes"><xs:attribute name="unit" type="xs:string"/></xs:attributeGroup>
               <xs:group name="AgeFields"><xs:choice>
                 <xs:element name="Number"><xs:simpleType><xs:union memberTypes="xs:int xs:boolean"/></xs:simpleType></xs:element>
@@ -95,6 +97,7 @@ public class HttpTests
         await Assert.That(Encoding.UTF8.GetString(memory.ToArray())).IsEqualTo(first);
         var dependencyUri = new Uri(new Uri(acquired.Document.Origin!), "base.wsdl");
         var schemaUri = new Uri(dependencyUri, "payload.xsd");
+        var ageBaseUri = new Uri(schemaUri, "age-base.xsd");
         var calls = new List<string>();
         ValueTask<ReadOnlyMemory<byte>?> ResolveDependency(string uri, CancellationToken cancellation)
         {
@@ -102,7 +105,12 @@ public class HttpTests
             calls.Add(uri);
             return ValueTask.FromResult<ReadOnlyMemory<byte>?>(uri == dependencyUri.AbsoluteUri ?
                 Encoding.UTF8.GetBytes(dependency) : uri == schemaUri.AbsoluteUri ?
-                Encoding.UTF8.GetBytes(schema) : (ReadOnlyMemory<byte>?)null);
+                Encoding.UTF8.GetBytes(schema) : uri == ageBaseUri.AbsoluteUri ?
+                Encoding.UTF8.GetBytes("""
+                    <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:payload">
+                      <xs:complexType name="AgeBase"/>
+                    </xs:schema>
+                    """) : (ReadOnlyMemory<byte>?)null);
         }
         var unresolved = await ApiOperationDocumentResolver.ResolveAsync(acquired.Format, acquired.Document.ContentType!,
             memory.ToArray(), ApiOperationReference.Parse(version +
@@ -113,7 +121,7 @@ public class HttpTests
             memory.ToArray(), ApiOperationReference.Parse(version +
                 "#interfaces/%7Burn:api%7DPort/operations/%7Burn:api%7DRead"), new Uri(acquired.Document.Origin!), ResolveDependency);
         await Assert.That(selected.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
-        await Assert.That(calls.SequenceEqual([dependencyUri.AbsoluteUri, schemaUri.AbsoluteUri])).IsTrue();
+        await Assert.That(calls.SequenceEqual([dependencyUri.AbsoluteUri, schemaUri.AbsoluteUri, ageBaseUri.AbsoluteUri])).IsTrue();
         await Assert.That(selected.DocumentUri).IsEqualTo(dependencyUri);
         await Assert.That(selected.Wsdl20Operation!.OperationName).IsEqualTo("{urn:api}Read");
         await Assert.That(selected.Wsdl20Operation.DeclaringInterfaceName).IsEqualTo("{urn:api}Base");
@@ -134,10 +142,13 @@ public class HttpTests
         await Assert.That(selected.Wsdl20Operation.SchemaElements.Count).IsEqualTo(2);
         var payload = selected.Wsdl20Operation.SchemaElements.Single(element => element.ElementName == "{urn:payload}Payload");
         await Assert.That(payload.ElementXml.Contains("<xs:all>", StringComparison.Ordinal)).IsTrue();
-        await Assert.That(payload.SchemaDocuments.Single().Contains("memberTypes=\"xs:int xs:boolean\"", StringComparison.Ordinal)).IsTrue();
-        await Assert.That(payload.SchemaDocuments.Single().Contains("<xs:choice>", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(payload.SchemaDocuments[0].Contains("memberTypes=\"xs:int xs:boolean\"", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(payload.SchemaDocuments[0].Contains("<xs:choice>", StringComparison.Ordinal)).IsTrue();
         await Assert.That(payload.ElementXml.Contains("base=\"p:AgeBase\"", StringComparison.Ordinal)).IsTrue();
-        await Assert.That(payload.SchemaDocuments.Single().Contains("name=\"AgeBase\"", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(payload.SchemaDocuments.Count).IsEqualTo(2);
+        await Assert.That(payload.SchemaDocuments[0].Contains("<xs:redefine", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(payload.SchemaDocuments[1].Contains("name=\"AgeBase\"", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(payload.SchemaDocumentUris[1]).IsEqualTo(ageBaseUri);
         await Assert.That(payload.ElementXml.Contains("ref=\"p:AgeFields\"", StringComparison.Ordinal)).IsTrue();
         await Assert.That(payload.ElementXml.Contains("ref=\"p:AgeAttributes\"", StringComparison.Ordinal)).IsTrue();
         await Assert.That(payload.ElementXml.Contains("name=\"Names\"", StringComparison.Ordinal)).IsTrue();

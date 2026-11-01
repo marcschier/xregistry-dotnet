@@ -86,8 +86,8 @@ structural reservation for base/local composition, bounding chains before
 native compilation. This conservative reservation can leave valid derivations
 unchecked. WSDL selection retains the authored base QName, local declaration
 and complete schema context rather than flattening inherited particles.
-Patterns and redefinitions remain
-outside the compiler policy; extension does not bypass that boundary.
+Patterns remain outside the compiler policy; extension does not bypass that
+boundary.
 
 Named XSD model groups and attribute groups use native QName resolution,
 including caller-resolved imported definitions. Model groups retain sequence,
@@ -111,6 +111,19 @@ unchecked. WSDL preserves selectors, ordered fields and referenced QNames in
 the owned schema declaration. This checks schema definitions only: it does not
 evaluate XPath against application instances, enforce instance uniqueness or
 establish that an instance's key references resolve.
+
+XSD 1.0 redefinitions use caller-acquired schema dependencies and native
+type/group derivation checks. A redefined type must derive from its original
+name; group and attribute-group self-references retain their native occurrence
+and uniqueness constraints. Missing originals, incorrect bases and namespace
+contradictions fail compilation. No-namespace originals can adopt the containing
+namespace through native chameleon processing. Each `redefine` doubles the
+structural reservation in addition to its content's existing reservations,
+so valid long chains can remain unchecked. This policy requires acquisition
+even for annotation-only redefinitions; unavailable targets remain unresolved.
+WSDL exposes original global elements while retaining both schema documents and
+the authored replacement context. It does not rewrite retained element XML
+with the effective redefined type or generate application instances.
 
 Protobuf map declarations reserve their synthetic entry symbol in the containing
 message: `foo` reserves `FooEntry`, and `map_field` reserves `MapFieldEntry`.
