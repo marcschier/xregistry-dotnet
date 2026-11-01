@@ -116070,13 +116070,18 @@
       ],
       "text": "- MUST be a non-empty format identifier when present.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "ValidateApiGroupMetadata rejects empty, whitespace-containing and malformed SPEC[/VERSION] identifiers. RegistryEngine applies the domain check to completed API Group metadata after model-based type validation. The Group may omit the restriction. This is metadata admission evidence, not language validation or native/platform qualification.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ApiGroupFormatMustBeAnIdentifier",
+          "ApiGroupMayOmitFormat"
+        ],
         "nativeEvidence": []
       }
     },
@@ -116101,13 +116106,20 @@
       ],
       "text": "- When the group declares `format`, every API Version in the group MUST declare a matching `format` value, compared case-insensitively.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "ValidateApiVersionMetadata and API Group constraints compare complete format identifiers ordinally and case-insensitively. RegistryEngine invokes these checks for completed Version metadata; direct and ordinary-mutation tests establish case-only acceptance and distinct-version rejection. This does not validate an API language document or qualify native/platform execution.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ApiVersionFormatMatchesGroupCaseInsensitively",
+          "ApiVersionFormatRejectsDifferentGroupFormat",
+          "ApiGroupEqualsConstraintUsesCaseInsensitiveFormatComparison",
+          "ApiGroupAndVersionFormatsMatchCaseInsensitively"
+        ],
         "nativeEvidence": []
       }
     },
@@ -116132,13 +116144,18 @@
       ],
       "text": "- REQUIRED on every API Version.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The retained API model requires Version format, and ValidateApiVersionMetadata rejects absent and empty values. RegistryEngine applies both metadata validation and the API domain check to completed candidate Versions. This requirement concerns the format declaration, not successful validation of the declared language; native/platform qualification remains separate.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ApiVersionFormatIsRequiredAndNonempty",
+          "ApiVersionMayUseAnUnversionedFormatIdentifier"
+        ],
         "nativeEvidence": []
       }
     },
@@ -116256,13 +116273,24 @@
       ],
       "text": "- All Versions of an API Resource MUST use the same complete `format` value, compared case-insensitively. The API Registry MUST enforce this comparison independently of Core's `matchversions` aspect, which compares string values exactly, including case. Thus `OpenAPI/3.0` and `OpenAPI/3.1` require separate Resources even if the described service contract is unchanged.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "RegistryEngine independently compares API Version format identifiers with ApiVersionFormatsEqual before ordinary Core matchversions checks. Ordinary writes and complete Resource reconciliation accept case-only changes while preserving authored spelling; distinct format versions/families fail atomically without adding a Version or changing stored state. Core string matchversions remains ordinal and case-sensitive, including API and nested paths. No language-validation, compatibility-policy or native/platform qualification is inferred.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ApiVersionFormatsEqualJsonNodeUsesOrdinalCaseInsensitiveCompleteIdentifierEquality",
+          "ApiVersionFormatsEqualJsonElementUsesOrdinalCaseInsensitiveCompleteIdentifierEquality",
+          "ApiVersionFormatCaseOnlyAndExactValuesAreAcceptedByOrdinaryMutation",
+          "ApiGroupAndVersionFormatsRejectDistinctCompleteFormatOnMutation",
+          "ApiVersionFormatsCaseOnlyAndExactValuesAreAcceptedDuringCompleteResourceReconciliation",
+          "DistinctApiVersionFormatsAreRejectedDuringCompleteResourceReconciliationWithoutChangingStoredState",
+          "ApiMatchVersionsRemainCaseSensitiveForFormatAndNestedPaths",
+          "NonApiStringMatchVersionsRemainOrdinalAndCaseSensitive"
+        ],
         "nativeEvidence": []
       }
     },
