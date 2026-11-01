@@ -122,6 +122,20 @@ public static partial class RegistryDomainRules
         ValidateSelector(message, "envelope", true);
         ValidateMessageProtocolSelector(message);
         ValidateSelector(message, "dataschemaformat", true);
+        if (SelectorIs(message, "envelope", "CloudEvents/1.0") && Present(message, "envelopeoptions"))
+        {
+            var options = message.GetProperty("envelopeoptions");
+            if (options.ValueKind != JsonValueKind.Object)
+            {
+                throw Invalid("CloudEvents envelope options must be an object.", "/envelopeoptions");
+            }
+            var mode = OptionalText(options, "mode", "/envelopeoptions/mode");
+            if (mode is not null and not ("binary" or "structured"))
+            {
+                throw Invalid("CloudEvents mode must be binary or structured.", "/envelopeoptions/mode");
+            }
+            _ = OptionalText(options, "format", "/envelopeoptions/format", nonempty: false);
+        }
         if (OptionalText(message, "dataschemauri", "/dataschemauri", nonempty: false) is not null)
         {
             Scalar("uri", message.GetProperty("dataschemauri"), "/dataschemauri", cancellationToken);

@@ -14,6 +14,54 @@ namespace XRegistry.Server.Tests;
 public class MessagePropertyDeclarationTests
 {
     [Test]
+    [Arguments("options", "[]")]
+    [Arguments("mode", "\"custom\"")]
+    [Arguments("format", "42")]
+    public async Task OpaqueCloudEventsOptionsRejectAtomicallyAndAllowReversal(string field, string invalid)
+    {
+        using var packaged = BuiltInRegistryModels.LoadSource(RegistryModelKind.Message);
+        var model = JsonNode.Parse(packaged.RootElement.GetRawText())!;
+        var options = model["groups"]!["messagegroups"]!["resources"]!["messages"]!["attributes"]!
+            ["envelope"]!["ifvalues"]!["CloudEvents/1.0"]!["siblingattributes"]!["envelopeoptions"]!.AsObject();
+        if (field == "options")
+        {
+            options["type"] = "any";
+            options.Remove("attributes");
+        }
+        else
+        {
+            var attribute = options["attributes"]![field]!.AsObject();
+            attribute["type"] = "any";
+            attribute.Remove("enum");
+        }
+        var store = new InMemoryRegistryPersistence();
+        var engine = Create(model.ToJsonString(), store);
+        const string path = "/messagegroups/g/messages/m";
+        string Metadata(string value) => new JsonObject
+        {
+            ["envelope"] = "CloudEvents/1.0", ["envelopemetadata"] = new JsonObject(),
+            ["envelopeoptions"] = field == "options" ? JsonNode.Parse(value) : new JsonObject { [field] = JsonNode.Parse(value) }
+        }.ToJsonString();
+        var valid = field switch { "options" => "{}", "mode" => "\"binary\"", _ => "\"application/cloudevents+json\"" };
+        await ExpectCode(() => Send(engine, RegistryAction.Replace, path, Metadata(invalid)), "invalid_attribute");
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(0);
+        await Send(engine, RegistryAction.Replace, path, Metadata(valid));
+        var before = (await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        await ExpectCode(() => Send(engine, RegistryAction.Patch, path, Metadata(invalid)), "invalid_attribute");
+        await Assert.That((await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText()).IsEqualTo(before);
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        var restarted = Create(model.ToJsonString(), store);
+        await Assert.That((await Send(restarted, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText()).IsEqualTo(before);
+        await Send(engine, RegistryAction.Patch, path, """{"envelopeoptions":null}""");
+        await Assert.That((await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.TryGetProperty("envelopeoptions", out _)).IsFalse();
+        var restored = await Send(engine, RegistryAction.Patch, path, Metadata(valid));
+        await Assert.That(JsonNode.DeepEquals(
+            JsonNode.Parse(restored.Metadata!.RootElement.GetProperty("envelopeoptions").GetRawText()),
+            JsonNode.Parse(RegistryJson.Parse(Metadata(valid)).RootElement.GetProperty("envelopeoptions").GetRawText()))).IsTrue();
+    }
+
+    [Test]
     public async Task StructuredFormatMismatchCannotPublishOrChangeStoredRepresentation()
     {
         var store = new InMemoryRegistryPersistence();

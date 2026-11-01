@@ -120,6 +120,11 @@ and must agree with literal outer `datacontenttype` and protocol content-type
 declarations. It does not constrain the nested payload's content type. Invalid
 format syntax or conflicting outer declarations reject without changing stored
 metadata or events; equivalent media-type spellings remain authored values.
+CloudEvents `envelopeoptions` remains optional, but a present non-null value
+must be an object. Its `mode` is `binary` or `structured`, and its `format` is
+a string when present. Direct completion and compatible models enforce these
+known shapes even when Core models them as `any`. Unknown option members remain
+opaque; these constraints do not assign meanings to custom envelope options.
 
 Local `basemessage` admission uses `ValidateMessageBaseReference` to check the
 actual Message model type and Resource/Version path. It does not require a

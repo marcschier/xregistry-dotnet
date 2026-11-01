@@ -10,6 +10,61 @@ namespace XRegistry.Models.Tests;
 public class MessageEndpointRuntimeRulesTests
 {
     [Test]
+    [Arguments("[]", "/envelopeoptions")]
+    [Arguments("true", "/envelopeoptions")]
+    [Arguments("\"structured\"", "/envelopeoptions")]
+    [Arguments("1", "/envelopeoptions")]
+    [Arguments("""{"mode":true}""", "/envelopeoptions/mode")]
+    [Arguments("""{"mode":1}""", "/envelopeoptions/mode")]
+    [Arguments("""{"mode":[]}""", "/envelopeoptions/mode")]
+    [Arguments("""{"mode":{}}""", "/envelopeoptions/mode")]
+    [Arguments("""{"mode":""}""", "/envelopeoptions/mode")]
+    [Arguments("""{"mode":"STRUCTURED"}""", "/envelopeoptions/mode")]
+    [Arguments("""{"mode":"custom"}""", "/envelopeoptions/mode")]
+    [Arguments("""{"format":true}""", "/envelopeoptions/format")]
+    [Arguments("""{"format":1}""", "/envelopeoptions/format")]
+    [Arguments("""{"format":[]}""", "/envelopeoptions/format")]
+    [Arguments("""{"format":{}}""", "/envelopeoptions/format")]
+    public async Task CloudEventsOptionsCannotBypassKnownNativeShapes(string options, string path)
+    {
+        var metadata = RegistryJson.Parse($$"""
+            {"envelope":"CloudEvents/1.0","envelopemetadata":{},"envelopeoptions":{{options}}}
+            """);
+        var error = await Assert.That(() => RegistryDomainRules.CompleteMessageMetadata(metadata)).Throws<RegistryException>();
+        await Assert.That(error!.Diagnostic.Code).IsEqualTo("invalid_attribute");
+        await Assert.That(error.Diagnostic.Path).IsEqualTo(path);
+        var custom = RegistryJson.Parse($$"""
+            {"envelope":"Custom/1","envelopemetadata":{},"envelopeoptions":{{options}}}
+            """);
+        var completed = RegistryDomainRules.CompleteMessageMetadata(custom);
+        await Assert.That(JsonNode.DeepEquals(
+            JsonNode.Parse(completed.RootElement.GetProperty("envelopeoptions").GetRawText()), JsonNode.Parse(options))).IsTrue();
+    }
+
+    [Test]
+    [Arguments("{}")]
+    [Arguments("null")]
+    [Arguments("""{"mode":"binary"}""")]
+    [Arguments("""{"mode":"structured","format":"application/cloudevents+json"}""")]
+    [Arguments("""{"mode":null,"format":null}""")]
+    [Arguments("""{"custom":{"mode":true,"format":42}}""")]
+    public async Task CloudEventsOptionsRetainOptionalityAndOpaqueExtensions(string options)
+    {
+        var metadata = RegistryJson.Parse($$"""
+            {"envelope":"CloudEvents/1.0","envelopemetadata":{},"envelopeoptions":{{options}}}
+            """);
+        var completed = RegistryDomainRules.CompleteMessageMetadata(metadata);
+        await Assert.That(JsonNode.DeepEquals(
+            JsonNode.Parse(completed.RootElement.GetProperty("envelopeoptions").GetRawText()), JsonNode.Parse(options))).IsTrue();
+        var custom = RegistryJson.Parse($$"""
+            {"envelope":"Custom/1","envelopemetadata":{},"envelopeoptions":{{options}}}
+            """);
+        await Assert.That(JsonNode.DeepEquals(
+            JsonNode.Parse(RegistryDomainRules.CompleteMessageMetadata(custom).RootElement.GetProperty("envelopeoptions").GetRawText()),
+            JsonNode.Parse(options))).IsTrue();
+    }
+
+    [Test]
     [Arguments("application/cloudevents+json", "application/cloudevents+json", true)]
     [Arguments("application/cloudevents+json", "APPLICATION/CLOUDEVENTS+JSON", true)]
     [Arguments("application/cloudevents+json", "application/json", false)]
