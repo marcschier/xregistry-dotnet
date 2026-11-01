@@ -494,6 +494,11 @@ public static partial class ApiOperationDocumentResolver
 
         var documentationFailure = ValidateHttpDocumentationShapes(root, "$");
         if (documentationFailure is not null) { return documentationFailure; }
+        if (format == "Swagger/2.0")
+        {
+            var transportFailure = ValidateSwaggerTransportDeclarations(root, "$", cancellationToken);
+            if (transportFailure is not null) { return transportFailure; }
+        }
         var componentFailure = ValidateApiReusableShapes(format, root, cancellationToken);
         if (componentFailure is not null)
         {
@@ -1042,6 +1047,11 @@ public static partial class ApiOperationDocumentResolver
             }
             var metadataFailure = ValidateHttpOperationMetadata(operation, pathPointer, cancellationToken);
             if (metadataFailure is not null) { return metadataFailure; }
+            if (format == "Swagger/2.0")
+            {
+                var transportFailure = ValidateSwaggerTransportDeclarations(operation, pathPointer, cancellationToken);
+                if (transportFailure is not null) { return transportFailure; }
+            }
             if (methodIndex == tokens.Count - 1) { return Selected(operation, pathPointer); }
             if (!operation.TryGetProperty("callbacks", out var callbacks) ||
                 callbacks.ValueKind != JsonValueKind.Object ||

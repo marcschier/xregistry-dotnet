@@ -27,6 +27,11 @@ public static partial class ApiOperationDocumentResolver
         }
         var metadataFailure = ValidateHttpOperationMetadata(location.Operation, location.Pointer, cancellationToken);
         if (metadataFailure is not null) { return metadataFailure; }
+        if (!includeCallbacks)
+        {
+            var transportFailure = ValidateSwaggerTransportDeclarations(location.Operation, location.Pointer, cancellationToken);
+            if (transportFailure is not null) { return transportFailure; }
+        }
         if (location.Operation.TryGetProperty("operationId", out var id))
         {
             var nativeId = id.GetString()!;
@@ -117,6 +122,36 @@ public static partial class ApiOperationDocumentResolver
         {
             return Failure(ApiOperationResolutionStatus.Invalid, "document.external_docs_description",
                 "An External Documentation Object description must be a string.", path + "/description");
+        }
+        return null;
+    }
+
+    private static ApiOperationResolutionResult? ValidateSwaggerTransportDeclarations(
+        JsonElement value, string pointer, CancellationToken cancellationToken)
+    {
+        foreach (var field in new[] { "schemes", "consumes", "produces" })
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!value.TryGetProperty(field, out var declarations)) { continue; }
+            var path = pointer + "/" + field;
+            if (declarations.ValueKind != JsonValueKind.Array)
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid, "document.swagger_transport",
+                    $"Swagger {field} must be an array of strings.", path);
+            }
+            var index = 0;
+            foreach (var declaration in declarations.EnumerateArray())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (declaration.ValueKind != JsonValueKind.String ||
+                    field == "schemes" && declaration.GetString() is not ("http" or "https" or "ws" or "wss"))
+                {
+                    return Failure(ApiOperationResolutionStatus.Invalid, "document.swagger_transport",
+                        "Swagger transport declarations must be strings; schemes must be http, https, ws or wss.",
+                        path + "/" + index.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                }
+                index++;
+            }
         }
         return null;
     }

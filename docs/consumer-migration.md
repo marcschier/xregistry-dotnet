@@ -547,6 +547,15 @@ create a named operation, introduce an operation-reference retrieval or become
 a valid operation pointer, including when its containing Path Item is retrieved
 through an authorized reference. This does not claim full validation of unknown
 Path Item fields.
+Swagger root and reached-operation `schemes`, `consumes` and `produces`
+declarations must be arrays of strings. Scheme values are exactly `http`,
+`https`, `ws` or `wss`. Empty operation arrays retain their override meaning;
+selection does not copy root declarations into the selected Operation Object
+or reorder or deduplicate authored arrays. Root checks precede selection and
+retrieval; reached operations, including reference targets, retain the named
+versus pointer boundaries below. OpenAPI does not inherit these Swagger fields.
+Media-type syntax in `consumes` and `produces` remains unqualified by this
+array-shape check.
 Named operation lookup checks uniqueness of every encountered `operationId`,
 not only the requested name. Repeated unrelated IDs report `Invalid` rather
 than returning an earlier match or `NotFound`; repeated requested IDs retain
