@@ -58,6 +58,15 @@ refinements rather than boolean/number/object-to-string coercion. Kafka explicit
 supports canonical base64 binary values and an `any` literal null byte value.
 Duplicate array headers and exact order are preserved.
 
+Content-type declarations for the same message representation compare media
+types and parameter names without case sensitivity. The `charset` parameter's
+value also compares without case sensitivity, as required by RFC 2046
+section 4.1.2; quoted and unquoted spellings are compared after unquoting.
+Other parameter values retain case-sensitive comparison, including multipart
+boundaries. Comparison does not rewrite any stored declaration. Different
+character sets or case-sensitive parameter values still reject, while structured
+CloudEvents payload and envelope content types remain separate representations.
+
 Local `basemessage` admission uses `ValidateMessageBaseReference` to check the
 actual Message model type and Resource/Version path. It does not require a
 target to exist, fetch it, or invoke the host's unrelated target policy.

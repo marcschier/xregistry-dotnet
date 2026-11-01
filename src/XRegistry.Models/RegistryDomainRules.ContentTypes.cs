@@ -115,7 +115,10 @@ public static partial class RegistryDomainRules
 
     private static IOrderedEnumerable<KeyValuePair<string, string>> OrderedParameters(MediaTypeHeaderValue contentType) =>
         contentType.Parameters.Select(static parameter =>
-            new KeyValuePair<string, string>(parameter.Name, ParameterValue(parameter.Value!)))
+            new KeyValuePair<string, string>(parameter.Name,
+                string.Equals(parameter.Name, "charset", StringComparison.OrdinalIgnoreCase)
+                    ? ParameterValue(parameter.Value!).ToUpperInvariant()
+                    : ParameterValue(parameter.Value!)))
             .OrderBy(static parameter => parameter.Key, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static parameter => parameter.Value, StringComparer.Ordinal);
 

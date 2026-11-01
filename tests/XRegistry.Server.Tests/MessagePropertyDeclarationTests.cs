@@ -14,6 +14,39 @@ namespace XRegistry.Server.Tests;
 public class MessagePropertyDeclarationTests
 {
     [Test]
+    public async Task CharsetEquivalentContentTypesPublishWithoutRewritingAndInvalidRevisionsRemainAtomic()
+    {
+        var store = new InMemoryRegistryPersistence();
+        var engine = MessageEndpointRuntimeTests.CreateDomain(RegistryModelKind.Message, store);
+        const string path = "/messagegroups/g/messages/m";
+        const string input = """
+            {"datacontenttype":"text/plain; charset=utf-8; profile=Case",
+             "envelope":"CloudEvents/1.0","envelopeoptions":{"mode":"binary"},
+             "envelopemetadata":{"datacontenttype":{"value":"TEXT/Plain; PROFILE=Case; CharSet=\"UTF-8\""}},
+             "protocol":"HTTP","protocoloptions":{"headers":[
+               {"name":"Content-Type","value":"Text/Plain; CHARSET=uTf-8; profile=Case"}]}}
+            """;
+        var created = await Send(engine, RegistryAction.Replace, path, input);
+        await Assert.That(created.Metadata!.RootElement.GetProperty("datacontenttype").GetString())
+            .IsEqualTo("text/plain; charset=utf-8; profile=Case");
+        await Assert.That(created.Metadata.RootElement.GetProperty("envelopemetadata").GetProperty("datacontenttype").GetProperty("value").GetString())
+            .IsEqualTo("TEXT/Plain; PROFILE=Case; CharSet=\"UTF-8\"");
+        await Assert.That(created.Metadata.RootElement.GetProperty("protocoloptions").GetProperty("headers")[0].GetProperty("value").GetString())
+            .IsEqualTo("Text/Plain; CHARSET=uTf-8; profile=Case");
+        var before = (await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        foreach (var invalid in new[] { "text/plain; charset=US-ASCII; profile=Case", "text/plain; charset=UTF-8; profile=case" })
+        {
+            var patch = new JsonObject { ["datacontenttype"] = invalid }.ToJsonString();
+            await ExpectCode(() => Send(engine, RegistryAction.Patch, path, patch), "invalid_attribute");
+            await Assert.That((await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText()).IsEqualTo(before);
+            await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        }
+        var restarted = MessageEndpointRuntimeTests.CreateDomain(RegistryModelKind.Message, store);
+        await Assert.That((await Send(restarted, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText()).IsEqualTo(before);
+    }
+
+    [Test]
     [Arguments("envelopemetadata")]
     [Arguments("properties")]
     [Arguments("application-properties")]

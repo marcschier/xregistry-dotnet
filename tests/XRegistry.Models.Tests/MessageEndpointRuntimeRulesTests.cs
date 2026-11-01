@@ -1,6 +1,7 @@
 // Copyright (c) 2026 xregistry-dotnet contributors.
 // SPDX-License-Identifier: MIT
 
+using System.Text.Json.Nodes;
 using TUnit.Assertions;
 using TUnit.Core;
 
@@ -8,6 +9,64 @@ namespace XRegistry.Models.Tests;
 
 public class MessageEndpointRuntimeRulesTests
 {
+    [Test]
+    [Arguments("""{"envelope":"CloudEvents/1.0","envelopeoptions":{"mode":"binary"},"envelopemetadata":{"datacontenttype":{"value":"TEXT/PLAIN; CHARSET=UTF-8"}}}""")]
+    [Arguments("""{"protocol":"HTTP","protocoloptions":{"headers":[{"name":"Content-Type","value":"TEXT/PLAIN; CHARSET=UTF-8"}]}}""")]
+    [Arguments("""{"protocol":"NATS","protocoloptions":{"headers":[{"name":"Content-Type","value":"TEXT/PLAIN; CHARSET=UTF-8"}]}}""")]
+    [Arguments("""{"protocol":"AMQP/1.0","protocoloptions":{"properties":{"content-type":{"value":"TEXT/PLAIN; CHARSET=UTF-8"}}}}""")]
+    [Arguments("""{"protocol":"MQTT/5.0","protocoloptions":{"content_type":"TEXT/PLAIN; CHARSET=UTF-8"}}""")]
+    [Arguments("""{"protocol":"KAFKA","protocoloptions":{"headers":{"content-type":{"name":"content-type","value":"TEXT/PLAIN; CHARSET=UTF-8"}}}}""")]
+    public async Task CharsetComparisonAppliesToEachMessageContentTypeDeclaration(string metadata)
+    {
+        var node = JsonNode.Parse(metadata)!.AsObject();
+        node["datacontenttype"] = "text/plain; charset=utf-8";
+        var input = RegistryJson.Parse(node.ToJsonString());
+        var completed = RegistryDomainRules.CompleteMessageMetadata(input);
+        await Assert.That(completed.RootElement.GetProperty("datacontenttype").GetString()).IsEqualTo("text/plain; charset=utf-8");
+        node["datacontenttype"] = "text/plain; charset=us-ascii";
+        var invalid = RegistryJson.Parse(node.ToJsonString());
+        var error = await Assert.That(() => RegistryDomainRules.ValidateMessageMetadata(invalid.RootElement)).Throws<RegistryException>();
+        await Assert.That(error!.Diagnostic.Code).IsEqualTo("invalid_attribute");
+    }
+
+    [Test]
+    [Arguments("text/plain; charset=utf-8", "TEXT/Plain; CHARSET=UTF-8", true)]
+    [Arguments("text/plain; charset=utf-8", "text/plain; charset=\"UTF-8\"", true)]
+    [Arguments("text/plain; charset=\"uTf-8\"", "text/plain; charset=utf-8", true)]
+    [Arguments("text/plain; charset=utf-8; profile=Case", "TEXT/PLAIN; PROFILE=Case; CHARSET=UTF-8", true)]
+    [Arguments("text/plain; charset=utf-8", "text/plain; charset=us-ascii", false)]
+    [Arguments("text/plain; charset=utf-8; profile=Case", "text/plain; charset=UTF-8; profile=case", false)]
+    [Arguments("text/plain; charset=utf-8", "text/plain", false)]
+    [Arguments("multipart/mixed; boundary=Case", "multipart/mixed; boundary=case", false)]
+    [Arguments("text/plain; charset=utf-8; charset=us-ascii", "text/plain; charset=US-ASCII; charset=UTF-8", true)]
+    public async Task ContentTypeCharsetComparisonPreservesOtherParameterSemantics(
+        string topLevel, string header, bool valid)
+    {
+        var input = RegistryJson.Parse(new JsonObject
+        {
+            ["datacontenttype"] = topLevel,
+            ["protocol"] = "HTTP",
+            ["protocoloptions"] = new JsonObject
+            {
+                ["headers"] = new JsonArray(new JsonObject
+                {
+                    ["name"] = "Content-Type", ["value"] = header
+                })
+            }
+        }.ToJsonString());
+        if (!valid)
+        {
+            var error = await Assert.That(() => RegistryDomainRules.CompleteMessageMetadata(input)).Throws<RegistryException>();
+            await Assert.That(error!.Diagnostic.Code).IsEqualTo("invalid_attribute");
+            await Assert.That(error.Diagnostic.Path).IsEqualTo("/protocoloptions/headers/0/value");
+            return;
+        }
+        var completed = RegistryDomainRules.CompleteMessageMetadata(input);
+        await Assert.That(completed.RootElement.GetProperty("datacontenttype").GetString()).IsEqualTo(topLevel);
+        await Assert.That(completed.RootElement.GetProperty("protocoloptions").GetProperty("headers")[0].GetProperty("value").GetString())
+            .IsEqualTo(header);
+    }
+
     [Test]
     [Arguments("HTTP")]
     [Arguments("AMQP/1.0")]

@@ -101519,9 +101519,12 @@
       ],
       "text": "As specified in [RFC 2045](https://tools.ietf.org/html/rfc2045), the media type part of the content type MUST be treated in a case-insensitive manner by consumers, along with the attribute names in parameters. For example, a `datacontenttype` of `text/plain; charset=utf-8` MUST be treated in the same way as `TEXT/Plain; CharSet=utf-8`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Consumer content-type equivalence uses case-insensitive media type and parameter names. Read with the referenced RFC 2046 section 4.1.2: charset values are also explicitly case-insensitive, unlike general parameter values. RegistryDomainRules.ContentTypes now compares decoded charset values case-insensitively without rewriting metadata; other parameter values remain ordinal after unquoting. ContentTypeCharsetComparisonPreservesOtherParameterSemantics covers mixed case, quoting, order, different/missing charsets, case-sensitive profile/boundary values and existing duplicate-parameter order policy. CharsetComparisonAppliesToEachMessageContentTypeDeclaration covers CloudEvents binary and HTTP/NATS/AMQP/MQTT/Kafka. CharsetEquivalentContentTypesPublishWithoutRewritingAndInvalidRevisionsRemainAtomic covers retained authored values, invalid revisions, event stability and restart. This does not assert charset alias equivalence or arbitrary registered media-type parameter semantics. Full per-requirement qualification remains pending.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
