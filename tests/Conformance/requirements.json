@@ -100921,9 +100921,12 @@
       ],
       "text": "- OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read as basemessage optionality, not permission to skip supplied-reference validation. Base-free definition materialization and schema-only Message admission do not invent a base; supplied local/absolute references retain type/syntax and authorized-acquisition obligations. BaseDefinitionIsDeeplyOverlaidWithoutChangingTheAuthoredIdentity and MessageSchemaRulesAcceptNearestValidDeclarations provide the adjacent behavior evidence. Recursive acquisition and whole-array overlay semantics remain separate.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -101155,9 +101158,12 @@
       ],
       "text": "- OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read as dataschemaformat optionality: it is not required for schema-free Messages but becomes required when dataschema or dataschemauri is present. MessageSchemaRulesAcceptNearestValidDeclarations and MessageSchemaRulesDiagnoseEachIndependentConstraint cover absent, inline and URI declarations with valid/invalid dependencies. Schema contents remain opaque here; selected format validation and concrete-object resolution are separate.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -101248,9 +101254,12 @@
       ],
       "text": "- OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read as inline dataschema optionality with its format dependency and URI exclusion. MessageSchemaRulesAcceptNearestValidDeclarations, MessageSchemaRulesDiagnoseEachIndependentConstraint and CompletionPreservesOpaquePayloadSchemasInsteadOfTreatingThemAsDeclarations prove absent/inline/URI distinctions without interpreting nested schema keys as Message declarations. InlineSchemaInferenceNeverInventsAnAcquisitionUri retains explicit resolver obligations rather than fabricating a URI.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -101453,9 +101462,12 @@
       ],
       "text": "- OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read as dataschemaxid optionality: URI-only schemas do not imply a local Schema Resource identity. MessageSchemaRulesAcceptNearestValidDeclarations admits URI-only metadata, while MessageSchemaReferenceUsesExplicitHostIdentityWithoutAcquiringTargets checks a supplied local XID independently of existence. Document identity matching applies only when both attributes are present; no target acquisition is inferred.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -101615,9 +101627,13 @@
       ],
       "text": "- OPTIONAL",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read as datacontenttype optionality with syntax and duplicated-representation consistency. Schema-free direct completion and MessageProtocolRulesRequireAnObjectAcrossBindings do not invent the attribute. Materialization may infer payload content type from a known schema format; UnknownSchemaFormatInferenceIsCallerDefinedOrExplicitlyUnresolved preserves an explicit unresolved obligation for custom formats rather than guessing. Structured wire and nested payload types remain distinct.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -101677,9 +101693,12 @@
       ],
       "text": "- OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read as property description optionality. DomainDefaultsDoNotDependOnNestedModelDefaults and OpaqueFixedAmqpPropertiesUseTheirDomainSpecificDefaults admit declarations without descriptions and do not invent them. A supplied description must remain a nonempty string; MessageStringsEnforceOnlyDeclaredDomainConstraints and InvalidNullDeclarationsCannotBeNormalizedIntoValidConstraints cover invalid supplied members. Description text is not a runtime value constraint.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -101774,9 +101793,13 @@
       ],
       "text": "- OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read as required-flag optionality with default false and CloudEvents mandatory exceptions. DomainDefaultsDoNotDependOnNestedModelDefaults and DeclarationDefaultsAreDomainDefaultsWithoutInventingAbsentAttributes prove omitted flags complete on present declarations only. InvalidNullDeclarationsCannotBeNormalizedIntoValidConstraints rejects supplied null flags; mandatory CloudEvents flags are validated separately. Actual-message enforcement is a producer/consumer operation, not registry publication.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -101875,9 +101898,12 @@
       ],
       "text": "- OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read as property type optionality with common string defaults and fixed protocol/envelope exceptions. DomainDefaultsDoNotDependOnNestedModelDefaults and OpaqueFixedAmqpPropertiesUseTheirDomainSpecificDefaults verify defaults independently of nested Core models. Supplied null/unknown types are not treated as absence. CompleteMessageMetadata defaults only present declarations; omitted declaration objects are not invented during registry storage.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -101972,9 +101998,13 @@
       ],
       "text": "- OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read as literal value optionality. ModeledAnyDoesNotEraseLiteralNullOrInventAnAbsentValue distinguishes omitted value from literal null, and ChildLiteralNullOverridesAnInheritedValueWithoutDeletingTheConstraint preserves overlay intent/provenance. Fixed specversion/time and inferred CloudEvents schema/content-type exceptions are reviewed separately. A supplied literal must match its declared type; validating an actual application message against that literal remains runtime behavior.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
