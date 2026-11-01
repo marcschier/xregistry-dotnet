@@ -10,6 +10,34 @@ namespace XRegistry.Models.Tests;
 public class MessageEndpointRuntimeRulesTests
 {
     [Test]
+    [Arguments("[]", "/protocoloptions/header")]
+    [Arguments("true", "/protocoloptions/header")]
+    [Arguments("\"header\"", "/protocoloptions/header")]
+    [Arguments("{}", "")]
+    [Arguments("""{"durable":true,"first-acquirer":false}""", "")]
+    [Arguments("""{"durable":false,"first-acquirer":true}""", "")]
+    [Arguments("""{"durable":"true"}""", "/protocoloptions/header/durable")]
+    [Arguments("""{"first-acquirer":1}""", "/protocoloptions/header/first-acquirer")]
+    [Arguments("""{"durable":{"value":true}}""", "/protocoloptions/header/durable")]
+    [Arguments("""{"first-acquirer":null}""", "/protocoloptions/header/first-acquirer")]
+    public async Task AmqpHeaderRetainsItsObjectAndNativeBooleanScalarShapes(string header, string errorPath)
+    {
+        var input = RegistryJson.Parse("""{"protocol":"AMQP/1.0","protocoloptions":{"header":""" + header + "}}");
+        if (errorPath.Length != 0)
+        {
+            var error = await Assert.That(() => RegistryDomainRules.CompleteMessageMetadata(input)).Throws<RegistryException>();
+            await Assert.That(error!.Diagnostic.Code).IsEqualTo("invalid_attribute");
+            await Assert.That(error.Diagnostic.Path).IsEqualTo(errorPath);
+        }
+        else
+        {
+            var completed = RegistryDomainRules.CompleteMessageMetadata(input);
+            await Assert.That(completed.RootElement.GetProperty("protocoloptions").GetProperty("header").GetRawText())
+                .IsEqualTo(header);
+        }
+    }
+
+    [Test]
     [Arguments("{}")]
     [Arguments("""{"dataschemauri":null}""")]
     public async Task AbsentAndClearedSchemaUriDoNotRequireAFormat(string metadata)

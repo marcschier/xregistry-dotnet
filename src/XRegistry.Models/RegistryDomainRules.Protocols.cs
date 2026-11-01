@@ -47,8 +47,21 @@ public static partial class RegistryDomainRules
             }
         }
 
-        if (SelectorIs(message, "protocol", "AMQP/1.0") && TryObject(options, "header", out var headerValues))
+        if (SelectorIs(message, "protocol", "AMQP/1.0") && Present(options, "header"))
         {
+            var headerValues = options.GetProperty("header");
+            if (headerValues.ValueKind != JsonValueKind.Object)
+            {
+                throw Invalid("The AMQP header must be an object of native scalar fields.", "/protocoloptions/header");
+            }
+            foreach (var name in new[] { "durable", "first-acquirer" })
+            {
+                if (headerValues.TryGetProperty(name, out var value) &&
+                    value.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                {
+                    throw Invalid("The AMQP header field must be boolean.", At("/protocoloptions/header", name));
+                }
+            }
             ProtocolInteger(headerValues, "priority", byte.MaxValue, "/protocoloptions/header");
             ProtocolInteger(headerValues, "ttl", uint.MaxValue, "/protocoloptions/header");
             ProtocolInteger(headerValues, "delivery-count", uint.MaxValue, "/protocoloptions/header");

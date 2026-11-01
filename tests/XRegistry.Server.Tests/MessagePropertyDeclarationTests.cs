@@ -14,6 +14,45 @@ namespace XRegistry.Server.Tests;
 public class MessagePropertyDeclarationTests
 {
     [Test]
+    public async Task OpaqueAmqpHeaderRejectsNonNativeShapesWithoutChangingStoredState()
+    {
+        using var packaged = BuiltInRegistryModels.LoadSource(RegistryModelKind.Message);
+        var model = JsonNode.Parse(packaged.RootElement.GetRawText())!;
+        var header = model["groups"]!["messagegroups"]!["resources"]!["messages"]!["attributes"]!
+            ["protocol"]!["ifvalues"]!["AMQP/1.0"]!["siblingattributes"]!["protocoloptions"]!["attributes"]!["header"]!.AsObject();
+        header["type"] = "any";
+        header.Remove("attributes");
+        header.Remove("namecharset");
+        var store = new InMemoryRegistryPersistence();
+        var engine = Create(model.ToJsonString(), store);
+        const string path = "/messagegroups/g/messages/m";
+        string Metadata(string value) => """{"protocol":"AMQP/1.0","protocoloptions":{"header":""" + value + "}}";
+        await ExpectCode(() => Send(engine, RegistryAction.Replace, path, Metadata("[]")), "invalid_attribute");
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(0);
+        var created = await Send(engine, RegistryAction.Replace, path,
+            Metadata("""{"durable":false,"first-acquirer":true,"priority":255,"ttl":4294967295,"delivery-count":0}"""));
+        var retained = created.Metadata!.RootElement.GetProperty("protocoloptions").GetProperty("header");
+        await Assert.That(retained.GetProperty("durable").GetBoolean()).IsFalse();
+        await Assert.That(retained.GetProperty("first-acquirer").GetBoolean()).IsTrue();
+        await Assert.That(retained.GetProperty("priority").GetInt32()).IsEqualTo(255);
+        await Assert.That(retained.GetProperty("ttl").GetUInt32()).IsEqualTo(uint.MaxValue);
+        var before = (await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        foreach (var invalid in new[] { "[]", """{"durable":"true"}""", """{"first-acquirer":{"value":true}}""", """{"priority":256}""" })
+        {
+            await ExpectCode(() => Send(engine, RegistryAction.Patch, path, Metadata(invalid)), "invalid_attribute");
+            await Assert.That((await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText()).IsEqualTo(before);
+            await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        }
+        var updated = await Send(engine, RegistryAction.Patch, path, Metadata("""{"durable":true,"first-acquirer":false}"""));
+        await Assert.That(updated.Metadata!.RootElement.GetProperty("protocoloptions").GetProperty("header").GetProperty("durable").GetBoolean()).IsTrue();
+        await Assert.That(updated.Metadata.RootElement.GetProperty("protocoloptions").GetProperty("header").GetProperty("first-acquirer").GetBoolean()).IsFalse();
+        var restarted = Create(model.ToJsonString(), store);
+        await Assert.That((await Send(restarted, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText())
+            .IsEqualTo((await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText());
+    }
+
+    [Test]
     [Arguments("../schemas/event.json#/$defs/Event")]
     [Arguments("urn:example:event")]
     [Arguments("")]

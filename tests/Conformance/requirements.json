@@ -100142,9 +100142,13 @@
       ],
       "text": "A `message` definition MAY contain any combination of `envelope`, `protocol`, and data payload declarations. A payload-only declaration can be useful if messages are sent through varying protocols without a fixed envelope model and are distinguished by content-type (including parameters) or even only through whether payload schema definitions match an incoming message.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Envelope, protocol and payload declarations are independently optional and can be combined. ValidateMessageMetadata requires option objects only when the corresponding selector is present; payload-only definitions remain valid. MessageEnvelopeRulesRequireMetadataWithoutRequiringAnEnvelope and BindingPrecedenceDoesNotInventAnImplicitConcreteProtocol cover unbound/payload-only/envelope/protocol/both cases. Runtime matching against application payloads is distinct from storage and materialization. Full qualification remains pending.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -100405,8 +100409,8 @@
       ],
       "text": "The key words \"MUST\", \"MUST NOT\", \"REQUIRED\", \"SHALL\", \"SHALL NOT\", \"SHOULD\", \"SHOULD NOT\", \"RECOMMENDED\", \"MAY\", and \"OPTIONAL\" in this document are to be interpreted as described in [RFC 2119](https://tools.ietf.org/html/rfc2119).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
+        "status": "informative",
+        "note": "RFC 2119 terminology defines interpretation of normative keywords, not a separate interoperable operation or behavior to implement.",
         "roles": []
       },
       "implementation": {
@@ -100471,8 +100475,8 @@
       ],
       "text": "In the pseudo JSON format snippets `?` means the preceding attribute is OPTIONAL, `*` means the preceding attribute MAY appear zero or more times, and `+` means the preceding attribute MUST appear at least once. The presence of the `#` character means the remaining portion of the line is a comment. Whitespace characters in the JSON snippets are used for readability and are not normative.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
+        "status": "informative",
+        "note": "Pseudo-JSON notation and explanatory whitespace conventions interpret illustrative snippets; they are not literal wire syntax or independent server behavior.",
         "roles": []
       },
       "implementation": {
@@ -100502,9 +100506,13 @@
       ],
       "text": "This specification uses **protocol** as a selector into the protocol-specific message metadata that is defined under the `protocol.ifvalues` section of the model. When a known protocol is explicitly specified for a message definition, the `protocoloptions` section MAY contain constraints for the protocol-specific metadata.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Known protocol selectors select protocoloptions metadata through model conditional definitions; specifying protocol does not require every possible option. RequireSelectedObject and the packaged Message model supply the declaration boundary. MessageProtocolRulesRequireAnObjectAcrossBindings and MessageProtocolSelectionRequiresOptionsBeforePublishing cover all packaged bindings with empty option objects and missing-object failures. Actual transport exchange remains application-owned. Full profile/model consistency review and qualification remain unfinished.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -101022,9 +101030,13 @@
       ],
       "text": "- REQUIRED if `envelope` is specified.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Present envelope requires an envelopemetadata object, including unknown extension envelopes; absence of a selector does not require an envelope. RequireSelectedObject enforces the dependency after selector validation. MessageEnvelopeRulesRequireMetadataWithoutRequiringAnEnvelope and MessageEnvelopeSelectionRequiresMetadataBeforePublishing give direct/public workflow evidence. CloudEvents empty declarations are legal and implied runtime requirements are distinct from inventing stored declarations. Qualification remains pending.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -101084,9 +101096,13 @@
       ],
       "text": "- REQUIRED if `protocol` is specified.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Present protocol requires a protocoloptions object, not necessarily nonempty options. RequireSelectedObject enforces this for known and extension protocols; Core model validation alone is insufficient for the cross-attribute dependency. MessageProtocolRulesRequireAnObjectAcrossBindings and MessageProtocolSelectionRequiresOptionsBeforePublishing cover the packaged protocol set and atomic failures. Qualification remains pending.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -101239,9 +101255,13 @@
       ],
       "text": "- If present, `dataschemaformat` MUST be present.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Present inline dataschema requires dataschemaformat, independently of envelope/protocol selection. ValidateMessageMetadata checks actual member presence after domain normalization. MessageSchemaRulesDiagnoseEachIndependentConstraint and MessageSchemaDeclarationsAreValidatedAtomically cover absence and nearest valid inline declarations. Schema contents remain opaque to Models; selected-format validation is a separate consumer/adapter obligation. Qualification remains pending.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -101340,9 +101360,13 @@
       ],
       "text": "- If present, `dataschemaformat` MUST be present.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Present dataschemauri requires dataschemaformat, including an empty but present RFC URI reference. Null/cleared references remain absent for this dependency. MessageSchemaRulesDiagnoseEachIndependentConstraint, MessageSchemaDeclarationsAreValidatedAtomically and AbsentAndClearedSchemaUriDoNotRequireAFormat cover dependency and absence behavior. URI syntax, concrete object selection and format naming are separate obligations. Qualification remains pending.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -101654,9 +101678,13 @@
       ],
       "text": "- If present, MUST be a non-empty string.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A present property description is a nonempty string; absent descriptions are allowed. Common declaration traversal validates member kinds before OptionalText so explicit null cannot evade the check. MessageStringsEnforceOnlyDeclaredDomainConstraints covers empty CloudEvents/AMQP/HTTP descriptions; InvalidNullDeclarationsCannotBeNormalizedIntoValidConstraints and HeaderValidationRejectsInvalidShapesAndNonTextualWireRefinements cover invalid present members and preservation of declared values. Qualification remains pending.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -101747,9 +101775,13 @@
       ],
       "text": "- Default value MUST be `false`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Ordinary property required defaults to false only for present declarations; CloudEvents mandatory base attributes have explicit overriding rules. CompleteMessageMetadata applies defaults after validation, and materialization applies them after inheritance. DomainDefaultsDoNotDependOnNestedModelDefaults and HeaderDefaultsApplyOnlyToPresentDeclarations prove opaque/model-independent defaults; PropertyDefaultsApplyAfterTheCompleteBaseOverlay proves inherited true is not overwritten. Qualification remains pending.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -101844,9 +101876,13 @@
       ],
       "text": "- Default value MUST be \"string\".",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Common declaration type defaults to string, with envelope/protocol-defined property defaults overriding it where specified. CompleteMessageMetadata resolves DefaultPropertyType for present declarations rather than relying on generic nested model defaults. DomainDefaultsDoNotDependOnNestedModelDefaults, OpaqueFixedAmqpPropertiesUseTheirDomainSpecificDefaults and PropertyDefaultsApplyAfterTheCompleteBaseOverlay distinguish common, fixed-AMQP and inherited types. Qualification remains pending.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -101937,9 +101973,13 @@
       ],
       "text": "- If present, MUST be a valid value for the property.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A present literal value must satisfy the property's declared/default/fixed type; omitted value is an unconstrained declaration, not an implicit null. Models validates representation/ranges/canonical binary/URI/timestamp/duration/template syntax without evaluating actual incoming messages. TypedCloudEventsPropertyValuesRetainTheirActualJsonTypesAndNullPresence, MismatchedTypedConstraintsRejectWithoutPublication and ModeledAnyDoesNotEraseLiteralNullOrInventAnAbsentValue cover valid/invalid/absent/null partitions. Runtime message conformance is separate. Full imported type and qualification review remain pending.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -102000,9 +102040,11 @@
       ],
       "text": "When creating a message based on a metaschema with such a value, the placeholders MUST be replaced with valid values. For example, the value `{foo}/bar` would be replaced with `abc/bar` or `xyz/bar` when creating a message.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Placeholder substitution when creating an application message belongs to producers/code generators, not registry metadata storage or MessageDefinitionMaterializer. The library stores validated authored templates and exposes constraints/provenance; this block must not be marked implemented merely because template syntax or declaration materialization tests pass. Runtime construction/substitution capabilities and per-requirement qualification require separate scope/evidence review.",
+        "roles": [
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -102031,9 +102073,11 @@
       ],
       "text": "If the `type` property has the value `timestamp` and the `value` property is set to a value of `0000-01-01T00:00:00Z`, the value MUST be replaced with the current timestamp when creating a message.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Current-time sentinel substitution applies when a producer creates an actual application message, not when storing/materializing a definition. CompleteMessageMetadata and materializer preserve 0000-01-01T00:00:00Z; CompletionEnforcesTheExpandedOutputByteBudgetAtTheExactBoundary and PropertyDefaultsApplyAfterTheCompleteBaseOverlay prove sentinel/default retention rather than clock invocation. This is not evidence of runtime timestamp substitution; producer-runtime scope and qualification remain separately unfinished.",
+        "roles": [
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -102188,9 +102232,13 @@
       ],
       "text": "- The `time` attribute's `value` MUST default to `0000-01-01T00:00:00Z` (\"current time\") and SHOULD NOT be declared with a different value.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "CloudEvents time declaration defaults to the current-time sentinel; other explicitly supplied valid timestamps are discouraged by SHOULD NOT rather than forbidden. CompleteMessageMetadata supplies the sentinel only when a time declaration is present without value; materialization may make implied CloudEvents requirements explicit. PropertyDefaultsApplyAfterTheCompleteBaseOverlay and ImpliedCloudEventsRequirementsAndPayloadReferencesBecomeExplicitConstraints cover these distinct operations. Runtime clock replacement remains producer-owned and unqualified.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -102407,9 +102455,13 @@
       ],
       "text": "HTTP allows for multiple headers with the same name. The `headers` property is therefore an array of objects with `name` and `value` properties. The `name` property is a string that MUST be a valid HTTP header name.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "HTTP declaration headers use an ordered array permitting repeated names; each name must satisfy HTTP token syntax. HeaderDeclarations enforces array/object/common-field shapes, ValidateHttpToken checks names and completion retains duplicate order. HeaderCompletionKeepsExactByteBoundsAndDuplicateArrayOrder and HeaderValidationRejectsInvalidShapesAndNonTextualWireRefinements provide direct/public evidence. Source heading also lists HTTP/1.1, HTTP/2 and HTTP/3 while model/implementation activation currently uses HTTP; versioned-selector consistency remains unfinished rather than implied by tests of HTTP.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -102438,9 +102490,13 @@
       ],
       "text": "The `method` property is a string that MUST be a valid HTTP method.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "HTTP method must be a valid case-sensitive HTTP token, including extension methods. ValidateHttpToken validates authored literals after Level-1 placeholders, without dispatching an HTTP request. MessageProtocolAndTemplateRulesReturnExactPaths and MessageProtocolAndTemplateRulesAcceptPermittedConstraints cover invalid whitespace and valid extension tokens; MessageProtocolConstraintsHaveNearestValidCounterparts covers public admission. Versioned HTTP selector activation and full qualification remain unfinished.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -102470,9 +102526,13 @@
       ],
       "text": "The `status` property is a string that MUST be a valid HTTP response code. The `status` and `method` properties are mutually exclusive and MUST NOT be present at the same time.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "HTTP status must represent a valid response code and cannot coexist with method. ValidateMessageProtocol admits literal ASCII 100-599 or valid Level-1 templates and rejects empty/invalid lexical/out-of-range values. InvalidResponseDeclarationsCannotPublishOrReplaceValidMessageMetadata and ValidResponseDeclarationsAndQueryMapsRoundTrip cover nearest bounds, invalid Unicode/lookalikes, exclusive method/status, preserved state/events and authored templates. Runtime substitution/HTTP exchange and versioned HTTP activation remain separate unfinished work.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -102563,9 +102623,13 @@
       ],
       "text": "As in AMQP, all sections and properties are OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "AMQP sections/properties are independently optional; protocol selection requires protocoloptions but does not require any of its six sections. Empty AMQP options pass MessageProtocolRulesRequireAnObjectAcrossBindings. Present declaration sections receive common type/required defaults only for authored declarations; OpaqueFixedAmqpPropertiesUseTheirDomainSpecificDefaults and AmqpMapsPreserveSymbolNamesAndTypedValues cover section behavior. Header scalars are not declaration objects. Full AMQP model/source/underlying type review and qualification remain pending.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -102625,9 +102689,13 @@
       ],
       "text": "The `message-id` permits the types `ulong`, `uuid`, `binary`, `string`, and `uritemplate`. A `value` constraint for the `message-id` property SHOULD NOT be defined in the message definition except for the case where the `message-id` is a `uritemplate`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "AMQP message-id permits ulong/uuid/binary/string/uritemplate; literal constraints are discouraged except templates but not forbidden by SHOULD NOT. ValidateMessageProperties handles these fixed types and ValidatePropertyValue checks native representations/ranges/canonical bytes. TypedCloudEventsPropertyValuesRetainTheirActualJsonTypesAndNullPresence alone is not AMQP message-id evidence; fixed property tests and full imported AMQP semantics still require review. No qualification claim is made from the enum branch alone.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -102657,9 +102725,13 @@
       ],
       "text": "The names of the properties MUST be of type `symbol` and MUST be unique within the scope of the map. The values of the properties MAY be of any permitted type.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "AMQP application property names are unique symbol keys; values are typed declaration literals, not ordinary Core attribute values. PropertyDeclarations applies symbol syntax and RegistryJson rejects duplicate object members; common completion preserves any/null distinctions. AmqpMapsPreserveSymbolNamesAndTypedValues and ModeledAnyDoesNotEraseLiteralNullOrInventAnAbsentValue cover native naming/typed values and opaque model boundaries. Imported symbol/type completeness and per-requirement qualification remain pending.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -102689,9 +102761,13 @@
       ],
       "text": "The names of the properties MUST be of type `symbol` and MUST be unique within the scope of the map. The values of the properties MAY be of any permitted type.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "AMQP message-annotations use unique symbol-named declaration map entries with any permitted property type. Shared PropertyDeclarations and typed-value checks apply without coercion; RegistryJson owns duplicate-member rejection. AmqpMapsPreserveSymbolNamesAndTypedValues and ModeledAnyDoesNotEraseLiteralNullOrInventAnAbsentValue include this section. Actual transported AMQP annotation semantics and full imported type/qualification coverage remain unfinished.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -102721,9 +102797,13 @@
       ],
       "text": "The names of the properties MUST be of type `symbol` and MUST be unique within the scope of the map. The values of the properties MAY be of any permitted type.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "AMQP delivery-annotations use unique symbol-named declaration map entries with any permitted property type. Shared PropertyDeclarations validates names and common declaration values/defaults across opaque model boundaries. AmqpMapsPreserveSymbolNamesAndTypedValues and ModeledAnyDoesNotEraseLiteralNullOrInventAnAbsentValue include this section; duplicate names are a RegistryJson object-level obligation. Full native type and per-requirement qualification review remain pending.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -102753,9 +102833,13 @@
       ],
       "text": "The names of the properties MUST be of type `symbol` and MUST be unique within the scope of the map. The values of the properties MAY be of any permitted type.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "AMQP footer entries share unique symbol-named declaration-map rules and permitted typed literal values. AmqpMapsPreserveSymbolNamesAndTypedValues, ModeledAnyDoesNotEraseLiteralNullOrInventAnAbsentValue and OpaqueSpecificationUriPatchesRejectAtomicallyAcrossDeclarationSections include footer naming/value/default/URI boundaries. RegistryJson handles duplicate object members. Full imported AMQP type semantics and per-requirement qualification remain pending.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -102815,9 +102899,13 @@
       ],
       "text": "The `key` and `key_base64` properties are mutually exclusive and MUST NOT be present at the same time.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Kafka key text and key_base64 binary representations are mutually exclusive when present. ValidateMessageProtocol enforces exclusion; ProtocolBinary requires canonical base64 without decoding/re-encoding storage. MessageProtocolAndTemplateRulesReturnExactPaths and MessageProtocolConstraintsHaveNearestValidCounterparts cover invalid/valid pairs, while BinaryDeclarationsPreserveTheirExactCanonicalBytesIncludingEmpty covers exact representation. Kafka transport/runtime encoding and qualification remain separate.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",

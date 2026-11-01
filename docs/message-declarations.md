@@ -51,6 +51,13 @@ corrected source, not a nonexistent RFC3339 duration grammar. Validation does
 not narrow durations to `TimeSpan`. HTTP/MQTT/AMQP protocol range and header
 rules remain separate from generic Core integer/string types.
 
+The AMQP `header` section is an object of native scalar fields.
+`durable` and `first-acquirer` are booleans, not property-declaration objects
+with nested `type` or `value` fields. Direct domain validation and explicitly
+Message-compatible models enforce these shapes even when `header` is modeled
+as `any`; priority, time-to-live and delivery-count retain their protocol
+integer bounds. Valid scalar values are stored without coercion.
+
 Server completion calls the same pure domain implementation after Core
 validation, only for explicitly Message-compatible Resources. Rejected writes
 and patches publish no partial metadata or outbox changes. Other custom models
