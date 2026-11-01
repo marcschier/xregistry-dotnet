@@ -10,6 +10,37 @@ namespace XRegistry.Models.Tests;
 public class MessageEndpointRuntimeRulesTests
 {
     [Test]
+    [Arguments("envelope", "\"\"", false)]
+    [Arguments("envelope", "1", false)]
+    [Arguments("envelope", "\"/1\"", false)]
+    [Arguments("envelope", "\"Custom/\"", false)]
+    [Arguments("envelope", "\"Custom\"", false)]
+    [Arguments("envelope", "\"custom/9\"", true)]
+    [Arguments("protocol", "\"\"", false)]
+    [Arguments("protocol", "false", false)]
+    [Arguments("protocol", "\"/1\"", false)]
+    [Arguments("protocol", "\"Custom/\"", false)]
+    [Arguments("protocol", "\"Custom\"", true)]
+    [Arguments("protocol", "\"mqtt/3.1.1\"", true)]
+    public async Task GroupSelectorsValidateKindsAndVersionPartsWithoutRewriting(
+        string field, string value, bool valid)
+    {
+        var metadata = RegistryJson.Parse(new JsonObject { [field] = JsonNode.Parse(value) }.ToJsonString());
+        if (valid)
+        {
+            RegistryDomainRules.ValidateMessageGroupMetadata(metadata.RootElement);
+            await Assert.That(metadata.RootElement.GetProperty(field).GetRawText()).IsEqualTo(value);
+        }
+        else
+        {
+            var error = await Assert.That(() => RegistryDomainRules.ValidateMessageGroupMetadata(metadata.RootElement))
+                .Throws<RegistryException>();
+            await Assert.That(error!.Diagnostic.Code).IsEqualTo("invalid_attribute");
+            await Assert.That(error.Diagnostic.Path).IsEqualTo("/" + field);
+        }
+    }
+
+    [Test]
     [Arguments("description")]
     [Arguments("specurl")]
     [Arguments("type")]

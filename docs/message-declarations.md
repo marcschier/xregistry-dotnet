@@ -39,6 +39,13 @@ absent or cleared references remain optional. Syntax validation does not fetch a
 schema or establish that the reference selects a concrete schema object. That
 selection still requires the chosen format's resolver and authorized source.
 
+`ValidateMessageSchemaReference` checks that `dataschemaxid` identifies a local
+Schema Resource in the effective model. When `dataschemauri` is also present,
+its document portion must match the binding's explicit self-URL projection;
+a fragment remains the schema format's object selector. The callback does not
+acquire the target or require a dangling Resource to exist. Matching that
+document identity alone does not prove that its fragment selects a schema object.
+
 Domain completion applies string/false defaults where appropriate, mandatory
 CloudEvents flags, fixed `specversion: "1.0"` and the documented current-time
 sentinel for declared `time`. It does not invent absent declarations or replace

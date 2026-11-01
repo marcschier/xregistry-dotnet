@@ -324,6 +324,40 @@ public class MessageEndpointRuntimeTests
     }
 
     [Test]
+    public async Task LocalSchemaFragmentIdentitySurvivesAtomicPatchesAndRestartWithoutTargetAcquisition()
+    {
+        var store = new InMemoryRegistryPersistence();
+        var engine = CreateDomain(RegistryModelKind.CloudEvents, store);
+        var schema = await Send(engine, RegistryAction.Replace, "/schemagroups/g/schemas/s$details",
+            """{"format":"JSONSchema/draft-07","schema":{"definitions":{"Event":{"type":"object"}}}}""");
+        var self = schema.Metadata!.RootElement.GetProperty("self").GetString()!;
+        const string path = "/messagegroups/g/messages/m";
+        string Metadata(string reference) => new System.Text.Json.Nodes.JsonObject
+        {
+            ["dataschemaxid"] = "/schemagroups/g/schemas/s",
+            ["dataschemaformat"] = "JSONSchema/draft-07",
+            ["dataschemauri"] = reference
+        }.ToJsonString();
+        var selected = self + "#/definitions/Event";
+        var created = await Send(engine, RegistryAction.Replace, path, Metadata(selected));
+        await Assert.That(created.Metadata!.RootElement.GetProperty("dataschemauri").GetString()).IsEqualTo(selected);
+        var before = (await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        foreach (var reference in new[] { self + "?other=1#/definitions/Event", "https://other.example/s#/definitions/Event" })
+        {
+            await ExpectCode(() => Send(engine, RegistryAction.Patch, path, Metadata(reference)), "invalid_attribute");
+            await Assert.That((await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText()).IsEqualTo(before);
+            await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        }
+        var restarted = CreateDomain(RegistryModelKind.CloudEvents, store);
+        await Assert.That((await Send(restarted, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText()).IsEqualTo(before);
+        var unselected = await Send(engine, RegistryAction.Patch, path, Metadata(self));
+        await Assert.That(unselected.Metadata!.RootElement.GetProperty("dataschemauri").GetString()).IsEqualTo(self);
+        var restored = await Send(engine, RegistryAction.Patch, path, Metadata(selected));
+        await Assert.That(restored.Metadata!.RootElement.GetProperty("dataschemauri").GetString()).IsEqualTo(selected);
+    }
+
+    [Test]
     public async Task DomainValidationRunsAfterReadonlyInputHasBeenIgnored()
     {
         var engine = Create("""

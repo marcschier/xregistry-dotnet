@@ -100577,9 +100577,13 @@
       ],
       "text": "- If present, MUST be a non-empty case-insensitive string.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read with the envelope name/version definition. GroupSelectorsValidateKindsAndVersionPartsWithoutRewriting covers empty/non-string values, missing names/versions and valid authored lower-case custom envelopes; the same validator is used for Message metadata. Group relation tests compare selectors case-insensitively without rewriting metadata. Custom envelope support is not implied by syntactic admission; complete qualification remains pending.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -100679,9 +100683,13 @@
       ],
       "text": "- If present, MUST be a non-empty case-insensitive string.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read with the protocol naming rule. GroupSelectorsValidateKindsAndVersionPartsWithoutRewriting checks empty/non-string kinds, missing names/versions and valid authored custom/MQTT names. The common Message-specific selector helper preserves spelling, rejects bare MQTT and leaves Endpoint rules separate. Group contract tests enforce case-insensitive agreement. Syntax admission does not certify protocol runtime support or custom-version compatibility.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -101411,9 +101419,12 @@
       ],
       "text": "- Description: Contains the `xid` of the xRegistry `schema` Resource entity associated with the schema document referenced by `dataschemauri`. Note that this means the entity MUST be located within the same Registry.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "ValidateMessageSchemaReference parses a local Resource XID and checks Schema model compatibility; Version/details/Meta/group/wrong-domain targets reject. MessageSchemaReferencesRequireSchemaResources and MessageSchemaReferenceUsesExplicitHostIdentityWithoutAcquiringTargets prove type/path checks and dangling local admission without target acquisition. The binding supplies self identity through an explicit callback, not a network lookup. Existing local schema metadata and URI identity tests cover publication; schema-object resolution is a separate format-specific operation.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -101473,9 +101484,12 @@
       ],
       "text": "- If `dataschemauri` is also present then its value MUST be the `self` URL of the entity referenced by this attribute.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read with the preceding concrete-schema-object requirement and Schema format selector rules: the implementation compares the URI's document portion to the binding-supplied exact Resource self URL, retaining its fragment as a format selector. MessageSchemaReferenceAllowsAFormatSelectorOnlyAfterExactDocumentIdentityMatches and LocalSchemaFragmentIdentitySurvivesAtomicPatchesAndRestartWithoutTargetAcquisition prove exact document matching, fragment retention, query/wrong-document rejection, atomic state/events and restart/reversal. This is identity admission, not proof that the fragment resolves to a concrete schema object; format resolution remains separate and no automatic acquisition is authorized.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
