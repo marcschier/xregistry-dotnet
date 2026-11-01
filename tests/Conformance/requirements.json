@@ -100174,9 +100174,13 @@
       ],
       "text": "The `basemessage` attribute, a URI-typed reference to another message definition, enables such reuse scenarios. Any message definition MAY refer to another message definition as its base, which effects a copy of the base message\u2019s definitions into the message that defines it. The mechanism is transitive, which means that `basemessage` relationships MUST be resolved recursively as long as they do not result in circular references.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Message reuse introduction defines optional basemessage inheritance and recursive resolution without cycles. Read with normative basemessage section at lines 589-634: server stores and admits references without acquisition; consumer materialization follows the caller-authorized source chain. MessageDefinitionMaterializer and MessageMaterializationTraversalTests provide explicit local/external traversal, transitive composition, direct/transitive/alias-cycle handling and unavailable-source outcomes. This is a client materialization obligation, not a server mandate to fetch all bases. Full per-requirement qualification remains pending.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -100749,9 +100753,12 @@
       ],
       "text": "When the value is a relative reference (begins with `/`), it MUST be a valid XID referencing a Resource, or Version, of type `message` within the same registry. When the value is an absolute URI, it MUST point to a message definition in an external registry, but the server is not mandated to validate or resolve external references.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Compound clause separates local Registry-root XID syntax and Message Resource/Version model type from external absolute-URI target resolution. RegistryDomainRules.ValidateMessageBaseReference checks local path kinds and compatible model annotation without requiring target existence, and checks external URI syntax without target access. MissingBaseDefinitionsPublishWithoutAcquisitionOrExistenceValidation covers durable local Resource/Version and unreachable external references; InvalidLocalBaseKindsAndNonMessageTypesRejectBeforePublication covers wrong kinds/types and no events. Client LocalMessageResourceAndVersionReferencesUseTheExplicitRegistryRoot covers the explicit root rather than the definition's URL parent. Qualification remains pending.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -100781,9 +100788,12 @@
       ],
       "text": "Referenced messages MAY themselves have a `basemessage` value; however, the chain of messages MUST NOT be recursive.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Recursive here means a circular base chain, not ordinary multi-level inheritance. Consumer materialization uses requested and acquired actual URI identities to reject direct, transitive and alias cycles before returning a success. UriEquivalentDirectCyclesAreRejectedBeforeAcquisition, ATransitiveCycleCannotReturnAPartialSuccess and ActualSourceIdentityDetectsAnAliasCycle cover these cases; DistinctFragmentsAreNotCollapsedByUriEquality preserves distinct fragment identities. Server external-reference admission does not acquire or validate the external chain. Per-requirement qualification remains pending.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -100812,9 +100822,11 @@
       ],
       "text": "The process that a client SHOULD follow to materialize the message is to follow the `basemessage` references to the end of the chain of messages, get that message's attributes, and then walk back up the chain performing a \"merge\" operation of the next message's attributes. Note that if an inherited attribute is a complex type (e.g. map, object) and the overlaying attribute is scalar, then the entire inherited attribute (and nested values) are replaced by that scalar value. For complex types, the merge is \"deep\", meaning each level of the complex type is merged appropriately rather than it being a complete replacement of the entire complex type.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Client SHOULD traversal is ordered from the authored definition to the oldest available base, then overlays from oldest to newest. Object/map members merge deeply; a scalar overlay replaces the inherited complex value. MessageDefinitionMaterializer.Merge implements this with retained source provenance; RecursiveOverridesReplaceArraysAndScalarsWithoutLosingDuplicatesOrNull covers nested winners, scalar/complex replacement and inherited origins. Its whole-array replacement is an implementation policy, not proof that this prose fully specifies array merge semantics. Property defaults and domain completion occur after complete overlays; unavailable tails remain explicitly incomplete. Qualification remains pending.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -100843,9 +100855,12 @@
       ],
       "text": "If the referenced message can not be found, whether due to a dangling reference, an unreachable external registry, or insufficient permissions, an error MUST NOT be generated. Dangling references are permitted.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Dangling, unavailable and access-denied bases must not make the authored Message invalid solely because they cannot be resolved. Server admission preserves references through publication/restart without invoking target validation. Consumer callbacks return explicit NotFound/Unavailable/AccessDenied statuses; UnavailableBasesRemainExplicitlyIncompleteWithoutFallback and APartiallyAvailableChainKeepsKnownOverlaysAndReportsItsMissingTail retain known metadata while marking incomplete composition. Unexpected callback failures are not converted into these permitted missing outcomes. Full qualification remains pending.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -100905,9 +100920,12 @@
       ],
       "text": "- If the value is a relative reference, it MUST be a valid `xid` of a Resource, or Version, of type `message` as defined by this specification.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read with the local-reference paragraph: slash-leading references must identify local Message Resource/Version XIDs, not Registry/Group/Meta/collection/details or request-version targets. ValidateMessageBaseReference checks actual model compatibility and MessageDefinitionMaterializer resolves against the supplied Registry root/model. InvalidLocalBaseKindsAndNonMessageTypesRejectBeforePublication and InvalidLocalTargetsNeverReachTheAcquisitionCallback provide server/client evidence; imported Message types remain valid. No target-existence mandate follows from XID type validation. Qualification remains pending.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -100937,9 +100955,12 @@
       ],
       "text": "- If the value is an absolute URI, it MUST point to a message definition but the server MUST NOT validate the target.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "External absolute URI must designate a Message, but the server MUST NOT validate its target. URI lexical validation is distinct from target acquisition/type/existence checks. MissingBaseDefinitionsPublishWithoutAcquisitionOrExistenceValidation uses an obligation validator that throws if invoked and proves untouched URI persistence across restart. MessageDefinitionMaterializer delegates optional client resolution only to its explicit source; NoConfiguredSourceNeverCausesImplicitNetworkOrFilesystemAcquisition confirms no implicit I/O. Full per-requirement qualification remains pending.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",

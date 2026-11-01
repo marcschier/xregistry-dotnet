@@ -48,7 +48,7 @@ it does not transfer historical qualification to a successor.
 | http-federation | 84 | 36 | 0 |
 | mapping | 95 | 39 | 0 |
 | media-endpoints | 7 | 0 | 0 |
-| message | 178 | 92 | 0 |
+| message | 178 | 99 | 0 |
 | model | 487 | 241 | 0 |
 | oci | 140 | 60 | 0 |
 | opcua | 205 | 0 | 0 |
