@@ -162,6 +162,46 @@ public static partial class ApiOperationDocumentResolver
         return null;
     }
 
+    private static ApiOperationResolutionResult? ValidateHttpRootTags(JsonElement root, CancellationToken cancellationToken)
+    {
+        if (!root.TryGetProperty("tags", out var tags)) { return null; }
+        if (tags.ValueKind != JsonValueKind.Array)
+        {
+            return Failure(ApiOperationResolutionStatus.Invalid, "document.tags",
+                "Root HTTP tags must be an array of Tag Objects.", "$/tags");
+        }
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        var index = 0;
+        foreach (var tag in tags.EnumerateArray())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var path = "$/tags/" + (index++).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (tag.ValueKind != JsonValueKind.Object)
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid, "document.tag",
+                    "A root tag declaration must be a Tag Object.", path);
+            }
+            if (!tag.TryGetProperty("name", out var name) || name.ValueKind != JsonValueKind.String)
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid, "document.tag_name",
+                    "A Tag Object requires a string name.", path + "/name");
+            }
+            if (tag.TryGetProperty("description", out var description) && description.ValueKind != JsonValueKind.String)
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid, "document.tag_description",
+                    "A Tag Object description must be a string.", path + "/description");
+            }
+            var documentationFailure = ValidateHttpDocumentationShapes(tag, path);
+            if (documentationFailure is not null) { return documentationFailure; }
+            if (!names.Add(name.GetString()!))
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid, "document.tag_duplicate",
+                    "Root HTTP tag names must be unique.", path + "/name");
+            }
+        }
+        return null;
+    }
+
     private static async ValueTask<ApiOperationResolutionResult?> CollectCallbackMatchesAsync(
         JsonElement callback, ReferencedDocument source, string pointer, string operationId,
         List<OperationLocation> matches, Dictionary<string, int> operationCounts,

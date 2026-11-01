@@ -11,6 +11,110 @@ namespace XRegistry.Validation.Tests;
 public class ApiOperationReferenceTests
 {
     [Test]
+    [Arguments("OpenAPI/3.0", "openapi", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "openapi", "3.1.1")]
+    [Arguments("Swagger/2.0", "swagger", "2.0")]
+    public async Task HttpRootTagDeclarationsRejectMalformedMetadataBeforeSelection(
+        string format, string versionField, string version)
+    {
+        var invalid = new (string Json, string Code, string Suffix)[]
+        {
+            ("null", "document.tags", ""), ("true", "document.tags", ""),
+            ("1", "document.tags", ""), ("\"tag\"", "document.tags", ""), ("{}", "document.tags", ""),
+            ("[null]", "document.tag", "/0"), ("[true]", "document.tag", "/0"),
+            ("[1]", "document.tag", "/0"), ("[\"tag\"]", "document.tag", "/0"), ("[[]]", "document.tag", "/0"),
+            ("[{}]", "document.tag_name", "/0/name"),
+            ("""[{"$ref":"https://not-acquired.test/tag"}]""", "document.tag_name", "/0/name"),
+            ("""[{"name":null}]""", "document.tag_name", "/0/name"),
+            ("""[{"name":true}]""", "document.tag_name", "/0/name"),
+            ("""[{"name":1}]""", "document.tag_name", "/0/name"),
+            ("""[{"name":[]}]""", "document.tag_name", "/0/name"),
+            ("""[{"name":{}}]""", "document.tag_name", "/0/name"),
+            ("""[{"name":"tag","description":null}]""", "document.tag_description", "/0/description"),
+            ("""[{"name":"tag","description":true}]""", "document.tag_description", "/0/description"),
+            ("""[{"name":"tag","description":1}]""", "document.tag_description", "/0/description"),
+            ("""[{"name":"tag","description":[]}]""", "document.tag_description", "/0/description"),
+            ("""[{"name":"tag","description":{}}]""", "document.tag_description", "/0/description"),
+            ("""[{"name":"tag","externalDocs":null}]""", "document.external_docs", "/0/externalDocs"),
+            ("""[{"name":"tag","externalDocs":{}}]""", "document.external_docs_url", "/0/externalDocs/url"),
+            ("""[{"name":"tag","externalDocs":{"url":"https://docs.test","description":null}}]""",
+                "document.external_docs_description", "/0/externalDocs/description"),
+            ("""[{"name":"same"},{"name":"same"}]""", "document.tag_duplicate", "/1/name"),
+            ("""[{"name":""},{"name":""}]""", "document.tag_duplicate", "/1/name")
+        };
+        foreach (var (json, code, suffix) in invalid)
+        {
+            foreach (var selector in new[] { "operations/Target", "operations/Missing", "/paths/~1items/get" })
+            {
+                var document = new JsonObject
+                {
+                    [versionField] = version, ["tags"] = JsonNode.Parse(json),
+                    ["paths"] = new JsonObject
+                    {
+                        ["/items"] = new JsonObject { ["get"] = new JsonObject { ["operationId"] = "Target" } },
+                        ["/remote"] = new JsonObject { ["$ref"] = "https://not-acquired.test/path" }
+                    }
+                };
+                var calls = 0;
+                var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                    resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+                await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+                await Assert.That(result.Diagnostic.Path).IsEqualTo("$/tags" + suffix);
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                await Assert.That(calls).IsEqualTo(0);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "openapi", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "openapi", "3.1.1")]
+    [Arguments("Swagger/2.0", "swagger", "2.0")]
+    public async Task HttpRootTagsRetainOptionalityOrdinalNamesAndUnlistedOperationTags(
+        string format, string versionField, string version)
+    {
+        foreach (var tags in new[]
+        {
+            "[]", """[{"name":""}]""",
+            """
+            [{"name":"tag"},{"name":"Tag"},{"name":"","description":""},
+                {"name":"unused","externalDocs":{"url":"https://not-acquired.test/docs"},
+                 "x-metadata":{"name":null,"$ref":"https://not-acquired.test/extension"}}]
+            """
+        })
+        {
+            var operation = JsonNode.Parse("""{"operationId":"Target","tags":["undeclared","undeclared",""]}""")!;
+            var document = new JsonObject
+            {
+                [versionField] = version, ["tags"] = JsonNode.Parse(tags),
+                ["paths"] = new JsonObject { ["/items"] = new JsonObject { ["get"] = operation } }
+            };
+            foreach (var hasTags in new[] { true, false })
+            {
+                if (!hasTags) { document.Remove("tags"); }
+                foreach (var selector in new[] { "operations/Target", "/paths/~1items/get", "operations/Missing" })
+                {
+                    var calls = 0;
+                    var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                        System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                        ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                        resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+                    await Assert.That(result.Status).IsEqualTo(selector == "operations/Missing"
+                        ? ApiOperationResolutionStatus.NotFound : ApiOperationResolutionStatus.Selected);
+                    await Assert.That(calls).IsEqualTo(0);
+                    if (result.Status == ApiOperationResolutionStatus.Selected)
+                    {
+                        await Assert.That(JsonNode.DeepEquals(operation, JsonNode.Parse(result.Operation.GetRawText()))).IsTrue();
+                    }
+                }
+            }
+        }
+    }
+
+    [Test]
     public async Task SwaggerMediaTypeDeclarationsRejectMalformedNamesAndParameters()
     {
         foreach (var text in new[]
