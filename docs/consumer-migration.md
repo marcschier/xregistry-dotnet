@@ -565,6 +565,14 @@ and tags need not be unique. A malformed unrelated operation prevents named
 selection but does not invalidate a pointer to another operation. Extension
 contents remain opaque. These checks do not establish complete Operation
 Object validation.
+Root and reached HTTP operation `externalDocs` values must be objects with a
+string `url` and, when present, a string `description`. An External
+Documentation Object is not a Reference Object: a `$ref` alone cannot replace
+its required `url`. Documentation addresses and extension contents are retained
+as authored data and never passed to the dependency resolver. Root checks run
+before named or pointer selection; operation checks retain the traversal
+boundaries above. This establishes required fields and JSON shapes only, not
+URL/URI syntax qualification or documentation-address resolution.
 OpenAPI 3.1 operation-ID selection also searches `webhooks`, including referenced
 Path Items. Webhook names are exact strings, not slash-prefixed paths; an `x-`
 name in this map is a webhook, not a Paths specification extension. Duplicate

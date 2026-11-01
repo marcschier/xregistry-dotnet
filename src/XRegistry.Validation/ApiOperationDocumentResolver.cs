@@ -492,6 +492,8 @@ public static partial class ApiOperationDocumentResolver
                 "The root swagger value must be '2.0'.", "$/swagger");
         }
 
+        var documentationFailure = ValidateHttpDocumentationShapes(root, "$");
+        if (documentationFailure is not null) { return documentationFailure; }
         var componentFailure = ValidateApiReusableShapes(format, root, cancellationToken);
         if (componentFailure is not null)
         {

@@ -14,6 +14,165 @@ public class ApiOperationReferenceTests
     [Arguments("OpenAPI/3.0", "openapi", "3.0.4")]
     [Arguments("OpenAPI/3.1", "openapi", "3.1.1")]
     [Arguments("Swagger/2.0", "swagger", "2.0")]
+    public async Task HttpExternalDocumentationShapesRejectBeforeSelectionOrRetrieval(
+        string format, string versionField, string version)
+    {
+        foreach (var metadata in new[]
+        {
+            "null", "true", "1", "[]", "\"docs\"", "{}",
+            """{"$ref":"https://not-acquired.test/docs"}""",
+            """{"url":null}""", """{"url":true}""", """{"url":1}""",
+            """{"url":[]}""", """{"url":{}}""",
+            """{"url":"https://docs.test","description":null}""",
+            """{"url":"https://docs.test","description":true}""",
+            """{"url":"https://docs.test","description":1}""",
+            """{"url":"https://docs.test","description":[]}""",
+            """{"url":"https://docs.test","description":{}}"""
+        })
+        {
+            foreach (var atRoot in new[] { false, true })
+            {
+                foreach (var selector in new[] { "operations/Target", "operations/Missing", "/paths/~1items/get" })
+                {
+                    var operation = new JsonObject { ["operationId"] = "Target" };
+                    var document = new JsonObject
+                    {
+                        [versionField] = version,
+                        ["paths"] = new JsonObject { ["/items"] = new JsonObject { ["get"] = operation } }
+                    };
+                    (atRoot ? document : operation)["externalDocs"] = JsonNode.Parse(metadata);
+                    if (atRoot)
+                    {
+                        document["paths"]!["/remote"] = new JsonObject { ["$ref"] = "https://not-acquired.test/path" };
+                    }
+                    var calls = 0;
+                    var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                        System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                        ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                        resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+                    await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+                    var objectValue = metadata.StartsWith('{');
+                    var description = metadata.Contains("description", StringComparison.Ordinal);
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo(!objectValue
+                        ? "document.external_docs" : description ? "document.external_docs_description" : "document.external_docs_url");
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo((atRoot ? "$" : "$/paths/~1items/get") +
+                        "/externalDocs" + (!objectValue ? "" : description ? "/description" : "/url"));
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                    await Assert.That(calls).IsEqualTo(0);
+                }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "openapi", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "openapi", "3.1.1")]
+    [Arguments("Swagger/2.0", "swagger", "2.0")]
+    public async Task HttpExternalDocumentationRemainsUnretrievedAndPreservesAuthoredValues(
+        string format, string versionField, string version)
+    {
+        var docs = new JsonObject
+        {
+            ["url"] = "https://docs.test/guide%2Fsection?q=a#part", ["description"] = "",
+            ["x-value"] = new JsonObject { ["$ref"] = "https://not-acquired.test/extension", ["url"] = null }
+        };
+        var operation = new JsonObject { ["operationId"] = "Target", ["externalDocs"] = docs.DeepClone() };
+        var document = new JsonObject
+        {
+            [versionField] = version, ["externalDocs"] = docs.DeepClone(),
+            ["paths"] = new JsonObject { ["/items"] = new JsonObject { ["get"] = operation.DeepClone() } }
+        };
+        foreach (var referenced in new[] { false, true })
+        {
+            document["paths"]!["/items"]!["get"] = referenced
+                ? new JsonObject { ["$ref"] = "https://allowed.test/operation" } : operation.DeepClone();
+            var calls = new List<string>();
+            var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+                resolveReference: (uri, _) =>
+                {
+                    calls.Add(uri);
+                    if (uri != "https://allowed.test/operation") { throw new UnauthorizedAccessException(); }
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+                        System.Text.Encoding.UTF8.GetBytes(operation.ToJsonString()));
+                });
+            await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+            await Assert.That(JsonNode.DeepEquals(operation, JsonNode.Parse(result.Operation.GetRawText()))).IsTrue();
+            await Assert.That(calls.Count).IsEqualTo(referenced ? 1 : 0);
+        }
+        operation["externalDocs"] = new JsonObject { ["description"] = "missing URL" };
+        document["paths"]!["/items"]!["get"] = new JsonObject { ["$ref"] = "https://allowed.test/operation" };
+        var invalid = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+            resolveReference: (_, _) => ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+                System.Text.Encoding.UTF8.GetBytes(operation.ToJsonString())));
+        await Assert.That(invalid.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(invalid.Diagnostic!.Path).IsEqualTo("$/externalDocs/url");
+        await Assert.That(invalid.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task HttpDocumentationChecksRetainRelativeAddressesAndCallbackPointerLocality(string format, string version)
+    {
+        var operation = JsonNode.Parse("""
+            {"operationId":"Parent","externalDocs":{"url":"../docs#guide"},
+             "callbacks":{"event":{"{$request.query.url}":{"post":{"operationId":"Child",
+              "externalDocs":{"url":"#child","description":""}}}}}}
+            """)!;
+        var document = new JsonObject
+        {
+            ["openapi"] = version, ["externalDocs"] = new JsonObject { ["url"] = "/docs" },
+            ["paths"] = new JsonObject { ["/items"] = new JsonObject { ["get"] = operation } }
+        };
+        var reference = ApiOperationReference.Parse(
+            "/apigroups/g/apis/a#/paths/~1items/get/callbacks/event/%7B$request.query.url%7D/post");
+        var valid = ApiOperationDocumentResolver.Resolve(format, "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()), reference);
+        await Assert.That(valid.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(valid.Operation.GetProperty("externalDocs").GetProperty("url").GetString()).IsEqualTo("#child");
+        var child = operation["callbacks"]!["event"]!["{$request.query.url}"]!["post"]!;
+        foreach (var ancestor in new[] { false, true })
+        {
+            var selected = ancestor ? operation : child;
+            var saved = selected["externalDocs"]!.DeepClone();
+            selected["externalDocs"] = new JsonObject { ["description"] = "missing" };
+            var invalid = ApiOperationDocumentResolver.Resolve(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()), reference);
+            await Assert.That(invalid.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+            await Assert.That(invalid.Diagnostic!.Path).IsEqualTo("$/paths/~1items/get" +
+                (ancestor ? "" : "/callbacks/event/{$request.query.url}/post") + "/externalDocs/url");
+            await Assert.That(invalid.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            selected["externalDocs"] = saved;
+        }
+        document["paths"]!["/unrelated"] = new JsonObject
+        {
+            ["get"] = new JsonObject { ["externalDocs"] = null }
+        };
+        var local = ApiOperationDocumentResolver.Resolve(format, "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()), reference);
+        await Assert.That(local.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        var named = ApiOperationDocumentResolver.Resolve(format, "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Child"));
+        await Assert.That(named.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(named.Diagnostic!.Path).IsEqualTo("$/paths/~1unrelated/get/externalDocs");
+        document.Remove("externalDocs");
+        operation.AsObject().Remove("externalDocs");
+        child.AsObject().Remove("externalDocs");
+        var absent = ApiOperationDocumentResolver.Resolve(format, "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()), reference);
+        await Assert.That(absent.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(absent.Operation.TryGetProperty("externalDocs", out _)).IsFalse();
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "openapi", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "openapi", "3.1.1")]
+    [Arguments("Swagger/2.0", "swagger", "2.0")]
     public async Task HttpOperationMetadataShapesApplyToNamedAndPointerSelections(
         string format, string versionField, string version)
     {

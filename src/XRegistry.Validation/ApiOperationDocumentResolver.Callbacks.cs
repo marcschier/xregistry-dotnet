@@ -95,6 +95,29 @@ public static partial class ApiOperationDocumentResolver
                 index++;
             }
         }
+        return ValidateHttpDocumentationShapes(operation, pointer);
+    }
+
+    private static ApiOperationResolutionResult? ValidateHttpDocumentationShapes(JsonElement value, string pointer)
+    {
+        if (!value.TryGetProperty("externalDocs", out var documentation)) { return null; }
+        var path = pointer + "/externalDocs";
+        if (documentation.ValueKind != JsonValueKind.Object)
+        {
+            return Failure(ApiOperationResolutionStatus.Invalid, "document.external_docs",
+                "HTTP externalDocs must be an External Documentation Object.", path);
+        }
+        if (!documentation.TryGetProperty("url", out var url) || url.ValueKind != JsonValueKind.String)
+        {
+            return Failure(ApiOperationResolutionStatus.Invalid, "document.external_docs_url",
+                "An External Documentation Object requires a string url.", path + "/url");
+        }
+        if (documentation.TryGetProperty("description", out var description) &&
+            description.ValueKind != JsonValueKind.String)
+        {
+            return Failure(ApiOperationResolutionStatus.Invalid, "document.external_docs_description",
+                "An External Documentation Object description must be a string.", path + "/description");
+        }
         return null;
     }
 
