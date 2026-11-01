@@ -14,6 +14,46 @@ namespace XRegistry.Server.Tests;
 public class MessagePropertyDeclarationTests
 {
     [Test]
+    [Arguments("envelopemetadata")]
+    [Arguments("properties")]
+    [Arguments("application-properties")]
+    [Arguments("message-annotations")]
+    [Arguments("delivery-annotations")]
+    [Arguments("footer")]
+    public async Task OpaqueSpecificationUriPatchesRejectAtomicallyAcrossDeclarationSections(string section)
+    {
+        using var packaged = BuiltInRegistryModels.LoadSource(RegistryModelKind.Message);
+        var model = JsonNode.Parse(packaged.RootElement.GetRawText())!;
+        var attributes = model["groups"]!["messagegroups"]!["resources"]!["messages"]!["attributes"]!;
+        var target = section == "envelopemetadata"
+            ? attributes["envelope"]!["ifvalues"]!["CloudEvents/1.0"]!["siblingattributes"]!["envelopemetadata"]!.AsObject()
+            : attributes["protocol"]!["ifvalues"]!["AMQP/1.0"]!["siblingattributes"]!["protocoloptions"]!["attributes"]![section]!.AsObject();
+        target["type"] = "any";
+        target.Remove("attributes");
+        var engine = Create(model.ToJsonString());
+        var name = section == "properties" ? "subject" : "example";
+        JsonObject Metadata(string reference)
+        {
+            var map = new JsonObject { [name] = new JsonObject { ["specurl"] = reference } };
+            return section == "envelopemetadata"
+                ? new JsonObject { ["envelope"] = "CloudEvents/1.0", ["envelopemetadata"] = map }
+                : new JsonObject { ["protocol"] = "AMQP/1.0", ["protocoloptions"] = new JsonObject { [section] = map } };
+        }
+        await Send(engine, RegistryAction.Replace, "/messagegroups/g/messages/m", Metadata("../specs/property").ToJsonString());
+        var before = (await Send(engine, RegistryAction.Read, "/messagegroups/g/messages/m")).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        await ExpectCode(() => Send(engine, RegistryAction.Patch, "/messagegroups/g/messages/m",
+            Metadata("bad uri").ToJsonString()), "invalid_attribute");
+        await Assert.That((await Send(engine, RegistryAction.Read, "/messagegroups/g/messages/m")).Metadata!.RootElement.GetRawText())
+            .IsEqualTo(before);
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        var updated = await Send(engine, RegistryAction.Patch, "/messagegroups/g/messages/m", Metadata("#property").ToJsonString());
+        var declarations = section == "envelopemetadata" ? updated.Metadata!.RootElement.GetProperty(section)
+            : updated.Metadata!.RootElement.GetProperty("protocoloptions").GetProperty(section);
+        await Assert.That(declarations.GetProperty(name).GetProperty("specurl").GetString()).IsEqualTo("#property");
+    }
+
+    [Test]
     [Arguments("boolean", "true")]
     [Arguments("integer", "42")]
     [Arguments("number", "1.25")]

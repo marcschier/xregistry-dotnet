@@ -11,6 +11,125 @@ namespace XRegistry.Models.Tests;
 public class MessageMaterializationRawDeclarationsTests
 {
     [Test]
+    [Arguments("HTTP", "headers", false)]
+    [Arguments("NATS", "headers", false)]
+    [Arguments("MQTT/5.0", "user_properties", false)]
+    [Arguments("KAFKA", "headers", true)]
+    public async Task ProtocolHeaderSpecificationUrisUseTheSameDomainSyntaxChecks(
+        string protocol, string field, bool map)
+    {
+        foreach (var reference in new[] { "../specs/header", "urn:example:header", "bad uri", "specs/%xz" })
+        {
+            var declaration = new JsonObject { ["name"] = "X-Test", ["specurl"] = reference };
+            var headers = map ? (JsonNode)new JsonObject { ["example"] = declaration } : new JsonArray(declaration);
+            var input = RegistryJson.Parse(new JsonObject
+            {
+                ["protocol"] = protocol, ["protocoloptions"] = new JsonObject { [field] = headers }
+            }.ToJsonString());
+            if (reference is "bad uri" or "specs/%xz")
+            {
+                var error = await Assert.That(() => RegistryDomainRules.CompleteMessageMetadata(input)).Throws<RegistryException>();
+                await Assert.That(error!.Diagnostic.Code).IsEqualTo("invalid_attribute");
+                await Assert.That(error.Diagnostic.Path).IsEqualTo("/protocoloptions/" + field + (map ? "/example" : "/0") + "/specurl");
+            }
+            else
+            {
+                var completed = RegistryDomainRules.CompleteMessageMetadata(input);
+                var values = completed.RootElement.GetProperty("protocoloptions").GetProperty(field);
+                var property = map ? values.GetProperty("example") : values[0];
+                await Assert.That(property.GetProperty("specurl").GetString()).IsEqualTo(reference);
+                await Assert.That(property.GetProperty("name").GetString()).IsEqualTo("X-Test");
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("envelopemetadata")]
+    [Arguments("properties")]
+    [Arguments("application-properties")]
+    [Arguments("message-annotations")]
+    [Arguments("delivery-annotations")]
+    [Arguments("footer")]
+    public async Task OpaquePropertySpecificationReferencesUseCoreUriSyntaxWithoutAcquisition(string section)
+    {
+        var name = section == "properties" ? "subject" : "example";
+        foreach (var reference in new[] { "../specs/property", "/specs/property", "#part", "urn:example:property",
+            "https://specs.example/property?q=value#part", "specs/%E2%82%AC" })
+        {
+            var declarations = new JsonObject { [name] = new JsonObject { ["specurl"] = reference } };
+            var definition = new MessageDefinition(Metadata(section, declarations.ToJsonString()),
+                new Uri("https://registry.example/message"), model: Model(section, opaque: true, defaults: false));
+            var calls = 0;
+            var result = await MessageDefinitionMaterializer.MaterializeAsync(definition, (_, _) =>
+            {
+                calls++;
+                throw new UnauthorizedAccessException("Specification references must not be acquired.");
+            });
+            var path = SectionPath(section) + "/" + name + "/specurl";
+            await Assert.That(Declarations(result.Metadata.RootElement, section).GetProperty(name)
+                .GetProperty("specurl").GetString()).IsEqualTo(reference);
+            await Assert.That(result.PropertySources[path].Location).IsEqualTo(definition.Location);
+            await Assert.That(result.IsComplete).IsTrue();
+            await Assert.That(calls).IsEqualTo(0);
+        }
+    }
+
+    [Test]
+    [Arguments("envelopemetadata")]
+    [Arguments("properties")]
+    [Arguments("application-properties")]
+    [Arguments("message-annotations")]
+    [Arguments("delivery-annotations")]
+    [Arguments("footer")]
+    public async Task OpaquePropertySpecificationReferencesCannotBypassUriValidation(string section)
+    {
+        var name = section == "properties" ? "subject" : "example";
+        foreach (var reference in new[] { "bad uri", "https://specs.example/%", "https://specs.example/%xz",
+            @"https://specs.example\property", "specs\nproperty", "https://[invalid/property" })
+        {
+            var declarations = new JsonObject { [name] = new JsonObject { ["specurl"] = reference } };
+            var definition = new MessageDefinition(Metadata(section, declarations.ToJsonString()),
+                new Uri("https://registry.example/message"), model: Model(section, opaque: true, defaults: false));
+            var calls = 0;
+            var error = await Assert.That(async () => await MessageDefinitionMaterializer.MaterializeAsync(definition, (_, _) =>
+            {
+                calls++;
+                throw new UnauthorizedAccessException("Specification references must not be acquired.");
+            })).Throws<RegistryException>();
+            await Assert.That(error!.Diagnostic.Code).IsEqualTo("invalid_attribute");
+            await Assert.That(error.Diagnostic.Path).IsEqualTo(SectionPath(section) + "/" + name + "/specurl");
+            await Assert.That(calls).IsEqualTo(0);
+        }
+    }
+
+    [Test]
+    public async Task InheritedSpecificationReferencesPreserveDeclaringOriginsAcrossOverlay()
+    {
+        var model = Model("envelopemetadata", opaque: true, defaults: false);
+        var baseline = new MessageDefinition(Metadata("envelopemetadata",
+            """{"example":{"specurl":"../specs/property","description":"base"}}"""),
+            new Uri("https://base.example/messages/base"), model: model);
+        var authored = JsonNode.Parse(Metadata("envelopemetadata",
+            """{"example":{"description":"child"}}""").RootElement.GetRawText())!.AsObject();
+        authored["basemessage"] = baseline.Location.AbsoluteUri;
+        var root = new MessageDefinition(RegistryJson.Parse(authored.ToJsonString()),
+            new Uri("https://child.example/messages/child"), model: model);
+        var calls = 0;
+        var result = await MessageDefinitionMaterializer.MaterializeAsync(root, (request, _) =>
+        {
+            calls++;
+            if (request.TargetUri != baseline.Location) { throw new InvalidOperationException("Unexpected source."); }
+            return ValueTask.FromResult(MessageDefinitionSourceResult.Found(baseline));
+        });
+        var property = result.Metadata.RootElement.GetProperty("envelopemetadata").GetProperty("example");
+        await Assert.That(property.GetProperty("specurl").GetString()).IsEqualTo("../specs/property");
+        await Assert.That(property.GetProperty("description").GetString()).IsEqualTo("child");
+        await Assert.That(result.PropertySources["/envelopemetadata/example/specurl"].Location).IsEqualTo(baseline.Location);
+        await Assert.That(result.PropertySources["/envelopemetadata/example/description"].Location).IsEqualTo(root.Location);
+        await Assert.That(calls).IsEqualTo(1);
+    }
+
+    [Test]
     [Arguments("envelopemetadata", false)]
     [Arguments("envelopemetadata", true)]
     [Arguments("application-properties", false)]

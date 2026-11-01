@@ -108,6 +108,10 @@ public static partial class RegistryDomainRules
                 }
             }
             _ = OptionalText(declaration, "description", At(path, "description"));
+            if (declaration.TryGetProperty("specurl", out var specification))
+            {
+                Scalar("uri", specification, At(path, "specurl"), cancellationToken);
+            }
             if (declaration.TryGetProperty("required", out var required) && required.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
             {
                 throw Invalid("The required declaration must be boolean.", At(path, "required"));

@@ -23,6 +23,15 @@ noncharacters prohibited by CloudEvents are rejected. Fixed AMQP properties
 retain their own types and widths, including unsigned message IDs and Group
 sequence numbers. Base64 constraints are canonical byte representations.
 
+Property `specurl` declarations use Core relative-or-absolute URI syntax even
+when the containing declaration map is modeled as `any`. Malformed escapes,
+backslashes, raw whitespace and invalid authority spellings reject at the
+declaration's `specurl` path. Valid references retain their authored spelling;
+validation does not fetch the specification or turn a relative reference into
+an absolute URI. Inherited references keep the declaring Message's origin in
+materialization provenance, independently of the derived Message's location.
+These checks apply to CloudEvents, AMQP property sections and protocol headers.
+
 Domain completion applies string/false defaults where appropriate, mandatory
 CloudEvents flags, fixed `specversion: "1.0"` and the documented current-time
 sentinel for declared `time`. It does not invent absent declarations or replace
