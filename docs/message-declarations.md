@@ -58,6 +58,12 @@ Message-compatible models enforce these shapes even when `header` is modeled
 as `any`; priority, time-to-live and delivery-count retain their protocol
 integer bounds. Valid scalar values are stored without coercion.
 
+MQTT `retain` is also a native boolean in both MQTT/3.1.1 and MQTT/5.0.
+Domain validation rejects strings, numbers and declaration objects rather than
+coercing them to a flag, including in compatible models that use `any` for this
+field. Stored `true` and `false` remain distinct; a Core null patch clears the
+optional field before validating the resulting Message metadata.
+
 Server completion calls the same pure domain implementation after Core
 validation, only for explicitly Message-compatible Resources. Rejected writes
 and patches publish no partial metadata or outbox changes. Other custom models

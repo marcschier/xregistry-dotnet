@@ -14,6 +14,47 @@ namespace XRegistry.Server.Tests;
 public class MessagePropertyDeclarationTests
 {
     [Test]
+    [Arguments("MQTT/3.1.1")]
+    [Arguments("MQTT/5.0")]
+    public async Task OpaqueMqttRetainRejectsCoercionAndPreservesAtomicReversalAndRestart(string protocol)
+    {
+        using var packaged = BuiltInRegistryModels.LoadSource(RegistryModelKind.Message);
+        var model = JsonNode.Parse(packaged.RootElement.GetRawText())!;
+        model["groups"]!["messagegroups"]!["resources"]!["messages"]!["attributes"]!
+            ["protocol"]!["ifvalues"]![protocol]!["siblingattributes"]!["protocoloptions"]!["attributes"]!["retain"]!["type"] = "any";
+        var store = new InMemoryRegistryPersistence();
+        var engine = Create(model.ToJsonString(), store);
+        const string path = "/messagegroups/g/messages/m";
+        string Metadata(string value) => new JsonObject
+        {
+            ["protocol"] = protocol, ["protocoloptions"] = new JsonObject { ["retain"] = JsonNode.Parse(value) }
+        }.ToJsonString();
+        await ExpectCode(() => Send(engine, RegistryAction.Replace, path, Metadata("1")), "invalid_attribute");
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(0);
+        var created = await Send(engine, RegistryAction.Replace, path, Metadata("false"));
+        await Assert.That(created.Metadata!.RootElement.GetProperty("protocoloptions").GetProperty("retain").GetBoolean()).IsFalse();
+        var before = (await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        foreach (var invalid in new[] { "\"true\"", "0", "[]", """{"value":true}""" })
+        {
+            await ExpectCode(() => Send(engine, RegistryAction.Patch, path, Metadata(invalid)), "invalid_attribute");
+            await Assert.That((await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText()).IsEqualTo(before);
+            await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        }
+        foreach (var value in new[] { "true", "false" })
+        {
+            var updated = await Send(engine, RegistryAction.Patch, path, Metadata(value));
+            await Assert.That(updated.Metadata!.RootElement.GetProperty("protocoloptions").GetProperty("retain").GetBoolean())
+                .IsEqualTo(value == "true");
+        }
+        var restarted = Create(model.ToJsonString(), store);
+        await Assert.That((await Send(restarted, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText())
+            .IsEqualTo((await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText());
+        var cleared = await Send(engine, RegistryAction.Patch, path, Metadata("null"));
+        await Assert.That(cleared.Metadata!.RootElement.GetProperty("protocoloptions").TryGetProperty("retain", out _)).IsFalse();
+    }
+
+    [Test]
     public async Task OpaqueAmqpHeaderRejectsNonNativeShapesWithoutChangingStoredState()
     {
         using var packaged = BuiltInRegistryModels.LoadSource(RegistryModelKind.Message);

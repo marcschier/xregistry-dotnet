@@ -10,6 +10,41 @@ namespace XRegistry.Models.Tests;
 public class MessageEndpointRuntimeRulesTests
 {
     [Test]
+    [Arguments("true", true)]
+    [Arguments("false", true)]
+    [Arguments("null", false)]
+    [Arguments("0", false)]
+    [Arguments("1", false)]
+    [Arguments("\"true\"", false)]
+    [Arguments("{}", false)]
+    [Arguments("[]", false)]
+    [Arguments("""{"value":true}""", false)]
+    public async Task MqttRetainMustBeANativeBooleanForBothProtocolVersions(string value, bool valid)
+    {
+        foreach (var protocol in new[] { "MQTT/3.1.1", "MQTT/5.0", "mqtt/5.0" })
+        {
+            var input = RegistryJson.Parse(new JsonObject
+            {
+                ["protocol"] = protocol,
+                ["protocoloptions"] = new JsonObject { ["retain"] = JsonNode.Parse(value) }
+            }.ToJsonString());
+            if (valid)
+            {
+                var completed = RegistryDomainRules.CompleteMessageMetadata(input);
+                await Assert.That(completed.RootElement.GetProperty("protocoloptions").GetProperty("retain").GetBoolean())
+                    .IsEqualTo(value == "true");
+                await Assert.That(completed.RootElement.GetProperty("protocol").GetString()).IsEqualTo(protocol);
+            }
+            else
+            {
+                var error = await Assert.That(() => RegistryDomainRules.CompleteMessageMetadata(input)).Throws<RegistryException>();
+                await Assert.That(error!.Diagnostic.Code).IsEqualTo("invalid_attribute");
+                await Assert.That(error.Diagnostic.Path).IsEqualTo("/protocoloptions/retain");
+            }
+        }
+    }
+
+    [Test]
     [Arguments("[]", "/protocoloptions/header")]
     [Arguments("true", "/protocoloptions/header")]
     [Arguments("\"header\"", "/protocoloptions/header")]

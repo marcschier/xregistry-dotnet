@@ -56,11 +56,7 @@ public static partial class RegistryDomainRules
             }
             foreach (var name in new[] { "durable", "first-acquirer" })
             {
-                if (headerValues.TryGetProperty(name, out var value) &&
-                    value.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
-                {
-                    throw Invalid("The AMQP header field must be boolean.", At("/protocoloptions/header", name));
-                }
+                ProtocolBoolean(headerValues, name, "/protocoloptions/header");
             }
             ProtocolInteger(headerValues, "priority", byte.MaxValue, "/protocoloptions/header");
             ProtocolInteger(headerValues, "ttl", uint.MaxValue, "/protocoloptions/header");
@@ -68,6 +64,7 @@ public static partial class RegistryDomainRules
         }
         if (SelectorIs(message, "protocol", "MQTT/3.1.1") || SelectorIs(message, "protocol", "MQTT/5.0"))
         {
+            ProtocolBoolean(options, "retain", "/protocoloptions");
             ProtocolInteger(options, "qos", 2, "/protocoloptions");
             ProtocolInteger(options, "payload_format_indicator", 1, "/protocoloptions");
             ProtocolInteger(options, "message_expiry_interval", uint.MaxValue, "/protocoloptions");
@@ -121,6 +118,15 @@ public static partial class RegistryDomainRules
         else if (SelectorIs(message, "protocol", "KAFKA") && Present(options, "key") && Present(options, "key_base64"))
         {
             throw Invalid("Kafka key and key_base64 are mutually exclusive.", "/protocoloptions/key_base64");
+        }
+    }
+
+    private static void ProtocolBoolean(JsonElement options, string name, string path)
+    {
+        if (options.TryGetProperty(name, out var value) &&
+            value.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+        {
+            throw Invalid("The protocol field must be boolean.", At(path, name));
         }
     }
 
