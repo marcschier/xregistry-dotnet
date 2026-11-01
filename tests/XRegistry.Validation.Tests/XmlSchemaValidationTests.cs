@@ -10,6 +10,114 @@ namespace XRegistry.Validation.Tests;
 public class XmlSchemaValidationTests
 {
     [Test]
+    [Arguments("""<xs:choice><xs:element name="x" type="xs:int"/></xs:choice>""")]
+    [Arguments("""<xs:choice minOccurs="0" maxOccurs="unbounded"><xs:element name="x" type="xs:int"/><xs:element name="y" type="xs:boolean"/></xs:choice>""")]
+    [Arguments("""<xs:sequence><xs:choice><xs:element name="x"/><xs:sequence><xs:element name="y"/><xs:element name="z"/></xs:sequence></xs:choice><xs:element name="end"/></xs:sequence>""")]
+    [Arguments("""<xs:choice><xs:choice><xs:element name="x"/><xs:element name="y"/></xs:choice><xs:element name="z"/></xs:choice>""")]
+    [Arguments("""<xs:choice><xs:element name="x"/><xs:any namespace="##other" processContents="lax"/></xs:choice>""")]
+    public async Task ChoiceContentModelsCompileNativeSingleNestedAndWildcardParticles(string content)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(
+            "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"root\"><xs:complexType>" +
+            content + "</xs:complexType></xs:element></xs:schema>"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task EmptyRequiredChoicesPreserveNativeCompilerWarningsAsUncheckedResults()
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes("""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="root"><xs:complexType><xs:choice/></xs:complexType></xs:element></xs:schema>
+            """));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Indeterminate);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("xsd.unresolved");
+        await Assert.That(result.Diagnostics[0].Detail.Length).IsGreaterThan(0);
+    }
+
+    [Test]
+    [Arguments("""<xs:choice><xs:element name="x" type="xs:int"/><xs:element name="x" type="xs:string"/></xs:choice>""")]
+    [Arguments("""<xs:choice><xs:element name="x"/><xs:any namespace="##any"/></xs:choice>""")]
+    [Arguments("""<xs:choice minOccurs="2" maxOccurs="1"><xs:element name="x"/></xs:choice>""")]
+    [Arguments("""<xs:choice><xs:all><xs:element name="x"/></xs:all></xs:choice>""")]
+    [Arguments("""<xs:choice><xs:attribute name="x"/></xs:choice>""")]
+    [Arguments("""<xs:choice><xs:element ref="Missing"/></xs:choice>""")]
+    public async Task ChoiceParticleAmbiguityAndContradictionsRejectNativeCompilation(string content)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(
+            "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"root\"><xs:complexType>" +
+            content + "</xs:complexType></xs:element></xs:schema>"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("xsd.schema");
+    }
+
+    [Test]
+    [Arguments(2, DocumentValidationStatus.Valid)]
+    [Arguments(16, DocumentValidationStatus.Indeterminate)]
+    public async Task ChoiceBranchesReserveCumulativeWorkBeforeNativeCompilation(
+        int count, DocumentValidationStatus expected)
+    {
+        var content = string.Concat(Enumerable.Range(0, count).Select(index =>
+            $"<xs:choice><xs:element name=\"a{index}\"/><xs:element name=\"b{index}\"/></xs:choice>"));
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(
+            "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"root\"><xs:complexType><xs:sequence>" +
+            content + "</xs:sequence></xs:complexType></xs:element></xs:schema>"));
+        await Assert.That(result.Status).IsEqualTo(expected);
+        if (expected == DocumentValidationStatus.Indeterminate)
+        {
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("limit.work");
+        }
+    }
+
+    [Test]
+    public async Task ChoiceAnnotationsDoNotMultiplyParticleBranchReservations()
+    {
+        var annotations = string.Concat(Enumerable.Range(0, 40).Select(index =>
+            $"<xs:documentation>note {index}</xs:documentation>"));
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(
+            "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"root\"><xs:complexType><xs:choice>" +
+            "<xs:annotation>" + annotations + "</xs:annotation><xs:element name=\"x\"/></xs:choice></xs:complexType></xs:element></xs:schema>"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+    }
+
+    [Test]
+    [Arguments(2, DocumentValidationStatus.Valid)]
+    [Arguments(16, DocumentValidationStatus.Indeterminate)]
+    public async Task NestedChoicesCannotBypassInnerBranchReservations(int depth, DocumentValidationStatus expected)
+    {
+        var content = "<xs:element name=\"leaf\"/>";
+        for (var index = 0; index < depth; index++)
+        {
+            content = $"<xs:choice><xs:element name=\"branch{index}\"/>{content}</xs:choice>";
+        }
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(
+            "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:element name=\"root\"><xs:complexType>" +
+            content + "</xs:complexType></xs:element></xs:schema>"));
+        await Assert.That(result.Status).IsEqualTo(expected);
+        if (expected == DocumentValidationStatus.Indeterminate)
+        {
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("limit.work");
+        }
+    }
+
+    [Test]
+    public async Task ChoiceParticlesCannotHideUnsupportedMemberConstructsBeforeAcquisition()
+    {
+        var calls = 0;
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes("""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:include schemaLocation="never.xsd"/>
+              <xs:element name="root"><xs:complexType><xs:choice>
+                <xs:element name="value"><xs:simpleType><xs:restriction base="xs:string"><xs:pattern value=".*"/></xs:restriction></xs:simpleType></xs:element>
+              </xs:choice></xs:complexType></xs:element>
+            </xs:schema>
+            """), new() { ResolveReference = (_, _) => { calls++; throw new UnauthorizedAccessException(); } });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Unsupported);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("xsd.construct_unsupported");
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
     [Arguments("""<xs:union memberTypes="xs:int xs:string"/>""")]
     [Arguments("""<xs:union memberTypes=" xs:int  xs:string "/>""")]
     [Arguments("""<xs:union><xs:simpleType><xs:restriction base="xs:int"/></xs:simpleType><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="unbounded"/></xs:restriction></xs:simpleType></xs:union>""")]

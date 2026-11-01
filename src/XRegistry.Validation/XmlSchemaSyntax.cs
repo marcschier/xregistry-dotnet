@@ -219,12 +219,17 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
         using var reader = XmlReader.Create(stream, Settings(embedded: prepaid));
         var sawRoot = false;
         var unionMembers = new Dictionary<int, long>();
+        var choiceBranches = new Dictionary<int, long>();
         while (reader.Read())
         {
             context.CancellationToken.ThrowIfCancellationRequested();
             if (reader.NodeType == XmlNodeType.EndElement && unionMembers.Remove(reader.Depth, out var members))
             {
-                ReserveUnion(members);
+                ReserveExpansion(members, "union");
+            }
+            if (reader.NodeType == XmlNodeType.EndElement && choiceBranches.Remove(reader.Depth, out var branches))
+            {
+                ReserveExpansion(branches, "choice");
             }
             if (reader.NodeType != XmlNodeType.Element)
             {
@@ -242,7 +247,7 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
             _elements++;
             if (reader.NamespaceURI == Namespace)
             {
-                if (reader.LocalName is "pattern" or "redefine" or "choice"
+                if (reader.LocalName is "pattern" or "redefine"
                     or "complexContent" or "key" or "keyref" or "unique"
                     || reader.LocalName is "group" or "attributeGroup" && reader.GetAttribute("ref") is not null)
                 {
@@ -252,6 +257,15 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
                 var minimum = Occurrence(reader.GetAttribute("minOccurs"), allowUnbounded: false);
                 var maximum = Occurrence(reader.GetAttribute("maxOccurs"), allowUnbounded: true);
                 _occurrenceCost *= Math.Max(1, Math.Max(minimum, maximum));
+                if (reader.LocalName is "element" or "choice" or "sequence" or "any" or "group" &&
+                    choiceBranches.ContainsKey(reader.Depth - 1))
+                {
+                    choiceBranches[reader.Depth - 1]++;
+                }
+                if (reader.LocalName == "choice" && !reader.IsEmptyElement)
+                {
+                    choiceBranches.Add(reader.Depth, 0);
+                }
                 if (reader.LocalName == "simpleType" && unionMembers.ContainsKey(reader.Depth - 1))
                 {
                     unionMembers[reader.Depth - 1]++;
@@ -267,7 +281,7 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
                         if (character is ' ' or '\t' or '\r' or '\n') { inToken = false; }
                         else if (!inToken) { count++; inToken = true; }
                     }
-                    if (reader.IsEmptyElement) { ReserveUnion(count); }
+                    if (reader.IsEmptyElement) { ReserveExpansion(count, "union"); }
                     else { unionMembers.Add(reader.Depth, count); }
                 }
             }
@@ -279,12 +293,12 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
         }
         ValidationContext.Require(sawRoot, "$", "xsd.root", "An XML Schema root is required.");
 
-        void ReserveUnion(long members)
+        void ReserveExpansion(long members, string construct)
         {
             if (members > context.Options.MaxWork / _occurrenceCost)
             {
                 ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$", "limit.work",
-                    "XML Schema union expansion exceeds the compilation budget.");
+                    $"XML Schema {construct} expansion exceeds the compilation budget.");
             }
             _occurrenceCost *= Math.Max(1, members);
         }

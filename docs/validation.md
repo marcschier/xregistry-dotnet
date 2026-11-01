@@ -51,7 +51,7 @@ The larger finite occurrence value contributes to the cumulative structural
 reservation; `maxOccurs="unbounded"` still reserves a finite minimum.
 Oversized reservations report `Indeterminate` with `limit.work` before
 compilation. Malformed or negative occurrence values report `Invalid`.
-This does not enable `xs:choice`, type derivation, identity constraints or
+This does not enable complex-type derivation, identity constraints or
 the other explicitly unsupported compiler constructs.
 
 XSD 1.0 union simple types can use ordered `memberTypes` QNames, inline simple
@@ -65,6 +65,18 @@ This conservative bound can leave a valid schema unchecked.
 WSDL selection retains authored union member order and complete schema context;
 it does not select a runtime member type or rewrite unions as message choices.
 Application instance validation and serialization remain outside this API.
+
+XSD 1.0 choice content models retain native element, nested choice, sequence
+and wildcard particles. The compiler checks unique particle attribution,
+consistent element types and legal occurrence ranges; ambiguous wildcard
+overlap and conflicting same-name declarations are invalid. Required empty
+choices preserve native compiler warnings as `Indeterminate`, not successful
+validation. Branch counts multiply the structural work reservation, including
+nested and sequential choices; annotations do not count as branches. This
+conservative policy can leave valid schemas unchecked when reservations exceed
+the budget. Unsupported constructs inside a branch still prevent compilation.
+WSDL selection returns one global message element with its owned choice XML,
+without selecting an instance branch or creating additional operation candidates.
 
 Protobuf map declarations reserve their synthetic entry symbol in the containing
 message: `foo` reserves `FooEntry`, and `map_field` reserves `MapFieldEntry`.

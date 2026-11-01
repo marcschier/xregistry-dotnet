@@ -788,6 +788,26 @@ public class Wsdl20OperationReferenceTests
     }
 
     [Test]
+    public async Task Wsdl20ChoiceParticlesRemainOneNativeGlobalMessageElement()
+    {
+        var result = await Resolve("""
+            <types xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:schema targetNamespace="urn:api">
+              <xs:element name="Payload"><xs:complexType><xs:choice>
+                <xs:element name="number" type="xs:int"/><xs:element name="flag" type="xs:boolean"/>
+              </xs:choice></xs:complexType></xs:element>
+            </xs:schema></types>
+            <interface name="Port"><operation name="Read"><input element="t:Payload"/><output element="#none"/></operation></interface>
+            """);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        var schema = result.Wsdl20Operation!.SchemaElements.Single();
+        await Assert.That(schema.ElementName).IsEqualTo("{urn:api}Payload");
+        var choice = XElement.Parse(schema.ElementXml).Descendants(
+            XName.Get("choice", "http://www.w3.org/2001/XMLSchema")).Single();
+        await Assert.That(choice.Elements().Select(element => element.Attribute("name")!.Value)
+            .SequenceEqual(["number", "flag"])).IsTrue();
+    }
+
+    [Test]
     [Arguments("minOccurs")]
     [Arguments("maxOccurs")]
     public async Task Wsdl20HugeOccurrenceIntegersNeverReachUnreservedSchemaCompilation(string attribute)

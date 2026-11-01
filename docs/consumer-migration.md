@@ -47,14 +47,20 @@ The shared bounded XSD compiler accepts `xs:all` with native optional/required
 element and group-placement checks. WSDL selection retains those declarations
 as schema data. Finite minimum and maximum occurrences use overflow-safe XML
 integer parsing and cumulative work reservations; values beyond the budget
-remain unchecked rather than reaching unreserved compilation. Choice models,
-type derivation and identity constraints remain unsupported.
+remain unchecked rather than reaching unreserved compilation.
+Complex-type derivation and identity constraints remain unsupported.
 
 Union simple types use the native XSD compiler with ordered named, inline,
 list and nested members. Missing or invalid member types fail compilation;
 unsupported member constructs still report unsupported. Multiplicative member
 reservations bound transitive expansion before compilation. Selection retains
 the union XML without choosing a runtime value type or serializing values.
+
+Choice content models retain native particles and ambiguity checks. Branch
+counts, including nested choices, contribute to the bounded compiler's
+structural reservation; compiler warnings remain unchecked results.
+WSDL selection retains the choice XML within one global message element,
+without choosing instance content or adding operation candidates.
 
 For `Protobuf/2` and `Protobuf/3`, schema validation checks declaration names
 in their containing scope. Fields, oneofs, nested types and enum values cannot

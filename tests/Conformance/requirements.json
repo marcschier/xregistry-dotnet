@@ -117167,6 +117167,7 @@
           "Wsdl20OperationReferenceTests.Wsdl20InlineCompilationCannotBypassTheSharedWorkBudget",
           "Wsdl20OperationReferenceTests.Wsdl20AllContentModelsRetainTheirNativeSchemaWithoutInventingMessageAlternatives",
           "Wsdl20OperationReferenceTests.Wsdl20UnionSimpleTypesRetainAuthoredMemberOrderAndSchemaContext",
+          "Wsdl20OperationReferenceTests.Wsdl20ChoiceParticlesRemainOneNativeGlobalMessageElement",
           "Wsdl20OperationReferenceTests.Wsdl20HugeOccurrenceIntegersNeverReachUnreservedSchemaCompilation",
           "Wsdl20OperationReferenceTests.Wsdl20SchemaDependenciesRetainIncludeVisibilityAndForeignCompilerContext",
           "Wsdl20OperationReferenceTests.Wsdl20InlineImportsDoNotMakeForeignElementsReferenceable",

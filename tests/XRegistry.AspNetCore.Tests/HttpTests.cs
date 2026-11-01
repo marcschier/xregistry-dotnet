@@ -54,7 +54,10 @@ public class HttpTests
             <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" id="schema" targetNamespace="urn:payload">
               <xs:element name="Payload"><xs:complexType><xs:all>
                 <xs:element name="Name" type="xs:string"/>
-                <xs:element name="Age" minOccurs="0"><xs:simpleType><xs:union memberTypes="xs:int xs:boolean"/></xs:simpleType></xs:element>
+                <xs:element name="Age" minOccurs="0"><xs:complexType><xs:choice>
+                  <xs:element name="Number"><xs:simpleType><xs:union memberTypes="xs:int xs:boolean"/></xs:simpleType></xs:element>
+                  <xs:element name="Unknown" type="xs:boolean"/>
+                </xs:choice></xs:complexType></xs:element>
               </xs:all></xs:complexType></xs:element>
               <xs:element name="Failure" type="xs:string"/>
             </xs:schema>
@@ -125,6 +128,7 @@ public class HttpTests
         var payload = selected.Wsdl20Operation.SchemaElements.Single(element => element.ElementName == "{urn:payload}Payload");
         await Assert.That(payload.ElementXml.Contains("<xs:all>", StringComparison.Ordinal)).IsTrue();
         await Assert.That(payload.ElementXml.Contains("memberTypes=\"xs:int xs:boolean\"", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(payload.ElementXml.Contains("<xs:choice>", StringComparison.Ordinal)).IsTrue();
         var missing = await ApiOperationDocumentResolver.ResolveAsync(acquired.Format, acquired.Document.ContentType!,
             memory.ToArray(), ApiOperationReference.Parse(version +
                 "#interfaces/%7Burn:api%7DNewPort/operations/%7Burn:api%7DRead"),
