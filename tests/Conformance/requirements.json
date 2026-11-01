@@ -101746,9 +101746,13 @@
       ],
       "text": "- OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Read with property specurl definition at lines 866-872: omission is permitted; present values are relative-or-absolute URI references to human-readable property specifications. Server domain validation already calls the Core URI scalar validator through ValidateMessageStrings, including opaque declaration boundaries; no URI acquisition or rebasing is required. New opaque CloudEvents/all-AMQP/header tests and atomic Server patch tests confirm existing syntax enforcement and retained authored spelling. Materializer provenance tests retain the declaring origin after inheritance. The initially added duplicate check in ValidateMessageProperties was removed after confirming the existing path; this is evidence coverage, not a new implementation gap. Full per-requirement/native qualification remains pending.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
