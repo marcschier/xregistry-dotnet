@@ -602,8 +602,16 @@ extension payloads or reference objects. Empty requirement objects, empty
 operation overrides, alternative ordering and repeated scope strings remain
 authored data. Root checks precede selection and retrieval; operation checks
 retain pointer locality and validate reached callback ancestors and reference
-targets. This shape check does not resolve scheme names, validate OAuth scopes,
-apply version-specific role rules or authorize requests.
+targets. Requirement names must identify declarations in the entry document's
+`securityDefinitions` for Swagger or `components.securitySchemes` for OpenAPI.
+OpenAPI uses entry-document lookup for implicit names, including operations
+retrieved from another document; a same-named declaration in that retrieved
+document cannot supply a missing entry declaration. Names remain case-sensitive.
+Missing names report `Invalid` at the requirement property without acquiring
+scheme references. Declared reference objects are not dereferenced by this name
+check, and unused declarations remain inactive. This does not validate effective
+scheme types or OAuth scopes, apply version-specific role rules or authorize
+requests.
 OpenAPI 3.1 operation-ID selection also searches `webhooks`, including referenced
 Path Items. Webhook names are exact strings, not slash-prefixed paths; an `x-`
 name in this map is a webhook, not a Paths specification extension. Duplicate

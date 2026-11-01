@@ -27,6 +27,9 @@ public static partial class ApiOperationDocumentResolver
         }
         var metadataFailure = ValidateHttpOperationMetadata(location.Operation, location.Pointer, cancellationToken);
         if (metadataFailure is not null) { return metadataFailure; }
+        var nameFailure = ValidateHttpSecurityNames(location.Operation, location.Pointer,
+            references.Root.Root, !includeCallbacks, cancellationToken);
+        if (nameFailure is not null) { return nameFailure; }
         if (!includeCallbacks)
         {
             var transportFailure = ValidateSwaggerTransportDeclarations(location.Operation, location.Pointer, cancellationToken);
@@ -245,6 +248,36 @@ public static partial class ApiOperationDocumentResolver
                     scopeIndex++;
                 }
             }
+        }
+        return null;
+    }
+
+    private static ApiOperationResolutionResult? ValidateHttpSecurityNames(JsonElement value, string pointer,
+        JsonElement entry, bool swagger, CancellationToken cancellationToken)
+    {
+        if (!value.TryGetProperty("security", out var requirements)) { return null; }
+        var schemes = default(JsonElement);
+        if (swagger) { entry.TryGetProperty("securityDefinitions", out schemes); }
+        else if (entry.TryGetProperty("components", out var components))
+        {
+            components.TryGetProperty("securitySchemes", out schemes);
+        }
+        var index = 0;
+        foreach (var requirement in requirements.EnumerateArray())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var scheme in requirement.EnumerateObject())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (schemes.ValueKind != JsonValueKind.Object || !schemes.TryGetProperty(scheme.Name, out _))
+                {
+                    return Failure(ApiOperationResolutionStatus.Invalid, "document.security_scheme_name",
+                        "A Security Requirement name must identify a scheme declaration in the entry document.",
+                        pointer + "/security/" + index.ToString(System.Globalization.CultureInfo.InvariantCulture) +
+                        "/" + Escape(scheme.Name));
+                }
+            }
+            index++;
         }
         return null;
     }

@@ -527,6 +527,8 @@ public static partial class ApiOperationDocumentResolver
         {
             return componentFailure;
         }
+        var securityNameFailure = ValidateHttpSecurityNames(root, "$", root, format == "Swagger/2.0", cancellationToken);
+        if (securityNameFailure is not null) { return securityNameFailure; }
         if (format == "OpenAPI/3.1" && root.TryGetProperty("webhooks", out var webhookMap))
         {
             if (webhookMap.ValueKind != JsonValueKind.Object)
@@ -1070,6 +1072,9 @@ public static partial class ApiOperationDocumentResolver
             }
             var metadataFailure = ValidateHttpOperationMetadata(operation, pathPointer, cancellationToken);
             if (metadataFailure is not null) { return metadataFailure; }
+            var securityNameFailure = ValidateHttpSecurityNames(operation, pathPointer, root,
+                format == "Swagger/2.0", cancellationToken);
+            if (securityNameFailure is not null) { return securityNameFailure; }
             if (format == "Swagger/2.0")
             {
                 var transportFailure = ValidateSwaggerTransportDeclarations(operation, pathPointer, cancellationToken);

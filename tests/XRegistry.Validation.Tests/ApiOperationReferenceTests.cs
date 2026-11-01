@@ -11,6 +11,171 @@ namespace XRegistry.Validation.Tests;
 public class ApiOperationReferenceTests
 {
     [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task HttpSecurityNameBindingChecksCallbackAncestorsAndChildren(bool ancestor)
+    {
+        var operation = JsonNode.Parse("""
+            {"operationId":"Parent","callbacks":{"event":{"{$request.query.url}":{"post":{"operationId":"Child"}}}}}
+            """)!;
+        var child = operation["callbacks"]!["event"]!["{$request.query.url}"]!["post"]!;
+        (ancestor ? operation : child)["security"] = JsonNode.Parse("""[{"Missing":[]}]""");
+        var document = new JsonObject
+        {
+            ["openapi"] = "3.1.1",
+            ["paths"] = new JsonObject { ["/items"] = new JsonObject { ["get"] = operation } }
+        };
+        foreach (var selector in new[] { "operations/Child", "/paths/~1items/get/callbacks/event/%7B$request.query.url%7D/post" })
+        {
+            var result = ApiOperationDocumentResolver.Resolve("OpenAPI/3.1", "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector));
+            await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.security_scheme_name");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/paths/~1items/get" +
+                (ancestor ? "" : "/callbacks/event/{$request.query.url}/post") + "/security/0/Missing");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+        document["components"] = JsonNode.Parse("""{"securitySchemes":{"Missing":{"type":"http","scheme":"basic"}}}""");
+        var admitted = ApiOperationDocumentResolver.Resolve("OpenAPI/3.1", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Child"));
+        await Assert.That(admitted.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(admitted.Operation.GetProperty("operationId").GetString()).IsEqualTo("Child");
+    }
+
+    [Test]
+    public async Task HttpSecurityNameBindingRetainsWebhookPointerLocalityAndDeclarationReversal()
+    {
+        var document = JsonNode.Parse("""
+            {"openapi":"3.1.1","webhooks":{
+                "target":{"post":{"operationId":"Target","security":[{},{"x-scheme":[]}]}},
+                "other":{"post":{"operationId":"Other","security":[{"Missing":[]}]}}},
+             "components":{"securitySchemes":{"x-scheme":{"type":"apiKey","name":"key","in":"header"}}}}
+            """)!;
+        foreach (var reversed in new[] { false, true })
+        {
+            if (reversed)
+            {
+                var hooks = document["webhooks"]!.AsObject();
+                var target = hooks["target"];
+                hooks.Remove("target");
+                hooks["target"] = target;
+            }
+            var bytes = System.Text.Encoding.UTF8.GetBytes(document.ToJsonString());
+            var pointer = ApiOperationDocumentResolver.Resolve("OpenAPI/3.1", "application/json", bytes,
+                ApiOperationReference.Parse("/apigroups/g/apis/a#/webhooks/target/post"));
+            await Assert.That(pointer.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+            await Assert.That(pointer.Operation.GetProperty("security").GetRawText()).IsEqualTo(
+                document["webhooks"]!["target"]!["post"]!["security"]!.ToJsonString());
+            var named = ApiOperationDocumentResolver.Resolve("OpenAPI/3.1", "application/json", bytes,
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"));
+            await Assert.That(named.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+            await Assert.That(named.Diagnostic!.Code).IsEqualTo("document.security_scheme_name");
+            await Assert.That(named.Diagnostic.Path).IsEqualTo("$/webhooks/other/post/security/0/Missing");
+            await Assert.That(named.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+        document["components"]!["securitySchemes"]!["Missing"] =
+            new JsonObject { ["type"] = "http", ["scheme"] = "basic" };
+        var restored = ApiOperationDocumentResolver.Resolve("OpenAPI/3.1", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"));
+        await Assert.That(restored.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        document["components"]!["securitySchemes"]!.AsObject().Remove("Missing");
+        var removed = ApiOperationDocumentResolver.Resolve("OpenAPI/3.1", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"));
+        await Assert.That(removed.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(removed.Diagnostic!.Code).IsEqualTo("document.security_scheme_name");
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "openapi", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "openapi", "3.1.1")]
+    [Arguments("Swagger/2.0", "swagger", "2.0")]
+    public async Task HttpSecurityNamesMustBindToTheEntryDocumentDeclarations(
+        string format, string versionField, string version)
+    {
+        foreach (var name in new[] { "Missing", "declared", "x-missing", "missing/~", "" })
+        {
+            foreach (var atRoot in new[] { false, true })
+            {
+                var operation = new JsonObject { ["operationId"] = "Target" };
+                var document = new JsonObject
+                {
+                    [versionField] = version,
+                    ["paths"] = new JsonObject { ["/items"] = new JsonObject { ["get"] = operation } }
+                };
+                var schemes = new JsonObject { ["Declared"] = new JsonObject { ["type"] = "apiKey", ["name"] = "key", ["in"] = "header" } };
+                if (format == "Swagger/2.0") { document["securityDefinitions"] = schemes; }
+                else { document["components"] = new JsonObject { ["securitySchemes"] = schemes }; }
+                (atRoot ? document : operation)["security"] = new JsonArray(new JsonObject { [name] = new JsonArray() });
+                foreach (var selector in new[] { "operations/Target", "operations/Missing", "/paths/~1items/get" })
+                {
+                    var calls = 0;
+                    var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                        System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                        ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                        resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+                    await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.security_scheme_name");
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo((atRoot ? "$" : "$/paths/~1items/get") +
+                        "/security/0/" + name.Replace("~", "~0").Replace("/", "~1"));
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                    await Assert.That(calls).IsEqualTo(0);
+                }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task ReferencedHttpSecurityNamesUseEntryDeclarationsNotReferencedDocumentNames(string format, string version)
+    {
+        foreach (var declared in new[] { false, true })
+        {
+            var document = JsonNode.Parse("""
+                {"paths":{"/items":{"$ref":"https://allowed.test/path#/item"}},
+                 "components":{"securitySchemes":{"unused":{"$ref":"https://not-acquired.test/unused"}}}}
+                """)!.AsObject();
+            document["openapi"] = version;
+            if (declared)
+            {
+                document["components"]!["securitySchemes"]!["MySecurity"] =
+                    new JsonObject { ["$ref"] = "https://not-acquired.test/scheme" };
+            }
+            var calls = new List<string>();
+            var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+                resolveReference: (uri, _) =>
+                {
+                    calls.Add(uri);
+                    if (uri != "https://allowed.test/path") { throw new UnauthorizedAccessException(); }
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes("""
+                        {"components":{"securitySchemes":{"MySecurity":{"type":"http","scheme":"basic"}}},
+                         "item":{"get":{"operationId":"Target","security":[{"MySecurity":[]}]}}}
+                        """));
+                });
+            await Assert.That(result.Status).IsEqualTo(declared
+                ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+            await Assert.That(calls.Count).IsEqualTo(1);
+            if (declared)
+            {
+                await Assert.That(result.Operation.GetProperty("security")[0].GetProperty("MySecurity").GetArrayLength()).IsEqualTo(0);
+                await Assert.That(result.DocumentPath).IsEqualTo("$/item/get");
+            }
+            else
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.security_scheme_name");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo("$/item/get/security/0/MySecurity");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+        }
+    }
+
+    [Test]
     [Arguments("OpenAPI/3.0", "openapi", "3.0.4")]
     [Arguments("OpenAPI/3.1", "openapi", "3.1.1")]
     [Arguments("Swagger/2.0", "swagger", "2.0")]
