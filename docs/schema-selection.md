@@ -193,6 +193,23 @@ declaration after the host stops; neither requires another read. This covers
 explicit Version acquisition and selection, not automatic dispatch from
 arbitrary Message metadata or a remote-source authorization policy.
 
+## Exact-Version JSON Pointer and XPath workflows
+
+For JSON Schema and JSON Structure, the HTTP consumer reads an exact schema
+Version and calls `SelectAsync` with its URI and a JSON Pointer fragment.
+For XSD 1.0, it uses a supported structural XPath fragment. A fragment-free
+JSON Schema URI selects its root; JSON Structure honors its declared `$root`.
+An XSD URI without a fragment requires a unique global element, or a unique
+global named type when there are no global elements.
+
+The HTTP workflow verifies that publishing a newer default does not change
+the exact Version's bytes or an already selected declaration. Selection results
+own the complete schema: they remain usable after the acquisition buffer is
+overwritten and the host stops. Missing definitions return `NotFound`;
+metadata and namespace containers return `Invalid` rather than falling back
+to the root. These are explicit acquisition-and-selection workflows, not
+automatic Message metadata resolution or unrestricted XPath support.
+
 ## Bounded XML selectors
 
 Supported structural paths have one leading `/` or `//`, followed by child steps.

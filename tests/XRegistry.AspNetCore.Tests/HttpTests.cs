@@ -28,6 +28,127 @@ namespace XRegistry.AspNetCore.Tests;
 public class HttpTests
 {
     [Test]
+    [Arguments("JsonSchema/draft/2020-12")]
+    [Arguments("JsonStructure/draft-04")]
+    [Arguments("XSD/1.0")]
+    public async Task HttpSchemaPointerAndXPathSelectionsRetainTheExactVersionAcrossDefaultChanges(string format)
+    {
+        var xml = format == "XSD/1.0";
+        var structure = format == "JsonStructure/draft-04";
+        var schema = xml
+            ? """
+              <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:telemetry">
+                <xs:annotation><xs:documentation>Telemetry</xs:documentation></xs:annotation>
+                <xs:simpleType name="Count"><xs:restriction base="xs:string"/></xs:simpleType>
+                <xs:element name="Event" type="xs:string"/>
+              </xs:schema>
+              """
+            : structure
+                ? """
+                  {"$schema":"https://json-structure.org/meta/core/v0/#","$id":"https://schemas.test/telemetry",
+                   "name":"Telemetry","$root":"/definitions/Root",
+                   "definitions":{"Root":{"type":"object","properties":{"value":{"type":"int64"}}},"Count":{"type":"string"}}}
+                  """
+                : """
+                  {"$schema":"https://json-schema.org/draft/2020-12/schema","title":"Telemetry",
+                   "type":"object","$defs":{"Count":{"type":"string"}}}
+                  """;
+        var selector = xml ? "/xs:schema/xs:simpleType[@name='Count']"
+            : structure ? "/definitions/Count" : "/$defs/Count";
+        var missingSelector = xml ? "/xs:schema/xs:element[@name='Missing']"
+            : structure ? "/definitions/Missing" : "/$defs/Missing";
+        var wrongKindSelector = xml ? "/xs:schema/xs:annotation"
+            : structure ? "/definitions" : "/title";
+        const string versionPath = "/schemagroups/g/schemas/s/versions/1";
+        var mediaType = xml ? "application/xml" : "application/json";
+        await using var host = await TestHost.StartAsync(model: BuiltInRegistryModels.Compile(RegistryModelKind.Schema),
+            resourceValidator: new BuiltInRegistryResourceValidator());
+        using var publish = new HttpRequestMessage(HttpMethod.Put, versionPath)
+        {
+            Content = new StringContent(schema, Encoding.UTF8, mediaType)
+        };
+        publish.Headers.TryAddWithoutValidation("xRegistry-format", format);
+        using var created = await host.Client.SendAsync(publish);
+        await Assert.That(created.StatusCode).IsEqualTo(HttpStatusCode.Created)
+            .Because(await created.Content.ReadAsStringAsync());
+        using var read = await host.Client.GetAsync(versionPath);
+        await Assert.That(read.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        var bytes = await read.Content.ReadAsByteArrayAsync();
+        await Assert.That(Encoding.UTF8.GetString(bytes)).IsEqualTo(schema);
+        var root = await SchemaObjectSelector.SelectAsync(format, bytes, versionPath);
+        await Assert.That(root.Status).IsEqualTo(SchemaObjectSelectionStatus.Selected);
+        await Assert.That(root.Selection!.DocumentReference).IsEqualTo(versionPath);
+        if (xml)
+        {
+            await Assert.That(root.Selection.Kind).IsEqualTo(SchemaTypeKind.XmlSchemaElement);
+            await Assert.That(root.Selection.TypeName).IsEqualTo("{urn:telemetry}Event");
+        }
+        else
+        {
+            await Assert.That(root.Selection.JsonPointer).IsEqualTo(structure ? "/definitions/Root" : "");
+            await Assert.That(root.Selection.Json!.Value.GetProperty("type").GetString()).IsEqualTo("object");
+        }
+        var selectedUri = versionPath + "#" + selector;
+        var selected = await SchemaObjectSelector.SelectAsync(format, bytes, selectedUri);
+        await Assert.That(selected.Status).IsEqualTo(SchemaObjectSelectionStatus.Selected);
+        await Assert.That(selected.Selection!.SchemaUri).IsEqualTo(selectedUri);
+        await Assert.That(selected.Selection.DocumentReference).IsEqualTo(versionPath);
+        await Assert.That(Encoding.UTF8.GetString(selected.Selection.Document.Span)).IsEqualTo(schema);
+        if (xml)
+        {
+            await Assert.That(selected.Selection.Kind).IsEqualTo(SchemaTypeKind.XmlSchemaType);
+            await Assert.That(selected.Selection.TypeName).IsEqualTo("{urn:telemetry}Count");
+            await Assert.That(selected.Selection.Xml!.Attribute("name")!.Value).IsEqualTo("Count");
+        }
+        else
+        {
+            await Assert.That(selected.Selection.Kind).IsEqualTo(structure
+                ? SchemaTypeKind.JsonStructure : SchemaTypeKind.JsonSchema);
+            await Assert.That(selected.Selection.JsonPointer).IsEqualTo(selector);
+            await Assert.That(selected.Selection.Json!.Value.GetProperty("type").GetString()).IsEqualTo("string");
+        }
+        var missing = await SchemaObjectSelector.SelectAsync(format, bytes, versionPath + "#" + missingSelector);
+        await Assert.That(missing.Status).IsEqualTo(SchemaObjectSelectionStatus.NotFound);
+        await Assert.That(missing.Selection).IsNull();
+        await Assert.That(missing.Diagnostics[0].Code).IsEqualTo("selection.not_found");
+        var wrongKind = await SchemaObjectSelector.SelectAsync(format, bytes, versionPath + "#" + wrongKindSelector);
+        await Assert.That(wrongKind.Status).IsEqualTo(SchemaObjectSelectionStatus.Invalid);
+        await Assert.That(wrongKind.Selection).IsNull();
+        await Assert.That(wrongKind.Diagnostics[0].Code).IsEqualTo("selection.not_type");
+
+        var newerSchema = xml ? schema.Replace("xs:string", "xs:boolean", StringComparison.Ordinal)
+            : schema.Replace("\"type\":\"string\"", "\"type\":\"boolean\"", StringComparison.Ordinal);
+        using var publishNewer = new HttpRequestMessage(HttpMethod.Put, "/schemagroups/g/schemas/s/versions/2")
+        {
+            Content = new StringContent(newerSchema, Encoding.UTF8, mediaType)
+        };
+        publishNewer.Headers.TryAddWithoutValidation("xRegistry-format", format);
+        using var newer = await host.Client.SendAsync(publishNewer);
+        await Assert.That(newer.StatusCode).IsEqualTo(HttpStatusCode.Created);
+        using var defaultRead = await host.Client.GetAsync("/schemagroups/g/schemas/s");
+        await Assert.That(defaultRead.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        await Assert.That(await defaultRead.Content.ReadAsStringAsync()).IsEqualTo(newerSchema);
+        using var exactRead = await host.Client.GetAsync(versionPath);
+        await Assert.That(exactRead.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        await Assert.That(await exactRead.Content.ReadAsStringAsync()).IsEqualTo(schema);
+        await host.DisposeAsync();
+        Array.Fill(bytes, (byte)'!');
+        var retained = await SchemaObjectSelector.SelectAsync(format, selected.Selection.Document, selectedUri);
+        await Assert.That(retained.Status).IsEqualTo(SchemaObjectSelectionStatus.Selected);
+        await Assert.That(Encoding.UTF8.GetString(retained.Selection!.Document.Span)).IsEqualTo(schema);
+        if (xml)
+        {
+            await Assert.That(retained.Selection.TypeName).IsEqualTo("{urn:telemetry}Count");
+            await Assert.That(retained.Selection.Xml!.Elements().Single().Attribute("base")!.Value).IsEqualTo("xs:string");
+        }
+        else
+        {
+            await Assert.That(retained.Selection.JsonPointer).IsEqualTo(selector);
+            await Assert.That(retained.Selection.Json!.Value.GetProperty("type").GetString()).IsEqualTo("string");
+        }
+    }
+
+    [Test]
     [Arguments(false)]
     [Arguments(true)]
     public async Task HttpSchemaVersionsSupportDirectAndEmbeddedNamedSelectorsWithoutRefetching(bool protobuf)

@@ -103445,13 +103445,21 @@
       ],
       "text": "When a URI, like the Message Registry's [`dataschemauri`](../message/spec.md#dataschemauri), points to a JSON Schema document, it MAY use a [JSON pointer][JSON pointer] expression to deep link into the schema document to reference a particular type definition. Otherwise the top-level object definition of the schema is used.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Selected MAY policy: SelectAsync selects a JSON Schema root or object-valued schema definition using one-pass URI-fragment decoding and RFC 6901 pointers. Metadata, schema-map containers and non-object targets fail explicitly. Real HTTP exact-Version acquisition proves root and definition selection, missing/wrong-kind failures and owned bytes retained after default changes and host disposal. This does not claim automatic Message dispatch, remote-source authorization, complete JSON Schema validity or final native/platform qualification.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "HttpSchemaPointerAndXPathSelectionsRetainTheExactVersionAcrossDefaultChanges",
+          "JsonPointerDecodesUtf8AndTildeEscapesExactlyOnce",
+          "JsonPointerRejectsMetadataContainersAndNonObjectSchemas",
+          "MalformedPointerSegmentsAreInvalidEvenAfterAnUnmatchedPrefix",
+          "JsonSelectionOwnsExplicitDependenciesAndPreservesTheSuppliedBaseUri"
+        ],
         "nativeEvidence": []
       }
     },
@@ -103476,13 +103484,21 @@
       ],
       "text": "When a URI, like the Message Registry's [`dataschemauri`](../message/spec.md#dataschemauri), points to an XML Schema document, it MAY use an XPath expression to deep link into the schema document to reference a particular type definition. Otherwise the top-level object definition of the schema is used.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Selected MAY policy: SelectAsync supports bounded structural XPath to global XSD 1.0 elements and named types. Without a selector it requires a unique global element, or a unique global named type when there are no elements. Unsupported XPath syntax and non-global selection are reported without partial evaluation. Real HTTP exact-Version acquisition proves default/explicit selection, missing/wrong-kind failures and owned bytes retained after default changes and host disposal. Full XPath, XSD 1.1, automatic Message dispatch and final native/platform qualification are not claimed.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "HttpSchemaPointerAndXPathSelectionsRetainTheExactVersionAcrossDefaultChanges",
+          "XmlDefaultAndStructuralSelectionsUseExactDeclarations",
+          "XmlSelectorsDistinguishCardinalityKindScopeAndNamespaceFailures",
+          "XmlUnsafeOrUnimplementedExpressionsAreNeverEvaluatedOrPartiallyIgnored",
+          "XmlWithoutElementsUsesOnlyAUniqueGlobalType"
+        ],
         "nativeEvidence": []
       }
     },
@@ -103672,13 +103688,21 @@
       ],
       "text": "When a URI, like the Message Registry's [`dataschemauri`](../message/spec.md#dataschemauri), points to a JSON Structure schema document, it MAY use a [JSON pointer][JSON pointer] expression to deep link into the schema document to reference a particular type definition. This is typically used to reference type definitions within the `definitions` namespace.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Selected MAY policy: SelectAsync uses RFC 6901 pointers to concrete JSON Structure types, including nested definitions namespaces, while preserving the exact acquired schema reference. Namespace/metadata containers are not types. Real HTTP exact-Version acquisition proves declared-root and definition selection, missing/wrong-kind failures and owned bytes retained after default changes and host disposal. This is bounded selection for JsonStructure/draft-04, not automatic Message dispatch, external authorization, full JSON Structure conformance or final native/platform qualification.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "HttpSchemaPointerAndXPathSelectionsRetainTheExactVersionAcrossDefaultChanges",
+          "JsonStructureWithoutSuffixUsesItsDeclaredRootAndNotTheFirstDefinition",
+          "JsonStructureNamespacesAndMetadataAreNotConcreteTypes",
+          "JsonStructureUsesAnExactLocalDocumentReferenceWithColonIds",
+          "JsonStructureImplicitRootSelectorStillHonorsTheSelectorBudget"
+        ],
         "nativeEvidence": []
       }
     },
