@@ -50,6 +50,12 @@ integer parsing and cumulative work reservations; values beyond the budget
 remain unchecked rather than reaching unreserved compilation. Choice models,
 type derivation and identity constraints remain unsupported.
 
+Union simple types use the native XSD compiler with ordered named, inline,
+list and nested members. Missing or invalid member types fail compilation;
+unsupported member constructs still report unsupported. Multiplicative member
+reservations bound transitive expansion before compilation. Selection retains
+the union XML without choosing a runtime value type or serializing values.
+
 For `Protobuf/2` and `Protobuf/3`, schema validation checks declaration names
 in their containing scope. Fields, oneofs, nested types and enum values cannot
 reuse a name in the same message; enum values share their enum's containing

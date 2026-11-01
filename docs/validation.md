@@ -54,6 +54,18 @@ compilation. Malformed or negative occurrence values report `Invalid`.
 This does not enable `xs:choice`, type derivation, identity constraints or
 the other explicitly unsupported compiler constructs.
 
+XSD 1.0 union simple types can use ordered `memberTypes` QNames, inline simple
+types, list members and nested unions. The native compiler resolves supplied
+member types and rejects missing types, complex-type members and cyclic type
+definitions. Unsupported constructs inside a member, including patterns, still
+prevent compilation. Union member counts contribute multiplicatively to the
+structural work reservation, including repeated references, so nested unions
+cannot reach unreserved expansion. Exhausted reservations report `limit.work`.
+This conservative bound can leave a valid schema unchecked.
+WSDL selection retains authored union member order and complete schema context;
+it does not select a runtime member type or rewrite unions as message choices.
+Application instance validation and serialization remain outside this API.
+
 Protobuf map declarations reserve their synthetic entry symbol in the containing
 message: `foo` reserves `FooEntry`, and `map_field` reserves `MapFieldEntry`.
 An authored message, enum, field, oneof or another map cannot reuse that symbol,

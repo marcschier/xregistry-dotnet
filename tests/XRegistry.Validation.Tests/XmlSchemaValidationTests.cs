@@ -10,6 +10,137 @@ namespace XRegistry.Validation.Tests;
 public class XmlSchemaValidationTests
 {
     [Test]
+    [Arguments("""<xs:union memberTypes="xs:int xs:string"/>""")]
+    [Arguments("""<xs:union memberTypes=" xs:int  xs:string "/>""")]
+    [Arguments("""<xs:union><xs:simpleType><xs:restriction base="xs:int"/></xs:simpleType><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="unbounded"/></xs:restriction></xs:simpleType></xs:union>""")]
+    [Arguments("""<xs:union memberTypes="xs:int"><xs:simpleType><xs:list itemType="xs:string"/></xs:simpleType></xs:union>""")]
+    [Arguments("""<xs:union><xs:simpleType><xs:union memberTypes="xs:int xs:boolean"/></xs:simpleType><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:union>""")]
+    public async Task UnionSimpleTypesCompileNativeNamedInlineListAndNestedMembers(string union)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(
+            "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"><xs:simpleType name=\"Value\">" +
+            union + "</xs:simpleType><xs:element name=\"value\" type=\"Value\"/></xs:schema>"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("""<xs:simpleType name="Value"><xs:union/></xs:simpleType>""")]
+    [Arguments("""<xs:simpleType name="Value"><xs:union memberTypes="xs:notAType"/></xs:simpleType>""")]
+    [Arguments("""<xs:simpleType name="Value"><xs:union memberTypes="missing:int"/></xs:simpleType>""")]
+    [Arguments("""<xs:complexType name="Complex"/><xs:simpleType name="Value"><xs:union memberTypes="Complex xs:int"/></xs:simpleType>""")]
+    [Arguments("""<xs:simpleType name="Value"><xs:union memberTypes="Value xs:int"/></xs:simpleType>""")]
+    [Arguments("""<xs:simpleType name="Value"><xs:union><xs:element name="bad"/></xs:union></xs:simpleType>""")]
+    public async Task UnionMemberContradictionsRemainNativeSchemaErrors(string declarations)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(
+            "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">" + declarations + "</xs:schema>"));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("xsd.schema");
+    }
+
+    [Test]
+    [Arguments("12", DocumentValidationStatus.Valid)]
+    [Arguments("true", DocumentValidationStatus.Valid)]
+    [Arguments("neither", DocumentValidationStatus.Invalid)]
+    public async Task UnionSchemaDefaultsMustMatchAnActualNativeMember(string value, DocumentValidationStatus expected)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes($"""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:element name="value" default="{value}"><xs:simpleType><xs:union memberTypes="xs:int xs:boolean"/></xs:simpleType></xs:element>
+            </xs:schema>
+            """));
+        await Assert.That(result.Status).IsEqualTo(expected);
+        if (expected == DocumentValidationStatus.Invalid)
+        {
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("xsd.schema");
+        }
+    }
+
+    [Test]
+    [Arguments(2, DocumentValidationStatus.Valid)]
+    [Arguments(15, DocumentValidationStatus.Indeterminate)]
+    public async Task InlineUnionMembersAlsoContributeToCumulativeExpansionReservations(
+        int count, DocumentValidationStatus expected)
+    {
+        var declarations = string.Concat(Enumerable.Range(0, count).Select(index =>
+            $"<xs:simpleType name=\"Union{index}\"><xs:union><xs:simpleType><xs:restriction base=\"xs:int\"/></xs:simpleType>" +
+            "<xs:simpleType><xs:restriction base=\"xs:boolean\"/></xs:simpleType></xs:union></xs:simpleType>"));
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(
+            "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">" + declarations + "</xs:schema>"));
+        await Assert.That(result.Status).IsEqualTo(expected);
+        if (expected == DocumentValidationStatus.Indeterminate)
+        {
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("limit.work");
+        }
+    }
+
+    [Test]
+    [Arguments(2, DocumentValidationStatus.Valid)]
+    [Arguments(20, DocumentValidationStatus.Indeterminate)]
+    public async Task RepeatedUnionReferencesReserveTheirTransitiveExpansionBeforeCompilation(
+        int depth, DocumentValidationStatus expected)
+    {
+        var declarations = new StringBuilder();
+        for (var index = 0; index < depth; index++)
+        {
+            var member = index == 0 ? "xs:int" : "Union" + (index - 1);
+            declarations.Append(System.Globalization.CultureInfo.InvariantCulture,
+                $"<xs:simpleType name=\"Union{index}\"><xs:union memberTypes=\"{member} {member}\"/></xs:simpleType>");
+        }
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes(
+            "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">" + declarations + "</xs:schema>"));
+        await Assert.That(result.Status).IsEqualTo(expected);
+        if (expected == DocumentValidationStatus.Indeterminate)
+        {
+            await Assert.That(result.Diagnostics[0].Code).IsEqualTo("limit.work");
+        }
+    }
+
+    [Test]
+    public async Task UnionMembersCannotHideUnsupportedPatternsOrTriggerDependencyAcquisition()
+    {
+        var calls = 0;
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes("""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+              <xs:include schemaLocation="never.xsd"/>
+              <xs:simpleType name="Value"><xs:union memberTypes="xs:int">
+                <xs:simpleType><xs:restriction base="xs:string"><xs:pattern value=".*"/></xs:restriction></xs:simpleType>
+              </xs:union></xs:simpleType>
+            </xs:schema>
+            """), new() { ResolveReference = (_, _) => { calls++; throw new UnauthorizedAccessException(); } });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Unsupported);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("xsd.construct_unsupported");
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task UnionNamedMembersResolveOnlyThroughExplicitSchemaImports()
+    {
+        var calls = new List<string>();
+        var result = await new BuiltInDocumentValidator().ValidateAsync("XSD/1.0", Encoding.UTF8.GetBytes("""
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:v="urn:value">
+              <xs:import namespace="urn:value" schemaLocation="value.xsd"/>
+              <xs:simpleType name="Value"><xs:union memberTypes="v:Integer xs:boolean"/></xs:simpleType>
+            </xs:schema>
+            """), new()
+        {
+            DocumentUri = new Uri("https://schemas.test/root.xsd"),
+            ResolveReference = (reference, _) =>
+            {
+                calls.Add(reference);
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes("""
+                        <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:value">
+                          <xs:simpleType name="Integer"><xs:restriction base="xs:int"/></xs:simpleType>
+                        </xs:schema>
+                        """));
+            }
+        });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(calls.SequenceEqual(["https://schemas.test/value.xsd"])).IsTrue();
+    }
+
+    [Test]
     [Arguments("")]
     [Arguments("minOccurs=\"0\"")]
     [Arguments("minOccurs=\"0\" maxOccurs=\"1\"")]

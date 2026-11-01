@@ -218,9 +218,14 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
         using var stream = new MemoryStream(bytes.ToArray(), false);
         using var reader = XmlReader.Create(stream, Settings(embedded: prepaid));
         var sawRoot = false;
+        var unionMembers = new Dictionary<int, long>();
         while (reader.Read())
         {
             context.CancellationToken.ThrowIfCancellationRequested();
+            if (reader.NodeType == XmlNodeType.EndElement && unionMembers.Remove(reader.Depth, out var members))
+            {
+                ReserveUnion(members);
+            }
             if (reader.NodeType != XmlNodeType.Element)
             {
                 continue;
@@ -237,7 +242,7 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
             _elements++;
             if (reader.NamespaceURI == Namespace)
             {
-                if (reader.LocalName is "pattern" or "redefine" or "choice" or "union"
+                if (reader.LocalName is "pattern" or "redefine" or "choice"
                     or "complexContent" or "key" or "keyref" or "unique"
                     || reader.LocalName is "group" or "attributeGroup" && reader.GetAttribute("ref") is not null)
                 {
@@ -247,6 +252,24 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
                 var minimum = Occurrence(reader.GetAttribute("minOccurs"), allowUnbounded: false);
                 var maximum = Occurrence(reader.GetAttribute("maxOccurs"), allowUnbounded: true);
                 _occurrenceCost *= Math.Max(1, Math.Max(minimum, maximum));
+                if (reader.LocalName == "simpleType" && unionMembers.ContainsKey(reader.Depth - 1))
+                {
+                    unionMembers[reader.Depth - 1]++;
+                }
+                if (reader.LocalName == "union")
+                {
+                    var text = reader.GetAttribute("memberTypes") ?? "";
+                    context.Work(text.Length + 1L);
+                    long count = 0;
+                    var inToken = false;
+                    foreach (var character in text)
+                    {
+                        if (character is ' ' or '\t' or '\r' or '\n') { inToken = false; }
+                        else if (!inToken) { count++; inToken = true; }
+                    }
+                    if (reader.IsEmptyElement) { ReserveUnion(count); }
+                    else { unionMembers.Add(reader.Depth, count); }
+                }
             }
             for (var i = 0; i < reader.AttributeCount; i++)
             {
@@ -255,6 +278,16 @@ internal sealed class XmlSchemaSyntax(ValidationContext context)
             }
         }
         ValidationContext.Require(sawRoot, "$", "xsd.root", "An XML Schema root is required.");
+
+        void ReserveUnion(long members)
+        {
+            if (members > context.Options.MaxWork / _occurrenceCost)
+            {
+                ValidationContext.Fail(DocumentValidationStatus.Indeterminate, "$", "limit.work",
+                    "XML Schema union expansion exceeds the compilation budget.");
+            }
+            _occurrenceCost *= Math.Max(1, members);
+        }
     }
 
     private long Occurrence(string? text, bool allowUnbounded)

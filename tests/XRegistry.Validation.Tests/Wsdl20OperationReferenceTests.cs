@@ -770,6 +770,24 @@ public class Wsdl20OperationReferenceTests
     }
 
     [Test]
+    public async Task Wsdl20UnionSimpleTypesRetainAuthoredMemberOrderAndSchemaContext()
+    {
+        var result = await Resolve("""
+            <types xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:schema targetNamespace="urn:api">
+              <xs:simpleType name="Value"><xs:union memberTypes="xs:int xs:boolean"/></xs:simpleType>
+              <xs:element name="Payload" type="t:Value"/>
+            </xs:schema></types>
+            <interface name="Port"><operation name="Read"><input element="t:Payload"/><output element="#none"/></operation></interface>
+            """);
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        var schema = result.Wsdl20Operation!.SchemaElements.Single();
+        await Assert.That(schema.ElementName).IsEqualTo("{urn:api}Payload");
+        var union = XElement.Parse(schema.SchemaDocuments.Single()).Descendants(
+            XName.Get("union", "http://www.w3.org/2001/XMLSchema")).Single();
+        await Assert.That(union.Attribute("memberTypes")!.Value).IsEqualTo("xs:int xs:boolean");
+    }
+
+    [Test]
     [Arguments("minOccurs")]
     [Arguments("maxOccurs")]
     public async Task Wsdl20HugeOccurrenceIntegersNeverReachUnreservedSchemaCompilation(string attribute)
