@@ -13,6 +13,42 @@ public class SchemaObjectJsonSelectionTests
     [Test]
     [Arguments("JsonSchema/draft/2019-09")]
     [Arguments("JsonSchema/draft/2020-12")]
+    public async Task EmbeddedResourceSelectionOwnsTheWholeDocumentAndItsScopedDependencies(string format)
+    {
+        const string schema = """
+            {"$id":"https://schemas.test/root","$ref":"child#node","$defs":{
+              "Child":{"$id":"child","$anchor":"node","type":"string","$ref":"part"}}}
+            """;
+        const string dependency = """{"type":"string"}""";
+        var dependencyBytes = Encoding.UTF8.GetBytes(dependency);
+        var calls = new List<string>();
+        var result = await SchemaObjectSelector.SelectAsync(format, Encoding.UTF8.GetBytes(schema),
+            "https://schemas.test/retrieval#/$defs/Child", new()
+            {
+                Validation = new()
+                {
+                    DocumentUri = new("https://schemas.test/retrieval"),
+                    ResolveReference = (reference, _) =>
+                    {
+                        calls.Add(reference);
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(dependencyBytes);
+                    }
+                }
+            });
+        Array.Fill(dependencyBytes, (byte)'!');
+        await Assert.That(result.Status).IsEqualTo(SchemaObjectSelectionStatus.Selected);
+        await Assert.That(result.Selection!.JsonPointer).IsEqualTo("/$defs/Child");
+        await Assert.That(result.Selection.Json!.Value.GetProperty("$id").GetString()).IsEqualTo("child");
+        await Assert.That(result.Selection.DocumentReference).IsEqualTo("https://schemas.test/retrieval");
+        await Assert.That(Encoding.UTF8.GetString(result.Selection.Document.Span)).IsEqualTo(schema);
+        await Assert.That(Encoding.UTF8.GetString(result.Selection.References["https://schemas.test/part"].Span))
+            .IsEqualTo(dependency);
+        await Assert.That(calls.SequenceEqual(["https://schemas.test/part"])).IsTrue();
+    }
+
+    [Test]
+    [Arguments("JsonSchema/draft/2019-09")]
+    [Arguments("JsonSchema/draft/2020-12")]
     public async Task CanonicalIdAliasSelectionPreservesAuthoredBytesAndRetrievalOrigin(string format)
     {
         const string schema = """

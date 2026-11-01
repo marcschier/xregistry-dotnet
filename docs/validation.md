@@ -8,7 +8,7 @@ successful validation.
 
 | Format family | Current syntax policy |
 | --- | --- |
-| JSON Schema | draft-07, 2019-09, 2020-12 structural/keyword validation with explicitly resolved references; embedded resource IDs, dynamic evaluation and custom meta-schema processing are unsupported. |
+| JSON Schema | draft-07, 2019-09, 2020-12 structural/keyword validation with explicitly resolved references; modern same-dialect embedded resources. Draft-07 embedded IDs, dynamic evaluation and custom meta-schema processing are unsupported. |
 | XML Schema | XSD 1.0 through hardened, preflight-bounded `XmlSchemaSet`; no DTD/external resolver. XSD 1.1 and unqualified constructs are unsupported. |
 | Avro | 1.8.2 and 1.11.0 grammar, names/references, unions, records, enum/fixed and defaults. Logical annotations use underlying wire types; valid decimal annotations retain precision/scale for resolution. |
 | Protobuf | Proto2/3 lexer and declaration/type/field/default/enum/reserved/service checks, with explicit imports. Custom options, groups and extensions are unsupported. No protoc subprocess. |
@@ -20,8 +20,8 @@ Draft-07 `$ref` objects ignore all sibling keywords, following
 Ignored `$id` values do not change the reference base, and ignored subschemas
 do not dispatch additional callbacks. Referenced targets still undergo schema
 checks, including targets located inside otherwise ignored sibling content.
-Modern dialects continue to check `$ref` siblings. This does not add embedded
-resource IDs or dynamic reference evaluation.
+Modern dialects continue to check `$ref` siblings. Dynamic reference evaluation
+remains unsupported.
 
 Keyword recognition follows the selected standard dialect. Draft-07 treats
 later keywords, including `$defs`, `$anchor`, dependent/unevaluated keywords
@@ -55,7 +55,8 @@ activating vocabulary support requirements, as required by
 Unknown required declarations do not cause an ordinary schema to fail.
 `$vocabulary` is forbidden in subschemas, and `$schema` requires a resource
 root with an absolute URI declaration. Draft-07 forbids nested `$schema`
-declarations even with `$id`; modern embedded resources remain unsupported.
+declarations even with `$id`; modern resource roots may repeat the selected
+dialect, while differing embedded dialects remain unsupported.
 Malformed dialect URIs are `Invalid`, while well-formed unrecognized dialects
 remain `Unsupported`. No custom meta-schema is acquired or evaluated.
 
@@ -68,8 +69,27 @@ the acquisition identity. Distinct captured Documents declaring the same
 canonical ID are `Invalid`, including IDs differing only by an empty fragment.
 Authored bytes and the caller's retrieval origin remain unchanged. This follows
 [2019-09 Core section 8.2.2](https://json-schema.org/draft/2019-09/draft-handrews-json-schema-02#rfc.section.8.2.2)
-and [2020-12 Core section 8.2.1](https://json-schema.org/draft/2020-12/draft-bhutton-json-schema-01#section-8.2.1);
-it does not add embedded schema resources.
+and [2020-12 Core section 8.2.1](https://json-schema.org/draft/2020-12/draft-bhutton-json-schema-01#section-8.2.1).
+
+Modern `$id` declarations in recognized schema positions create embedded
+resources. Each resource has its own canonical URI, relative-reference base,
+anchor namespace and JSON Pointer root. Relative IDs resolve against the
+nearest containing resource, not against a sibling's ID. A canonical-resource
+pointer starts at that resource's root; a containing-Document pointer keeps
+its authored structural path across resource boundaries. References within
+the target use the nearest resource scope. Repeated and circular references
+reuse registered resources, including forward references within one captured
+Document and aliases registered by acquired Documents.
+
+Resources may reuse anchor names in different scopes; duplicates within one
+scope and conflicting canonical IDs are `Invalid`. Unknown annotation content
+does not register embedded IDs during ordinary traversal. Source selection
+retains the complete Document and owned dependency bytes, not a detached
+resource serialization. Parsing charges the captured bytes and nodes once;
+embedded URI registration and reference-scope lookup consume semantic work.
+All resource contents remain subject to the same operation-wide budgets.
+This implements same-dialect static resource resolution, not instance
+evaluation, cross-dialect bundles, draft-07 embedded IDs or dynamic references.
 
 JSON Schema reference fragments undergo strict UTF-8 percent decoding once
 before choosing JSON Pointer or plain-name anchor resolution. Encoded anchors

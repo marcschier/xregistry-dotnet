@@ -9,8 +9,8 @@ namespace XRegistry.Validation;
 internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
 {
     private readonly List<SchemaDocument> _documents = [];
-    private readonly Dictionary<string, SchemaDocument> _byUri = new(StringComparer.Ordinal);
-    private readonly List<(SchemaDocument Document, string Reference, string Path)> _references = [];
+    private readonly Dictionary<string, SchemaResource> _byUri = new(StringComparer.Ordinal);
+    private readonly List<(SchemaResource Resource, string Reference, string Path)> _references = [];
     private readonly int _draft = format.EndsWith("draft-07", StringComparison.OrdinalIgnoreCase) ? 7
         : format.EndsWith("2019-09", StringComparison.OrdinalIgnoreCase) ? 2019 : 2020;
 
@@ -48,15 +48,16 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
 
                 if (fragment.Length == 0 || fragment.StartsWith('/'))
                 {
-                    var (value, targetPath) = SchemaJson.DecodedPointer(target.Json.RootElement, fragment, path, context);
-                    Validate(value, target, targetPath);
+                    var (value, localPath) = SchemaJson.DecodedPointer(target.Root, fragment, path, context);
+                    var targetPath = target.Path + localPath[1..];
+                    Validate(value, Scope(target, targetPath), targetPath);
                 }
                 else
                 {
                     ValidationContext.Require(target.Anchors.TryGetValue(fragment, out var targetPath),
                         path, "reference.not_found", $"The anchor '{fragment}' is not defined.");
-                    var (value, _) = SchemaJson.DecodedPointer(target.Json.RootElement, targetPath[1..], path, context);
-                    Validate(value, target, targetPath);
+                    var (value, _) = SchemaJson.DecodedPointer(target.Document.Json.RootElement, targetPath[1..], path, context);
+                    Validate(value, Scope(target, targetPath), targetPath);
                 }
             }
             validatedRoot?.Invoke(_documents[0].Json.RootElement, declaredPaths!);
@@ -70,26 +71,49 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
         }
     }
 
-    private SchemaDocument Load(ReadOnlyMemory<byte> bytes, string uri)
+    private SchemaResource Load(ReadOnlyMemory<byte> bytes, string uri)
     {
-        var document = new SchemaDocument(context.ReadJson(bytes), uri);
+        var document = new SchemaDocument(context.ReadJson(bytes));
         _documents.Add(document);
-        _byUri[uri] = document;
+        var baseUri = uri;
         if (document.Json.RootElement.ValueKind == JsonValueKind.Object
             && !(_draft == 7 && document.Json.RootElement.TryGetProperty("$ref", out _))
             && document.Json.RootElement.TryGetProperty("$id", out var id))
         {
-            document.BaseUri = Identifier(SchemaJson.String(id, "$/$id"), uri, "$/$id");
-            ValidationContext.Require(!_byUri.TryGetValue(document.BaseUri, out var existing) || existing == document,
-                "$/$id", "schema.duplicate_id", "Different supplied documents declare the same schema identifier.");
-            _byUri[document.BaseUri] = document;
+            baseUri = Identifier(SchemaJson.String(id, "$/$id"), uri, "$/$id");
         }
-        Validate(document.Json.RootElement, document, "$");
-        return document;
+        var resource = new SchemaResource(document, document.Json.RootElement, "$", baseUri);
+        document.Resources.Add("$", resource);
+        Register(uri, resource, "$");
+        Register(baseUri, resource, "$/$id");
+        Validate(document.Json.RootElement, resource, "$");
+        return resource;
     }
 
-    private void Validate(JsonElement schema, SchemaDocument document, string path)
+    private void Register(string uri, SchemaResource resource, string path)
     {
+        ValidationContext.Require(!_byUri.TryGetValue(uri, out var existing) || existing == resource,
+            path, "schema.duplicate_id", "Different schema resources declare the same identifier.");
+        _byUri[uri] = resource;
+    }
+
+    private SchemaResource Scope(SchemaResource resource, string path)
+    {
+        var candidate = path;
+        while (true)
+        {
+            context.Work(1, path);
+            if (resource.Document.Resources.TryGetValue(candidate, out var scope))
+            {
+                return scope;
+            }
+            candidate = candidate[..candidate.LastIndexOf('/')];
+        }
+    }
+
+    private void Validate(JsonElement schema, SchemaResource resource, string path)
+    {
+        var document = resource.Document;
         context.Work(1, path);
         if (!document.Visited.Add(path) || schema.ValueKind is JsonValueKind.True or JsonValueKind.False)
         {
@@ -102,8 +126,21 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
             var referencePath = SchemaJson.Path(path, "$ref");
             var reference = SchemaJson.String(draftSevenReference, referencePath);
             CheckUri(reference, referencePath, false);
-            _references.Add((document, reference, referencePath));
+            _references.Add((resource, reference, referencePath));
             return;
+        }
+        if (path != resource.Path && schema.TryGetProperty("$id", out var embeddedId))
+        {
+            var idPath = SchemaJson.Path(path, "$id");
+            var baseUri = Identifier(SchemaJson.String(embeddedId, idPath), resource.BaseUri, idPath);
+            if (_draft == 7)
+            {
+                Unsupported(idPath, "schema.embedded_resource", "Draft-07 embedded resource identifiers are not implemented.");
+            }
+            context.Work(baseUri.Length, idPath);
+            resource = new SchemaResource(document, schema, path, baseUri);
+            document.Resources.Add(path, resource);
+            Register(baseUri, resource, idPath);
         }
         foreach (var property in schema.EnumerateObject())
         {
@@ -114,7 +151,7 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
                 case "$schema":
                     var dialectUri = SchemaJson.String(value, childPath);
                     CheckUri(dialectUri, childPath, true);
-                    ValidationContext.Require(path == "$" || _draft != 7 && schema.TryGetProperty("$id", out _),
+                    ValidationContext.Require(path == resource.Path,
                         childPath, "schema.dialect_location", "A dialect declaration requires a schema resource root.");
                     var dialect = dialectUri.TrimEnd('#');
                     var expected = _draft switch
@@ -127,28 +164,24 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
                     {
                         var recognized = dialect is "http://json-schema.org/draft-07/schema"
                             or "https://json-schema.org/draft/2019-09/schema" or "https://json-schema.org/draft/2020-12/schema";
-                        ValidationContext.Fail(recognized ? DocumentValidationStatus.Invalid : DocumentValidationStatus.Unsupported,
-                            childPath, recognized ? "schema.dialect_mismatch" : "schema.dialect_unsupported",
+                        var mismatch = recognized && path == "$";
+                        ValidationContext.Fail(mismatch ? DocumentValidationStatus.Invalid : DocumentValidationStatus.Unsupported,
+                            childPath, mismatch ? "schema.dialect_mismatch" : "schema.dialect_unsupported",
                             "The schema dialect does not match the explicitly supported format.");
                     }
                     break;
                 case "$id":
-                    if (path != "$")
-                    {
-                        Identifier(SchemaJson.String(value, childPath), document.BaseUri, childPath);
-                        Unsupported(childPath, "schema.embedded_resource", "Embedded resource identifiers are not implemented.");
-                    }
                     break;
                 case "$ref":
                     var reference = SchemaJson.String(value, childPath);
                     CheckUri(reference, childPath, false);
-                    _references.Add((document, reference, childPath));
+                    _references.Add((resource, reference, childPath));
                     break;
                 case "$anchor" when _draft != 7:
                     var anchor = SchemaJson.String(value, childPath);
                     CheckAnchor(anchor, childPath);
-                    ValidationContext.Require(document.Anchors.TryAdd(anchor, path), childPath,
-                        "schema.duplicate_anchor", "A schema anchor must be unique within a document.");
+                    ValidationContext.Require(resource.Anchors.TryAdd(anchor, path), childPath,
+                        "schema.duplicate_anchor", "A schema anchor must be unique within a resource.");
                     break;
                 case "$dynamicRef" when _draft == 2020:
                 case "$recursiveRef" when _draft != 7:
@@ -201,7 +234,7 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
                         {
                             SchemaPattern.Validate(child.Name, context, childPath);
                         }
-                        Validate(child.Value, document, SchemaJson.Path(childPath, child.Name));
+                        Validate(child.Value, resource, SchemaJson.Path(childPath, child.Name));
                     }
                     break;
                 case "dependencies":
@@ -214,7 +247,7 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
                         }
                         else
                         {
-                            Validate(child.Value, document, SchemaJson.Path(childPath, child.Name));
+                            Validate(child.Value, resource, SchemaJson.Path(childPath, child.Name));
                         }
                     }
                     break;
@@ -253,20 +286,20 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
                         "schema.nonnegative_integer", "A nonnegative integer is required.");
                     break;
                 case "prefixItems" when _draft == 2020:
-                    SchemaArray(value, document, childPath);
+                    SchemaArray(value, resource, childPath);
                     break;
                 case "items":
                     if (_draft != 2020 && value.ValueKind == JsonValueKind.Array)
                     {
-                        SchemaArray(value, document, childPath);
+                        SchemaArray(value, resource, childPath);
                         break;
                     }
-                    Validate(value, document, childPath);
+                    Validate(value, resource, childPath);
                     break;
                 case "allOf":
                 case "anyOf":
                 case "oneOf":
-                    SchemaArray(value, document, childPath);
+                    SchemaArray(value, resource, childPath);
                     break;
                 case "unevaluatedItems" when _draft != 7:
                 case "unevaluatedProperties" when _draft != 7:
@@ -280,7 +313,7 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
                 case "additionalItems" when _draft != 2020:
                 case "additionalProperties":
                 case "propertyNames":
-                    Validate(value, document, childPath);
+                    Validate(value, resource, childPath);
                     break;
                 case "enum":
                     SchemaJson.Array(value, childPath);
@@ -315,13 +348,13 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
         }
     }
 
-    private void SchemaArray(JsonElement value, SchemaDocument document, string path)
+    private void SchemaArray(JsonElement value, SchemaResource resource, string path)
     {
         SchemaJson.Array(value, path);
         ValidationContext.Require(value.GetArrayLength() > 0, path, "schema.empty", "A schema array must not be empty.");
         for (var i = 0; i < value.GetArrayLength(); i++)
         {
-            Validate(value[i], document, SchemaJson.Path(path, i.ToString(CultureInfo.InvariantCulture)));
+            Validate(value[i], resource, SchemaJson.Path(path, i.ToString(CultureInfo.InvariantCulture)));
         }
     }
 
@@ -372,11 +405,19 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
     private static void Unsupported(string path, string code, string detail)
         => ValidationContext.Fail(DocumentValidationStatus.Unsupported, path, code, detail);
 
-    private sealed class SchemaDocument(JsonDocument json, string baseUri)
+    private sealed class SchemaDocument(JsonDocument json)
     {
         internal JsonDocument Json { get; } = json;
-        internal string BaseUri { get; set; } = baseUri;
         internal HashSet<string> Visited { get; } = new(StringComparer.Ordinal);
+        internal Dictionary<string, SchemaResource> Resources { get; } = new(StringComparer.Ordinal);
+    }
+
+    private sealed class SchemaResource(SchemaDocument document, JsonElement root, string path, string baseUri)
+    {
+        internal SchemaDocument Document { get; } = document;
+        internal JsonElement Root { get; } = root;
+        internal string Path { get; } = path;
+        internal string BaseUri { get; } = baseUri;
         internal Dictionary<string, string> Anchors { get; } = new(StringComparer.Ordinal);
     }
 }

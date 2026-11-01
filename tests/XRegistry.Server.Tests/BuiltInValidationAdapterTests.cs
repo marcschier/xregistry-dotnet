@@ -15,6 +15,37 @@ public class BuiltInValidationAdapterTests
     [Test]
     [Arguments("JsonSchema/draft/2019-09")]
     [Arguments("JsonSchema/draft/2020-12")]
+    public async Task EmbeddedSchemaResourcesPublishWithExactBytesAndDuplicateIdsRejectAtomically(string format)
+    {
+        const string schema = """{"$id":"https://schemas.test/root","$ref":"child#node","$defs":{"Child":{"$id":"child#","$anchor":"node","type":"string"}}}""";
+        var calls = 0;
+        var engine = ValidatingEngine(strict: true, validateCompatibility: false, validationOptions: new()
+        {
+            MaxReferences = 0,
+            ResolveReference = (_, _) => { calls++; throw new UnauthorizedAccessException(); }
+        });
+        var created = await Send(engine, RegistryAction.Replace, "/sets/g/schemas/s$details", $$$"""
+            {"versionid":"v1","format":"{{{format}}}","schema":{{{schema}}}}
+            """);
+        await Assert.That(created.Metadata!.RootElement.GetProperty("formatvalidated").GetBoolean()).IsTrue();
+        using var bytes = (await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/versions/v1")).Document!.OpenRead();
+        using var reader = new StreamReader(bytes, Encoding.UTF8);
+        await Assert.That(await reader.ReadToEndAsync()).IsEqualTo(schema);
+        var before = (await Send(engine, RegistryAction.Read, "/sets/g/schemas/s$details")).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        const string invalid = """{"$id":"https://schemas.test/root","$defs":{"A":{"$id":"child"},"B":{"$id":"child#"}}}""";
+        await ExpectCode(() => Send(engine, RegistryAction.Post, "/sets/g/schemas/s$details", $$$"""
+            {"versionid":"v2","format":"{{{format}}}","schema":{{{invalid}}}}
+            """), "format_violation");
+        await Assert.That((await Send(engine, RegistryAction.Read, "/sets/g/schemas/s$details")).Metadata!.RootElement.GetRawText())
+            .IsEqualTo(before);
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("JsonSchema/draft/2019-09")]
+    [Arguments("JsonSchema/draft/2020-12")]
     public async Task CanonicalRootIdAliasesPublishWithoutAcquisitionAndInvalidIdsRejectAtomically(string format)
     {
         const string schema = """{"$id":"https://schemas.test/canonical#","$ref":"https://schemas.test/canonical","type":"string"}""";

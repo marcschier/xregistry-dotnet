@@ -10,6 +10,242 @@ namespace XRegistry.Validation.Tests;
 public class JsonSchemaValidationTests
 {
     [Test]
+    [Arguments("child#node")]
+    [Arguments("child#%6Eode")]
+    [Arguments("child#/properties/value")]
+    [Arguments("#/$defs/Child/properties/value")]
+    public async Task EmbeddedResourcesResolveCanonicalAndContainingPointersWithoutAcquisition(string reference)
+    {
+        foreach (var format in new[] { "JsonSchema/draft/2019-09", "JsonSchema/draft/2020-12" })
+        {
+            var schema = RegistryJson.Create(writer =>
+            {
+                writer.WriteStartObject(); writer.WriteString("$id", "https://schemas.test/root");
+                writer.WriteString("$ref", reference); writer.WriteStartObject("$defs"); writer.WriteStartObject("Child");
+                writer.WriteString("$id", "child#"); writer.WriteStartObject("properties"); writer.WriteStartObject("value");
+                writer.WriteString("$anchor", "node"); writer.WriteString("type", "string");
+                writer.WriteEndObject(); writer.WriteEndObject(); writer.WriteEndObject(); writer.WriteEndObject(); writer.WriteEndObject();
+            });
+            var calls = 0;
+            var result = await new BuiltInDocumentValidator().ValidateAsync(format,
+                Encoding.UTF8.GetBytes(schema.RootElement.GetRawText()), new()
+                {
+                    MaxReferences = 0,
+                    ResolveReference = (_, _) => { calls++; throw new UnauthorizedAccessException(); }
+                });
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+            await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+            await Assert.That(calls).IsEqualTo(0);
+        }
+    }
+
+    [Test]
+    [Arguments("JsonSchema/draft/2019-09")]
+    [Arguments("JsonSchema/draft/2020-12")]
+    public async Task EmbeddedReferenceBasesAndAnchorNamespacesRemainResourceLocal(string format)
+    {
+        var calls = new List<string>();
+        var result = await new BuiltInDocumentValidator().ValidateAsync(format, """
+            {"$id":"https://schemas.test/root","$anchor":"node",
+             "$ref":"left/#node","$defs":{
+               "Left":{"$id":"left/","$anchor":"node","$ref":"#/$defs/Value",
+                 "$defs":{"Value":{"$ref":"part"}}},
+               "Right":{"$id":"right/","$anchor":"node","$ref":"part"}}}
+            """u8.ToArray(), new()
+            {
+                ResolveReference = (reference, _) =>
+                {
+                    calls.Add(reference);
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>("""{"type":"string"}"""u8.ToArray());
+                }
+            });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+        await Assert.That(calls.SequenceEqual(["https://schemas.test/left/part", "https://schemas.test/right/part"])).IsTrue();
+    }
+
+    [Test]
+    [Arguments("JsonSchema/draft/2019-09")]
+    [Arguments("JsonSchema/draft/2020-12")]
+    public async Task NestedEmbeddedIdsResolveAgainstParentsWithoutLeakingToSiblings(string format)
+    {
+        var calls = new List<string>();
+        var result = await new BuiltInDocumentValidator().ValidateAsync(format, """
+            {"$id":"https://schemas.test/root","$defs":{
+               "Parent":{"$id":"nested/","$defs":{"Child":{"$id":"child/","$ref":"part"}}},
+               "Sibling":{"$ref":"part"}}}
+            """u8.ToArray(), new()
+            {
+                ResolveReference = (reference, _) =>
+                {
+                    calls.Add(reference);
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>("""{"type":"string"}"""u8.ToArray());
+                }
+            });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(calls.SequenceEqual(["https://schemas.test/nested/child/part", "https://schemas.test/part"])).IsTrue();
+    }
+
+    [Test]
+    [Arguments("JsonSchema/draft/2019-09")]
+    [Arguments("JsonSchema/draft/2020-12")]
+    public async Task EmbeddedCircularAndForwardReferencesReuseCapturedResources(string format)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync(format, """
+            {"$id":"https://schemas.test/root","$ref":"first","$defs":{
+               "First":{"$id":"first","$ref":"second"},
+               "Second":{"$id":"second","$ref":"first"}}}
+            """u8.ToArray(), new() { MaxReferences = 0 });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("JsonSchema/draft/2019-09")]
+    [Arguments("JsonSchema/draft/2020-12")]
+    public async Task EscapedContainingPointersRetainTheirNearestEmbeddedScope(string format)
+    {
+        var calls = new List<string>();
+        var result = await new BuiltInDocumentValidator().ValidateAsync(format, """
+            {"$id":"https://schemas.test/root","$ref":"#/$defs/A~1B/properties/value","$defs":{
+              "A/B":{"$id":"nested/","properties":{"value":{"$ref":"part"}}}},
+             "x-custom":{"$id":"https://schemas.test/root","$anchor":"duplicate","$ref":"never"}}
+            """u8.ToArray(), new()
+            {
+                ResolveReference = (reference, _) =>
+                {
+                    calls.Add(reference);
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>( """{"type":"string"}"""u8.ToArray());
+                }
+            });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+        await Assert.That(calls.SequenceEqual(["https://schemas.test/nested/part"])).IsTrue();
+    }
+
+    [Test]
+    [Arguments("""{"$id":"https://schemas.test/root","$defs":{"A":{"$id":"same"},"B":{"$id":"same#"}}}""",
+        "schema.duplicate_id")]
+    [Arguments("""{"$id":"https://schemas.test/root","$defs":{"A":{"$id":"#"}}}""", "schema.duplicate_id")]
+    [Arguments("""{"$id":"https://schemas.test/root","$defs":{"A":{"$id":"child","$defs":{"X":{"$anchor":"node"},"Y":{"$anchor":"node"}}}}}""",
+        "schema.duplicate_anchor")]
+    [Arguments("""{"$id":"https://schemas.test/root","$ref":"#node","$defs":{"A":{"$id":"child","$anchor":"node"}}}""",
+        "reference.not_found")]
+    [Arguments("""{"$id":"https://schemas.test/root","$ref":"child#/missing","$defs":{"A":{"$id":"child","type":"string"}}}""",
+        "reference.not_found")]
+    [Arguments("""{"$id":"https://schemas.test/root","$ref":"child#/title","$defs":{"A":{"$id":"child","title":"annotation"}}}""",
+        "schema.object")]
+    [Arguments("""{"$id":"https://schemas.test/root","$defs":{"A":{"$id":"child#node"}}}""", "schema.id_fragment")]
+    public async Task EmbeddedResourceIdentityAndTargetFailuresRemainExplicit(string schema, string code)
+    {
+        foreach (var format in new[] { "JsonSchema/draft/2019-09", "JsonSchema/draft/2020-12" })
+        {
+            var result = await new BuiltInDocumentValidator().ValidateAsync(format, Encoding.UTF8.GetBytes(schema),
+                new() { MaxReferences = 0 });
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+            await Assert.That(result.Diagnostics.Single().Code).IsEqualTo(code);
+        }
+    }
+
+    [Test]
+    [Arguments("JsonSchema/draft/2019-09")]
+    [Arguments("JsonSchema/draft/2020-12")]
+    public async Task AcquiredDocumentsRegisterEmbeddedAliasesForLaterReferences(string format)
+    {
+        var calls = new List<string>();
+        var result = await new BuiltInDocumentValidator().ValidateAsync(format, """
+            {"allOf":[{"$ref":"https://schemas.test/container"},
+                      {"$ref":"https://schemas.test/child#node"}]}
+            """u8.ToArray(), new()
+            {
+                MaxReferences = 1,
+                ResolveReference = (reference, _) =>
+                {
+                    calls.Add(reference);
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>( """
+                        {"$id":"https://schemas.test/container","$defs":{
+                          "Child":{"$id":"child","$anchor":"node","type":"string"}}}
+                        """u8.ToArray());
+                }
+            });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(calls.SequenceEqual(["https://schemas.test/container"])).IsTrue();
+    }
+
+    [Test]
+    [Arguments(-1, DocumentValidationStatus.Indeterminate)]
+    [Arguments(0, DocumentValidationStatus.Valid)]
+    [Arguments(1, DocumentValidationStatus.Valid)]
+    public async Task EmbeddedResourceRegistrationHasAnExactInclusiveWorkBudget(int delta, DocumentValidationStatus status)
+    {
+        var bytes = """{"$id":"https://schemas.test/root","$defs":{"Value":{"$id":"child","type":"string"}}}"""u8.ToArray();
+        var result = await new BuiltInDocumentValidator().ValidateAsync("JsonSchema/draft/2020-12", bytes,
+            new() { MaxWork = bytes.Length + 2 + "https://schemas.test/child".Length + delta });
+        await Assert.That(result.Status).IsEqualTo(status);
+        if (status == DocumentValidationStatus.Valid) { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+        else { await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("limit.work"); }
+    }
+
+    [Test]
+    [Arguments(-1, DocumentValidationStatus.Indeterminate)]
+    [Arguments(0, DocumentValidationStatus.Valid)]
+    [Arguments(1, DocumentValidationStatus.Valid)]
+    public async Task EmbeddedResourcesChargeCapturedDocumentBytesOnlyOnce(int delta, DocumentValidationStatus status)
+    {
+        var bytes = """{"$id":"https://schemas.test/root","$defs":{"Value":{"$id":"child","type":"string"}}}"""u8.ToArray();
+        var result = await new BuiltInDocumentValidator().ValidateAsync("JsonSchema/draft/2020-12", bytes,
+            new() { MaxTotalBytes = bytes.Length + delta });
+        await Assert.That(result.Status).IsEqualTo(status);
+        if (status == DocumentValidationStatus.Valid) { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+        else { await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("limit.total_bytes"); }
+    }
+
+    [Test]
+    [Arguments(5, 64, DocumentValidationStatus.Indeterminate, "limit.nodes")]
+    [Arguments(6, 64, DocumentValidationStatus.Valid, "")]
+    [Arguments(7, 64, DocumentValidationStatus.Valid, "")]
+    [Arguments(100, 3, DocumentValidationStatus.Indeterminate, "limit.depth")]
+    [Arguments(100, 4, DocumentValidationStatus.Valid, "")]
+    [Arguments(100, 5, DocumentValidationStatus.Valid, "")]
+    public async Task EmbeddedResourcesRemainWithinWholeDocumentStructuralBudgets(
+        int nodes, int depth, DocumentValidationStatus status, string code)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("JsonSchema/draft/2020-12",
+            """{"$id":"https://schemas.test/root","$defs":{"Value":{"$id":"child","type":"string"}}}"""u8.ToArray(),
+            new() { MaxNodes = nodes, MaxDepth = depth });
+        await Assert.That(result.Status).IsEqualTo(status);
+        if (code.Length == 0) { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+        else { await Assert.That(result.Diagnostics.Single().Code).IsEqualTo(code); }
+    }
+
+    [Test]
+    [Arguments("JsonSchema/draft/2019-09", "https://json-schema.org/draft/2019-09/schema")]
+    [Arguments("JsonSchema/draft/2020-12", "https://json-schema.org/draft/2020-12/schema")]
+    public async Task SameDialectDeclarationsAreAllowedAtEmbeddedResourceRoots(string format, string dialect)
+    {
+        var schema = Encoding.UTF8.GetBytes($$$$$"""
+            {"$id":"https://schemas.test/root","$defs":{"Child":{"$schema":"{{{{{dialect}}}}}","$id":"child","type":"string"}}}
+            """);
+        var result = await new BuiltInDocumentValidator().ValidateAsync(format, schema);
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("JsonSchema/draft/2020-12", """{"$id":"child","$schema":"http://json-schema.org/draft-07/schema#"}""",
+        "schema.dialect_unsupported")]
+    [Arguments("JsonSchema/draft-07", """{"$id":"child"}""", "schema.embedded_resource")]
+    public async Task UnqualifiedEmbeddedDialectsRemainUnsupported(string format, string child, string code)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync(format,
+            Encoding.UTF8.GetBytes($$$$"""
+                {"$id":"https://schemas.test/root","properties":{"value":{{{{child}}}}}}
+                """));
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Unsupported);
+        await Assert.That(result.Diagnostics.Single().Code).IsEqualTo(code);
+    }
+
+    [Test]
     [Arguments("https://schemas.test/canonical", "https://schemas.test/canonical")]
     [Arguments("https://schemas.test/canonical#", "https://schemas.test/canonical")]
     [Arguments("canonical#", "https://schemas.test/canonical")]
