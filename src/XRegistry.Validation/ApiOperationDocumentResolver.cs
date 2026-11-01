@@ -515,6 +515,8 @@ public static partial class ApiOperationDocumentResolver
         if (documentationFailure is not null) { return documentationFailure; }
         var tagFailure = ValidateHttpRootTags(root, cancellationToken);
         if (tagFailure is not null) { return tagFailure; }
+        var securityFailure = ValidateHttpSecurityShapes(root, "$", cancellationToken);
+        if (securityFailure is not null) { return securityFailure; }
         if (format == "Swagger/2.0")
         {
             var transportFailure = ValidateSwaggerTransportDeclarations(root, "$", cancellationToken);

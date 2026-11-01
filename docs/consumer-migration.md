@@ -595,6 +595,15 @@ dependency retrieval. Operation tag lists remain separate: repeated names are
 permitted, and a name used by an operation need not have a root declaration.
 Selection preserves operation tags without adding root metadata or fetching
 tag documentation; extension contents remain opaque.
+Root and reached HTTP operation `security` values must be arrays of Security
+Requirement Objects whose scheme values are arrays of strings. Every property
+inside a requirement names a scheme, including `x-` names; these are not
+extension payloads or reference objects. Empty requirement objects, empty
+operation overrides, alternative ordering and repeated scope strings remain
+authored data. Root checks precede selection and retrieval; operation checks
+retain pointer locality and validate reached callback ancestors and reference
+targets. This shape check does not resolve scheme names, validate OAuth scopes,
+apply version-specific role rules or authorize requests.
 OpenAPI 3.1 operation-ID selection also searches `webhooks`, including referenced
 Path Items. Webhook names are exact strings, not slash-prefixed paths; an `x-`
 name in this map is a webhook, not a Paths specification extension. Duplicate

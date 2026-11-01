@@ -100,7 +100,8 @@ public static partial class ApiOperationDocumentResolver
                 index++;
             }
         }
-        return ValidateHttpDocumentationShapes(operation, pointer);
+        var securityFailure = ValidateHttpSecurityShapes(operation, pointer, cancellationToken);
+        return securityFailure ?? ValidateHttpDocumentationShapes(operation, pointer);
     }
 
     private static ApiOperationResolutionResult? ValidateHttpDocumentationShapes(JsonElement value, string pointer)
@@ -197,6 +198,52 @@ public static partial class ApiOperationDocumentResolver
             {
                 return Failure(ApiOperationResolutionStatus.Invalid, "document.tag_duplicate",
                     "Root HTTP tag names must be unique.", path + "/name");
+            }
+        }
+        return null;
+    }
+
+    private static ApiOperationResolutionResult? ValidateHttpSecurityShapes(
+        JsonElement value, string pointer, CancellationToken cancellationToken)
+    {
+        if (!value.TryGetProperty("security", out var security)) { return null; }
+        var path = pointer + "/security";
+        if (security.ValueKind != JsonValueKind.Array)
+        {
+            return Failure(ApiOperationResolutionStatus.Invalid, "document.security",
+                "HTTP security must be an array of Security Requirement Objects.", path);
+        }
+        var index = 0;
+        foreach (var requirement in security.EnumerateArray())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var itemPath = path + "/" + (index++).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (requirement.ValueKind != JsonValueKind.Object)
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid, "document.security",
+                    "A Security Requirement must be an object.", itemPath);
+            }
+            foreach (var scheme in requirement.EnumerateObject())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var schemePath = itemPath + "/" + Escape(scheme.Name);
+                if (scheme.Value.ValueKind != JsonValueKind.Array)
+                {
+                    return Failure(ApiOperationResolutionStatus.Invalid, "document.security",
+                        "A Security Requirement scheme value must be an array of strings.", schemePath);
+                }
+                var scopeIndex = 0;
+                foreach (var scope in scheme.Value.EnumerateArray())
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (scope.ValueKind != JsonValueKind.String)
+                    {
+                        return Failure(ApiOperationResolutionStatus.Invalid, "document.security",
+                            "Security Requirement scope or role names must be strings.",
+                            schemePath + "/" + scopeIndex.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    }
+                    scopeIndex++;
+                }
             }
         }
         return null;
