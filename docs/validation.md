@@ -52,6 +52,40 @@ the cumulative work budget. Exhausting that budget reports `Indeterminate` with
 `limit.work`, rather than accepting a declaration whose reservation checks were
 not completed.
 
+## Standalone WSDL operation selection
+
+`ApiOperationDocumentResolver` selects abstract operations from `WSDL/1.1`
+XML Documents with `application/xml` or `text/xml` media types. The locator
+uses the expanded port type name, independent of XML prefix spelling:
+`#interfaces/%7Burn:users%7DPort/operations/Read`. Operation names remain exact
+local names; selection does not choose a service address or protocol binding.
+
+A name-only locator reports `Ambiguous` for overloaded operations. The
+`input/<name>/output/<name>` suffix selects both effective message names,
+including the defaults in
+[WSDL 1.1 section 2.4.5](https://www.w3.org/TR/2001/NOTE-wsdl-20010315).
+Use `!` for an absent input or output. Names use XML NMTOKEN syntax, so a
+colon or leading digit is not rejected by an invented NCName restriction.
+
+`WsdlOperation` retains the native operation XML with its in-scope namespaces,
+expanded message and fault QNames, effective names and transmission pattern.
+One-way, notification, request-response and solicit-response remain distinct.
+No JSON operation or JSON Pointer is fabricated. Malformed XML, DTDs,
+wrong WSDL roots, missing message references, duplicate port types and
+indistinguishable overloads fail before selection.
+
+This is a standalone operation-selection policy, not full WSDL validation.
+Imports and required extensions report `Unsupported` without calling a dependency resolver;
+`SupportsCallerProvidedWsdlImports` and `SupportsApiDocumentValidation` remain
+false. WSDL 2.0, imported components, embedded schema validity and complete
+binding/service validation remain unsupported. Shared byte, node, depth,
+work and deadline limits apply, and cancellation propagates.
+
+The HTTP workflow acquires an older exact API Version after its default changes
+and selects the retained WSDL operation after source and host disposal.
+It preserves entry bytes and native operation meaning without asserting that
+registration or selection establishes full document validity.
+
 ## Compatibility
 
 `IDocumentCompatibilityValidator.CheckAsync` accepts candidate bytes and

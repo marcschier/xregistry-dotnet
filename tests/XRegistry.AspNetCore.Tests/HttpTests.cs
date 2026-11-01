@@ -29,6 +29,56 @@ namespace XRegistry.AspNetCore.Tests;
 public class HttpTests
 {
     [Test]
+    public async Task ExactHttpWsdlAcquisitionPreservesNativeOperationSelectionAfterDefaultChangeAndDisposal()
+    {
+        const string first = """
+            <definitions xmlns="http://schemas.xmlsoap.org/wsdl/" xmlns:t="urn:users" targetNamespace="urn:users">
+              <message name="Message"/><portType name="Port">
+                <operation name="Read"><input message="t:Message"/><output message="t:Message"/></operation>
+              </portType>
+            </definitions>
+            """;
+        var second = first.Replace("name=\"Read\"", "name=\"ReadNew\"", StringComparison.Ordinal);
+        const string version = "/apigroups/g/apis/a/versions/1";
+        await using var host = await TestHost.StartAsync(model: BuiltInRegistryModels.Compile(RegistryModelKind.Api),
+            useBoundPublicRoot: true);
+        foreach (var item in new[] { (Path: version, Bytes: first), (Path: "/apigroups/g/apis/a/versions/2", Bytes: second) })
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Put, item.Path)
+            {
+                Content = new StringContent(item.Bytes, Encoding.UTF8, "application/xml")
+            };
+            request.Headers.TryAddWithoutValidation("xRegistry-format", "WSDL/1.1");
+            using var response = await host.Client.SendAsync(request);
+            await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.Created)
+                .Because(await response.Content.ReadAsStringAsync());
+        }
+        using var source = await HttpFederationReadSource.OpenAsync(host.Client.BaseAddress!,
+            new() { AllowLoopbackHttp = true });
+        var acquired = await ApiRegistryDocumentAcquirer.AcquireAsync(source, version);
+        source.Dispose();
+        await host.DisposeAsync();
+        using var stream = acquired.Document.OpenRead();
+        using var memory = new MemoryStream();
+        await stream.CopyToAsync(memory);
+        await Assert.That(Encoding.UTF8.GetString(memory.ToArray())).IsEqualTo(first);
+        var result = await ApiOperationDocumentResolver.ResolveAsync(acquired.Format, acquired.Document.ContentType!,
+            memory.ToArray(), ApiOperationReference.Parse(version +
+                "#interfaces/%7Burn:users%7DPort/operations/Read"), new Uri(acquired.Document.Origin!));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(result.WsdlOperation!.InterfaceName).IsEqualTo("{urn:users}Port");
+        await Assert.That(result.WsdlOperation.OperationName).IsEqualTo("Read");
+        await Assert.That(result.WsdlOperation.MessageExchangePattern).IsEqualTo(WsdlMessageExchangePattern.RequestResponse);
+        await Assert.That(result.WsdlOperation.InputName).IsEqualTo("ReadRequest");
+        await Assert.That(result.WsdlOperation.OutputName).IsEqualTo("ReadResponse");
+        await Assert.That(result.DocumentUri!.AbsoluteUri).IsEqualTo(acquired.Document.Origin);
+        var missing = await ApiOperationDocumentResolver.ResolveAsync(acquired.Format, acquired.Document.ContentType!,
+            memory.ToArray(), ApiOperationReference.Parse(version +
+                "#interfaces/%7Burn:users%7DPort/operations/ReadNew"));
+        await Assert.That(missing.Status).IsEqualTo(ApiOperationResolutionStatus.NotFound);
+    }
+
+    [Test]
     public async Task HttpExternalApiAcquisitionRetainsTheAuthorizedEffectiveUrlForRelativeDependencies()
     {
         const string entry = """

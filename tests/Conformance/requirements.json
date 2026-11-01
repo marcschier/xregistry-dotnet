@@ -117049,13 +117049,20 @@
       ],
       "text": "For WSDL, an interface token MUST use the expanded QName `{namespace}local`, independent of XML prefix choices. Apply token escaping and percent encoding to the entire expanded name. For a WSDL 1.1 port type in `urn:example:users`:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Standalone WSDL 1.1 selection uses the expanded targetNamespace/portType name independently of prefix spelling and rejects prefix-based selector tokens. API locator parsing performs the specified percent/tilde decoding before exact comparison. Real HTTP exact-Version acquisition preserves native selection after default change and disposal. WSDL 2.0 and imported components remain unsupported, so the whole clause remains pending.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "WsdlOperationReferenceTests.Wsdl11ExpandedNamesDoNotDependOnXmlPrefixesAndFaultsRemainNative",
+          "WsdlOperationReferenceTests.Wsdl11RejectsNonExpandedInterfaceTokensAndUnsupportedSelectorOrMediaForms",
+          "HttpTests.ExactHttpWsdlAcquisitionPreservesNativeOperationSelectionAfterDefaultChangeAndDisposal"
+        ],
         "nativeEvidence": []
       }
     },
@@ -117080,13 +117087,19 @@
       ],
       "text": "WSDL 1.1 uses the operation's local name. A name-only selector MUST fail if operations are overloaded. An overload can be selected using both effective input and output names, including the defaults specified by WSDL 1.1 section 2.4.5. Use the token `!` for an absent input or output; `!` is not a valid XML NMTOKEN. WSDL 1.1 input and output names are NMTOKENs, not NCNames.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Standalone WSDL 1.1 operation selection distinguishes all four native transmission patterns, computes section 2.4.5 effective input/output defaults, rejects name-only overload ambiguity and selects exact input/output names including absent markers and NMTOKEN-only spellings. Native message/fault QNames and namespace-complete operation XML are retained without endpoint inference. Imports and full WSDL document validation remain unsupported; broader WSDL qualification remains pending.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "WsdlOperationReferenceTests.Wsdl11PreservesEveryNativeExchangePatternAndEffectiveDefaultName",
+          "WsdlOperationReferenceTests.Wsdl11OverloadsRequireEffectiveInputAndOutputNamesIncludingAbsentMarkers",
+          "WsdlOperationReferenceTests.Wsdl11RejectsInvalidOperationComponentsBeforeSelection"
+        ],
         "nativeEvidence": []
       }
     },

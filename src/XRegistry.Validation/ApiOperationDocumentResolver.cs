@@ -21,10 +21,11 @@ public sealed class ApiOperationResolverCapabilities
     internal ApiOperationResolverCapabilities()
     {
         Formats = Array.AsReadOnly(["OpenAPI/3.0", "OpenAPI/3.1", "Swagger/2.0", "OpenRPC/1.4",
-            "AvroProtocol/1.12.0", "Smithy/2.0", "gRPC/proto3"]);
-        ContentTypes = Array.AsReadOnly(["application/json", "text/plain"]);
+            "AvroProtocol/1.12.0", "Smithy/2.0", "gRPC/proto3", "WSDL/1.1"]);
+        ContentTypes = Array.AsReadOnly(["application/json", "text/plain", "application/xml", "text/xml"]);
         Selectors = Array.AsReadOnly([ApiOperationSelectorKind.Operation, ApiOperationSelectorKind.JsonPointer,
-            ApiOperationSelectorKind.ServiceOperation]);
+            ApiOperationSelectorKind.ServiceOperation, ApiOperationSelectorKind.InterfaceOperation,
+            ApiOperationSelectorKind.InterfaceOperationInputOutput]);
         SupportsCallerProvidedPathItemReferences = true;
         SupportsCallerProvidedOperationReferences = true;
         MaxReferencedDocuments = 32;
@@ -48,6 +49,9 @@ public sealed class ApiOperationResolverCapabilities
     /// Gets whether OpenAPI/Swagger and OpenRPC selection can follow operation references through a caller-supplied resolver.
     /// </summary>
     public bool SupportsCallerProvidedOperationReferences { get; }
+
+    /// <summary>Gets whether WSDL imports are resolved; this policy selects standalone WSDL 1.1 documents only.</summary>
+    public bool SupportsCallerProvidedWsdlImports { get; }
 
     /// <summary>Gets the maximum number of distinct referenced documents loaded for one resolution.</summary>
     public int MaxReferencedDocuments { get; }
@@ -115,14 +119,17 @@ public sealed class ApiOperationResolutionResult
 {
     internal ApiOperationResolutionResult(ApiOperationResolutionStatus status, DocumentDiagnostic? diagnostic = null,
         JsonElement operation = default, string? documentPath = null, Uri? documentUri = null,
-        GrpcOperationSelection? grpcOperation = null)
+        GrpcOperationSelection? grpcOperation = null, WsdlOperationSelection? wsdlOperation = null)
     {
         var jsonSelection = operation.ValueKind == JsonValueKind.Object &&
-            !string.IsNullOrEmpty(documentPath) && grpcOperation is null;
+            !string.IsNullOrEmpty(documentPath) && grpcOperation is null && wsdlOperation is null;
         var grpcSelection = grpcOperation is not null && operation.ValueKind == JsonValueKind.Undefined &&
-            documentPath is null;
-        if (status == ApiOperationResolutionStatus.Selected && !(jsonSelection || grpcSelection) ||
-            status != ApiOperationResolutionStatus.Selected && (diagnostic is null || grpcOperation is not null))
+            documentPath is null && wsdlOperation is null;
+        var wsdlSelection = wsdlOperation is not null && grpcOperation is null &&
+            operation.ValueKind == JsonValueKind.Undefined && documentPath is null;
+        if (status == ApiOperationResolutionStatus.Selected && !(jsonSelection || grpcSelection || wsdlSelection) ||
+            status != ApiOperationResolutionStatus.Selected &&
+                (diagnostic is null || grpcOperation is not null || wsdlOperation is not null))
         {
             throw new ArgumentException("A selected operation or a diagnostic is required.");
         }
@@ -133,19 +140,23 @@ public sealed class ApiOperationResolutionResult
         DocumentPath = documentPath;
         DocumentUri = documentUri;
         GrpcOperation = grpcOperation;
+        WsdlOperation = wsdlOperation;
     }
 
     /// <summary>Gets the resolution outcome.</summary>
     public ApiOperationResolutionStatus Status { get; }
 
-    /// <summary>Gets the native JSON operation, method or protocol message; undefined for gRPC source.</summary>
+    /// <summary>Gets the native JSON operation, method or protocol message; undefined for gRPC and WSDL.</summary>
     public JsonElement Operation { get; }
 
-    /// <summary>Gets the document-local JSON Pointer for a JSON selection; null for gRPC source.</summary>
+    /// <summary>Gets the document-local JSON Pointer for a JSON selection; null for gRPC and WSDL.</summary>
     public string? DocumentPath { get; }
 
     /// <summary>Gets the source document URI when known.</summary>
     public Uri? DocumentUri { get; }
+
+    /// <summary>Gets the selected native WSDL operation, or null for other selections and failures.</summary>
+    public WsdlOperationSelection? WsdlOperation { get; }
 
     /// <summary>Gets the selected gRPC source method, or null for other outcomes and JSON selections.</summary>
     public GrpcOperationSelection? GrpcOperation { get; }
@@ -248,6 +259,10 @@ public static partial class ApiOperationDocumentResolver
                 $"The API format '{format}' is not supported.");
         }
         var grpc = format == "gRPC/proto3";
+        if (format == "WSDL/1.1")
+        {
+            return ResolveWsdl11(contentType, document, reference.Selector, documentUri, cancellationToken);
+        }
         if (!string.Equals(contentType.Split(';', 2)[0].Trim(), grpc ? "text/plain" : "application/json",
             StringComparison.OrdinalIgnoreCase))
         {
