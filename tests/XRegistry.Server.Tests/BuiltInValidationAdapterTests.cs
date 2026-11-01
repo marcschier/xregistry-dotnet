@@ -12,6 +12,39 @@ namespace XRegistry.Server.Tests;
 
 public class BuiltInValidationAdapterTests
 {
+    [Test]
+    public async Task DraftSevenIgnoredReferenceSiblingsPublishWithoutChangingAuthoredDocumentBytes()
+    {
+        const string schema = """{"$ref":"https://schemas.test/target","type":"invalid","$id":42,"properties":{"ignored":{"$ref":"https://never.test/"}}}""";
+        var calls = new List<string>();
+        var engine = ValidatingEngine(strict: true, validateCompatibility: false, validationOptions: new()
+        {
+            ResolveReference = (reference, _) =>
+            {
+                calls.Add(reference);
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(reference == "https://schemas.test/target"
+                    ? """{"type":"string"}"""u8.ToArray() : null);
+            }
+        });
+        var created = await Send(engine, RegistryAction.Replace, "/sets/g/schemas/s$details", $$$"""
+            {"versionid":"v1","format":"JsonSchema/draft-07","schema":{{{schema}}}}
+            """);
+        await Assert.That(created.Metadata!.RootElement.GetProperty("formatvalidated").GetBoolean()).IsTrue();
+        await Assert.That(calls.SequenceEqual(["https://schemas.test/target"])).IsTrue();
+        using var bytes = (await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/versions/v1")).Document!.OpenRead();
+        using var reader = new StreamReader(bytes, Encoding.UTF8);
+        await Assert.That(await reader.ReadToEndAsync()).IsEqualTo(schema);
+        var before = (await Send(engine, RegistryAction.Read, "/sets/g/schemas/s$details")).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        await ExpectCode(() => Send(engine, RegistryAction.Post, "/sets/g/schemas/s$details", """
+            {"versionid":"v2","format":"JsonSchema/draft-07","schema":{"$ref":42,"type":"string"}}
+            """), "format_violation");
+        await Assert.That((await Send(engine, RegistryAction.Read, "/sets/g/schemas/s$details")).Metadata!.RootElement.GetRawText())
+            .IsEqualTo(before);
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        await Assert.That(calls.SequenceEqual(["https://schemas.test/target", "https://schemas.test/target"])).IsTrue();
+    }
+
     private const string ValidatedModel = """
         {"groups":{"sets":{"singular":"set","resources":{"schemas":{
           "singular":"schema","validateformat":true,"validatecompatibility":true,"strictvalidation":false

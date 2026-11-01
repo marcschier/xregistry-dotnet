@@ -15,6 +15,21 @@ successful validation.
 | gRPC | `gRPC/proto3` uses the Proto3 policy and requires at least one service declared in the supplied root document. Imported source uses its declared syntax. Descriptor sets are unsupported. Source-method selection is available separately through `ApiOperationDocumentResolver`. |
 | JSON Structure | Draft-04 Core document/type/namespace/reference/union/compound grammar and bounded primitive restrictions. Required extensions, inheritance and unqualified extended primitive const/enum rules are unsupported. |
 
+Draft-07 `$ref` objects ignore all sibling keywords, following
+[Core section 8.3](https://json-schema.org/draft-07/draft-handrews-json-schema-01#rfc.section.8.3).
+Ignored `$id` values do not change the reference base, and ignored subschemas
+do not dispatch additional callbacks. Referenced targets still undergo schema
+checks, including targets located inside otherwise ignored sibling content.
+Modern dialects continue to check `$ref` siblings. This does not add embedded
+resource IDs or dynamic reference evaluation.
+
+JSON Schema reference fragments undergo strict UTF-8 percent decoding once
+before choosing JSON Pointer or plain-name anchor resolution. Encoded anchors
+therefore resolve as anchors, and encoded leading slashes select pointers.
+Malformed URI spellings and invalid UTF-8 fail before callback dispatch.
+Callbacks receive fragment-free references; alternate encoded spellings reuse
+the acquired Document. These checks validate schemas, not application instances.
+
 Standalone XSD imports, includes and redefinitions use only `DocumentValidationOptions.ResolveReference`.
 Each location resolves against the retrieved containing schema's URI and
 inherited `xml:base`, including a base on the dependency declaration itself.

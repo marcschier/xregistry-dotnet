@@ -32,6 +32,14 @@ complete xRegistry conformance.
 | Federation read acquisition | `IFederationReadSource` / `HttpFederationReadSource` | A read-source seam, not a write dispatcher or immutable live snapshot. |
 | OPC UA access and federation reads | `XRegistry.Bindings.OpcUa` | Uses OPC UA Client Stack 2.0.1 to discover endpoints, apply caller policy, open a Session, remap the portable root through `NamespaceArray`, and verify Registry type and Core version. `OpcUaRegistryReadSource` maps Registry, Group, Resource, Meta, Version and collection views, and reads local FileType Documents or returns external-reference descriptors. `OpcUaRegistryWriter` updates Properties and calls Methods, including Resource Document replacement. Callers supply Group, Resource and ResourceVersions ObjectType mappings. Fake-Session tests cover reader, source and writer behavior; in-process server tests cover Session establishment, XREG-Events subscription management, writes, methods and document transfer. Two-server tests cover trusted external Resource and Version resolution. Core API views and NodeSet projection remain unimplemented. Endpoint security policy is caller-selected. Generic packages remain free of OPC UA types. |
 
+Draft-07 schema validation now ignores `$ref` sibling keywords, including
+`$id` and nested reference declarations. The referenced target still receives
+schema checks; ignored siblings remain unchanged in captured Document bytes.
+Modern dialects retain sibling validation. JSON Schema references decode
+fragments once before choosing pointer or anchor resolution, so encoded anchor
+names no longer enter the pointer path. Malformed URI spellings and invalid
+UTF-8 fail before acquisition; callbacks receive fragment-free references.
+
 Legacy prepare/replay/incarnation/generation extensions are not standard
 xRegistry HTTP. The in-process persistence/response preparation methods do not
 imply proprietary wire endpoints.

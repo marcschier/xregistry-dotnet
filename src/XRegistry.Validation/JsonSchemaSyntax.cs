@@ -32,7 +32,8 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
                 context.Work(1, path);
                 var fragmentAt = reference.IndexOf('#');
                 var location = fragmentAt < 0 ? reference : reference[..fragmentAt];
-                var fragment = fragmentAt < 0 ? "#" : reference[fragmentAt..];
+                var fragment = fragmentAt < 0 ? "" : SchemaJson.DecodeFragment(
+                    reference[(fragmentAt + 1)..], path, "reference.pointer", context);
                 var target = source;
                 if (location.Length != 0)
                 {
@@ -43,14 +44,14 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
                     }
                 }
 
-                if (fragment == "#" || fragment.StartsWith("#/", StringComparison.Ordinal) || fragment.StartsWith("#%", StringComparison.Ordinal))
+                if (fragment.Length == 0 || fragment.StartsWith('/'))
                 {
-                    var (value, targetPath) = SchemaJson.Pointer(target.Json.RootElement, fragment, path, context);
+                    var (value, targetPath) = SchemaJson.DecodedPointer(target.Json.RootElement, fragment, path, context);
                     Validate(value, target, targetPath);
                 }
                 else
                 {
-                    ValidationContext.Require(target.Anchors.TryGetValue(fragment[1..], out var targetPath),
+                    ValidationContext.Require(target.Anchors.TryGetValue(fragment, out var targetPath),
                         path, "reference.not_found", $"The anchor '{fragment}' is not defined.");
                     var (value, _) = SchemaJson.DecodedPointer(target.Json.RootElement, targetPath[1..], path, context);
                     Validate(value, target, targetPath);
@@ -73,6 +74,7 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
         _documents.Add(document);
         _byUri[uri] = document;
         if (document.Json.RootElement.ValueKind == JsonValueKind.Object
+            && !(_draft == 7 && document.Json.RootElement.TryGetProperty("$ref", out _))
             && document.Json.RootElement.TryGetProperty("$id", out var id))
         {
             document.BaseUri = ResolveUri(uri, SchemaJson.String(id, "$/$id"));
@@ -93,6 +95,14 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
         }
 
         SchemaJson.Object(schema, path);
+        if (_draft == 7 && schema.TryGetProperty("$ref", out var draftSevenReference))
+        {
+            var referencePath = SchemaJson.Path(path, "$ref");
+            var reference = SchemaJson.String(draftSevenReference, referencePath);
+            CheckUri(reference, referencePath, false);
+            _references.Add((document, reference, referencePath));
+            return;
+        }
         foreach (var property in schema.EnumerateObject())
         {
             var childPath = SchemaJson.Path(path, property.Name);
@@ -342,8 +352,17 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
             or "number" or "integer" or "string", path, "schema.type", $"'{type}' is not a JSON Schema type.");
 
     private static void CheckUri(string value, string path, bool absolute)
-        => ValidationContext.Require(!value.Any(char.IsWhiteSpace) && Uri.TryCreate(value,
-            absolute ? UriKind.Absolute : UriKind.RelativeOrAbsolute, out _), path, "schema.uri", "A valid URI reference is required.");
+    {
+        var separator = value.IndexOf('#');
+        var document = separator < 0 ? value : value[..separator];
+        var fragmentValid = separator < 0 || Uri.IsWellFormedUriString(
+            "urn:schema-fragment#" + value[(separator + 1)..], UriKind.Absolute);
+        ValidationContext.Require(!value.Any(character => char.IsWhiteSpace(character) || char.IsControl(character)) &&
+            !value.Contains('\\', StringComparison.Ordinal) && fragmentValid &&
+            (document.Length == 0 && !absolute || Uri.IsWellFormedUriString(document,
+                absolute ? UriKind.Absolute : UriKind.RelativeOrAbsolute)),
+            path, "schema.uri", "A valid URI reference is required.");
+    }
 
     private static string ResolveUri(string baseUri, string reference)
         => Uri.TryCreate(baseUri, UriKind.Absolute, out var absolute) && Uri.TryCreate(absolute, reference, out var resolved)

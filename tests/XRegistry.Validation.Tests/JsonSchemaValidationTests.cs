@@ -10,6 +10,147 @@ namespace XRegistry.Validation.Tests;
 public class JsonSchemaValidationTests
 {
     [Test]
+    [Arguments("""{"$ref":"target","type":"invalid","$id":42,"pattern":"[","$schema":false}""")]
+    [Arguments("""{"$id":"https://wrong.test/","$ref":"target","properties":{"ignored":{"$ref":"never"}}}""")]
+    [Arguments("""{"$ref":"target","$defs":{"ignored":{"$dynamicRef":"#never"}},"required":42}""")]
+    public async Task DraftSevenReferenceObjectsIgnoreSiblingsWithoutAcquiringTheirReferences(string schema)
+    {
+        var calls = new List<string>();
+        var result = await new BuiltInDocumentValidator().ValidateAsync("JsonSchema/draft-07",
+            Encoding.UTF8.GetBytes(schema), new()
+            {
+                DocumentUri = new("https://schemas.test/root"),
+                ResolveReference = (reference, _) =>
+                {
+                    calls.Add(reference);
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(reference == "https://schemas.test/target"
+                        ? """{"type":"string"}"""u8.ToArray() : null);
+                }
+            });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+        await Assert.That(calls.SequenceEqual(["https://schemas.test/target"])).IsTrue();
+    }
+
+    [Test]
+    [Arguments("JsonSchema/draft/2019-09")]
+    [Arguments("JsonSchema/draft/2020-12")]
+    public async Task ModernReferenceObjectsContinueToValidateSiblingKeywords(string format)
+    {
+        var calls = 0;
+        var result = await new BuiltInDocumentValidator().ValidateAsync(format,
+            """{"$ref":"https://schemas.test/target","type":"invalid"}"""u8.ToArray(), new()
+            {
+                ResolveReference = (_, _) => { calls++; throw new UnauthorizedAccessException(); }
+            });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("schema.type");
+        await Assert.That(result.Diagnostics.Single().Path).IsEqualTo("$/type");
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("""{"$ref":"#/definitions/target","definitions":{"target":{"type":"string"},"ignored":{"type":"invalid"}}}""",
+        DocumentValidationStatus.Valid, "")]
+    [Arguments("""{"$ref":"#/definitions/target","definitions":{"target":{"type":"invalid"}}}""",
+        DocumentValidationStatus.Invalid, "schema.type")]
+    [Arguments("""{"$ref":42,"type":"string"}""", DocumentValidationStatus.Invalid, "schema.string")]
+    [Arguments("""{"$ref":"missing","type":"string"}""", DocumentValidationStatus.Indeterminate, "reference.unresolved")]
+    [Arguments("""{"$ref":"#","type":"invalid"}""", DocumentValidationStatus.Valid, "")]
+    public async Task DraftSevenReferenceTargetsRemainCheckedEvenWhenContainingSiblingsAreIgnored(
+        string schema, DocumentValidationStatus status, string code)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("JsonSchema/draft-07", Encoding.UTF8.GetBytes(schema));
+        await Assert.That(result.Status).IsEqualTo(status);
+        if (code.Length == 0) { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+        else { await Assert.That(result.Diagnostics.Single().Code).IsEqualTo(code); }
+    }
+
+    [Test]
+    [Arguments("#node")]
+    [Arguments("#%6Eode")]
+    [Arguments("#n%6Fde")]
+    public async Task EncodedAnchorReferencesDecodeOnceBeforeChoosingTheirReferenceKind(string reference)
+    {
+        foreach (var format in new[] { "JsonSchema/draft/2019-09", "JsonSchema/draft/2020-12" })
+        {
+            var calls = 0;
+            var result = await new BuiltInDocumentValidator().ValidateAsync(format, Encoding.UTF8.GetBytes($$$$"""
+                {"$ref":"{{{{reference}}}}","$defs":{"target":{"$anchor":"node","type":"string"}}}
+                """), new()
+                {
+                    ResolveReference = (_, _) => { calls++; throw new UnauthorizedAccessException(); }
+                });
+            await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+            await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+            await Assert.That(calls).IsEqualTo(0);
+        }
+    }
+
+    [Test]
+    [Arguments("#%2F$defs%2Ftarget", DocumentValidationStatus.Valid, "")]
+    [Arguments("#/$defs/a%252Fb", DocumentValidationStatus.Valid, "")]
+    [Arguments("#%256Eode", DocumentValidationStatus.Invalid, "reference.not_found")]
+    [Arguments("#%C0%AF", DocumentValidationStatus.Invalid, "reference.pointer")]
+    [Arguments("#%FF", DocumentValidationStatus.Invalid, "reference.pointer")]
+    [Arguments("#missing", DocumentValidationStatus.Invalid, "reference.not_found")]
+    public async Task ReferenceFragmentDecodingNeverDoubleDecodesOrAcceptsInvalidUtf8(
+        string reference, DocumentValidationStatus status, string code)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("JsonSchema/draft/2020-12",
+            Encoding.UTF8.GetBytes($$$"""
+                {"$ref":"{{{reference}}}","$defs":{"target":{"$anchor":"node"},"a%2Fb":true}}
+                """));
+        await Assert.That(result.Status).IsEqualTo(status);
+        if (code.Length == 0) { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+        else { await Assert.That(result.Diagnostics.Single().Code).IsEqualTo(code); }
+    }
+
+    [Test]
+    [Arguments("https://schemas.test/part#%GG")]
+    [Arguments("part%GG")]
+    [Arguments("part\\name")]
+    [Arguments("part#node#other")]
+    public async Task MalformedSchemaReferencesRejectBeforeCallbackNormalization(string reference)
+    {
+        var calls = 0;
+        var schema = RegistryJson.Create(writer =>
+        {
+            writer.WriteStartObject(); writer.WriteString("$ref", reference); writer.WriteEndObject();
+        });
+        var result = await new BuiltInDocumentValidator().ValidateAsync("JsonSchema/draft/2020-12",
+            Encoding.UTF8.GetBytes(schema.RootElement.GetRawText()), new()
+            {
+                ResolveReference = (_, _) => { calls++; throw new UnauthorizedAccessException(); }
+            });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("schema.uri");
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task ExternalEncodedAnchorReferencesKeepFragmentFreeSharedAcquisition()
+    {
+        var calls = new List<string>();
+        var result = await new BuiltInDocumentValidator().ValidateAsync("JsonSchema/draft/2020-12", """
+            {"allOf":[{"$ref":"part#%6Eode"},{"$ref":"part#node"},{"$ref":"part#%2F$defs%2Ftarget"}]}
+            """u8.ToArray(), new()
+            {
+                DocumentUri = new("https://schemas.test/root"),
+                MaxReferences = 1,
+                ResolveReference = (reference, _) =>
+                {
+                    calls.Add(reference);
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+                        """{"$defs":{"target":{"$anchor":"node","type":"string"}}}"""u8.ToArray());
+                }
+            });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+        await Assert.That(calls.SequenceEqual(["https://schemas.test/part"])).IsTrue();
+    }
+
+    [Test]
     [Arguments("""{"type":"string","minLength":2.0,"maxLength":10,"pattern":"^[a-z]+$"}""", DocumentValidationStatus.Valid, "")]
     [Arguments("""{"type":["null","string"],"anyOf":[true,{"const":"x"}]}""", DocumentValidationStatus.Valid, "")]
     [Arguments("""{"type":["string","string"]}""", DocumentValidationStatus.Invalid, "schema.duplicate")]
