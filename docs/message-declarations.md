@@ -32,6 +32,13 @@ an absolute URI. Inherited references keep the declaring Message's origin in
 materialization provenance, independently of the derived Message's location.
 These checks apply to CloudEvents, AMQP property sections and protocol headers.
 
+Message `dataschemauri` also uses Core URI-reference syntax in the direct domain
+API and explicitly Message-compatible models, including models that declare the
+attribute as `any`. Empty and relative references retain their authored spelling;
+absent or cleared references remain optional. Syntax validation does not fetch a
+schema or establish that the reference selects a concrete schema object. That
+selection still requires the chosen format's resolver and authorized source.
+
 Domain completion applies string/false defaults where appropriate, mandatory
 CloudEvents flags, fixed `specversion: "1.0"` and the documented current-time
 sentinel for declared `time`. It does not invent absent declarations or replace

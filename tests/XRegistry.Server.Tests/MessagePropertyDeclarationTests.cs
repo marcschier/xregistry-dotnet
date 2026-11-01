@@ -14,6 +14,38 @@ namespace XRegistry.Server.Tests;
 public class MessagePropertyDeclarationTests
 {
     [Test]
+    [Arguments("../schemas/event.json#/$defs/Event")]
+    [Arguments("urn:example:event")]
+    [Arguments("")]
+    public async Task OpaqueSchemaUriAttributesCannotBypassDomainSyntaxOrChangeStateOnInvalidPatches(string reference)
+    {
+        using var packaged = BuiltInRegistryModels.LoadSource(RegistryModelKind.Message);
+        var model = JsonNode.Parse(packaged.RootElement.GetRawText())!;
+        model["groups"]!["messagegroups"]!["resources"]!["messages"]!["attributes"]!["dataschemauri"]!["type"] = "any";
+        var store = new InMemoryRegistryPersistence();
+        var engine = Create(model.ToJsonString(), store);
+        const string path = "/messagegroups/g/messages/m";
+        JsonObject Metadata(string value) => new()
+        {
+            ["dataschemaformat"] = "JSONSchema/draft-07", ["dataschemauri"] = value
+        };
+        await ExpectCode(() => Send(engine, RegistryAction.Replace, path, Metadata("bad uri").ToJsonString()), "invalid_attribute");
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(0);
+        var created = await Send(engine, RegistryAction.Replace, path, Metadata(reference).ToJsonString());
+        await Assert.That(created.Metadata!.RootElement.GetProperty("dataschemauri").GetString()).IsEqualTo(reference);
+        var before = (await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        foreach (var invalid in new[] { "schemas/%xz", "https://schemas.example\\event", "https://[invalid/event" })
+        {
+            await ExpectCode(() => Send(engine, RegistryAction.Patch, path, Metadata(invalid).ToJsonString()), "invalid_attribute");
+            await Assert.That((await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText()).IsEqualTo(before);
+            await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        }
+        var restarted = Create(model.ToJsonString(), store);
+        await Assert.That((await Send(restarted, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText()).IsEqualTo(before);
+    }
+
+    [Test]
     public async Task CharsetEquivalentContentTypesPublishWithoutRewritingAndInvalidRevisionsRemainAtomic()
     {
         var store = new InMemoryRegistryPersistence();

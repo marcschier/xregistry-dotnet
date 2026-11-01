@@ -122,7 +122,10 @@ public static partial class RegistryDomainRules
         ValidateSelector(message, "envelope", true);
         ValidateSelector(message, "protocol", false);
         ValidateSelector(message, "dataschemaformat", true);
-        _ = OptionalText(message, "dataschemauri", "/dataschemauri", nonempty: false);
+        if (OptionalText(message, "dataschemauri", "/dataschemauri", nonempty: false) is not null)
+        {
+            Scalar("uri", message.GetProperty("dataschemauri"), "/dataschemauri", cancellationToken);
+        }
         foreach (var (declaration, path) in MessageDeclarations(message))
         {
             cancellationToken.ThrowIfCancellationRequested();

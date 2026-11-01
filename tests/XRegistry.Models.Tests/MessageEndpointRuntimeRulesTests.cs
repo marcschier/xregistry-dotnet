@@ -10,6 +10,53 @@ namespace XRegistry.Models.Tests;
 public class MessageEndpointRuntimeRulesTests
 {
     [Test]
+    [Arguments("{}")]
+    [Arguments("""{"dataschemauri":null}""")]
+    public async Task AbsentAndClearedSchemaUriDoNotRequireAFormat(string metadata)
+    {
+        var input = RegistryJson.Parse(metadata);
+        var completed = RegistryDomainRules.CompleteMessageMetadata(input);
+        await Assert.That(completed.RootElement.TryGetProperty("dataschemaformat", out _)).IsFalse();
+        await Assert.That(completed.RootElement.GetRawText()).IsEqualTo(input.RootElement.GetRawText());
+    }
+
+    [Test]
+    [Arguments("bad uri")]
+    [Arguments("schemas/%")]
+    [Arguments("schemas/%xz")]
+    [Arguments("https://schemas.example\\event")]
+    [Arguments("https://[invalid/event")]
+    [Arguments("schemas/\nevent")]
+    public async Task MessageSchemaUriDomainChecksRejectMalformedReferencesBeforeSelection(string reference)
+    {
+        var input = RegistryJson.Parse(new JsonObject
+        {
+            ["dataschemaformat"] = "JSONSchema/draft-07", ["dataschemauri"] = reference
+        }.ToJsonString());
+        var error = await Assert.That(() => RegistryDomainRules.CompleteMessageMetadata(input)).Throws<RegistryException>();
+        await Assert.That(error!.Diagnostic.Code).IsEqualTo("invalid_attribute");
+        await Assert.That(error.Diagnostic.Path).IsEqualTo("/dataschemauri");
+    }
+
+    [Test]
+    [Arguments("")]
+    [Arguments("../schemas/event.json#/$defs/Event")]
+    [Arguments("#/$defs/Event")]
+    [Arguments("/schemas/event")]
+    [Arguments("urn:example:event")]
+    [Arguments("https://schemas.example/event?q=value#Event")]
+    [Arguments("schemas/%E2%82%AC")]
+    public async Task MessageSchemaUriDomainChecksPreserveRelativeAbsoluteAndEmptyReferences(string reference)
+    {
+        var input = RegistryJson.Parse(new JsonObject
+        {
+            ["dataschemaformat"] = "JSONSchema/draft-07", ["dataschemauri"] = reference
+        }.ToJsonString());
+        var completed = RegistryDomainRules.CompleteMessageMetadata(input);
+        await Assert.That(completed.RootElement.GetProperty("dataschemauri").GetString()).IsEqualTo(reference);
+    }
+
+    [Test]
     [Arguments("""{"envelope":"CloudEvents/1.0","envelopeoptions":{"mode":"binary"},"envelopemetadata":{"datacontenttype":{"value":"TEXT/PLAIN; CHARSET=UTF-8"}}}""")]
     [Arguments("""{"protocol":"HTTP","protocoloptions":{"headers":[{"name":"Content-Type","value":"TEXT/PLAIN; CHARSET=UTF-8"}]}}""")]
     [Arguments("""{"protocol":"NATS","protocoloptions":{"headers":[{"name":"Content-Type","value":"TEXT/PLAIN; CHARSET=UTF-8"}]}}""")]

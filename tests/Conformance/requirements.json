@@ -101270,9 +101270,13 @@
       ],
       "text": "- Description: Contains a relative or absolute URI that points to the schema object to use for the message payload. The schema format is identified by the `dataschemaformat` attribute. See [Schema Formats](../schema/spec.md#43-schema-formats) for details on how to reference specific schema objects for the message payload. It is not sufficient for the URI to point to a schema document; it MUST resolve to a concrete schema object.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Compound description separates relative-or-absolute URI-reference syntax, declared schema format and concrete object selection rather than mere document retrieval. The direct domain API previously checked only dataschemauri's string kind; six malformed lexical partitions passed before the new Core URI scalar check. MessageSchemaUriDomainChecksRejectMalformedReferencesBeforeSelection and MessageSchemaUriDomainChecksPreserveRelativeAbsoluteAndEmptyReferences cover lexical rejection and retained authored spelling. OpaqueSchemaUriAttributesCannotBypassDomainSyntaxOrChangeStateOnInvalidPatches proves compatible any-typed model publication/atomic patch/restart behavior. This admission check does not acquire a schema or prove concrete-object selection; selected format resolver coverage and full per-requirement qualification remain unfinished.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -101301,9 +101305,13 @@
       ],
       "text": "- OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "dataschemauri is optional; absence/clearing does not require dataschemaformat, while a present URI reference, including the empty RFC URI reference, retains the separate format requirement. AbsentAndClearedSchemaUriDoNotRequireAFormat and MessageSchemaUriDomainChecksPreserveRelativeAbsoluteAndEmptyReferences cover direct domain completion; opaque compatible-model publication tests preserve valid relative/URN/empty references. Present malformed references reject independently of the caller model's type. Concrete schema-object resolution and per-requirement qualification remain separate unfinished work.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
