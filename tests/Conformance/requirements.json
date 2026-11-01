@@ -114448,13 +114448,21 @@
       ],
       "text": "The standardized parameter names are case-sensitive and MUST appear literally. Each MUST use `name=value` with a non-empty value. `wotid` MUST appear exactly once; `wotversion` MUST NOT appear more than once. A Producer MUST place `wotid` first and, when present, `wotversion` immediately after it. Additional parameters MUST follow them.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The public query parser checks literal case-sensitive names, required nonempty values, duplicates and standardized parameter ordering. The encoder emits wotid first and optional wotversion second. Additional parameters remain uninterpreted; full CloudEvents URI and TD-view processing are separate obligations.",
+        "roles": [
+          "producer",
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SourceQueryRetainsExactSelectionAndUninterpretedAdditionalParameters",
+          "InvalidStandardizedSourceParametersFailExplicitly",
+          "ProducerEncodingPreservesRequiredCharactersAndUsesUppercaseUtf8Escapes",
+          "ProducerRejectsEmptyValuesAndInvalidUnicode"
+        ],
         "nativeEvidence": []
       }
     },
@@ -114480,13 +114488,20 @@
       ],
       "text": "For standardized values, a Producer MUST use UTF-8 percent encoding with uppercase hexadecimal digits. RFC 3986 `unreserved` characters and `!$'()*,:@/?` MUST remain unescaped. `%`, `;`, `=`, `&`, `+` and `#` within a standardized value MUST be percent-encoded. A Producer MUST NOT use form-query encoding or encode a space as `+` for these values. These encoding requirements do not apply to additional parameters.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The public encoder preserves all declared unreserved and permitted punctuation characters and encodes reserved delimiters, percent, space and Unicode using uppercase UTF-8 percent escapes. Parsing leaves additional parameters untouched.",
+        "roles": [
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ProducerEncodingPreservesRequiredCharactersAndUsesUppercaseUtf8Escapes",
+          "SourceQueryRetainsExactSelectionAndUninterpretedAdditionalParameters",
+          "ProducerRejectsEmptyValuesAndInvalidUnicode",
+          "SourceQueryLengthBoundariesApplyToEncodedAndRawQueries"
+        ],
         "nativeEvidence": []
       }
     },
@@ -114512,13 +114527,20 @@
       ],
       "text": "A Consumer MUST split the query at `;` before decoding the standardized values. It MUST reject a missing or empty `wotid`, an empty `wotversion`, a duplicate standardized parameter, or a standardized parameter in the wrong position. For a standardized value, it MUST reject an invalid percent escape, invalid UTF-8, or an unescaped character outside the permitted set. It MUST percent-decode each standardized value exactly once and MUST NOT interpret `+` as a space. These validation rules do not apply to additional parameters.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The public parser splits at semicolons before exactly one strict UTF-8 percent decode. It rejects invalid escapes, invalid UTF-8, missing/empty/duplicate/misplaced standardized parameters and forbidden raw characters, including plus. Additional parameter values do not acquire these standardized-value checks.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SourceValuesDecodeExactlyOnceWithoutFormQuerySemantics",
+          "InvalidStandardizedSourceParametersFailExplicitly",
+          "SourceQueryRetainsExactSelectionAndUninterpretedAdditionalParameters",
+          "SourceQueryLengthBoundariesApplyToEncodedAndRawQueries"
+        ],
         "nativeEvidence": []
       }
     },
