@@ -18,6 +18,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TUnit.Assertions;
 using TUnit.Core;
+using XRegistry.Federation;
 using XRegistry.Models;
 using XRegistry.Publication;
 using XRegistry.Server;
@@ -27,6 +28,79 @@ namespace XRegistry.AspNetCore.Tests;
 
 public class HttpTests
 {
+    [Test]
+    public async Task ExactHttpApiAcquisitionFeedsOperationSelectionWithoutFollowingTheChangedDefault()
+    {
+        const string first = """
+            {"openapi":"3.1.1","info":{"title":"Telemetry","version":"1"},
+             "paths":{"/telemetry":{"$ref":"operations.json#/Read"}}}
+            """;
+        const string dependency = """
+            {"Read":{"get":{"operationId":"Read","responses":{"200":{"description":"OK"}}}}}
+            """;
+        const string second = """
+            {"openapi":"3.1.1","info":{"title":"Telemetry","version":"2"},
+             "paths":{"/telemetry":{"get":{"operationId":"ReadNew","responses":{"200":{"description":"OK"}}}}}}
+            """;
+        const string version = "/apigroups/g/apis/a/versions/1";
+        await using var host = await TestHost.StartAsync(model: BuiltInRegistryModels.Compile(RegistryModelKind.Api),
+            useBoundPublicRoot: true);
+        foreach (var item in new[] { (Path: version, Bytes: first), (Path: "/apigroups/g/apis/a/versions/2", Bytes: second) })
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Put, item.Path)
+            {
+                Content = new StringContent(item.Bytes, Encoding.UTF8, "application/json")
+            };
+            request.Headers.TryAddWithoutValidation("xRegistry-format", "OpenAPI/3.1");
+            using var response = await host.Client.SendAsync(request);
+            await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.Created)
+                .Because(await response.Content.ReadAsStringAsync());
+        }
+        var budget = new FederationReadBudget();
+        using var source = await HttpFederationReadSource.OpenAsync(host.Client.BaseAddress!,
+            new() { AllowLoopbackHttp = true }, new() { Limits = budget.Limits }, budget);
+        var acquired = await ApiRegistryDocumentAcquirer.AcquireAsync(source, version, budget);
+        await Assert.That(acquired.VersionXid).IsEqualTo(version);
+        await Assert.That(acquired.Format).IsEqualTo("OpenAPI/3.1");
+        await Assert.That(acquired.Context.Source).IsEqualTo(source.Context.Source);
+        await Assert.That(acquired.Document.Origin).IsEqualTo(new Uri(host.Client.BaseAddress!, version).AbsoluteUri);
+        await Assert.That(source.Observations.Any(o => o.RequestUri.AbsolutePath.EndsWith("/versions/2", StringComparison.Ordinal)))
+            .IsFalse();
+        var reference = ApiOperationReference.Parse(version + "#operations/Read");
+        source.Dispose();
+        await host.DisposeAsync();
+        using var stream = acquired.Document.OpenRead();
+        using var memory = new MemoryStream();
+        await stream.CopyToAsync(memory);
+        var bytes = memory.ToArray();
+        await Assert.That(Encoding.UTF8.GetString(bytes)).IsEqualTo(first);
+        await Assert.That(acquired.ContentDigest).IsEqualTo(
+            "sha256:" + Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant());
+        var dependencyUri = new Uri(new Uri(acquired.Document.Origin!), "operations.json").AbsoluteUri;
+        var calls = new List<string>();
+        ValueTask<ReadOnlyMemory<byte>?> ResolveDependency(string uri, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            calls.Add(uri);
+            return ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes(dependency));
+        }
+        var unavailable = await ApiOperationDocumentResolver.ResolveAsync(acquired.Format, acquired.Document.ContentType!,
+            bytes, reference, new Uri(acquired.Document.Origin!));
+        await Assert.That(unavailable.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+        var selected = await ApiOperationDocumentResolver.ResolveAsync(acquired.Format, acquired.Document.ContentType!,
+            bytes, reference, new Uri(acquired.Document.Origin!), ResolveDependency);
+        await Assert.That(selected.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(selected.Operation.GetProperty("operationId").GetString()).IsEqualTo("Read");
+        await Assert.That(selected.DocumentPath).IsEqualTo("$/Read/get");
+        await Assert.That(selected.DocumentUri!.AbsoluteUri).IsEqualTo(dependencyUri);
+        await Assert.That(calls.ToArray()).IsEquivalentTo([dependencyUri]);
+        var missing = await ApiOperationDocumentResolver.ResolveAsync(acquired.Format, acquired.Document.ContentType!,
+            bytes, ApiOperationReference.Parse(version + "#operations/ReadNew"), new Uri(acquired.Document.Origin!),
+            ResolveDependency);
+        await Assert.That(missing.Status).IsEqualTo(ApiOperationResolutionStatus.NotFound);
+        await Assert.That(missing.Diagnostic!.Code).IsEqualTo("selection.not_found");
+    }
+
     [Test]
     [Arguments("JsonSchema/draft/2020-12")]
     [Arguments("JsonStructure/draft-04")]
@@ -915,7 +989,8 @@ public class HttpTests
             Action<HttpContext>? completed = null, RegistryModel? model = null, IRegistryResourceValidator? resourceValidator = null,
             bool allowCapabilityUpdates = false, IRegistryDocumentReferencePolicy? documentReferencePolicy = null,
             string pathBase = "", IRegistryHostBackend? hostBackend = null, Action<HttpContext>? started = null,
-            PublicationOpenedSnapshot? publicationSnapshot = null, Func<HttpContext, Task>? completedAsync = null)
+            PublicationOpenedSnapshot? publicationSnapshot = null, Func<HttpContext, Task>? completedAsync = null,
+            bool useBoundPublicRoot = false)
         {
             var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { EnvironmentName = "Development", Args = [] });
             builder.Logging.ClearProviders();
@@ -961,10 +1036,19 @@ public class HttpTests
                 });
             }
 
+            var publicRoot = new Uri("https://public.example/registry");
+            if (useBoundPublicRoot)
+            {
+                application.Map("/starting", () => Results.StatusCode(StatusCodes.Status503ServiceUnavailable));
+                application.UseRouting();
+                application.UseEndpoints(static _ => { });
+                await application.StartAsync();
+                publicRoot = new Uri(application.Urls.Single());
+            }
             var engine = new RegistryEngine(new()
             {
                 RegistryId = "http-test",
-                PublicRoot = new Uri("https://public.example/registry"),
+                PublicRoot = publicRoot,
                 Model = model ?? RegistryModel.Compile(RegistryJson.Parse("""
                     {"groups":{"teams":{"singular":"team","resources":{
                      "notes":{"singular":"note","hasdocument":false},"files":{"singular":"file","maxversions":2}}}}}
@@ -988,7 +1072,7 @@ public class HttpTests
             {
                 application.MapXRegistry(hostBackend ?? engine, httpOptions);
             }
-            await application.StartAsync();
+            if (!useBoundPublicRoot) { await application.StartAsync(); }
             var addresses = application.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!;
             return new(application, new HttpClient { BaseAddress = new Uri(addresses.Addresses.Single()) });
         }

@@ -115719,13 +115719,20 @@
       ],
       "text": "An API Version identifies an entry document. Dependencies use the native language's `$ref`, import, include, or equivalent constructs. Resolvers MUST apply that language's base-URI and import rules. The initial base is the document retrieval URL for an embedded document and the effective retrieval URL after redirects for an external document, unless a native identifier establishes another base. Publishers MUST account for relative references when relocating documents. Protobuf and Thrift include paths require explicit resolver configuration; namespace names and Smithy shape IDs are not retrieval URLs.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact API-Version acquisition retains the captured retrieval origin without inferring a document base. The actual HTTP OpenAPI workflow proves that an explicit dependency resolver receives a relative $ref resolved against that origin after the default changes and the host stops; without resolver authorization selection is Indeterminate. The supplied dependency bytes and selected operation are separate from the acquired entry document. External descriptors, other language import rules, native base overrides and relocation remain pending.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "HttpTests.ExactHttpApiAcquisitionFeedsOperationSelectionWithoutFollowingTheChangedDefault",
+          "ApiRegistryDocumentAcquirerTests.ExactApiAcquisitionRetainsBytesFormatDigestAndDeclaredOriginAfterSourceDisposal",
+          "ApiRegistryDocumentAcquirerTests.MissingDeniedAndExternalApiDocumentsNeverSelectADefaultOrAnotherSource"
+        ],
         "nativeEvidence": []
       }
     },

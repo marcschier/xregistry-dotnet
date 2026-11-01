@@ -314,7 +314,6 @@ public static class WotRegistryResolver
 
     private sealed class Resolution
     {
-        private readonly IFederationReadSource _source;
         private readonly FederationReadRequest _collection;
         private readonly WotVersionResolutionRequest _request;
         private readonly FederationReadBudget _budget;
@@ -322,7 +321,7 @@ public static class WotRegistryResolver
         private readonly NativeRegistryContext _context;
         private readonly RegistryModel _model;
         private readonly WotVersionProfile _profile;
-        private readonly FederationResolutionOwner _owner;
+        private readonly CapturedFederationReadScope _reads;
         private readonly bool _useCoreDefaultSelection;
 
         internal Resolution(IFederationReadSource source, FederationReadRequest collection,
@@ -330,16 +329,14 @@ public static class WotRegistryResolver
             bool useCoreDefaultSelection = false)
         {
             token.ThrowIfCancellationRequested();
-            _source = source;
             _collection = collection;
             _request = request;
             _budget = budget;
             _token = token;
             _useCoreDefaultSelection = useCoreDefaultSelection;
-            _context = source.Context;
-            _owner = FederationCapabilities.GetResolutionOwner(source.Capabilities);
-            _model = source.Model ?? throw new FederationException(FederationErrorCode.UnsupportedOperation,
-                "WoT acquisition requires the source's captured model.");
+            _reads = new(source, budget, token);
+            _context = _reads.Context;
+            _model = _reads.Model;
             try { _profile = WotRegistryProfiles.Read(_model); }
             catch (RegistryException exception)
             {
@@ -530,63 +527,11 @@ public static class WotRegistryResolver
             return (document, "sha256:" + Convert.ToHexString(hash).ToLowerInvariant());
         }
 
-        private async ValueTask<JsonElement> MetadataAsync(FederationReadRequest request)
-        {
-            var result = await ReadAsync(request).ConfigureAwait(false);
-            FederationJson.RequireObject(result.Metadata);
-            var text = result.Metadata.GetRawText();
-            var count = Encoding.UTF8.GetByteCount(text);
-            _budget.CheckObjectBytes(count);
-            _budget.ChargeBytes(count);
-            _budget.ChargeObject();
-            RegistryJson parsed;
-            try
-            {
-                parsed = RegistryJson.FromElement(result.Metadata, new RegistryJsonLimits
-                {
-                    MaxBytes = _budget.Limits.MaxObjectBytes,
-                    MaxDepth = _budget.Limits.MaxJsonDepth,
-                    MaxNodes = (int)Math.Min(int.MaxValue, _budget.Limits.MaxWork)
-                });
-            }
-            catch (RegistryException exception)
-            {
-                throw FederationJson.FromCore(exception);
-            }
-            FederationJson.CountWork(parsed.RootElement, _budget, _token);
-            return parsed.RootElement;
-        }
+        private ValueTask<JsonElement> MetadataAsync(FederationReadRequest request) => _reads.MetadataAsync(request);
 
-        private async ValueTask<FederationReadResult> ReadAsync(FederationReadRequest request)
-        {
-            _token.ThrowIfCancellationRequested();
-            CheckContext();
-            _budget.ChargeRequest();
-            var result = await _source.ReadAsync(request, _token).ConfigureAwait(false);
-            _token.ThrowIfCancellationRequested();
-            CheckContext();
-            if (result.Context != _context)
-            {
-                throw new FederationException(FederationErrorCode.InconsistentSnapshot,
-                    "A WoT read returned bytes or metadata from another source context.");
-            }
-            if (!FederationSyntax.SameXid(result.SelectedXid, request.Target,
-                request.Operation == FederationOperation.Collection))
-            {
-                throw FederationJson.Invalid("A WoT read returned a different selected path.");
-            }
-            return result;
-        }
+        private ValueTask<FederationReadResult> ReadAsync(FederationReadRequest request) => _reads.ReadAsync(request);
 
-        private void CheckContext()
-        {
-            if (_source.Context != _context || !ReferenceEquals(_source.Model, _model) ||
-                FederationCapabilities.GetResolutionOwner(_source.Capabilities) != _owner)
-            {
-                throw new FederationException(FederationErrorCode.InconsistentSnapshot,
-                    "The WoT source context, captured model or resolution owner changed between reads.");
-            }
-        }
+        private void CheckContext() => _reads.Check();
 
         private static JsonElement Entity(JsonElement envelope, string target)
         {

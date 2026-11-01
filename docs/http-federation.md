@@ -76,6 +76,48 @@ pointers when wrapping entities in the abstract result envelope. Arbitrary
 Document bytes, domain URL attributes and user strings are not rewritten.
 An ignored flag yielding API URLs cannot masquerade as document-view pointers.
 
+## Exact API-Version acquisition
+
+`ApiRegistryDocumentAcquirer.AcquireAsync` takes one caller-authorized
+`IFederationReadSource`, an exact API Version XID and a shared read budget.
+It verifies the captured model's API Group and document-bearing Resource,
+reads Version metadata, then acquires that exact Version's bytes. It does
+not inspect a mutable default, resolve aliases, retrieve dependencies or
+invoke an API.
+
+```csharp
+var budget = new FederationReadBudget();
+using var source = await HttpFederationReadSource.OpenAsync(
+    registryRoot, transportOptions, new() { Limits = budget.Limits },
+    budget, cancellation);
+var acquired = await ApiRegistryDocumentAcquirer.AcquireAsync(
+    source, "/apigroups/team/apis/telemetry/versions/1", budget, cancellation);
+```
+
+The result retains the exact Version XID, complete authored format identifier,
+computed SHA-256 digest, source context and independently owned Document.
+The Document's media type, declared base and original retrieval location remain
+separate; no base is inferred from an XID or namespace. An HTTP source captures
+its retrieval URL as `Document.Origin`. A consumer passes that URL, or the
+applicable native-language base, explicitly to its operation resolver.
+Acquisition does not normalize format spelling or establish language validity.
+
+Missing or denied Versions, external descriptors, wrong identities and changed
+source/model/resolution-owner captures fail without another Version or source.
+Metadata and acquired bytes consume cumulative request, object, byte and work
+budgets; hashing and output also have finite bounds. Repeated calls cannot
+reset a supplied budget. Cancellation propagates.
+
+The live HTTP workflow publishes two API Versions, acquires the older exact
+Version after the default changes, and selects its OpenAPI operation after
+closing both source and host. Without an authorized dependency resolver,
+its relative Path Item `$ref` produces `Indeterminate`. With one, the resolver
+receives the absolute dependency URL resolved against the captured retrieval
+origin; the selected operation reports that dependency's URI. The entry
+Document and supplied dependency bytes remain separate.
+This does not freeze unversioned dependencies,
+implement external-document retrieval or qualify full API language validation.
+
 ## Collections and errors
 
 Collection capture follows every necessary opaque `next` link, even if
