@@ -76,16 +76,23 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
         var document = new SchemaDocument(context.ReadJson(bytes));
         _documents.Add(document);
         var baseUri = uri;
+        string? rootAnchor = null;
         if (document.Json.RootElement.ValueKind == JsonValueKind.Object
             && !(_draft == 7 && document.Json.RootElement.TryGetProperty("$ref", out _))
             && document.Json.RootElement.TryGetProperty("$id", out var id))
         {
-            baseUri = Identifier(SchemaJson.String(id, "$/$id"), uri, "$/$id");
+            var identifier = SchemaJson.String(id, "$/$id");
+            baseUri = Identifier(identifier, uri, "$/$id");
+            rootAnchor = DraftSevenAnchor(identifier);
         }
         var resource = new SchemaResource(document, document.Json.RootElement, "$", baseUri);
         document.Resources.Add("$", resource);
         Register(uri, resource, "$");
         Register(baseUri, resource, "$/$id");
+        if (rootAnchor is not null)
+        {
+            AddAnchor(resource, rootAnchor, "$", "$/$id");
+        }
         Validate(document.Json.RootElement, resource, "$");
         return resource;
     }
@@ -132,15 +139,20 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
         if (path != resource.Path && schema.TryGetProperty("$id", out var embeddedId))
         {
             var idPath = SchemaJson.Path(path, "$id");
-            var baseUri = Identifier(SchemaJson.String(embeddedId, idPath), resource.BaseUri, idPath);
-            if (_draft == 7)
+            var identifier = SchemaJson.String(embeddedId, idPath);
+            var baseUri = Identifier(identifier, resource.BaseUri, idPath);
+            var anchor = DraftSevenAnchor(identifier);
+            if (anchor is not null)
             {
-                Unsupported(idPath, "schema.embedded_resource", "Draft-07 embedded resource identifiers are not implemented.");
+                AddAnchor(resource, anchor, path, idPath);
             }
-            context.Work(baseUri.Length, idPath);
-            resource = new SchemaResource(document, schema, path, baseUri);
-            document.Resources.Add(path, resource);
-            Register(baseUri, resource, idPath);
+            else
+            {
+                context.Work(baseUri.Length, idPath);
+                resource = new SchemaResource(document, schema, path, baseUri);
+                document.Resources.Add(path, resource);
+                Register(baseUri, resource, idPath);
+            }
         }
         foreach (var property in schema.EnumerateObject())
         {
@@ -151,7 +163,7 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
                 case "$schema":
                     var dialectUri = SchemaJson.String(value, childPath);
                     CheckUri(dialectUri, childPath, true);
-                    ValidationContext.Require(path == resource.Path,
+                    ValidationContext.Require(path == "$" || _draft != 7 && path == resource.Path,
                         childPath, "schema.dialect_location", "A dialect declaration requires a schema resource root.");
                     var dialect = dialectUri.TrimEnd('#');
                     var expected = _draft switch
@@ -180,8 +192,7 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
                 case "$anchor" when _draft != 7:
                     var anchor = SchemaJson.String(value, childPath);
                     CheckAnchor(anchor, childPath);
-                    ValidationContext.Require(resource.Anchors.TryAdd(anchor, path), childPath,
-                        "schema.duplicate_anchor", "A schema anchor must be unique within a resource.");
+                    AddAnchor(resource, anchor, path, childPath);
                     break;
                 case "$dynamicRef" when _draft == 2020:
                 case "$recursiveRef" when _draft != 7:
@@ -365,8 +376,18 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
     private void CheckAnchor(string anchor, string path)
         => ValidationContext.Require(anchor.Length > 0
             && (char.IsAsciiLetter(anchor[0]) || _draft == 2020 && anchor[0] == '_')
-            && anchor.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-' or '.' || _draft == 2019 && c == ':'),
+            && anchor.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-' or '.' || _draft != 2020 && c == ':'),
             path, "schema.anchor", "Invalid schema anchor for the selected dialect.");
+
+    private void AddAnchor(SchemaResource resource, string anchor, string targetPath, string path)
+    {
+        context.Work(anchor.Length, path);
+        ValidationContext.Require(resource.Anchors.TryAdd(anchor, targetPath), path,
+            "schema.duplicate_anchor", "A schema anchor must be unique within a resource.");
+    }
+
+    private string? DraftSevenAnchor(string identifier)
+        => _draft == 7 && identifier.Length > 1 && identifier[0] == '#' ? identifier[1..] : null;
 
     private string Identifier(string value, string baseUri, string path)
     {
@@ -374,7 +395,18 @@ internal sealed class JsonSchemaSyntax(string format, ValidationContext context)
         var resolved = ResolveUri(baseUri, value);
         if (_draft == 7)
         {
-            return resolved;
+            var fragment = value.IndexOf('#');
+            if (fragment >= 0 && fragment < value.Length - 1)
+            {
+                if (fragment != 0 || value[1] == '/')
+                {
+                    Unsupported(path, "schema.id_fragment_unsupported", "Draft-07 defines only fragment-only plain-name identifiers.");
+                }
+                CheckAnchor(value[1..], path);
+                return baseUri;
+            }
+            var resolvedFragment = resolved.IndexOf('#');
+            return resolvedFragment < 0 ? resolved : resolved[..resolvedFragment];
         }
         var fragmentAt = value.IndexOf('#');
         ValidationContext.Require(fragmentAt < 0 || fragmentAt == value.Length - 1,

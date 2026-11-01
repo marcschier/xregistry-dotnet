@@ -10,6 +10,168 @@ namespace XRegistry.Validation.Tests;
 public class JsonSchemaValidationTests
 {
     [Test]
+    public async Task DraftSevenNamedSchemasRetainContainingPointerRoots()
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("JsonSchema/draft-07", """
+            {"definitions":{"Named":{"$id":"#name","allOf":[{"$ref":"#/definitions/Target"}]},
+              "Target":{"type":"string"},"Nested":{"$id":"child","definitions":{
+                "Named":{"$id":"#name","allOf":[{"$ref":"#/definitions/Target"}]},"Target":{"type":"integer"}}}}}
+            """u8.ToArray(), new() { DocumentUri = new("https://schemas.test/root"), MaxReferences = 0 });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task DraftSevenAcquiredDocumentsRegisterNestedAndNamedAliases()
+    {
+        var calls = new List<string>();
+        var result = await new BuiltInDocumentValidator().ValidateAsync("JsonSchema/draft-07", """
+            {"$id":"https://schemas.test/root","allOf":[{"$ref":"retrieved#name"},
+              {"$ref":"child#name"},{"$ref":"child#/definitions/Named"}]}
+            """u8.ToArray(), new()
+            {
+                ResolveReference = (reference, _) =>
+                {
+                    calls.Add(reference);
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>( """
+                        {"$id":"https://schemas.test/canonical","definitions":{"Named":{"$id":"#name","type":"string"},
+                          "Nested":{"$id":"child","definitions":{"Named":{"$id":"#name","type":"integer"}}}}}
+                        """u8.ToArray());
+                }
+            });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+        await Assert.That(calls.SequenceEqual(["https://schemas.test/retrieved"])).IsTrue();
+    }
+
+    [Test]
+    [Arguments(-1, DocumentValidationStatus.Indeterminate)]
+    [Arguments(0, DocumentValidationStatus.Valid)]
+    [Arguments(1, DocumentValidationStatus.Valid)]
+    public async Task DraftSevenNamedIdentifierRegistrationHasExactWorkBounds(int delta, DocumentValidationStatus status)
+    {
+        var bytes = """{"definitions":{"Value":{"$id":"#node","type":"string"}}}"""u8.ToArray();
+        var result = await new BuiltInDocumentValidator().ValidateAsync("JsonSchema/draft-07", bytes,
+            new() { MaxWork = bytes.Length + 2 + "node".Length + delta });
+        await Assert.That(result.Status).IsEqualTo(status);
+        if (status == DocumentValidationStatus.Valid) { await Assert.That(result.Diagnostics.Count).IsEqualTo(0); }
+        else { await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("limit.work"); }
+    }
+
+    [Test]
+    public async Task DraftSevenCircularNamedIdentifiersTerminateWithoutAcquisition()
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("JsonSchema/draft-07", """
+            {"definitions":{"A":{"$id":"#alice","allOf":[{"$ref":"#bob"}]},
+              "B":{"$id":"#bob","allOf":[{"$ref":"#alice"}]}}}
+            """u8.ToArray(), new() { MaxReferences = 0 });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("#/definitions/A")]
+    [Arguments("#foo")]
+    [Arguments("#%66oo")]
+    [Arguments("other.json#bar")]
+    [Arguments("other.json#/definitions/X")]
+    [Arguments("#/definitions/B/definitions/Y")]
+    [Arguments("t/inner.json")]
+    [Arguments("urn:example:leaf")]
+    public async Task DraftSevenPublishedIdExampleResolvesAllIdentifierForms(string reference)
+    {
+        var calls = 0;
+        var schema = Encoding.UTF8.GetBytes($$$$$"""
+            {"$id":"https://schemas.test/root.json","allOf":[{"$ref":"{{{{{reference}}}}}"}],
+             "definitions":{"A":{"$id":"#foo","type":"string"},
+               "B":{"$id":"other.json","definitions":{"X":{"$id":"#bar","type":"string"},
+                 "Y":{"$id":"t/inner.json","type":"integer"}}},
+               "C":{"$id":"urn:example:leaf","type":"boolean"}}}
+            """);
+        var result = await new BuiltInDocumentValidator().ValidateAsync("JsonSchema/draft-07", schema, new()
+        {
+            MaxReferences = 0,
+            ResolveReference = (_, _) => { calls++; throw new UnauthorizedAccessException(); }
+        });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task DraftSevenNamedFragmentsKeepContainingBaseForNestedReferences()
+    {
+        var calls = new List<string>();
+        var result = await new BuiltInDocumentValidator().ValidateAsync("JsonSchema/draft-07", """
+            {"$id":"https://schemas.test/root","allOf":[{"$ref":"#node"},{"$ref":"nested/#node"}],
+             "definitions":{"Root":{"$id":"#node","properties":{"value":{"$ref":"part"}}},
+              "Nested":{"$id":"nested/","definitions":{"Value":{"$id":"#node","properties":{"value":{"$ref":"part"}}}}}}}
+            """u8.ToArray(), new()
+            {
+                ResolveReference = (reference, _) =>
+                {
+                    calls.Add(reference);
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>( """{"type":"string"}"""u8.ToArray());
+                }
+            });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(calls.SequenceEqual(["https://schemas.test/part", "https://schemas.test/nested/part"])).IsTrue();
+    }
+
+    [Test]
+    [Arguments("#a")]
+    [Arguments("#Z0-._:z")]
+    public async Task DraftSevenRootFragmentIdentifiersNameTheCapturedRoot(string identifier)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("JsonSchema/draft-07",
+            Encoding.UTF8.GetBytes($$$"""
+                {"$id":"{{{identifier}}}","allOf":[{"$ref":"{{{identifier}}}"}]}
+                """), new() { DocumentUri = new("https://schemas.test/root"), MaxReferences = 0 });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Valid);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("#_node", DocumentValidationStatus.Invalid, "schema.anchor")]
+    [Arguments("#0node", DocumentValidationStatus.Invalid, "schema.anchor")]
+    [Arguments("#a%3Ab", DocumentValidationStatus.Invalid, "schema.anchor")]
+    [Arguments("#/definitions/X", DocumentValidationStatus.Unsupported, "schema.id_fragment_unsupported")]
+    [Arguments("https://schemas.test/root#node", DocumentValidationStatus.Unsupported, "schema.id_fragment_unsupported")]
+    public async Task DraftSevenFragmentIdentifierBoundariesAreExplicit(
+        string identifier, DocumentValidationStatus status, string code)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("JsonSchema/draft-07",
+            Encoding.UTF8.GetBytes($$$$"""
+                {"$id":"https://schemas.test/root","definitions":{"Value":{"$id":"{{{{identifier}}}}"}}}
+                """));
+        await Assert.That(result.Status).IsEqualTo(status);
+        await Assert.That(result.Diagnostics.Single().Code).IsEqualTo(code);
+        await Assert.That(result.Diagnostics.Single().Path).IsEqualTo("$/definitions/Value/$id");
+    }
+
+    [Test]
+    [Arguments("""{"definitions":{"A":{"$id":"#node"},"B":{"$id":"#node"}}}""", "schema.duplicate_anchor")]
+    [Arguments("""{"definitions":{"A":{"$id":"child"},"B":{"$id":"child#"}}}""", "schema.duplicate_id")]
+    public async Task DraftSevenIdentifierCollisionsRejectAmbiguousSchemas(string schema, string code)
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("JsonSchema/draft-07", Encoding.UTF8.GetBytes(schema),
+            new() { DocumentUri = new("https://schemas.test/root") });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics.Single().Code).IsEqualTo(code);
+    }
+
+    [Test]
+    public async Task DraftSevenReferenceObjectsNeverRegisterIgnoredIdentifiers()
+    {
+        var result = await new BuiltInDocumentValidator().ValidateAsync("JsonSchema/draft-07", """
+            {"$id":"https://schemas.test/root","definitions":{"Ignored":{"$ref":"#/definitions/Real","$id":"#node"},
+             "Real":{"type":"string"}},"allOf":[{"$ref":"#node"}]}
+            """u8.ToArray(), new() { MaxReferences = 0 });
+        await Assert.That(result.Status).IsEqualTo(DocumentValidationStatus.Invalid);
+        await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("reference.not_found");
+    }
+
+    [Test]
     [Arguments("child#node")]
     [Arguments("child#%6Eode")]
     [Arguments("child#/properties/value")]
@@ -234,7 +396,7 @@ public class JsonSchemaValidationTests
     [Test]
     [Arguments("JsonSchema/draft/2020-12", """{"$id":"child","$schema":"http://json-schema.org/draft-07/schema#"}""",
         "schema.dialect_unsupported")]
-    [Arguments("JsonSchema/draft-07", """{"$id":"child"}""", "schema.embedded_resource")]
+    [Arguments("JsonSchema/draft-07", """{"$id":"child#node"}""", "schema.id_fragment_unsupported")]
     public async Task UnqualifiedEmbeddedDialectsRemainUnsupported(string format, string child, string code)
     {
         var result = await new BuiltInDocumentValidator().ValidateAsync(format,

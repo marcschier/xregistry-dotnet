@@ -74,7 +74,7 @@ remain aliases of one supplied Document; selection preserves authored bytes
 and the caller's retrieval origin. Conflicting canonical IDs fail even when
 one spelling ends with an empty fragment.
 
-Modern embedded schema IDs now establish resource-local reference bases,
+Nonfragment embedded schema IDs now establish resource-local reference bases,
 anchors and pointer roots. Canonical pointers address the embedded root;
 containing-Document pointers retain their structural path. Resource scopes
 do not leak across siblings, and circular or repeated references reuse
@@ -83,8 +83,15 @@ duplicate names within one resource and conflicting IDs fail. Selection
 preserves whole-Document bytes and owned dependency context; it does not
 extract a standalone resource. Registration and scope lookup consume work,
 while captured byte/node budgets remain shared. Same-dialect resource-root
-declarations are supported; differing embedded dialects, draft-07 embedded
-IDs and dynamic evaluation remain unsupported.
+declarations are supported; differing embedded dialects and dynamic evaluation
+remain unsupported.
+
+Draft-07 fragment-only IDs now register plain names within the containing
+resource, without changing its pointer root or relative-reference base. Names
+may contain colons after their initial ASCII letter. Duplicate names fail.
+IDs combining another URI component with a nonempty fragment, and pointer
+IDs, remain unsupported because draft-07 leaves their effect undefined.
+Ignored `$id` siblings of draft-07 `$ref` do not register identifiers.
 
 Legacy prepare/replay/incarnation/generation extensions are not standard
 xRegistry HTTP. The in-process persistence/response preparation methods do not

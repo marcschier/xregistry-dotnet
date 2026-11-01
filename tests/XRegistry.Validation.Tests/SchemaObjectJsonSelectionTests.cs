@@ -11,6 +11,33 @@ namespace XRegistry.Validation.Tests;
 public class SchemaObjectJsonSelectionTests
 {
     [Test]
+    public async Task DraftSevenNestedIdSelectionRetainsContainingBytesAndScopedDependency()
+    {
+        const string schema = """
+            {"$id":"https://schemas.test/root","definitions":{"Nested":{"$id":"nested/",
+              "definitions":{"Value":{"$id":"#node","properties":{"v":{"$ref":"part"}}}}}}}
+            """;
+        var calls = new List<string>();
+        var result = await SchemaObjectSelector.SelectAsync("JsonSchema/draft-07", Encoding.UTF8.GetBytes(schema),
+            "source#/definitions/Nested/definitions/Value", new()
+            {
+                Validation = new()
+                {
+                    ResolveReference = (reference, _) =>
+                    {
+                        calls.Add(reference);
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>( """{"type":"string"}"""u8.ToArray());
+                    }
+                }
+            });
+        await Assert.That(result.Status).IsEqualTo(SchemaObjectSelectionStatus.Selected);
+        await Assert.That(result.Selection!.JsonPointer).IsEqualTo("/definitions/Nested/definitions/Value");
+        await Assert.That(result.Selection.Json!.Value.GetProperty("$id").GetString()).IsEqualTo("#node");
+        await Assert.That(Encoding.UTF8.GetString(result.Selection.Document.Span)).IsEqualTo(schema);
+        await Assert.That(calls.SequenceEqual(["https://schemas.test/nested/part"])).IsTrue();
+    }
+
+    [Test]
     [Arguments("JsonSchema/draft/2019-09")]
     [Arguments("JsonSchema/draft/2020-12")]
     public async Task EmbeddedResourceSelectionOwnsTheWholeDocumentAndItsScopedDependencies(string format)
