@@ -11,6 +11,218 @@ namespace XRegistry.Validation.Tests;
 public class ApiOperationReferenceTests
 {
     [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiServerChecksFollowCallbacksAndReferencedPathItems(string format, string version)
+    {
+        foreach (var scope in new[] { "path", "parent", "callbackPath", "child" })
+        {
+            var path = JsonNode.Parse("""
+                {"get":{"operationId":"Parent","callbacks":{"event":{"{$request.query.url}":{"post":{"operationId":"Child"}}}}}}
+                """)!;
+            var parent = path["get"]!;
+            var callbackPath = parent["callbacks"]!["event"]!["{$request.query.url}"]!;
+            var affected = scope switch { "path" => path, "parent" => parent, "callbackPath" => callbackPath, _ => callbackPath["post"]! };
+            affected["servers"] = JsonNode.Parse("""[{"url":"/","variables":{"name":{"default":false}}}]""");
+            var document = new JsonObject { ["openapi"] = version,
+                ["paths"] = new JsonObject { ["/items"] = path.DeepClone() } };
+            var suffix = (scope switch
+            {
+                "path" => "",
+                "parent" => "/get",
+                "callbackPath" => "/get/callbacks/event/{$request.query.url}",
+                _ => "/get/callbacks/event/{$request.query.url}/post"
+            }) + "/servers/0/variables/name/default";
+            foreach (var selector in new[] { "operations/Child", "/paths/~1items/get/callbacks/event/%7B$request.query.url%7D/post" })
+            {
+                var result = ApiOperationDocumentResolver.Resolve(format, "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector));
+                await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.servers");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo("$/paths/~1items" + suffix);
+            }
+            document["paths"]!["/items"] = new JsonObject { ["$ref"] = "https://allowed.test/path#/item" };
+            var calls = 0;
+            var referenced = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Child"),
+                resolveReference: (uri, _) =>
+                {
+                    calls++;
+                    if (uri != "https://allowed.test/path") { throw new UnauthorizedAccessException(); }
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(
+                        new JsonObject { ["item"] = path.DeepClone() }.ToJsonString()));
+                });
+            await Assert.That(referenced.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+            await Assert.That(referenced.Diagnostic!.Code).IsEqualTo("document.servers");
+            await Assert.That(referenced.Diagnostic.Path).IsEqualTo("$/item" + suffix);
+            await Assert.That(referenced.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            await Assert.That(calls).IsEqualTo(1);
+            affected["servers"] = new JsonArray();
+            document["paths"]!["/items"] = path.DeepClone();
+            var restored = ApiOperationDocumentResolver.Resolve(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Child"));
+            await Assert.That(restored.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+            await Assert.That(restored.Operation.GetProperty("operationId").GetString()).IsEqualTo("Child");
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiServerAdmissionRetainsPointerLocalityAndReversedDeclarations(string format, string version)
+    {
+        var document = new JsonObject
+        {
+            ["openapi"] = version,
+            ["paths"] = JsonNode.Parse("""
+                {"/target":{"servers":[{"url":"/api"}],"get":{"operationId":"Target"}},
+                 "/other":{"servers":false,"get":{"operationId":"Other"}}}
+                """)
+        };
+        foreach (var reverse in new[] { false, true })
+        {
+            if (reverse)
+            {
+                var paths = document["paths"]!.AsObject();
+                var target = paths["/target"];
+                paths.Remove("/target");
+                paths["/target"] = target;
+            }
+            var bytes = System.Text.Encoding.UTF8.GetBytes(document.ToJsonString());
+            var local = ApiOperationDocumentResolver.Resolve(format, "application/json", bytes,
+                ApiOperationReference.Parse("/apigroups/g/apis/a#/paths/~1target/get"));
+            await Assert.That(local.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+            await Assert.That(local.Operation.TryGetProperty("servers", out _)).IsFalse();
+            var named = ApiOperationDocumentResolver.Resolve(format, "application/json", bytes,
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"));
+            await Assert.That(named.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+            await Assert.That(named.Diagnostic!.Code).IsEqualTo("document.servers");
+            await Assert.That(named.Diagnostic.Path).IsEqualTo("$/paths/~1other/servers");
+            await Assert.That(named.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+        var webhook = ApiOperationDocumentResolver.Resolve("OpenAPI/3.1", "application/json",
+            System.Text.Encoding.UTF8.GetBytes("""
+                {"openapi":"3.1.1","webhooks":{"event":{"servers":false,"post":{"operationId":"Hook"}}}}
+                """), ApiOperationReference.Parse("/apigroups/g/apis/a#/webhooks/event/post"));
+        await Assert.That(webhook.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(webhook.Diagnostic!.Path).IsEqualTo("$/webhooks/event/servers");
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiServerShapesApplyAtRootPathAndOperationBeforeSelection(string format, string version)
+    {
+        var invalid = new List<(string Json, string Suffix)>
+        {
+            ("null", ""), ("false", ""), ("1", ""), ("{}", ""), ("\"server\"", ""),
+            ("[null]", "/0"), ("[false]", "/0"), ("[1]", "/0"), ("[[]]", "/0"), ("[\"server\"]", "/0"),
+            ("[{}]", "/0/url"), ("""[{"$ref":"https://not-acquired.test/server"}]""", "/0/url")
+        };
+        foreach (var bad in new[] { "null", "false", "1", "[]", "{}" })
+        {
+            invalid.Add(($$$$"""[{"url":{{{{bad}}}}}]""", "/0/url"));
+            invalid.Add(($$$$"""[{"url":"/","description":{{{{bad}}}}}]""", "/0/description"));
+            if (bad != "{}") { invalid.Add(($$$$"""[{"url":"/","variables":{{{{bad}}}}}]""", "/0/variables")); }
+            invalid.Add(($$$$"""[{"url":"/","variables":{"name/~":{{{{bad}}}}}}]""",
+                bad == "{}" ? "/0/variables/name~1~0/default" : "/0/variables/name~1~0"));
+            invalid.Add(($$$$"""[{"url":"/","variables":{"name/~":{"default":{{{{bad}}}}}}}]""", "/0/variables/name~1~0/default"));
+            invalid.Add(($$$$"""[{"url":"/","variables":{"name/~":{"default":"","description":{{{{bad}}}}}}}]""",
+                "/0/variables/name~1~0/description"));
+            invalid.Add(($$$$"""[{"url":"/","variables":{"name/~":{"default":"","enum":["",{{{{bad}}}}]}}}]""",
+                "/0/variables/name~1~0/enum/1"));
+            if (bad != "[]")
+            {
+                invalid.Add(($$$$"""[{"url":"/","variables":{"name/~":{"default":"","enum":{{{{bad}}}}}}}]""",
+                    "/0/variables/name~1~0/enum"));
+            }
+        }
+        if (format == "OpenAPI/3.1")
+        {
+            invalid.Add(("""[{"url":"/","variables":{"name/~":{"default":"","enum":[]}}}]""", "/0/variables/name~1~0/enum"));
+            invalid.Add(("""[{"url":"/","variables":{"name/~":{"default":"missing","enum":["other"]}}}]""",
+                "/0/variables/name~1~0/default"));
+        }
+        foreach (var (json, suffix) in invalid)
+        {
+            foreach (var scope in new[] { "root", "path", "operation" })
+            {
+                var operation = new JsonObject { ["operationId"] = "Target" };
+                var path = new JsonObject { ["get"] = operation };
+                var document = new JsonObject { ["openapi"] = version, ["paths"] = new JsonObject { ["/items"] = path } };
+                (scope == "root" ? document : scope == "path" ? path : operation)["servers"] = JsonNode.Parse(json);
+                foreach (var selector in new[] { "operations/Target", "operations/Missing", "/paths/~1items/get" })
+                {
+                    var calls = 0;
+                    var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                        System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                        ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                        resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+                    await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.servers");
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo((scope switch
+                        { "root" => "$", "path" => "$/paths/~1items", _ => "$/paths/~1items/get" }) + "/servers" + suffix);
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                    await Assert.That(calls).IsEqualTo(0);
+                }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiServersPreserveOverridesTemplatesAndVersionSpecificRecommendations(string format, string version)
+    {
+        var servers = JsonNode.Parse("""
+            [{"url":"https://{name}.example.test:{port}/api","description":"",
+              "variables":{"name":{"default":"","enum":["","demo",""]},
+                "port":{"default":"443","enum":["443","8443"],"x-private":{"$ref":"https://not-acquired.test"}}},
+              "x-private":{"url":false}}]
+            """)!;
+        foreach (var array in new[] { "[]", servers.ToJsonString() })
+        {
+            var operation = new JsonObject { ["operationId"] = "Target", ["servers"] = JsonNode.Parse(array) };
+            var document = new JsonObject
+            {
+                ["openapi"] = version, ["servers"] = servers.DeepClone(),
+                ["paths"] = new JsonObject { ["/items"] = new JsonObject { ["servers"] = servers.DeepClone(), ["get"] = operation } }
+            };
+            foreach (var selector in new[] { "operations/Target", "/paths/~1items/get" })
+            {
+                var calls = 0;
+                var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                    resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+                await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+                await Assert.That(JsonNode.DeepEquals(operation, JsonNode.Parse(result.Operation.GetRawText()))).IsTrue();
+                await Assert.That(calls).IsEqualTo(0);
+            }
+        }
+        foreach (var enumeration in new[] { "[]", """["different"]""" })
+        {
+            var json = $$$$$"""
+                {"openapi":"{{{{{version}}}}}","servers":[{"url":"{variable}",
+                "variables":{"variable":{"default":"default","enum":{{{{{enumeration}}}}}}}}],
+                "paths":{"/items":{"get":{"operationId":"Target"}}}}
+                """;
+            var result = ApiOperationDocumentResolver.Resolve(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(json), ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"));
+            await Assert.That(result.Status).IsEqualTo(format == "OpenAPI/3.0"
+                ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        }
+        var swagger = ApiOperationDocumentResolver.Resolve("Swagger/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes("""
+                {"swagger":"2.0","servers":false,"paths":{"/items":{"servers":false,"get":{"operationId":"Target","servers":false}}}}
+                """), ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"));
+        await Assert.That(swagger.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+    }
+
+    [Test]
     public async Task HttpUriSyntaxChecksCallbackAncestorsAndReferencedMetadataWithoutFetchingAddresses()
     {
         var operation = JsonNode.Parse("""

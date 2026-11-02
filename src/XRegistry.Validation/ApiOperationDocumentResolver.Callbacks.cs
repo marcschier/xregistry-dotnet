@@ -27,6 +27,8 @@ public static partial class ApiOperationDocumentResolver
         }
         var metadataFailure = ValidateHttpOperationMetadata(location.Operation, location.Pointer, cancellationToken);
         if (metadataFailure is not null) { return metadataFailure; }
+        var serverFailure = ValidateOpenApiServers(location.Operation, location.Pointer, references.Format, cancellationToken);
+        if (serverFailure is not null) { return serverFailure; }
         var nameFailure = ValidateHttpSecurityNames(location.Operation, location.Pointer,
             references.Root.Root, !includeCallbacks, cancellationToken);
         if (nameFailure is not null) { return nameFailure; }
@@ -72,6 +74,86 @@ public static partial class ApiOperationDocumentResolver
         active.Remove(identity);
         return null;
     }
+
+    private static ApiOperationResolutionResult? ValidateOpenApiServers(
+        JsonElement value, string pointer, string format, CancellationToken cancellationToken)
+    {
+        if (format == "Swagger/2.0" || !value.TryGetProperty("servers", out var servers)) { return null; }
+        var path = pointer + "/servers";
+        if (servers.ValueKind != JsonValueKind.Array)
+        {
+            return InvalidOpenApiServer("OpenAPI servers must be an array.", path);
+        }
+        var index = 0;
+        foreach (var server in servers.EnumerateArray())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var serverPath = path + "/" + (index++).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (server.ValueKind != JsonValueKind.Object)
+            {
+                return InvalidOpenApiServer("A server declaration must be a Server Object.", serverPath);
+            }
+            if (!server.TryGetProperty("url", out var url) || url.ValueKind != JsonValueKind.String)
+            {
+                return InvalidOpenApiServer("A Server Object requires a string url.", serverPath + "/url");
+            }
+            if (server.TryGetProperty("description", out var description) && description.ValueKind != JsonValueKind.String)
+            {
+                return InvalidOpenApiServer("A server description must be a string.", serverPath + "/description");
+            }
+            if (!server.TryGetProperty("variables", out var variables)) { continue; }
+            if (variables.ValueKind != JsonValueKind.Object)
+            {
+                return InvalidOpenApiServer("Server variables must be a map of Server Variable Objects.", serverPath + "/variables");
+            }
+            foreach (var variable in variables.EnumerateObject())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var variablePath = serverPath + "/variables/" + Escape(variable.Name);
+                if (variable.Value.ValueKind != JsonValueKind.Object)
+                {
+                    return InvalidOpenApiServer("A server variable must be an object.", variablePath);
+                }
+                if (!variable.Value.TryGetProperty("default", out var defaultValue) || defaultValue.ValueKind != JsonValueKind.String)
+                {
+                    return InvalidOpenApiServer("A server variable requires a string default.", variablePath + "/default");
+                }
+                if (variable.Value.TryGetProperty("description", out var variableDescription) &&
+                    variableDescription.ValueKind != JsonValueKind.String)
+                {
+                    return InvalidOpenApiServer("A server variable description must be a string.", variablePath + "/description");
+                }
+                if (!variable.Value.TryGetProperty("enum", out var enumeration)) { continue; }
+                if (enumeration.ValueKind != JsonValueKind.Array ||
+                    format == "OpenAPI/3.1" && enumeration.GetArrayLength() == 0)
+                {
+                    return InvalidOpenApiServer("A server variable enum must be a string array, nonempty in OpenAPI 3.1.",
+                        variablePath + "/enum");
+                }
+                var defaultFound = false;
+                var enumIndex = 0;
+                foreach (var member in enumeration.EnumerateArray())
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (member.ValueKind != JsonValueKind.String)
+                    {
+                        return InvalidOpenApiServer("Server variable enum members must be strings.",
+                            variablePath + "/enum/" + enumIndex.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    }
+                    defaultFound |= string.Equals(member.GetString(), defaultValue.GetString(), StringComparison.Ordinal);
+                    enumIndex++;
+                }
+                if (format == "OpenAPI/3.1" && !defaultFound)
+                {
+                    return InvalidOpenApiServer("The server variable default must occur in its enum.", variablePath + "/default");
+                }
+            }
+        }
+        return null;
+    }
+
+    private static ApiOperationResolutionResult InvalidOpenApiServer(string message, string pointer) =>
+        Failure(ApiOperationResolutionStatus.Invalid, "document.servers", message, pointer);
 
     private static ApiOperationResolutionResult? ValidateHttpOperationMetadata(
         JsonElement operation, string pointer, CancellationToken cancellationToken)

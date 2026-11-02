@@ -517,6 +517,8 @@ public static partial class ApiOperationDocumentResolver
 
         var documentationFailure = ValidateHttpDocumentationShapes(root, "$");
         if (documentationFailure is not null) { return documentationFailure; }
+        var serverFailure = ValidateOpenApiServers(root, "$", format, cancellationToken);
+        if (serverFailure is not null) { return serverFailure; }
         var tagFailure = ValidateHttpRootTags(root, cancellationToken);
         if (tagFailure is not null) { return tagFailure; }
         var securityFailure = ValidateHttpSecurityShapes(root, "$", cancellationToken);
@@ -861,6 +863,8 @@ public static partial class ApiOperationDocumentResolver
                 "A Path Item reference target must be an object.", sourcePointer));
         }
 
+        var serverFailure = ValidateOpenApiServers(pathItem, sourcePointer, references.Format, cancellationToken);
+        if (serverFailure is not null) { return PathItemResolution.Failed(serverFailure); }
         var operations = new Dictionary<string, OperationLocation>(StringComparer.Ordinal);
         if (pathItem.TryGetProperty("$ref", out var referenceValue))
         {
@@ -1065,6 +1069,11 @@ public static partial class ApiOperationDocumentResolver
         for (var methodIndex = methodStart; ; methodIndex += 4)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (pathItem.ValueKind == JsonValueKind.Object)
+            {
+                var pathServerFailure = ValidateOpenApiServers(pathItem, pathPointer, format, cancellationToken);
+                if (pathServerFailure is not null) { return pathServerFailure; }
+            }
             if (pathItem.ValueKind != JsonValueKind.Object ||
                 pathItem.TryGetProperty("$ref", out _) ||
                 !pathItem.TryGetProperty(tokens[methodIndex], out var operation))
@@ -1081,6 +1090,8 @@ public static partial class ApiOperationDocumentResolver
             }
             var metadataFailure = ValidateHttpOperationMetadata(operation, pathPointer, cancellationToken);
             if (metadataFailure is not null) { return metadataFailure; }
+            var serverFailure = ValidateOpenApiServers(operation, pathPointer, format, cancellationToken);
+            if (serverFailure is not null) { return serverFailure; }
             var securityNameFailure = ValidateHttpSecurityNames(operation, pathPointer, root,
                 format == "Swagger/2.0", cancellationToken);
             if (securityNameFailure is not null) { return securityNameFailure; }

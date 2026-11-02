@@ -668,6 +668,21 @@ recommended URL form rather than inheriting OpenAPI's mandatory URI syntax.
 Syntax admission does not materialize base-resolved metadata addresses,
 authorize schemes or origins, enforce OAuth deployment TLS, or establish full
 RFC qualification.
+OpenAPI `servers` declarations at the root, reached Path Items and reached
+operations must be arrays of Server Objects with string `url` values and
+optional string descriptions. Server variables must be objects with required
+string defaults, optional string descriptions and optional string-array enums.
+OpenAPI 3.1 requires each enum to be nonempty and contain its default by ordinal
+comparison; OpenAPI 3.0 treats those two constraints as recommendations and does
+not reject an otherwise valid declaration for violating them.
+Checks follow named traversal through references, callbacks and 3.1 webhooks.
+Pointers check only their containing Path Items, callback ancestors and selected
+operation, in addition to root declarations. Empty server arrays, duplicate enum
+values and opaque extensions remain authored data. Selection neither substitutes
+server variables nor copies inherited servers into operations, and server
+addresses are never sent to the dependency resolver. Swagger does not inherit
+OpenAPI's `servers` field. URL-template syntax, variable bindings and effective
+server URL construction remain outside these shape and enum checks.
 OpenAPI 3.1 operation-ID selection also searches `webhooks`, including referenced
 Path Items. Webhook names are exact strings, not slash-prefixed paths; an `x-`
 name in this map is a webhook, not a Paths specification extension. Duplicate
