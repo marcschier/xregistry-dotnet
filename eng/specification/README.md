@@ -152,8 +152,11 @@ line-ending conversion.
 ## Review workflow
 
 The active successor composition uses merged upstream `d290b1ec` and draft
-PR #571 `d757328e`, while retaining the earlier source sets as review-only
-evidence. PR #715 and #716 remain separate review-only inputs. Refreshing the
+PR #571 `d757328e`, except for the OPC UA binding selected from `f69085fb`.
+That native-only refresh corrects the canonical `deprecated` event names and
+their field rules; it does not select later versions of other drafts or models.
+Earlier source sets remain review-only evidence. PR #715 and #716 remain
+separate review-only inputs. Refreshing the
 composition does not transfer implementation or qualification claims to the
 new source-qualified requirements, even when their text is unchanged.
 

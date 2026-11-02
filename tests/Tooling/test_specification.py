@@ -320,6 +320,7 @@ class ProvenanceAndReviewTests(unittest.TestCase):
         self.assertEqual(set(sources), {
             "upstream-4a7e7f5e", "pr571-811de7d2", "pr571-514f6eac",
             "pr715-5f9d0134", "pr716-9613f002", "upstream-d290b1ec", "pr571-d757328e",
+            "pr571-f69085fb",
         })
         prior = sources["pr571-811de7d2"]
         current = sources["pr571-514f6eac"]
@@ -342,6 +343,37 @@ class ProvenanceAndReviewTests(unittest.TestCase):
         self.assertEqual(sources["upstream-d290b1ec"]["commit"], freezer.CURRENT_MERGED)
         self.assertEqual(sources["pr571-d757328e"]["commit"], freezer.CURRENT_DRAFT)
         self.assertEqual(new_roles["workingdrafts/models/wot/samples/cloudevents.json"], "review-only")
+
+    def test_native_events_refresh_selects_only_opcua_and_preserves_other_sources(self) -> None:
+        spec = importlib.util.spec_from_file_location("freeze_successors", ROOT / "eng/specification/freeze_successors.py")
+        freezer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(freezer)
+        sources = {source["id"]: source for source in freezer.sources()}
+        native = sources["pr571-f69085fb"]
+        self.assertEqual(native["commit"], "f69085fb89b1204dd72d9dca00472a5f331be2d1")
+        self.assertEqual(native["commit"], freezer.OPCUA_EVENTS)
+        self.assertEqual(native["repository"], "https://github.com/xregistry/spec")
+        self.assertEqual(native["files"], [
+            {"path": "workingdrafts/bindings/opcua.md", "owner": "opcua",
+             "kind": "normative", "role": "normative"},
+            {"path": "LICENSE", "owner": "license", "kind": "license", "role": "review-only"},
+        ])
+        prior = sources["pr571-d757328e"]
+        self.assertEqual(prior["commit"], "d757328e4e3ca70761244b4a77cacba6bfb5599b")
+        roles = {entry["path"]: entry["role"] for entry in prior["files"]}
+        self.assertEqual(roles["workingdrafts/bindings/opcua.md"], "review-only")
+        for path, role in {
+            "workingdrafts/models/registry/spec.md": "normative",
+            "workingdrafts/models/registry/model.json": "review-only",
+            "workingdrafts/models/wot/spec.md": "normative",
+            "workingdrafts/publication/spec.md": "normative",
+            "workingdrafts/publication/design/design.md": "selected-design",
+            "workingdrafts/bindings/oci.md": "normative",
+        }.items():
+            self.assertEqual(roles[path], role, path)
+        for source_id in ("pr715-5f9d0134", "pr716-9613f002"):
+            self.assertTrue(all(entry["role"] == "review-only" for entry in sources[source_id]["files"]))
+        self.assertEqual(sources["upstream-d290b1ec"]["commit"], freezer.CURRENT_MERGED)
 
     def test_explicit_successor_retirement_preserves_reviews_and_verifies_archive_bytes(self) -> None:
         manifest = self.pin_successors()

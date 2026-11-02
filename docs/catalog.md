@@ -145,8 +145,9 @@ zero, erase the prior contents and always attempt to close an opened handle.
 
 The reader, writer and read source have fake-Session coverage. An in-process
 OPC UA Stack server also verifies Session establishment, SpecVersion gating,
-event Subscription creation and removal, Property writes, Group and Resource
-Methods, attribute Methods, expected-Epoch `Delete`, model-resolved Resource
+event Subscription creation and removal, publishing enablement and native
+notification fields, Property writes, Group and Resource Methods, attribute
+Methods, expected-Epoch `Delete`, model-resolved Resource
 document replacement, created-Resource completion, and FileType byte
 readback. Callers still supply OPC UA type NodeIds for Groups and Resources,
 and the `ResourceVersionsType` NodeId for version operations. The binding draft permits
@@ -170,7 +171,12 @@ caller-injected trusted provider lease; it verifies the target Registry, model
 and node roles,
 application identity, namespace mapping and origin-relative XID before
 returning a target node. Event type discovery, notification decoding and
-Subscription management implement the draft's `XREG-Events` behavior.
+Subscription management provide client-side support for native xRegistry Events.
+Both native deprecation transitions map to Core's
+`io.xregistry.<entity>.deprecated` action. Decoded events retain the concrete
+`EventType` NodeId, so a consumer can distinguish setting or changing deprecation
+from removing it without inventing a Core `undeprecated` action.
+
 A two-server test resolves a caller-authorized metadata-only Resource to an
 exact target Version, reads its FileType bytes, and verifies the selected XID,
 ContentType and bytes. The target uses alternate Group/Resource collection

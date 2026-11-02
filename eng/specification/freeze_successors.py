@@ -27,6 +27,7 @@ API = "5f9d0134407927c0fae3b95e0aa844548e3756d6"
 MEDIA = "9613f002c82c9568fbefc5f1f0cf0490d6df572a"
 CURRENT_MERGED = "d290b1ec38d9e5436decb5ba0854f2321401a118"
 CURRENT_DRAFT = "d757328e4e3ca70761244b4a77cacba6bfb5599b"
+OPCUA_EVENTS = "f69085fb89b1204dd72d9dca00472a5f331be2d1"
 
 
 def sources() -> list[dict]:
@@ -120,7 +121,17 @@ def sources() -> list[dict]:
     for source in (merged, draft, closure):
         for entry in source["files"]:
             entry["role"] = "review-only"
-    result = [merged, draft, closure, api, media, current_merged, current_draft]
+    opcua_events = {
+        "id": "pr571-f69085fb", "repository": "https://github.com/xregistry/spec",
+        "commit": OPCUA_EVENTS, "status": "working-draft", "files": [
+            {"path": "workingdrafts/bindings/opcua.md", "owner": "opcua",
+             "kind": "normative", "role": "normative"},
+        ],
+    }
+    for entry in current_draft["files"]:
+        if entry["path"] == "workingdrafts/bindings/opcua.md":
+            entry["role"] = "review-only"
+    result = [merged, draft, closure, api, media, current_merged, current_draft, opcua_events]
     for source in result:
         source["files"].append({"path": "LICENSE", "owner": "license", "kind": "license", "role": "review-only"})
     return result

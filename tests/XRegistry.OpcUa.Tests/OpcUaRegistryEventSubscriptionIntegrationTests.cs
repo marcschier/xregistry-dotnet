@@ -80,6 +80,32 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
 
         await Assert.That(connection.SpecVersion).IsEqualTo("1.0");
         await Assert.That(connection.Session.SubscriptionCount).IsEqualTo(1);
+        var nativeSubscription = connection.Session.Subscriptions.Single();
+        await Assert.That(nativeSubscription.Created).IsTrue();
+        await Assert.That(nativeSubscription.CurrentPublishingEnabled).IsTrue();
+        var nativeMonitoredItem = nativeSubscription.MonitoredItems.Single();
+        await Assert.That(nativeMonitoredItem.Status.Created).IsTrue();
+        var received = new TaskCompletionSource<OpcUaRegistryEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
+        subscription.EventReceived += (_, args) => received.TrySetResult(args.Value);
+        subscription.NotificationFailed += (_, error) => received.TrySetException(error);
+        var time = new DateTimeOffset(2026, 9, 15, 12, 30, 45, TimeSpan.Zero);
+        server.ReportRegistryCreatedEvent(time);
+
+        var notification = await received.Task.WaitAsync(cancellation.Token);
+
+        await Assert.That(notification.Type).IsEqualTo("io.xregistry.registry.created");
+        await Assert.That(notification.EventType)
+            .IsEqualTo(new NodeId("RegistryCreatedEventType", connection.RegistryRoot.NamespaceIndex));
+        await Assert.That(notification.Id).IsEqualTo("AQID");
+        await Assert.That(notification.SourceNode).IsEqualTo(connection.RegistryRoot);
+        await Assert.That(notification.SourceName).IsEqualTo("Registry");
+        await Assert.That(notification.SourceUrl).IsEqualTo(InProcessRegistryServer.EventSourceUrl);
+        await Assert.That(notification.Subject).IsEqualTo("/");
+        await Assert.That(notification.Time).IsEqualTo(time);
+        await Assert.That(notification.Epoch).IsEqualTo(1u);
+        await Assert.That(notification.MetaEpoch).IsNull();
+        await Assert.That(notification.Changed).IsNull();
+        await Assert.That(notification.CorrelationId).IsNull();
         await subscription.StopAsync(cancellation.Token);
         await Assert.That(connection.Session.SubscriptionCount).IsEqualTo(0);
     }
@@ -403,6 +429,7 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
         }
 
         public const string NamespaceUri = "urn:xregistry:opcua:integration";
+        public const string EventSourceUrl = "https://registry.example.test";
 
         public string Endpoint { get; }
         public string ApplicationUri { get; }
@@ -422,6 +449,8 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
         public int DeleteInvocations => server.DeleteInvocations;
         public uint? DeleteExpectedEpoch => server.DeleteExpectedEpoch;
         public int AttributeMethodInvocations => server.AttributeMethodInvocations;
+
+        public void ReportRegistryCreatedEvent(DateTimeOffset time) => server.ReportRegistryCreatedEvent(time);
 
         public static async ValueTask<InProcessRegistryServer> StartAsync(
             string? externalServerApplicationUri = null,
@@ -517,6 +546,10 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
         public uint? DeleteExpectedEpoch => nodeManager?.DeleteExpectedEpoch;
         public int AttributeMethodInvocations => nodeManager?.AttributeMethodInvocations ?? 0;
 
+        public void ReportRegistryCreatedEvent(DateTimeOffset time) =>
+            (nodeManager ?? throw new InvalidOperationException("The node manager was not initialized."))
+                .ReportRegistryCreatedEvent(time);
+
         protected override IMasterNodeManager CreateMasterNodeManager(
             IServerInternal server,
             ApplicationConfiguration configuration)
@@ -540,6 +573,7 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
         private readonly Dictionary<uint, MemoryStream> openFiles = [];
         private readonly string? externalServerApplicationUri;
         private readonly bool alternateModelLayout;
+        private BaseObjectState? registryRoot;
         private byte[] documentContents = [];
         private uint nextFileHandle;
         public int DeleteInvocations { get; private set; }
@@ -881,12 +915,37 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
             AddPredefinedNode(SystemContext, resourceVersionsType);
             AddPredefinedNode(SystemContext, eventType);
             AddPredefinedNode(SystemContext, root);
+            registryRoot = root;
+            AddRootNotifier(root);
             if (!externalReferences.TryGetValue(ObjectIds.ObjectsFolder, out var references))
             {
                 externalReferences[ObjectIds.ObjectsFolder] = references = [];
             }
             references.Add(new NodeStateReference(ReferenceTypeIds.Organizes, false, root.NodeId));
             AddReverseReferences(externalReferences);
+        }
+
+        public void ReportRegistryCreatedEvent(DateTimeOffset time)
+        {
+            var root = registryRoot ?? throw new InvalidOperationException("The Registry root was not initialized.");
+            var notification = new BaseEventState(null);
+            notification.Initialize(SystemContext, root, EventSeverity.Low, new LocalizedText("Registry created"));
+            notification.NodeId = new NodeId("IntegrationEvent", NamespaceIndex);
+            if (notification.EventId is not { } eventId || notification.EventType is not { } eventType ||
+                notification.SourceNode is not { } sourceNode || notification.SourceName is not { } sourceName ||
+                notification.Time is not { } eventTime)
+            {
+                throw new InvalidOperationException("The SDK did not initialize the native event fields.");
+            }
+            eventId.Value = new ByteString(new byte[] { 1, 2, 3 });
+            eventType.Value = new NodeId("RegistryCreatedEventType", NamespaceIndex);
+            sourceNode.Value = root.NodeId;
+            sourceName.Value = "Registry";
+            eventTime.Value = new DateTimeUtc(time);
+            AddGroupProperty(notification, "SourceUrl", InProcessRegistryServer.EventSourceUrl, DataTypeIds.String);
+            AddGroupProperty(notification, "Subject", "/", DataTypeIds.String);
+            AddGroupProperty(notification, "Epoch", 1u, DataTypeIds.UInt32);
+            root.ReportEvent(SystemContext, notification);
         }
 
         private void AddDocumentFile(BaseObjectState parent)

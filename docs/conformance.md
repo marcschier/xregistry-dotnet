@@ -16,7 +16,7 @@ Historical pinned files: **318**. Historical normative documents: **17**. Combin
 Historical sources and their reviews are retained separately from the
 successor composition; new source-qualified requirements do not inherit
 historical implementation claims.
-Successor files: **96**. Successor normative documents: **22**. Selected informative designs: **1**.
+Successor files: **98**. Successor normative documents: **22**. Selected informative designs: **1**.
 
 A selected informative design is an implementation target, not an adopted
 standard. Its obligations still require explicit semantic review.
@@ -51,7 +51,7 @@ it does not transfer historical qualification to a successor.
 | message | 178 | 178 | 0 |
 | model | 487 | 487 | 0 |
 | oci | 140 | 60 | 0 |
-| opcua | 205 | 0 | 0 |
+| opcua | 205 | 29 | 0 |
 | openusd | 122 | 59 | 0 |
 | pagination | 88 | 36 | 0 |
 | publication | 65 | 65 | 0 |

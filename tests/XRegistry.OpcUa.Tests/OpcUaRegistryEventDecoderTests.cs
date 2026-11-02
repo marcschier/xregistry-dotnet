@@ -17,6 +17,8 @@ public class OpcUaRegistryEventDecoderTests
     private static readonly NodeId s_modelUpdated = new(5104u, 2);
     private static readonly NodeId s_groupDeprecated = new(5105u, 2);
     private static readonly NodeId s_resourceDeprecated = new(5106u, 2);
+    private static readonly NodeId s_groupUndeprecated = new(5107u, 2);
+    private static readonly NodeId s_resourceUndeprecated = new(5108u, 2);
     private static readonly NodeId s_unknown = new(5199u, 2);
     private static readonly string[] s_changed = ["description", "name"];
     private static readonly string[] s_singleChanged = ["name"];
@@ -39,6 +41,7 @@ public class OpcUaRegistryEventDecoderTests
         await Assert.That(decoded).IsNotNull();
         await Assert.That(decoded!.Type).IsEqualTo("io.xregistry.resource.updated");
         await Assert.That(decoded.Id).IsEqualTo("AQID");
+        await Assert.That(decoded.EventType).IsEqualTo(s_resourceUpdated);
         await Assert.That(decoded.SourceNode).IsEqualTo(new NodeId(87u, 2));
         await Assert.That(decoded.SourceName).IsEqualTo("files/f");
         await Assert.That(decoded.SourceUrl).IsEqualTo("https://registry.example.test");
@@ -209,34 +212,51 @@ public class OpcUaRegistryEventDecoderTests
     }
 
     [Test]
-    public async Task ConstructorRejectsNonCanonicalEventTypes()
+    [Arguments("io.xregistry.resource.created.extra")]
+    [Arguments("io.xregistry.group.deprecation")]
+    [Arguments("io.xregistry.resource.deprecation")]
+    [Arguments("io.xregistry.group.undeprecated")]
+    [Arguments("io.xregistry.resource.undeprecated")]
+    public async Task ConstructorRejectsNonCanonicalEventTypes(string type)
     {
-        await Assert.That(() => Decoder((s_resourceUpdated, "io.xregistry.resource.created.extra")))
+        await Assert.That(() => Decoder((s_resourceUpdated, type)))
             .Throws<ArgumentException>();
     }
 
     [Test]
-    [Arguments("group", "/teams/g")]
-    [Arguments("resource", "/teams/g/files/f")]
-    public async Task DeprecatedEventUsesTheStandardizedActionName(string entity, string subject)
+    [Arguments("group", "/teams/g", false)]
+    [Arguments("group", "/teams/g", true)]
+    [Arguments("resource", "/teams/g/files/f", false)]
+    [Arguments("resource", "/teams/g/files/f", true)]
+    public async Task DeprecatedEventUsesTheStandardizedActionName(string entity, string subject, bool removed)
     {
-        var nodeId = entity == "group" ? s_groupDeprecated : s_resourceDeprecated;
+        var deprecatedNode = entity == "group" ? s_groupDeprecated : s_resourceDeprecated;
+        var undeprecatedNode = entity == "group" ? s_groupUndeprecated : s_resourceUndeprecated;
+        var nodeId = removed ? undeprecatedNode : deprecatedNode;
         var type = $"io.xregistry.{entity}.deprecated";
-        var decoder = Decoder((nodeId, type));
+        var decoder = Decoder((deprecatedNode, type), (undeprecatedNode, type));
         var notification = Notification(nodeId, subject, eventId: [1]);
 
         var found = decoder.TryDecode(notification, out var decoded);
 
         await Assert.That(found).IsTrue();
         await Assert.That(decoded!.Type).IsEqualTo(type);
-        await Assert.That(() => Decoder((nodeId, $"io.xregistry.{entity}.deprecation")))
-            .Throws<ArgumentException>();
+        await Assert.That(decoded.EventType).IsEqualTo(nodeId);
+        await Assert.That(decoded.Epoch).IsNull();
+        await Assert.That(decoded.MetaEpoch).IsNull();
+        await Assert.That(decoded.Changed).IsNull();
+        await Check.Error(() => decoder.TryDecode(
+            Notification(nodeId, subject, [1], epoch: 1u), out _), FederationErrorCode.InvalidPackage);
+        await Check.Error(() => decoder.TryDecode(
+            Notification(nodeId, subject, [1], metaEpoch: 1u), out _), FederationErrorCode.InvalidPackage);
+        await Check.Error(() => decoder.TryDecode(
+            Notification(nodeId, subject, [1], changed: s_singleChanged), out _), FederationErrorCode.InvalidPackage);
     }
 
     private static OpcUaRegistryEventDecoder Decoder(params (NodeId NodeId, string Type)[] mappings) =>
         new(mappings.ToDictionary(static mapping => mapping.NodeId, static mapping => mapping.Type));
 
-    private static EventFieldList Notification(NodeId eventType, string subject, byte[] eventId,
+    internal static EventFieldList Notification(NodeId eventType, string subject, byte[] eventId,
         string sourceUrl = "https://registry.example.test", string sourceName = "entity",
         object? epoch = null, object? metaEpoch = null, object? changed = null,
         object? correlationId = null, DateTimeOffset? time = null, Variant? typeField = null) =>

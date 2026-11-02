@@ -79,6 +79,46 @@ public class OpcUaRegistryEventSubscriptionTests
     }
 
     [Test]
+    [Arguments("Group", "group", "/teams/g")]
+    [Arguments("Resource", "resource", "/teams/g/files/f")]
+    public async Task DiscoveryAndDecodingRetainBothNativeDeprecationTransitions(
+        string typePrefix, string entity, string subject)
+    {
+        var session = CreateSession();
+        var proxy = (SessionProxy)(object)session;
+        proxy.TypeDefinition = s_registryType;
+        var deprecated = new NodeId(310u, 2);
+        var undeprecated = new NodeId(311u, 2);
+        proxy.GeneratedEvents[s_registryType] =
+        [
+            new(deprecated, $"{typePrefix}DeprecatedEventType"),
+            new(undeprecated, $"{typePrefix}UndeprecatedEventType"),
+        ];
+
+        var eventTypes = await OpcUaRegistryEventSubscription.DiscoverEventTypesAsync(
+            session, s_namespaceUris, s_notifier);
+        var canonicalType = $"io.xregistry.{entity}.deprecated";
+        await Assert.That(eventTypes.Count).IsEqualTo(2);
+        await Assert.That(eventTypes[deprecated]).IsEqualTo(canonicalType);
+        await Assert.That(eventTypes[undeprecated]).IsEqualTo(canonicalType);
+        var decoder = new OpcUaRegistryEventDecoder(eventTypes);
+
+        var foundDeprecated = decoder.TryDecode(
+            OpcUaRegistryEventDecoderTests.Notification(deprecated, subject, [1]), out var first);
+        var foundUndeprecated = decoder.TryDecode(
+            OpcUaRegistryEventDecoderTests.Notification(undeprecated, subject, [2]), out var second);
+
+        await Assert.That(foundDeprecated).IsTrue();
+        await Assert.That(foundUndeprecated).IsTrue();
+        await Assert.That(first!.Type).IsEqualTo(canonicalType);
+        await Assert.That(second!.Type).IsEqualTo(canonicalType);
+        await Assert.That(first.EventType).IsEqualTo(deprecated);
+        await Assert.That(second.EventType).IsEqualTo(undeprecated);
+        await Assert.That(first.Changed).IsNull();
+        await Assert.That(second.Changed).IsNull();
+    }
+
+    [Test]
     public async Task EventFilterSelectsCanonicalFieldsInDecoderOrder()
     {
         var method = typeof(OpcUaRegistryEventSubscription).GetMethod(
@@ -93,6 +133,8 @@ public class OpcUaRegistryEventSubscriptionTests
         await Assert.That(selectedPaths).IsEqualTo(
             "0:EventId,0:EventType,0:SourceNode,0:SourceName,0:Time," +
             "2:SourceUrl,2:Subject,2:Epoch,2:MetaEpoch,2:Changed,2:CorrelationId");
+        await Assert.That(filter.WhereClause.Elements.Count).IsEqualTo(0);
+        await Assert.That(clauses.All(clause => string.IsNullOrEmpty(clause.IndexRange))).IsTrue();
     }
 
     [Test]

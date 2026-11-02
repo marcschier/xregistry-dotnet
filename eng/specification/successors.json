@@ -728,6 +728,28 @@
           "sha256": "c07c2bf22d1b6eadecdbc008b0693c9a876f85c1485c375ff57301085ffc8db9"
         }
       ]
+    },
+    {
+      "id": "pr571-f69085fb",
+      "repository": "https://github.com/xregistry/spec",
+      "commit": "f69085fb89b1204dd72d9dca00472a5f331be2d1",
+      "status": "working-draft",
+      "files": [
+        {
+          "path": "workingdrafts/bindings/opcua.md",
+          "owner": "opcua",
+          "kind": "normative",
+          "bytes": 177340,
+          "sha256": "3acea266c84c32e6aca0d1ce53f17cd04edcaaa58f71d923b9b14d9ee9d5e312"
+        },
+        {
+          "path": "LICENSE",
+          "owner": "license",
+          "kind": "license",
+          "bytes": 11349,
+          "sha256": "c07c2bf22d1b6eadecdbc008b0693c9a876f85c1485c375ff57301085ffc8db9"
+        }
+      ]
     }
   ],
   "composition": [
@@ -1144,7 +1166,7 @@
     {
       "source": "pr571-d757328e",
       "path": "workingdrafts/bindings/opcua.md",
-      "role": "normative"
+      "role": "review-only"
     },
     {
       "source": "pr571-d757328e",
@@ -1208,6 +1230,16 @@
     },
     {
       "source": "pr571-d757328e",
+      "path": "LICENSE",
+      "role": "review-only"
+    },
+    {
+      "source": "pr571-f69085fb",
+      "path": "workingdrafts/bindings/opcua.md",
+      "role": "normative"
+    },
+    {
+      "source": "pr571-f69085fb",
       "path": "LICENSE",
       "role": "review-only"
     }

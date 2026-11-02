@@ -213,7 +213,7 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
                 "Discovered xRegistry EventTypes do not share one namespace index.");
         }
 
-        var subscription = new Subscription(s_telemetry.Value, new SubscriptionOptions());
+        var subscription = new Subscription(s_telemetry.Value, new SubscriptionOptions { PublishingEnabled = true });
         var monitoredItem = new MonitoredItem(s_telemetry.Value, new MonitoredItemOptions
         {
             StartNodeId = notifier,

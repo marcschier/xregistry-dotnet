@@ -13,6 +13,7 @@ namespace XRegistry.Bindings.OpcUa;
 public sealed record OpcUaRegistryEvent(
     string Type,
     string Id,
+    NodeId EventType,
     NodeId SourceNode,
     string SourceName,
     string SourceUrl,
@@ -91,7 +92,7 @@ public sealed class OpcUaRegistryEventDecoder
         var correlationId = ReadOptionalString(fields[10], "CorrelationId");
         ValidateOptionalFields(type, epoch, metaEpoch, changed, correlationId);
 
-        decoded = new OpcUaRegistryEvent(type.CanonicalName, Convert.ToBase64String(eventId), sourceNode,
+        decoded = new OpcUaRegistryEvent(type.CanonicalName, Convert.ToBase64String(eventId), eventTypeNode, sourceNode,
             sourceName, sourceUrl, subject, time, epoch, metaEpoch, changed, correlationId);
         return true;
     }
