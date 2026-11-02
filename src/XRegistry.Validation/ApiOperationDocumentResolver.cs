@@ -1125,6 +1125,32 @@ public static partial class ApiOperationDocumentResolver
     private static bool HasRawUriWhitespaceOrControls(string text) =>
         text.Any(static character => char.IsWhiteSpace(character) || char.IsControl(character));
 
+    [GeneratedRegex(@"\A(?:[A-Za-z0-9._~!$&'()*+,;=:@/?-]|%[A-Fa-f0-9]{2})*\z",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
+    private static partial Regex ApiUriFragment();
+
+    private static bool IsHttpMetadataUriReference(string text)
+    {
+        for (var index = 0; index < text.Length; index++)
+        {
+            var character = text[index];
+            if (character == '%')
+            {
+                if (index + 2 >= text.Length || !char.IsAsciiHexDigit(text[index + 1]) ||
+                    !char.IsAsciiHexDigit(text[index + 2])) { return false; }
+                index += 2;
+            }
+            else if (!char.IsAsciiLetterOrDigit(character) && !"-._~:/?#[]@!$&'()*+,;=".Contains(character))
+            {
+                return false;
+            }
+        }
+        var fragmentAt = text.IndexOf('#');
+        var document = fragmentAt < 0 ? text : text[..fragmentAt];
+        return (document.Length == 0 || Uri.IsWellFormedUriString(document, UriKind.RelativeOrAbsolute)) &&
+            (fragmentAt < 0 || ApiUriFragment().IsMatch(text[(fragmentAt + 1)..]));
+    }
+
     private static string Escape(string token) =>
         token.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal);
 

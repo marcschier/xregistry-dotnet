@@ -124,6 +124,11 @@ public static partial class ApiOperationDocumentResolver
             return Failure(ApiOperationResolutionStatus.Invalid, "document.external_docs_url",
                 "An External Documentation Object requires a string url.", path + "/url");
         }
+        if (!IsHttpMetadataUriReference(url.GetString()!))
+        {
+            return Failure(ApiOperationResolutionStatus.Invalid, "document.external_docs_uri",
+                "An External Documentation Object url must be a valid URI reference.", path + "/url");
+        }
         if (documentation.TryGetProperty("description", out var description) &&
             description.ValueKind != JsonValueKind.String)
         {
@@ -262,6 +267,7 @@ public static partial class ApiOperationDocumentResolver
         if (!swagger && scheme.TryGetProperty("$ref", out _))
         {
             var referenceFailure = ValidateSecurityString(scheme, "$ref", pointer, required: true);
+            referenceFailure ??= ValidateSecurityUri(scheme, "$ref", pointer);
             if (referenceFailure is not null || format != "OpenAPI/3.1") { return referenceFailure; }
             return ValidateSecurityString(scheme, "summary", pointer, required: false) ??
                 ValidateSecurityString(scheme, "description", pointer, required: false);
@@ -295,7 +301,8 @@ public static partial class ApiOperationDocumentResolver
                 return string.Equals(scheme.GetProperty("scheme").GetString(), "bearer", StringComparison.OrdinalIgnoreCase)
                     ? ValidateSecurityString(scheme, "bearerFormat", pointer, required: false) : null;
             case "openIdConnect":
-                return ValidateSecurityString(scheme, "openIdConnectUrl", pointer, required: true);
+                return ValidateSecurityString(scheme, "openIdConnectUrl", pointer, required: true) ??
+                    ValidateSecurityUri(scheme, "openIdConnectUrl", pointer);
             case "oauth2":
                 if (swagger)
                 {
@@ -341,6 +348,11 @@ public static partial class ApiOperationDocumentResolver
         {
             failure = ValidateSecurityString(value, "refreshUrl", pointer, required: false);
             if (failure is not null) { return failure; }
+            foreach (var field in new[] { "authorizationUrl", "tokenUrl", "refreshUrl" })
+            {
+                failure = ValidateSecurityUri(value, field, pointer);
+                if (failure is not null) { return failure; }
+            }
         }
         if (!value.TryGetProperty("scopes", out var scopes) || scopes.ValueKind != JsonValueKind.Object)
         {
@@ -372,6 +384,14 @@ public static partial class ApiOperationDocumentResolver
 
     private static ApiOperationResolutionResult InvalidSecurityScheme(string message, string pointer) =>
         Failure(ApiOperationResolutionStatus.Invalid, "document.security_scheme", message, pointer);
+
+    private static ApiOperationResolutionResult? ValidateSecurityUri(JsonElement value, string field, string pointer)
+    {
+        if (!value.TryGetProperty(field, out var uri) || uri.ValueKind != JsonValueKind.String) { return null; }
+        return IsHttpMetadataUriReference(uri.GetString()!) ? null :
+            Failure(ApiOperationResolutionStatus.Invalid, "document.security_uri",
+                "A security declaration address must be a valid URI reference.", pointer + "/" + field);
+    }
 
     private static ApiOperationResolutionResult? ValidateHttpSecurityNames(JsonElement value, string pointer,
         JsonElement entry, bool swagger, CancellationToken cancellationToken)

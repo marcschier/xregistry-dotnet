@@ -32,10 +32,6 @@ public static partial class ApiOperationDocumentResolver
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
     private static partial Regex SmithyXmlName();
 
-    [GeneratedRegex(@"\A(?:[A-Za-z0-9._~!$&'()*+,;=:@/?-]|%[A-Fa-f0-9]{2})*\z",
-        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
-    private static partial Regex SmithyUriFragment();
-
     [GeneratedRegex(@"\A[!#$%&'*+.^_`|~0-9A-Za-z-]+\z",
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
     private static partial Regex SmithyHttpHeaderName();
@@ -52,7 +48,7 @@ public static partial class ApiOperationDocumentResolver
         var fragment = value.IndexOf('#');
         return fragment >= 0 &&
             (fragment == 0 || Uri.IsWellFormedUriString(value[..fragment], UriKind.Relative)) &&
-            SmithyUriFragment().IsMatch(value[(fragment + 1)..]);
+            ApiUriFragment().IsMatch(value[(fragment + 1)..]);
     }
 
     private static ApiOperationResolutionResult ResolveSmithyOperation(JsonElement root, string shapeId,
@@ -1226,7 +1222,7 @@ public static partial class ApiOperationDocumentResolver
             var pattern = queryIndex < 0 ? uri : uri[..queryIndex];
             ValidationContext.Require(uri.StartsWith('/') && !pattern.Contains("//", StringComparison.Ordinal) &&
                 !uri.Contains('#') && !uri.EndsWith('?') &&
-                (queryIndex < 0 || SmithyUriFragment().IsMatch(uri.AsSpan(queryIndex + 1))),
+                (queryIndex < 0 || ApiUriFragment().IsMatch(uri.AsSpan(queryIndex + 1))),
                 uriPath, "document.http_uri", "A Smithy HTTP URI requires a valid origin-form pattern without empty path segments or fragments.");
             var labels = new Dictionary<string, bool>(StringComparer.Ordinal);
             var hasGreedyLabel = false;
@@ -1245,7 +1241,7 @@ public static partial class ApiOperationDocumentResolver
                 }
                 else
                 {
-                    ValidationContext.Require(segment is not ("." or "..") && SmithyUriFragment().IsMatch(segment),
+                    ValidationContext.Require(segment is not ("." or "..") && ApiUriFragment().IsMatch(segment),
                         uriPath, "document.http_uri", "HTTP path segments must be URI literals or whole-segment labels, without dot segments.");
                 }
             }

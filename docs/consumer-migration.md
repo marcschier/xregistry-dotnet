@@ -585,8 +585,7 @@ Documentation Object is not a Reference Object: a `$ref` alone cannot replace
 its required `url`. Documentation addresses and extension contents are retained
 as authored data and never passed to the dependency resolver. Root checks run
 before named or pointer selection; operation checks retain the traversal
-boundaries above. This establishes required fields and JSON shapes only, not
-URL/URI syntax qualification or documentation-address resolution.
+boundaries above. These checks do not resolve documentation addresses.
 Root HTTP `tags` declarations are optional arrays of Tag Objects with required
 string names and optional string descriptions and External Documentation
 Objects. Names must be unique by ordinal comparison; an empty name is still a
@@ -625,8 +624,8 @@ Scope descriptions are strings; Swagger scopes retain opaque `x-` extensions,
 whereas OpenAPI scopes treat every key as a scope name. Empty flow and scope
 maps remain permitted. OpenAPI Reference Objects are not resolved by this
 inline check; Swagger Security Definitions do not permit a Reference Object
-in place of a Security Scheme. Inline checks do not qualify URL/URI syntax or
-scope membership and never retrieve discovery or OAuth addresses.
+in place of a Security Scheme. Inline checks do not validate scope membership
+and never retrieve discovery or OAuth addresses.
 Inline OpenAPI HTTP authentication scheme names must be nonempty RFC 7235
 tokens. The shared token check also serves callback header expressions; spaces,
 controls, non-ASCII characters and token separators are rejected without
@@ -652,8 +651,23 @@ OpenAPI 3.1 permits non-OAuth role names, while OAuth and OpenID requirements
 retain authored scope names in both OpenAPI versions. Scheme classification
 uses the resolved target, not reference siblings. These checks do not validate
 scope membership, retrieve OAuth or discovery metadata, or enforce runtime
-authorization. URI syntax of unused references and documentation addresses
-remains outside this admission check.
+authorization.
+HTTP External Documentation addresses and OpenAPI Security Scheme reference,
+discovery and OAuth addresses must have URI-reference syntax. The bounded
+check rejects whitespace, controls, backslashes, non-ASCII URI characters,
+malformed percent escapes, invalid document syntax and invalid fragment
+characters. Relative references, empty references and encoded UTF-8 remain
+permitted; authored casing and encoding are not normalized. Fragment syntax
+uses the same helper as Smithy namespace references.
+These checks apply to root and tag documentation, reached operations and
+callback ancestors, and inline or used referenced schemes. Unused OpenAPI
+scheme references receive syntax checks without acquisition. Metadata
+fragments are not treated as JSON Pointers, and documentation, discovery and
+OAuth addresses are never retrieved. Swagger OAuth URLs retain the specification's
+recommended URL form rather than inheriting OpenAPI's mandatory URI syntax.
+Syntax admission does not materialize base-resolved metadata addresses,
+authorize schemes or origins, enforce OAuth deployment TLS, or establish full
+RFC qualification.
 OpenAPI 3.1 operation-ID selection also searches `webhooks`, including referenced
 Path Items. Webhook names are exact strings, not slash-prefixed paths; an `x-`
 name in this map is a webhook, not a Paths specification extension. Duplicate
