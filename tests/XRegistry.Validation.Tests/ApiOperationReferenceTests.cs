@@ -164,6 +164,60 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
+    public async Task SwaggerResponseExamplesInheritOnlyTheApiRootProducesAcrossDocumentRelocation()
+    {
+        foreach (var rootProduces in new[] { """["application/json"]""", """["text/plain"]""", "[]" })
+        {
+            foreach (var selector in new[] { "operations/Target", "/paths/~1target/get" })
+            {
+                var remotePath = selector == "operations/Target";
+                var document = new JsonObject { ["swagger"] = "2.0", ["produces"] = JsonNode.Parse(rootProduces),
+                    ["paths"] = JsonNode.Parse(remotePath
+                        ? """{"/target":{"$ref":"https://allowed.test/path#/P"}}"""
+                        : """{"/target":{"get":{"operationId":"Target","responses":{"200":{"$ref":"https://allowed.test/response#/R"}}}}}""") };
+                var calls = new List<string>();
+                var result = await ApiOperationDocumentResolver.ResolveAsync("Swagger/2.0", "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                    resolveReference: (uri, _) =>
+                    {
+                        calls.Add(uri);
+                        var json = uri switch
+                        {
+                            "https://allowed.test/path" => """
+                                {"produces":["text/plain"],"P":{"get":{"operationId":"Target",
+                                "responses":{"200":{"$ref":"response#/R"}}}}}
+                                """,
+                            "https://allowed.test/response" => """
+                                {"produces":["application/json"],"R":{"description":"","examples":{"application/json":null}}}
+                                """,
+                            _ => throw new UnauthorizedAccessException()
+                        };
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(json));
+                    });
+                await Assert.That(string.Join("|", calls)).IsEqualTo(remotePath
+                    ? "https://allowed.test/path|https://allowed.test/response" : "https://allowed.test/response");
+                var valid = rootProduces == """["application/json"]""";
+                await Assert.That(result.Status).IsEqualTo(valid
+                    ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+                if (valid)
+                {
+                    await Assert.That(result.Operation.TryGetProperty("produces", out _)).IsFalse();
+                    await Assert.That(result.Operation.GetProperty("responses").GetProperty("200").GetProperty("$ref").GetString())
+                        .IsEqualTo(remotePath ? "response#/R" : "https://allowed.test/response#/R");
+                    await Assert.That(result.DocumentUri?.AbsoluteUri).IsEqualTo(remotePath ? "https://allowed.test/path" : null);
+                }
+                else
+                {
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.response_example");
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo("$/R/examples/application~1json");
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                }
+            }
+        }
+    }
+
+    [Test]
     public async Task SwaggerResponseExamplesAllowEmptyMapsAndOpaqueValuesWithoutInventingProduces()
     {
         foreach (var json in new[] { "null", "true", "1", "\"$request.body#/id\"", "[]",
