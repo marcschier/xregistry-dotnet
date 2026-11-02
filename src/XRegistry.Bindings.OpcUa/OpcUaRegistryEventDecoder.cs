@@ -237,8 +237,8 @@ public sealed class OpcUaRegistryEventDecoder
             ("model", "updated") => true,
             ("modelsource", "updated") => true,
             ("capabilities", "updated") => true,
-            ("group", "created" or "updated" or "deprecation" or "deleted") => true,
-            ("resource", "created" or "updated" or "deprecation" or "deleted") => true,
+            ("group", "created" or "updated" or "deprecated" or "deleted") => true,
+            ("resource", "created" or "updated" or "deprecated" or "deleted") => true,
             ("version", "created" or "updated" or "deleted") => true,
             _ => false
         };

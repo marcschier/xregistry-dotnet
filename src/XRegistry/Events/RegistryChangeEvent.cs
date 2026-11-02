@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Globalization;
+using System.Numerics;
 
 namespace XRegistry;
 
@@ -32,7 +33,7 @@ public enum RegistryEventAction
     /// <summary>Attributes or containment changed.</summary>
     Updated,
     /// <summary>The Group or Resource deprecation object changed.</summary>
-    Deprecation,
+    Deprecated,
     /// <summary>The entity was deleted.</summary>
     Deleted
 }
@@ -43,7 +44,8 @@ public sealed class RegistryChangeEvent
     private readonly Lazy<RegistryJson> _json;
 
     internal RegistryChangeEvent(string source, string correlationId, DateTimeOffset time, int ordinal,
-        RegistryEventEntity entity, RegistryEventAction action, string subject, string[]? changed)
+        RegistryEventEntity entity, RegistryEventAction action, string subject, string[]? changed,
+        BigInteger? epoch, BigInteger? metaEpoch)
     {
         Source = source;
         CorrelationId = correlationId;
@@ -51,6 +53,8 @@ public sealed class RegistryChangeEvent
         Entity = entity;
         Action = action;
         Subject = subject;
+        Epoch = epoch;
+        MetaEpoch = metaEpoch;
         Id = correlationId + ":" + ordinal.ToString(CultureInfo.InvariantCulture);
         Changed = changed is null ? null : Array.AsReadOnly(changed);
         _json = new Lazy<RegistryJson>(Serialize);
@@ -72,6 +76,10 @@ public sealed class RegistryChangeEvent
     public string Subject { get; }
     /// <summary>Gets the complete merged changed-name list, or null when unavailable or prohibited.</summary>
     public IReadOnlyList<string>? Changed { get; }
+    /// <summary>Gets the final subject entity epoch included in event data when available.</summary>
+    public BigInteger? Epoch { get; }
+    /// <summary>Gets the final Resource Meta epoch included in event data when available.</summary>
+    public BigInteger? MetaEpoch { get; }
     /// <summary>Gets the exact standardized CloudEvents type.</summary>
     public string Type => "io.xregistry." + EntityName(Entity) + "." + ActionName(Action);
 
@@ -88,15 +96,29 @@ public sealed class RegistryChangeEvent
         writer.WriteString("id", Id);
         writer.WriteString("time", Time.ToString("yyyy-MM-dd'T'HH:mm:ss.FFFFFFF'Z'", CultureInfo.InvariantCulture));
         writer.WriteString("xregcorrelationid", CorrelationId);
-        if (Changed is not null)
+        if (Epoch.HasValue || MetaEpoch.HasValue || Changed is not null)
         {
             writer.WriteStartObject("data");
-            writer.WriteStartArray("changed");
-            foreach (var name in Changed)
+            if (Epoch is { } epoch)
             {
-                writer.WriteStringValue(name);
+                writer.WritePropertyName("epoch");
+                writer.WriteRawValue(epoch.ToString(CultureInfo.InvariantCulture));
             }
-            writer.WriteEndArray();
+            if (MetaEpoch is { } metaEpoch)
+            {
+                writer.WritePropertyName("meta.epoch");
+                writer.WriteRawValue(metaEpoch.ToString(CultureInfo.InvariantCulture));
+            }
+            if (Changed is not null)
+            {
+                writer.WriteStartArray("changed");
+                foreach (var name in Changed)
+                {
+                    writer.WriteStringValue(name);
+                }
+                writer.WriteEndArray();
+            }
+
             writer.WriteEndObject();
         }
         writer.WriteEndObject();
@@ -118,7 +140,7 @@ public sealed class RegistryChangeEvent
     {
         RegistryEventAction.Created => "created",
         RegistryEventAction.Updated => "updated",
-        RegistryEventAction.Deprecation => "deprecation",
+        RegistryEventAction.Deprecated => "deprecated",
         RegistryEventAction.Deleted => "deleted",
         _ => throw new ArgumentOutOfRangeException(nameof(action))
     };

@@ -20,6 +20,7 @@ public class OpcUaRegistryEventSubscriptionTests
     private static readonly NodeId s_otherBaseType = new(203u, 2);
     private static readonly NodeId s_registryCreated = new(300u, 2);
     private static readonly NodeId s_groupDeprecated = new(301u, 2);
+    private static readonly NodeId s_resourceDeprecated = new(302u, 2);
     private static readonly NodeId s_unknown = new(399u, 2);
     private static readonly byte[] s_continuationPoint = [1];
     private static readonly NamespaceTable s_namespaceUris =
@@ -40,14 +41,16 @@ public class OpcUaRegistryEventSubscriptionTests
         proxy.GeneratedEvents[s_baseType] =
         [
             new(s_groupDeprecated, "GroupDeprecatedEventType"),
+            new(s_resourceDeprecated, "ResourceDeprecatedEventType"),
         ];
 
         var eventTypes = await OpcUaRegistryEventSubscription.DiscoverEventTypesAsync(
             session, s_namespaceUris, s_notifier);
 
-        await Assert.That(eventTypes.Count).IsEqualTo(2);
+        await Assert.That(eventTypes.Count).IsEqualTo(3);
         await Assert.That(eventTypes[s_registryCreated]).IsEqualTo("io.xregistry.registry.created");
-        await Assert.That(eventTypes[s_groupDeprecated]).IsEqualTo("io.xregistry.group.deprecation");
+        await Assert.That(eventTypes[s_groupDeprecated]).IsEqualTo("io.xregistry.group.deprecated");
+        await Assert.That(eventTypes[s_resourceDeprecated]).IsEqualTo("io.xregistry.resource.deprecated");
         await Assert.That(proxy.BrowseRequests.Any(request =>
             request.NodeId == s_registryType && request.ReferenceTypeId == ReferenceTypeIds.GeneratesEvent)).IsTrue();
         await Assert.That(proxy.BrowseRequests.Any(request =>
@@ -70,7 +73,7 @@ public class OpcUaRegistryEventSubscriptionTests
         var eventTypes = await OpcUaRegistryEventSubscription.DiscoverEventTypesAsync(
             session, s_namespaceUris, s_notifier);
 
-        await Assert.That(eventTypes[s_groupDeprecated]).IsEqualTo("io.xregistry.group.deprecation");
+        await Assert.That(eventTypes[s_groupDeprecated]).IsEqualTo("io.xregistry.group.deprecated");
         await Assert.That(proxy.BrowseRequests.Any(request =>
             request.NodeId == s_notifier && request.ReferenceTypeId == ReferenceTypeIds.HasNotifier)).IsTrue();
     }

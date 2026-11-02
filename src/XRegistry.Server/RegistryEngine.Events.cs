@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Globalization;
+using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -139,33 +140,48 @@ public sealed partial class RegistryEngine
                     changed.Add(ResourceDefinition(path).Singular);
                 }
 
-                interaction.Record(kind, action, entity.Key, action == RegistryEventAction.Updated ? changed : null);
+                RecordEvent(interaction, kind, action, entity.Key,
+                    action == RegistryEventAction.Updated ? changed : null);
                 if (path.Kind == RegistryPathKind.Group && (entity.IsNew || entity.Deleted))
                 {
-                    interaction.Record(RegistryEventEntity.Registry, RegistryEventAction.Updated, "/",
+                    RecordEvent(interaction, RegistryEventEntity.Registry, RegistryEventAction.Updated, "/",
                         [path.GroupType!, path.GroupType + "count", "epoch", "modifiedat"]);
                 }
                 else if (path.Kind == RegistryPathKind.Resource && (entity.IsNew || entity.Deleted))
                 {
-                    interaction.Record(RegistryEventEntity.Group, RegistryEventAction.Updated,
-                        ServerJson.Key(RegistryPath.ForGroup(path.GroupType!, path.GroupId!)),
-                        [path.ResourceType!, path.ResourceType + "count", "epoch", "modifiedat"]);
+                    var groupKey = ServerJson.Key(RegistryPath.ForGroup(path.GroupType!, path.GroupId!));
+                    var group = _entities.GetValueOrDefault(groupKey) ?? Find(groupKey);
+                    if (group is null)
+                    {
+                        throw new InvalidOperationException($"Cannot prepare the collection event without Group '{groupKey}'.");
+                    }
+
+                    if (!group.Deleted)
+                    {
+                        RecordEvent(interaction, RegistryEventEntity.Group, RegistryEventAction.Updated,
+                            groupKey, [path.ResourceType!, path.ResourceType + "count", "epoch", "modifiedat"]);
+                    }
                 }
                 else if (path.Kind == RegistryPathKind.Version)
                 {
                     var resourceKey = ResourceKey(path);
                     _entities.TryGetValue(resourceKey, out var resource);
                     resource ??= Find(resourceKey);
-                    if (entity.IsNew || entity.Deleted)
+                    if (resource is null)
                     {
-                        interaction.Record(RegistryEventEntity.Resource, RegistryEventAction.Updated, resourceKey,
+                        throw new InvalidOperationException($"Cannot prepare the collection event without Resource '{resourceKey}'.");
+                    }
+
+                    if (resource is { Deleted: false } && (entity.IsNew || entity.Deleted))
+                    {
+                        RecordEvent(interaction, RegistryEventEntity.Resource, RegistryEventAction.Updated, resourceKey,
                             ["versions", "versionscount", "meta.epoch", "meta.modifiedat"]);
                     }
 
-                    if (resource is not null && (Id(entity) == ServerJson.Text(resource.Attributes, "defaultversionid") ||
+                    if (resource is { Deleted: false } && (Id(entity) == ServerJson.Text(resource.Attributes, "defaultversionid") ||
                         Id(entity) == ServerJson.Text(resource.Original, "defaultversionid")))
                     {
-                        interaction.Record(RegistryEventEntity.Resource, RegistryEventAction.Updated, resourceKey, changed);
+                        RecordEvent(interaction, RegistryEventEntity.Resource, RegistryEventAction.Updated, resourceKey, changed);
                     }
                 }
 
@@ -176,38 +192,47 @@ public sealed partial class RegistryEngine
                     var next = DefaultVersionState(entity, previous: false);
                     if (previous.Metadata.HasValue && next.Metadata.HasValue)
                     {
-                        interaction.RecordDefaultVersionChange(entity.Key, previous.Metadata.Value, next.Metadata.Value);
+                        if (CurrentDefaultVersionEpoch(entity) is { } epoch)
+                        {
+                            interaction.RecordDefaultVersionChange(entity.Key, previous.Metadata.Value, next.Metadata.Value,
+                                epoch, ServerJson.Unsigned(entity.Attributes["epoch"]!, entity.Key + "/meta"));
+                        }
+                        else
+                        {
+                            RecordEvent(interaction, RegistryEventEntity.Resource, RegistryEventAction.Updated,
+                                entity.Key);
+                        }
+
                         if (previous.HasDocument || next.HasDocument)
                         {
                             // Stored Documents are Version attributes even though their bytes are separate from metadata.
-                            interaction.Record(RegistryEventEntity.Resource, RegistryEventAction.Updated, entity.Key,
+                            RecordEvent(interaction, RegistryEventEntity.Resource, RegistryEventAction.Updated, entity.Key,
                                 [ResourceDefinition(path).Singular]);
                         }
                     }
                     else
                     {
-                        interaction.Record(RegistryEventEntity.Resource, RegistryEventAction.Updated, entity.Key);
+                        RecordEvent(interaction, RegistryEventEntity.Resource, RegistryEventAction.Updated, entity.Key);
                     }
                 }
 
                 if (!entity.Deleted && kind is RegistryEventEntity.Group or RegistryEventEntity.Resource &&
                     !ServerJson.Equal(entity.Original["deprecated"], entity.Attributes["deprecated"]))
                 {
-                    interaction.Record(kind, RegistryEventAction.Deprecation, entity.Key,
-                        Changed(entity.Original["deprecated"] as JsonObject ?? new(), entity.Attributes["deprecated"] as JsonObject ?? new()));
+                    interaction.Record(kind, RegistryEventAction.Deprecated, entity.Key);
                 }
             }
 
             if (_modelChanged)
             {
-                interaction.Record(RegistryEventEntity.Registry, RegistryEventAction.Updated, "/", ["model", "modelsource"]);
+                RecordEvent(interaction, RegistryEventEntity.Registry, RegistryEventAction.Updated, "/", ["model", "modelsource"]);
                 interaction.Record(RegistryEventEntity.Model, RegistryEventAction.Updated, "/model");
                 interaction.Record(RegistryEventEntity.ModelSource, RegistryEventAction.Updated, "/modelsource");
             }
 
             if (_capabilitiesChanged)
             {
-                interaction.Record(RegistryEventEntity.Registry, RegistryEventAction.Updated, "/", ["capabilities"]);
+                RecordEvent(interaction, RegistryEventEntity.Registry, RegistryEventAction.Updated, "/", ["capabilities"]);
                 interaction.Record(RegistryEventEntity.Capabilities, RegistryEventAction.Updated, "/capabilities",
                     Changed(ServerJson.Object(_previousCapabilities.Metadata), ServerJson.Object(_capabilities.Metadata)));
             }
@@ -229,6 +254,85 @@ public sealed partial class RegistryEngine
                 ["correlationid"] = correlationId,
                 ["events"] = events
             }, _engine.Limits.Json with { MaxBytes = _engine.Limits.MaxResponseBytes }));
+        }
+
+        private void RecordEvent(RegistryInteractionEvents interaction, RegistryEventEntity kind,
+            RegistryEventAction action, string subject, IEnumerable<string>? changed = null)
+        {
+            if (action is not (RegistryEventAction.Created or RegistryEventAction.Updated))
+            {
+                interaction.Record(kind, action, subject, changed);
+                return;
+            }
+
+            var entity = _entities.GetValueOrDefault(subject) ?? Find(subject);
+            if (entity is null || entity.Deleted)
+            {
+                throw new InvalidOperationException($"Cannot prepare the final epoch for event subject '{subject}'.");
+            }
+
+            if (kind == RegistryEventEntity.Resource)
+            {
+                var (epoch, metaEpoch) = CurrentResourceEventEpochs(entity);
+                interaction.Record(kind, action, subject, changed, epoch, metaEpoch);
+                return;
+            }
+
+            if (kind is RegistryEventEntity.Registry or RegistryEventEntity.Group or RegistryEventEntity.Version)
+            {
+                interaction.Record(kind, action, subject, changed,
+                    ServerJson.Unsigned(entity.Attributes["epoch"]!, subject));
+                return;
+            }
+
+            interaction.Record(kind, action, subject, changed);
+        }
+
+        private BigInteger? CurrentDefaultVersionEpoch(Entity resource)
+        {
+            var target = resource.Attributes["xref"] is JsonValue reference &&
+                reference.TryGetValue<string>(out var targetKey)
+                ? _entities.GetValueOrDefault(targetKey) ?? Find(targetKey)
+                : resource;
+            if (target is null || target.Deleted || target.Attributes["xref"] is not null)
+            {
+                return null;
+            }
+
+            var defaultId = ServerJson.Text(target.Attributes, "defaultversionid");
+            if (defaultId is null)
+            {
+                return null;
+            }
+
+            var key = target.Key + "/versions/" + Uri.EscapeDataString(defaultId);
+            var version = _entities.GetValueOrDefault(key) ?? Find(key);
+            return version is null || version.Deleted ? null : ServerJson.Unsigned(version.Attributes["epoch"]!, key);
+        }
+
+        private (BigInteger Epoch, BigInteger MetaEpoch) CurrentResourceEventEpochs(Entity resource)
+        {
+            var target = resource.Attributes["xref"] is JsonValue reference &&
+                reference.TryGetValue<string>(out var targetKey)
+                ? _entities.GetValueOrDefault(targetKey) ?? Find(targetKey)
+                : resource;
+            if (target is not null && !target.Deleted && target.Attributes["xref"] is null)
+            {
+                var defaultId = ServerJson.Text(target.Attributes, "defaultversionid");
+                if (defaultId is not null)
+                {
+                    var versionKey = target.Key + "/versions/" + Uri.EscapeDataString(defaultId);
+                    var version = _entities.GetValueOrDefault(versionKey) ?? Find(versionKey);
+                    if (version is not null && !version.Deleted)
+                    {
+                        return (ServerJson.Unsigned(version.Attributes["epoch"]!, versionKey),
+                            ServerJson.Unsigned(target.Attributes["epoch"]!, target.Key + "/meta"));
+                    }
+                }
+            }
+
+            var localMetaEpoch = ServerJson.Unsigned(resource.Attributes["epoch"]!, resource.Key + "/meta");
+            return (localMetaEpoch, localMetaEpoch);
         }
 
         private (JsonElement? Metadata, bool HasDocument) DefaultVersionState(Entity resource, bool previous)

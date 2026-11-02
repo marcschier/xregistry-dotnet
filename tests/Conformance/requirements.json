@@ -88755,8 +88755,8 @@
       ],
       "text": "The key words \"MUST\", \"MUST NOT\", \"REQUIRED\", \"SHALL\", \"SHALL NOT\", \"SHOULD\", \"SHOULD NOT\", \"RECOMMENDED\", \"MAY\", and \"OPTIONAL\" in this document are to be interpreted as described in [RFC 2119](https://tools.ietf.org/html/rfc2119).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
+        "status": "informative",
+        "note": "RFC 2119 interpretation, not an executable feature. This proposal reviews the entire active HTTP source, including subordinate rules, wire sketches and examples; implementation suggestions are not execution receipts. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
         "roles": []
       },
       "implementation": {
@@ -88788,9 +88788,12 @@
       ],
       "text": "For clarity, OPTIONAL attributes (specification-defined and extensions) are OPTIONAL for clients to use, but the servers' responsibility will vary. Server-unknown extension attributes MUST be silently stored in the backing datastore. Specification-defined attributes and server-known extension attributes MUST generate an error if the corresponding feature is not supported or enabled. However, as with all attributes, if accepting the attribute results in a bad state (such as exceeding a size limit or resulting in a security issue), then the server MAY choose to reject the request.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Model-permitted extension values pass through validation, Merge and publication without feature-specific handlers. Closed-model unknown names remain errors, not silently accepted extensions. Disabled metadata and finite host budgets are explicit rejections. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -88821,8 +88824,8 @@
       ],
       "text": "In the pseudo JSON format snippets `?` means the preceding item is OPTIONAL, `*` means the preceding item MAY appear zero or more times, and `+` means the preceding item MUST appear at least once. The presence of the `#` character means the remaining portion of the line is a comment. Whitespace characters in the JSON snippets are used for readability and are not normative.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
+        "status": "informative",
+        "note": "Defines pseudocode cardinality and comments. The sketches were interpreted as notation, not JSON payloads containing comments, ellipses or optionality markers. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
         "roles": []
       },
       "implementation": {
@@ -88853,9 +88856,12 @@
       ],
       "text": "While these APIs are shown to be at the root path of a host, implementations MAY choose to prefix them as necessary. However, the same prefix MUST be used consistently for all APIs in the same Registry instance.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "MapXRegistry applies one MountPath/PathBase prefix; navigation is generated from configured PublicRoot, never Host. The client appends escaped relative paths below its one configured root. Error subjects have a separate prefix defect recorded on the request_path clause. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -88885,9 +88891,12 @@
       ],
       "text": "If an OPTIONAL HTTP path is not supported by an implementation, then any use of that API MUST generate an error ([api_not_found](#api_not_found)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The implementation supplies the listed optional administrative paths. Unsupported administrative subpaths produce HTTP 404 api_not_found. A supported but capability-disabled metadata API instead uses Core not_available; that distinction is deliberate and directly asserted. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -88916,9 +88925,12 @@
       ],
       "text": "If an HTTP method is not supported for a supported HTTP path, then an error ([action_not_supported](./spec.md#action_not_supported)) MUST be generated.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "TryAction, model-aware Allowed and the adapter reject unsupported verbs before body consumption. The catalog emits 405 action_not_supported and Allow; document PATCH uses the more specific details_required error. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -88947,9 +88959,11 @@
       ],
       "text": "Implementations MAY support extension APIs, however, the following rules apply:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Permission to add APIs, not a requirement to provide an arbitrary extension-API facility. The mapped handler implements explicit registry routes and the defined shortself mechanism; extension path restrictions are reviewed in the following records. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -88978,9 +88992,11 @@
       ],
       "text": "- New HTTP paths that extend non-root paths MUST NOT be defined as they might conflict with URLs of entities within the system.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "No custom subordinate administrative API is registered. The adapter rejects /model/extra and similar paths, while RegistryPath permits only the defined entity, meta and versions shapes. Shortself navigation reuses canonical routes rather than adding arbitrary child APIs. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -89009,9 +89025,11 @@
       ],
       "text": "- New root HTTP paths MAY be defined as long as they do not use Registry-level HTTP paths or attribute names. This includes extension and Groups collection attribute names.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Optional root-extension permission. No arbitrary root extension registry is adopted by MapXRegistry; independently mapped application APIs remain a host integration responsibility. This is not evidence that arbitrary host extensions have been collision-checked. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -89165,9 +89183,11 @@
       ],
       "text": "In the [core specification](./spec.md) there is a discussion about [\"no-code servers\"](./spec.md#design-no-code-servers). In the case of HTTP, simple file servers SHOULD support exposing Resources where the HTTP body response contains the Resource's domain-specific \"document\" as well as exposing the serialization of the Resource's xRegistry metadata via the [`$details`](#resource-metadata-vs-resource-document) suffix on the URL path. This can be achieved by creating a secondary, sibling, file on disk with `$details` at the end of its filename.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Conditional advice to no-code file-server producers. This HTTP review does not claim a static-file deployment or re-review the File specification. The actual dynamic host's Document/$details pairing is covered by the Resource representation records. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -89227,9 +89247,12 @@
       ],
       "text": "Creating or updating entities MAY be done using HTTP `PUT`, `PATCH` or `POST` methods:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Introduces the five entity/collection mutation patterns. Their concrete body, dispatch and response obligations are reviewed separately below, rather than treating this introductory permission as additional executed evidence. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -89258,9 +89281,12 @@
       ],
       "text": "See the [`Request Flags`](#request-flags--query-parameters) section for the list of flags/query parameters that MAY be used for each API.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Cross-reference to per-operation flag rules. RequestFlags and query/projection consumers were inspected; concrete flag syntax, applicability and defects are recorded under the flag clauses. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -89289,9 +89315,12 @@
       ],
       "text": "The `PUT` variant MUST adhere to the following:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "PUT umbrella introducing lines 222-235. The individual rules have their own decisions and gaps; this heading is not a separate claim that every PUT permutation has direct tests. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -89320,9 +89349,12 @@
       ],
       "text": "- The URL MUST be of the form: `<PATH-TO-ENTITY>`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "RegistryPath separates entity and collection shapes; Allowed does not grant PUT to collections. Client relative-path construction preserves the requested entity below the registry prefix. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -89351,9 +89383,12 @@
       ],
       "text": "- The HTTP body MUST contain the full updated serialization of the entity to be processed.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The adapter distinguishes a nonempty JSON metadata body from exact Document input, then Replace dispatches a full entity replacement. Body presence is directly tested, but complete metadata replacement of previously populated mutable attributes needs a direct operation vector. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -89382,9 +89417,12 @@
       ],
       "text": "- The entity processed MUST either be created (if it does not already exist), or updated (if it does exist).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "EnsureGroup/EnsureResource and ApplyVersion select existing staged/snapshot identities or create new entities. Actual HTTP PUT creates a Resource, then updates the same identity and advances its epoch without creating another Version. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -89413,9 +89451,11 @@
       ],
       "text": "- Any mutable attribute which is either missing or present with a value of `null`, MUST be interpreted as a request to delete the attribute.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Metadata Replace builds a fresh mutable attribute map, and completion removes optional nulls. Existing null-deletion assertions concern PATCH/header semantics; they do not establish omitted-attribute deletion for metadata PUT. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -89444,9 +89484,12 @@
       ],
       "text": "- Excluding any Registry collection attributes, all mutable attributes specified MUST be a full serialization of the attribute. Any missing nested attribute MUST be interpreted as a request to delete the attribute.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Merge assigns each submitted complex value as one DeepClone, not a recursive merge. Scalar-map headers have direct replacement tests; nested metadata objects/arrays on entity PUT are a separate direct-evidence gap. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -89476,9 +89519,11 @@
       ],
       "text": "- After processing the request, if there are any missing REQUIRED attributes then an error ([required_attribute_missing](./spec.md#required_attribute_missing)) MUST be generated.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Complete checks required model attributes before publication and supplies required_attribute_missing with the affected entity and list argument. An actual HTTP Resource creation missing a required Version field asserts the exact error contract. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -89507,9 +89552,12 @@
       ],
       "text": "The `PATCH` variant when directed at a single entity, MUST adhere to the `PUT` semantics defined above with the following exceptions:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "PATCH umbrella. The following records review preserved omissions, null deletion, details_required and create-with-required-values independently. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -89539,9 +89587,12 @@
       ],
       "text": "- Any mutable attribute which is missing MUST be interpreted as a request to leave it unchanged. However, modifying some other attribute (or some other server semantics) MAY modify it. A value of `null` MUST be interpreted as a request to delete the attribute.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "PATCH preserves omitted ordinary attributes and interprets explicit null as deletion. Required/default and generated-field semantics are applied during completion, not by inventing values in the client codec. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -89570,9 +89621,12 @@
       ],
       "text": "- When processing a Resource or Version, whose Resource type has its [`hasdocument`](./model.md#groupsstringresourcesstringhasdocument) model aspect set to `true`, the URL accessing the entity MUST include the `$details` suffix, and MUST generate an error ([details_required](#details_required)) in the absence of the `$details` suffix. This is because when it is absent, the processing of the HTTP `xRegistry-` headers are already defined with \"PATCH\" semantics so a normal `PUT` or `POST` can be used instead. Using `PATCH` in this case would mean that the request is trying to \"patch\" the Resource's \"document\", which this specification does not support at this time.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Allowed removes PATCH for document-bearing Resource/Version paths lacking $details, and the adapter returns the specific 405 details_required rather than attempting to patch bytes. Metadata-only types remain patchable without the suffix. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -89603,9 +89657,12 @@
       ],
       "text": "- `PATCH` MAY be used to create new entities, but as with any of the create operations, any missing REQUIRED attributes MUST generate an error ([required_attribute_missing](./spec.md#required_attribute_missing)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "PATCH shares Ensure/New and Complete with PUT, so creation is implemented and required fields are enforced. Existing required-field HTTP evidence is PUT, not PATCH creation. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -89634,9 +89691,12 @@
       ],
       "text": "The `POST` variant when directed at a single entity other than a Resource, MUST adhere to the following:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Introduces POST-to-owner collection-map rules; supported owners are Registry and Group. Concrete map validation, unchanged owner metadata and response selection follow below. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -89665,9 +89725,12 @@
       ],
       "text": "- The HTTP body MUST contain only a JSON map where the key MUST be the attribute (collection) name of a nested xRegistry collection. The value of each map entry MUST be a map of nested entities where the key is the entity's `<SINGULAR>id` and the value is a serialization of the entity itself.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "ApplyContainerAsync(collectionsOnly=true) accepts model collection names, and ApplyCollectionAsync requires ID-keyed object entries. Public engine tests assert the owner/collection envelope and reject ordinary owner attributes with groups_only/resources_only. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -89696,9 +89759,11 @@
       ],
       "text": "- The processing of each top-level map entry MUST follow the same rules as defined for `POST` to the nested xRegistry collection where the map entry's value is the input.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Each owner-map entry calls the same ApplyCollectionAsync implementation used by POST to that collection. Existing owner POST assertions do not compare mixed collection types against equivalent direct collection POST operations. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -89727,9 +89792,11 @@
       ],
       "text": "- The root of the JSON object in the HTTP body MUST NOT contain any attributes of the targeted entity other than the nested collections, and none of that entity's attribute are to be updated. This operation allows for an update to multiple nested collections in a single operation without modifying the owning entity.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "collectionsOnly skips Merge on the owner and rejects noncollection attributes after requested ignore processing. Membership-driven counts/epochs remain Core-managed effects. Rejection is tested; preservation of a preexisting owner's ordinary attributes needs its own direct assertion. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -89758,9 +89825,11 @@
       ],
       "text": "- The response message MUST be a map of the nested entity types with just the changed entities that were processed. No top-level entity attributes are to appear - similar to the request message.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "HTTP-SEM-002 is fixed: validated owner POST retains its normalized collection input for response selection, rather than re-reading raw configuration fields. Actual HTTP tests verify multiple Group collections, exact processed keys, unchanged ignored configuration and deterministic empty responses for only-ignored input. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -89789,9 +89858,12 @@
       ],
       "text": "The `POST` variant when directed at a Resource entity, MUST adhere to the following:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Resource POST umbrella, distinct from POST to Registry/Group owners. The concrete single-Version body and PUT-like processing rules are reviewed next. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -89821,9 +89893,12 @@
       ],
       "text": "- The HTTP body MUST contain the serialization of the single Version to be created, however, it MAY include Resource-level read-only attributes (such as `versionscount`), and if they are present, then they MUST be silently ignored by the server. This is done as a convenience for users who might have obtained the Version's serialization from a query to a Resource (not a specific Version), in which case those extra Resource-level attributes would be included in the serialization.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Resource POST calls VersionInput and ApplyVersion for one Version; VersionInput strips read-only Resource projection fields. Existing POST tests use Version input, not a copied Resource response carrying versionscount/metaurl. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -89852,9 +89927,11 @@
       ],
       "text": "- The 'PUT' variant rules above MUST apply to the new Version entity.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Metadata Resource POST passes patch=false for the selected Version; Document mode preserves the special header PATCH semantics. Direct POST replacement of an existing explicitly selected Version is not asserted by the creation-focused tests. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -89883,9 +89960,12 @@
       ],
       "text": "The `PATCH` variant when directed at an xRegistry collection, MUST adhere to the following:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Introduces collection PATCH. Individual keyed-map, subset-value and per-entity PATCH obligations are separately reviewed below. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -89945,9 +90025,12 @@
       ],
       "text": "- Each value in the map MUST contain just the attributes that are to be updated for that entity.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Collection PATCH forwards partial entity objects with patch=true; it does not require a full entity serialization. Existing public operation and actual HTTP tests exercise partial name/rank changes without supplying generated attributes. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -89976,9 +90059,11 @@
       ],
       "text": "- The processing of each individual entity in the map MUST follow the same rules as defined for `PATCH` of a single entity above.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "All three collection branches forward the PATCH selector to the same entity mutation routines. Direct subset/filter assertions cover Groups and Resources; Version collection omission/null/default behavior lacks an equivalent direct operation case. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90007,9 +90092,12 @@
       ],
       "text": "The `POST` variant when directed at an xRegistry collection MUST adhere to the following:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Collection POST umbrella; the following keyed-map, replacement and missing-Version requirements carry the behavioral decisions. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90069,9 +90157,12 @@
       ],
       "text": "- Each value in the map MUST be the full serialization of the entity to be either added or updated. Note that `POST` does not support deleting entities from a collection, so a separate delete operation might be needed if there are entities that need to be removed.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "ApplyCollectionAsync iterates supplied entries only and passes replacement semantics for POST; it never deletes omitted members. Membership retention is asserted, but replacing an existing member's omitted ordinary fields is not directly covered. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90100,9 +90191,11 @@
       ],
       "text": "- The processing of each individual entity in the map MUST follow the same rules as defined for `PUT` above.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Collection POST invokes the same ApplyContainer/ApplyResource/ApplyVersion paths as PUT with patch=false. This is implementation evidence, not a substitute for the missing existing-member replacement comparison. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90131,9 +90224,11 @@
       ],
       "text": "- In the case of an empty map of Versions and the Resource being referenced does not exist yet, an error ([missing_versions](#missing_versions)) MUST be generated because a Resource can not exist without any Versions. If the intent was to create a Resource with a Version that has just default values, then there are other APIs that can be used that make that intent clear (e.g. `PUT` to the Resource itself).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "ApplyCollectionAsync explicitly throws missing_versions for an empty Version map when the owning Resource is absent. The matching 400 HTTP catalog entry exists. No direct existing test assertion for this exact absent-versus-existing boundary was found. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90162,9 +90257,11 @@
       ],
       "text": "- If an entity with the specified `<SINGULAR>id` already exists then it MUST be interpreted as a request to update the existing entity. Otherwise, it MUST be interpreted as a request to create a new entity with that `<SINGULAR>id`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Find/Ensure/New determines update versus creation from the canonical target identity. Escaped spellings share identity, while case-conflicting sibling IDs are rejected rather than creating ambiguous duplicates. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90193,9 +90290,12 @@
       ],
       "text": "- Unless otherwise noted, all non-xRegistry collection attributes present MUST be a full representation of their values. This means any complex attributes (e.g. objects, maps), MUST be fully replaced by the incoming value.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Merge overwrites submitted attributes as complete values, including on PATCH. Header-map replacement is directly established, but a nested metadata object replacement is not proved by a scalar-map header test. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90224,9 +90324,12 @@
       ],
       "text": "- A request to update, or delete, a read-only attribute MUST be silently ignored. However, a request that includes a `<SINGULAR>id` MUST be compared with the entity's current value and if it differs then an error ([mismatched_id](./spec.md#mismatched_id)) MUST be generated. This includes both `<RESOURCE>id` and `versionid` in the case of Resources and Versions. This is to prevent accidentally updating the wrong entity.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Ordinary read-only input is discarded before value validation, but engine Guard/CheckId preserves Resource ID and versionid comparisons. The header codec similarly retains identity/epoch guards, including exact large integers, instead of treating them as ignorable read-only fields. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90255,9 +90358,11 @@
       ],
       "text": "- A request to update a mutable attribute with an invalid value MUST generate an error ([invalid_attribute](./spec.md#invalid_attribute)) (this includes deleting a mandatory mutable attribute that has no default value defined).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "HTTP-SEM-003 is fixed and directly verified: explicit null removal of an existing required value reports invalid_attribute with the actual attribute name. Top-level/nested objects, array/map items, Version/projection and Document-header mutations preserve rollback. Initial absence or PUT omission keeps required_attribute_missing; defaults still reset. This is diagnostic classification, not permission to accept invalid state. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90286,9 +90391,11 @@
       ],
       "text": "- Registry collection attributes MUST be processed per the rules specified in the [Updating Nested Registry Collections](./spec.md#updating-nested-registry-collections) section.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Nested registry collections are dispatched separately from ordinary attributes; supplied children are processed without replacing whole collections. Nested Version input takes precedence over the Resource default projection, and nested failures roll back the request. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90318,9 +90425,12 @@
       ],
       "text": "- Write operations that are meant to include xRegistry metadata in the HTTP body MUST NOT be empty, and if detected MUST generate an error ([missing_body](#missing_body)). To denote an empty set of metadata, `{}` MUST be used instead.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The adapter reads bounded metadata bytes and rejects a zero-length write with missing_body; {} is a present JSON object. This rule is not applied to Document-mode writes, where an empty body is real content. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90349,9 +90459,12 @@
       ],
       "text": "- Any error during the processing of an entity, or its nested entities, MUST result in the entire request being rejected and no updates performed.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The engine stages the entire mutation, authorizes affected descendants, validates content, renders and prepares headers before one persistence candidate is committed. Failures before publication have no effects. Transport failure after commit is explicitly not advertised as rollback or retried. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90380,9 +90493,12 @@
       ],
       "text": "- When a write operation request includes the Resource/Version's metadata in the HTTP body, then the inclusion of any xRegistry `xRegistry-` HTTP headers MUST generate an error ([extra_xregistry_header](#extra_xregistry_header)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "All metadata-body writes reject any xRegistry-prefixed request header before parsing the body. The actual HTTP extra-header assertion targets a Group; the required Resource/Version $details combinations are not directly asserted through the server. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90411,9 +90527,12 @@
       ],
       "text": "- When a write operation request includes a domain-specific document in the HTTP body, and the `<RESOURCE>url` xRegistry HTTP header is present with a non-null value, the HTTP body MUST be empty. If the `<RESOURCE>url` attribute is absent, then the contents of the HTTP body (even if empty) are to be used as the entity's document.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "ApplyDocument requires an explicit external-reference policy and probes for an empty body when a non-null URL is supplied; otherwise it consumes even zero bytes as the Document. The client rejects a nonempty or unknowably empty URL upload before credentials. The server's URL-plus-nonempty-body boundary lacks direct HTTP evidence. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90442,9 +90561,12 @@
       ],
       "text": "- The `<RESOURCE>` and `<RESOURCEbase64>` attributes MUST never appear as xRegistry HTTP headers, and if present on a write request MUST generate an error ([extra_xregistry_header](#extra_xregistry_header)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The shared codec rejects both Document-content header names before type lookup, even for null, and omits them from response headers. The adapter preserves the standardized extra_xregistry_header diagnostic. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90473,9 +90595,12 @@
       ],
       "text": "A successful response MUST return the same response as a `GET` to the entity (or entities) processed, showing their current representation in the same format (`$details` variant or not) as the request, with the following exceptions:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "HTTP-SEM-002's ignored owner-input rendering defect is fixed and covered by actual root POST tests. Writes and reads still share RenderAsync. This broad clause remains pending because full metadata and optional-header equivalence across every write route was not established by the focused fixes. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90504,9 +90629,11 @@
       ],
       "text": "- In the `POST` case, or a `PATCH` directed to an xRegistry collection, the result MUST contain only the entities processed, not the entire Registry collection.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Collection POST/PATCH selection and readonly omission remain unchanged. Root POST now selects from normalized owner collections, and actual multi-Group-type tests exclude old entries and ignored configuration while returning exactly the processed IDs. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90535,9 +90662,12 @@
       ],
       "text": "- In the `PUT` or `PATCH` cases that are directed to a single entity, for a newly created entity, the HTTP status MUST be `201 Created`, and it MUST include an HTTP `Location` header with a URL to the newly created entity. Note that this URL MUST be the same as the `self` attribute of that entity.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "SetOutcome assigns Created and Location using the selected representation's self URL. A real Document PUT asserts 201 and its literal Location; metadata/Version/Group PATCH creation and Location=self equality are not directly covered. External-document 303 follows the later explicit redirect variants. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90566,9 +90696,12 @@
       ],
       "text": "- In the `PUT` or `PATCH` cases directed at a single Resource or Version, if a new Version was created, the response MUST include a `Content-Location` HTTP header to the newly created Version entity, and it MUST be the same as the Version's `self` attribute.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "SetOutcome supplies ContentLocation from the newly created Version and adds $details only for a document-bearing metadata response. PreparedResponse writes that URI. Existing creation tests do not assert Content-Location or equality with the new Version's self. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90597,9 +90730,11 @@
       ],
       "text": "- The responses MUST NOT include any inlineable attributes (such as `<RESOURCE>`, `<RESOURCE>base64` or nested objects/collections) unless requested.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "RenderEntity/RenderResourcePart omit collection bodies, meta, configuration and inline Document attributes unless selected by Inline. Ordinary extension objects are not confused with the Core list of inlineable attributes. Export and doc have their explicit specialized projections. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90628,9 +90763,12 @@
       ],
       "text": "Otherwise an HTTP `200 OK` without an HTTP `Location` header MUST be returned.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Existing ordinary updates remain Success/200 and only explicit creation/redirect branches set Location. Tests assert update 200 but not the absence of Location. Later Resource POST/redirect examples provide the specialized status exceptions to this general sentence. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90659,9 +90797,12 @@
       ],
       "text": "Note that the response MUST be generated applying the semantics of any [request flags](#request-flags--query-parameters) specified in the request URL (e.g. `?inline`).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "RequestFlags is parsed before mutation and RenderAsync applies flags to the response, not as a filter on which requested entities are mutated. A response filter can omit a changed child without preventing its persisted update; inline/binary operate on representation. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90690,9 +90831,12 @@
       ],
       "text": "All API responses, including errors, SHOULD include a `Link` HTTP header of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "RootHeaders seeds both successful and problem responses with the trusted xregistry-root link, and pagination appends rather than replaces it. This covers responses produced by the mapped handler, not transport errors rejected by Kestrel before routing. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90722,9 +90866,11 @@
       ],
       "text": "- When serializing Resources and Versions, whose Resource type's [`hasdocument`](./model.md#groupsstringresourcesstringhasdocument) aspect is set to `true`, then this URL MUST include the `$details` suffix appended to its `<SINGULAR>id` if it is serialized in the the HTTP body response. If the aspect is set to `false` then it MUST NOT include it. This rule applies even if the URL used in a request message did include the suffix.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "RenderResourcePart uses HasDocument to add $details in metadata self; Document headers reset self to the document path. Metadata-only suffix requests emit suffix-free self. This follows the explicit rule rather than later illustrative self strings that omit $details; doc-view fragment rules remain specialized. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90753,9 +90899,12 @@
       ],
       "text": "- When `labels` is serialized as an HTTP header, see [Serializing Resource Domain-Specific Documents](#serializing-resource-domain-specific-documents), then each map entry MUST appear as a separate HTTP header using a name of `xRegistry-labels.<KEYNAME>`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The shared codec emits a separate xRegistry-labels.<key> field per entry. It splits only the first map-name dot, preserving dots in the key; actual requests/responses assert literal label header names and escaped values. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90784,9 +90933,12 @@
       ],
       "text": "- When this attribute is serialized as an HTTP header, it MUST use the name `Content-Type` and not `xRegistry-contenttype`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "contenttype maps to the standard Content-Type field and xRegistry-contenttype is rejected. Its value retains standard media-type syntax, including parameters, rather than applying an invented custom-header grammar. It can also supply conditional attribute context. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90815,9 +90967,12 @@
       ],
       "text": "- On an update request when the xRegistry metadata appears in HTTP headers, unlike other attributes that will remain unchanged when not specified, this attribute MUST be erased if the incoming request does not include the `Content-Type` HTTP header.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Document-mode ApplyAsync explicitly assigns request ContentType, including null, rather than retaining the prior value. The codec treats absent request Content-Type as cleared conditional context, not a missing stored discriminator to synthesize or fetch. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90846,9 +91001,12 @@
       ],
       "text": "- When a Resource or Version's attributes are serialized as HTTP headers, this attribute MUST NOT be included in the list.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The Resource document attribute is always excluded from encoded response metadata headers and rejected as a request header, including null/scalar content. Actual Document bytes travel only in the body. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90877,9 +91035,12 @@
       ],
       "text": "- When a Resource or Version's attributes are serialized as HTTP headers, this attribute MUST NOT be included in the list.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The same explicit exclusion applies to <RESOURCE>base64. Tests assert request rejection and response omission even when the submitted value is scalar or null; binary inlining remains a metadata-body operation. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90909,9 +91070,12 @@
       ],
       "text": "Since xRegistry collections (i.e. the `<COLLECTION>` attribute) could be too large to retrieve in a single request, when retrieving a collection, the client MAY request a subset by using the [pagination specification](../pagination/spec.md). Likewise, the server MAY choose to return a subset of the collection using the same mechanism defined in that specification even if the request didn't ask for pagination. The pagination specification MUST only be used when the request is directed at a collection, not at its owning entity (such as the root of the Registry, or at an individual Group or Resource).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The HTTP host enables paging only for direct Group/Resource/Version collection reads; RequestFlags rejects limit on owner entities. It may impose server page bounds without a client limit. This references the paging mechanism only, not a re-review of the 36 dedicated Pagination rows. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90940,9 +91104,12 @@
       ],
       "text": "In the remainder of this specification, the presence of the `Link` HTTP header indicates that the [pagination specification](../pagination/spec.md) MAY be used for that API.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Notation indicating which response sketches admit pagination links. It does not mean every Link field, including xregistry-root, is a pagination marker or that owner entities may be paginated. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -90972,9 +91139,12 @@
       ],
       "text": "A server MAY support clients querying the list of supported HTTP methods for any supported API. The request MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "OPTIONS is mapped explicitly, authorized as a read and answered from model/capability-aware Allowed actions without reading a request body. The entity route matrix exercises Group, Resource, Meta, Version and collection OPTIONS endpoints. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -91003,9 +91173,11 @@
       ],
       "text": "A successful response MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "PreparedResponse emits 200, Allow and Access-Control-Allow-Methods from one action list. Existing OPTIONS tests assert status and membership in Allow, not the complete two-header wire form. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -91034,9 +91206,11 @@
       ],
       "text": "- The same `<METHODS>` values MUST be returned for both headers.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Both OPTIONS fields are assigned the same local allow string. No direct assertion comparing Allow and Access-Control-Allow-Methods was found in the HTTP tests; this is an evidence gap, not an observed mismatch. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -91065,9 +91239,11 @@
       ],
       "text": "- `OPTIONS` MUST be one of the values returned.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Allowed starts with Read, Head and Options and EffectiveAllowed retains Options. Actual OPTIONS responses across entity and collection kinds assert that OPTIONS appears in Allow. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -91096,9 +91272,11 @@
       ],
       "text": "- This operation MUST NOT modify any data within the Registry.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "ExecuteCoreAsync returns the prepared OPTIONS result before constructing a mutation Request, so there is no PublishAsync path. Existing tests do not directly compare registry state/generation before and after OPTIONS. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -91127,9 +91305,11 @@
       ],
       "text": "- Implementations MAY choose to include other information per the [RFC9110](https://www.rfc-editor.org/rfc/rfc9110.html#section-9.3.7) specification.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Permission to add RFC 9110 information to OPTIONS. The host adds its ordinary root link and framing; no additional extension information is required or claimed. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -91158,9 +91338,12 @@
       ],
       "text": "A server MAY support clients retrieving the [Registry Entity](./spec.md#registry-entity) via an HTTP `GET` directed to the Registry Entity.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "GET root resolves the Registry entity, authorizes reads and renders its metadata. Actual HTTP GET root returns 200 and observable registry attributes/counts, with anonymous reading controlled by explicit host policy. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -91189,9 +91372,12 @@
       ],
       "text": "The request MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The root GET form is recognized both at the application root and below a configured mount. Client SendAsync with an empty path addresses its configured Registry root without inferring a resource type. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -91220,9 +91406,11 @@
       ],
       "text": "A successful response MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "RenderEntity produces a Registry JSON object with configured identity, generated URLs/counts and metadata; PreparedResponse supplies 200 and application/json; charset=utf-8. Independent engine values and actual HTTP state assertions support the response rather than a shared-codec roundtrip alone. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -91251,9 +91439,12 @@
       ],
       "text": "A server MAY support clients updating the [Registry entity](./spec.md#registry-entity) via an HTTP `PATCH` or `PUT` directed to the Registry entity.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Root PUT and PATCH are explicitly allowed and routed to ApplyContainerAsync. HTTP tests execute root PATCH guards and nested failure rollback; the query host seeds its root hierarchy using real PUT. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -91282,9 +91473,12 @@
       ],
       "text": "The request MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The mapped root accepts JSON metadata bodies for PUT/PATCH, with explicit method selection and bounded parsing. Actual requests use literal JSON and Content-Type rather than a generated model-specific client serializer. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -91313,9 +91507,12 @@
       ],
       "text": "- With the exception of the `capabilities`, `modelsource` and Groups attributes, the HTTP body MUST contain the full representation of the Registry entity in the case of `PUT`, or the full representation of just the modified attributes in the case of `PATCH`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "ApplyContainerAsync removes collections/configuration from ordinary attribute merging, then uses Replace versus Patch semantics for the remainder. Existing HTTP root tests do not prove the complete ordinary-attribute deletion/default difference on a populated Registry. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -91344,9 +91541,11 @@
       ],
       "text": "- A missing `capabilities` or `modelsource` attribute MUST NOT result in any changes to those values.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Configuration is changed only when ApplyContainerAsync detects the corresponding property, and its state is held separately from ordinary root replacement. Existing persistence/capability tests do not directly assert both preconfigured values survive a root PUT that omits them. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -91375,9 +91574,12 @@
       ],
       "text": "- For both the `PATCH` and `PUT` cases, if present, the `modelsource` attribute MUST be a complete replacement representation of the model definition. A value of `null` or `{}` MUST reset the model to the server's default value (no Groups, Resources, extension attributes or custom specification-defined attributes).  See [Creating or Updating the Registry Model](./model.md#creating-or-updating-the-registry-model) for more information.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Root modelsource is passed as a complete replacement, with null converted to {}. The public engine reset removes Group definitions and returns {}; replacement validates existing entities atomically instead of discarding noncompliant stored data. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -91406,9 +91608,12 @@
       ],
       "text": "- When the `capabilities` attribute is present and `PATCH` is used then only the top-level capabilities specified in the request MUST be updated. But, each capability present MUST be specified in its entirety. When `PUT` is used then it MUST be a complete replacement definition of all the capabilities. In either case, a value of `null` MUST reset the server to its default set of capabilities.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Root capability changes reuse CapabilityProfile.Update with the root method's patch selector; null selects server defaults. Direct tests establish standalone whole-member semantics and combined-root rollback, not root PUT/PATCH null-reset and omission behavior together. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -91437,9 +91642,11 @@
       ],
       "text": "A successful response MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Successful root updates render the current Registry as JSON with status 200; the root is not spuriously marked Created. Actual root PATCH asserts 200 and later exact epoch/name/count state, and root PUT setup asserts 200. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -91469,9 +91676,12 @@
       ],
       "text": "A server MAY support clients updating or creating multiple [Groups](./spec.md#group-entity) of varying types via an HTTP `POST` directed to the [Registry entity](./spec.md#registry-entity). This API is very similar to the [`POST /<GROUPS>`](#patch-and-post-groups) API, except that the HTTP body MUST be a map of Group types as shown below:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Registry POST iterates the model's Group collections, processing only the requested maps. Existing direct owner POST tests use one Group type; the specification's simultaneous multiple-Group-type example needs a matching public HTTP vector. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -91500,9 +91710,12 @@
       ],
       "text": "The request MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "ApplyContainerAsync and Map enforce the collection-type/ID/entity nesting shown in the root POST wire sketch. The public engine test verifies that structure; no successful raw root POST envelope assertion was found in the inspected HTTP tests. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -91531,9 +91744,11 @@
       ],
       "text": "A request that isn't a map of Group types (e.g. it contains other Registry level attributes) MUST generate an error ([groups_only](./spec.md#groups_only)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Root POST rejects ordinary Registry attributes with groups_only and the offending name. The public engine vector asserts exact subject/args and zero publication; the HTTP catalog maps that diagnostic to the defined 400 response. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -91562,9 +91777,11 @@
       ],
       "text": "A successful response MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Actual root POST tests now establish HTTP 200, JSON content type, exact teams/projects top-level keys, current processed Group values and no old or ignored configuration entries. The HTTP-SEM-002 response-envelope defect is fixed. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -91593,9 +91810,11 @@
       ],
       "text": "- The response MUST only include the Groups that were processed, and not any Registry-level attributes.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Root POST responses contain only processed Group collections after normalization. Actual tests prove ignored capabilities/modelsource never appear, untouched Groups are omitted, ordinary Registry metadata stays unchanged, and only-ignored input returns exactly {}. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -91625,9 +91844,12 @@
       ],
       "text": "The `GET /export` API MUST be an alias for `GET /?doc&inline=*,capabilities,modelsource`. If this path is supported, it MUST NOT support any HTTP update methods. This API was created:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "HTTP-SEM-001 is fixed: actual HTTP tests prove implicit doc/full-hierarchy/configuration export even with disabled inline, including exact Version bytes and relative references. This combined clause stays pending because the full export mutation-method rejection matrix remains uncovered. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -91656,9 +91878,11 @@
       ],
       "text": "- Note, the semantics of the `doc` and `inline` flags MUST still be adhered to even if explicitly specifying those flags is not supported by the server.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Implicit export doc/inline semantics now survive disabled explicit flags in all focused bare, empty, unknown-path and repeated-inline cases. Actual HTTP assertions verify relative pointers, exact Document bytes and both required configuration maps, not only a 200 status. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -91688,9 +91912,12 @@
       ],
       "text": "[Request Flags](#request-flags--query-parameters) MAY be included, if supported, and any [`?inline` flag](#inline-flag) specified MUST override the default value defined above.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Only enabled explicit inline overrides export defaults. Actual tests prove shallow teams selection, comma/repeated teams+model union, and bare/empty/* hierarchy without implicit configuration. Disabled variants retain the complete default export instead of suppressing it. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -91719,9 +91946,12 @@
       ],
       "text": "A request MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "GET /export is a recognized administrative path and actual HTTP GET succeeds. It is interpreted as a root document projection, not a Resource named export. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -91750,9 +91980,11 @@
       ],
       "text": "A successful response MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Actual HTTP export tests now assert 200/application-json/UTF-8 and the required projected hierarchy, meta/default references, exact Version Document bytes and configuration maps under disabled inline. Enabled overrides are separately asserted. HTTP-SEM-001 no longer produces an incomplete successful export. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -92216,9 +92448,12 @@
       ],
       "text": "A server MUST support clients retrieving its full [model definition](./model.md#registry-model) via an HTTP `GET` directed to the stand-alone `model` entity.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The required /model API is always present in the default profile, remains immutable and returns the effective compiled model, not merely source customizations. Actual GET and forbidden PATCH statuses are independently asserted. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -92247,9 +92482,12 @@
       ],
       "text": "The request MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "GET /model uses the standalone administrative route and no request body. RegistryPath recognition and the actual HTTP status matrix distinguish it from Group and modelsource paths. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -92278,9 +92516,11 @@
       ],
       "text": "A successful response MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The implementation serializes EffectiveModel as 200 JSON; the raw test asserts status but not that the response contains expanded/defaulted model definitions rather than modelsource. Model compilation itself is outside this HTTP review. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -92309,9 +92549,12 @@
       ],
       "text": "A server MAY support clients retrieving the client-provided [model definition](./model.md#registry-model) used to define the current model via an HTTP `GET` directed to the stand-alone `modelsource` entity.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "/modelsource returns the saved client/configured source definition separately from EffectiveModel. The public engine test proves an include reference remains in source after restart without refetching, and actual HTTP GET is routed successfully. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -92340,9 +92583,11 @@
       ],
       "text": "In cases where the Registry's model has never been specified via `modelsource`, this operation MUST return `{}` not an empty HTTP body.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "An empty source serializes as {} rather than a zero-length response. LoadModel initially exposes options.Model.Source, so the distinction between an explicitly configured startup source and a model never supplied via modelsource needs a precise initial-state test; the reset test is not that boundary. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -92371,9 +92616,12 @@
       ],
       "text": "The request MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "GET /modelsource is a distinct recognized route below the Registry mount. The adapter rejects subordinate modelsource extension paths rather than treating them as source attributes. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -92402,9 +92650,11 @@
       ],
       "text": "A successful response MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "RenderAsync emits the owned source JSON object and the common response writer supplies 200 JSON. Source-preservation and explicit {} reset assertions are direct engine evidence, paired with a real HTTP GET status check; no exact original whitespace preservation is required. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -92433,9 +92683,12 @@
       ],
       "text": "A server MAY support clients updating its [model definition](./model.md#registry-model) via an HTTP `PUT` directed to the stand-alone `modelsource` entity.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "PUT /modelsource is explicitly enabled, uses UpdateModel authorization and stages a complete compiled candidate before publication. Invalid model input has literal HTTP errors; a public engine replacement survives restart and exposes new routes without losing old entities. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -92464,9 +92717,12 @@
       ],
       "text": "The request MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The PUT JSON-object wire form reaches model-source processing; POST is rejected with 405, rather than silently becoming model replacement. The client low-level API sends the supplied JSON bytes once. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -92496,9 +92752,12 @@
       ],
       "text": "Note: the HTTP body MUST be a JSON object and an empty request MUST generate an error ([missing_body](#missing_body)). To denote an empty model, `{}` SHOULD be used instead.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The shared write-body guard rejects empty input before the model compiler, and ServerJson.Object requires an object. {} is compiled as an empty model, subject to existing-data compliance. The exact modelsource empty-body/null/{} HTTP boundary is not directly asserted. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -92527,9 +92786,12 @@
       ],
       "text": "A server MAY support clients retrieving a [Group](./spec.md#group-entity) collection via an HTTP `GET` directed to the Registry's `<GROUPS>` collection URL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A model-defined Group collection GET is supported and rendered as an authorized ID-keyed set, with optional paging. Actual HTTP filter/sort tests assert concrete returned IDs and total counts rather than only route existence. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -92558,9 +92820,12 @@
       ],
       "text": "The request MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "GET /<GROUPS> is selected from the effective model rather than a fixed set of collection names. Both /teams and a separately modeled /registry/things route are exercised, including mount handling. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -92589,9 +92854,11 @@
       ],
       "text": "A successful response MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The Group collection response is 200 JSON keyed by IDs; each record is rendered as Group metadata. Actual raw tests assert page records, typed values, trusted next-link location and count, including a terminal page without next. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -92620,9 +92887,12 @@
       ],
       "text": "A server MAY support clients creating/updating multiple [Groups](./spec.md#group-entity) in a Group collection via an HTTP `PATCH` or `POST` directed to the Registry's `<GROUPS>` collection URL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "GroupCollection PATCH/POST are mapped to ApplyCollectionAsync, not entity replacement of the collection. Public engine tests exercise multi-Group POST and partial collection PATCH with independently expected IDs/state. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -92651,9 +92921,12 @@
       ],
       "text": "The request MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Both verbs use ID-keyed JSON maps and per-Group mutation paths. Their public engine semantics are tested, but a direct successful raw HTTP Group collection PATCH/POST request pair is absent from the inspected assertions. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -92682,9 +92955,11 @@
       ],
       "text": "A successful response MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Collection results remain Success/200 and Selection returns processed IDs, not all Groups. Existing engine assertions cover selection and stored updates, but do not assert the complete Group collection mutation HTTP response. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -92713,9 +92988,12 @@
       ],
       "text": "A server MAY support clients deleting one or more [Groups](./spec.md#group-entity) from a Group collection via an HTTP `DELETE` directed to the Registry's `<GROUPS>` collection URL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Group collection DELETE handles absent body as all, {} as none and a supplied ID map as selected deletion. Public engine assertions prove stale guard rollback, missing-ID tolerance and all three body cases; the adapter explicitly reads DELETE metadata. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -92744,9 +93022,12 @@
       ],
       "text": "The request MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The specified optional ID/epoch map reaches Delete and Guard with exact unsigned values. Existing direct tests are engine operations, not an HTTP DELETE carrying a body; client present/absent-body support alone is not full wire evidence. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -92775,9 +93056,11 @@
       ],
       "text": "A successful response MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Successful deletion yields NoContent and the adapter maps it to allowed status 204 with no body. The existing Group collection deletion test asserts resulting membership but not a literal HTTP 204/body response. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -92806,9 +93089,12 @@
       ],
       "text": "A server MAY support clients retrieving a [Group](./spec.md#group-entity) via an HTTP `GET` directed to the Group entity.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Group GET is supported independently of its collection route and reads only authorized current metadata. The actual entity route matrix exercises /teams/g; missing Groups produce the exact standardized not_found result. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -92837,9 +93123,12 @@
       ],
       "text": "The request MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The two-segment Group GET form is recognized using the effective Group type and one decoded ID. Escaped identity is not silently normalized into another Group. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -92868,9 +93157,11 @@
       ],
       "text": "A successful response MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "RenderEntity produces current Group metadata and model-defined child URL/count fields, and the wire writer uses 200 JSON. Existing raw Group GET tests mostly assert status; a complete literal metadata/link assertion is not present. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -92899,9 +93190,12 @@
       ],
       "text": "A server MAY support clients creating or updating a [Group](./spec.md#group-entity) in a Group collection via an HTTP `PATCH` or `PUT` directed to the Group entity.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Group PUT/PATCH route to EnsureGroup plus ApplyContainerAsync. Public engine tests exercise replacement and partial mutation, and the real HTTP query test patches a Group while retained reads stay consistent. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -92930,9 +93224,12 @@
       ],
       "text": "The request MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The JSON-body Group PUT/PATCH form is implemented and protected by body/header validation. Raw tests establish PATCH and several rejected PUT inputs; an accepted direct Group PUT/PATCH creation pair is not established by those rejection vectors. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -92961,9 +93258,11 @@
       ],
       "text": "A successful response MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Common rendering provides Group JSON, 200 for update and 201/Location for creation under the general exception. Existing Group PATCH tests assert 200 but do not prove the complete response body or creation Location=self. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -93116,9 +93415,12 @@
       ],
       "text": "A server MAY support clients deleting a [Group](./spec.md#group-entity) via an HTTP `DELETE` directed to the Group entity.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Group DELETE is allowed and DeleteEntity recursively stages child Resource/Version deletion before one commit. Existing direct HTTP tests cover rejected DELETE targets, not successful Group cascade deletion; read-only cascade rejection is an engine test. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -93147,9 +93449,12 @@
       ],
       "text": "The request MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "DELETE /<GROUPS>/<GID> resolves to a Group; an optional epoch query is copied into its deletion guard. The inspected tests do not send a successful raw single-Group DELETE with and without that guard. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -93178,9 +93483,11 @@
       ],
       "text": "A successful response MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Successful single-Group deletion maps to 204 with no body through the common deletion result. There is no direct positive HTTP response assertion for this route in the inspected tests. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -94862,9 +95169,12 @@
       ],
       "text": "A server MAY support clients deleting a [Resource](./spec.md#resource-entity) via an HTTP `DELETE` directed to the Resource entity.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Single Resource DELETE is enabled and stages removal of all Versions plus owning Group membership. The inspected HTTP assertions do not execute a successful single-Resource delete; last-Version and collection deletion tests are not a substitute for this route. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -94893,9 +95203,12 @@
       ],
       "text": "The request MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "DELETE targets the Resource path; RequestFlags validates single-entity epoch and Delete translates it to meta.epoch. This correctly distinguishes the Resource guard from its default Version's epoch, but a direct raw request assertion is missing. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -94924,9 +95237,11 @@
       ],
       "text": "A successful response MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The common deletion branch would emit 204 and no body for a successful Resource DELETE. No existing direct positive HTTP assertion establishes this route's response form. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -95141,9 +95456,12 @@
       ],
       "text": "A `DELETE` directed to the Meta entity is not supported and MUST generate an error ([action_not_supported](./spec.md#action_not_supported)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Allowed grants Meta PUT/PATCH but not DELETE. The actual entity matrix asserts DELETE /meta is 405, and the adapter/catalog uses action_not_supported rather than deleting the Resource or its Versions. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -95980,9 +96298,12 @@
       ],
       "text": "The [core xRegistry specification](./spec.md) defines a set of [request flags](./spec.md#request-flags) that MAY be used to control the processing of requests as well as influence how response messages are generated. Each flag is mapped to an HTTP query parameter per the following rules:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Introduces HTTP serialization of Core flags. The following records separately evaluate null flags, singleton parameters, repeated values and the filter/ignore/inline/sort exceptions; no aggregate test count is used to close them. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -96011,9 +96332,12 @@
       ],
       "text": "- When the flag is a boolean type of flag then it MUST be serialized as `?FLAG_NAME`, all lower case.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Client query pairs with null values serialize as bare flags, distinct from an empty value's equals sign. Callers supply the specified lower-case names; the server matches known flag names case-sensitively rather than normalizing arbitrary extension keys. Actual doc/binary flags affect projection. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -96043,9 +96367,12 @@
       ],
       "text": "- When the flag has a single value associated with it, then it MUST be serialized as `?FLAG_NAME=VALUE`, where the `FLAG_NAME` MUST be all lower case. The flag MUST NOT be specified more than once.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "BuildUri emits lower-case caller-supplied names with escaped =VALUE values; RequestFlags tracks recognized singletons and rejects repetitions. Existing raw tests assert valued flags and invalid values, but not duplicate singleton query rejection through the host. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -96074,9 +96401,12 @@
       ],
       "text": "- When the flag allows for multiple values, then each value MUST be serialized as a separate query parameter per the previous bullets.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The client retains ordered repeated pairs, and ParseQuery produces one entry per field instead of collapsing values. Actual wire assertions preserve repeated filter values; actual filter OR and repeated ignore tests prove the server consumes repeats with their defined exceptions. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -96105,9 +96435,12 @@
       ],
       "text": "A server MAY support the `?filter` query parameter allowing clients to reduce the response entities to just the ones that match certain criteria.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "filter is enabled and uses the shared Core QueryPlan/Evaluation over authorized logical facts before rendering. Independent raw tests assert selected IDs and typed comparisons; it is not a pass-through flag or a silent empty result for malformed supported queries. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -96136,9 +96469,12 @@
       ],
       "text": "This query parameter MUST be serialized as:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The client URI-encodes filter values once; the host decodes one UTF-8 query pass before the Core grammar splits conjunctions. Actual requests carry escaped operators/commas and return independently expected records. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -96167,9 +96503,11 @@
       ],
       "text": "- All `<EXPRESSION>` values within the scope of one `?filter` query parameter MUST be evaluated as a logical `AND` per the [core specification](./spec.md#filter-flag).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "QueryPlan groups comma-separated expressions into one branch, and Evaluation intersects matching subtree leaves within that branch. Direct tests prove conjunction does not combine different sibling witnesses and that counts/inline results reflect the intersection. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -96199,9 +96537,11 @@
       ],
       "text": "- The `?filter` query parameter MAY appear multiple times and if so MUST be evaluated as a logical `OR` with the other `?filter` query parameters that appear - per the [core specification](./spec.md#filter-flag).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Repeated filter parameters become separate branches whose matches are unioned in a HashSet, not ANDed or concatenated with duplicates. Selection drives child membership and URL/count projection; direct raw and subtree tests assert the resulting union independently. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -96231,9 +96571,12 @@
       ],
       "text": "A server MAY support the `?ignore` query parameter on any write operation to indicate that certain aspects of the request message MUST be ignored by the server.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "HTTP-SEM-002 is fixed by reusing normalized owner input, not by weakening ignore or validation. Actual tests cover ignored invalid configuration, partial/unignored configuration rejection, disabled-ignore rejection, only-ignored authenticated writes, descendant denial and invalid-child atomic rollback. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -96262,9 +96605,12 @@
       ],
       "text": "This query parameter MUST be serialized as:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "RequestFlags accepts bare ignore, empty value and '*' as the enabled ignore set, plus comma-separated named values. Direct engine cases assert each alias skips readonly entries while retaining nested identity checks; the client preserves bare versus empty wire syntax. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -96293,9 +96639,12 @@
       ],
       "text": "- The `?ignore` query parameter MAY be specified more than once.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Repeated ignore fields union their supported values. The actual HTTP request contains ignore=readonly and ignore=epoch and proves the unlocked Resource changes despite a stale epoch while the locked Resource is omitted and remains protected. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -96324,9 +96673,12 @@
       ],
       "text": "A server MAY support the `?inline` query parameter on any request to indicate which nested collections/objects, or potentially large attributes, are to be included in the response message.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "inline controls nested collections, meta, configuration and Document projection through ValidateInline/Includes/Child. Supported explicit inline works in actual HTTP queries. Ordinary extension objects are not falsely treated as separately inlineable entities. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -96355,9 +96707,12 @@
       ],
       "text": "This query parameter MUST be serialized as:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The client can emit bare inline or an escaped path list; the host treats absent/empty inline value as '*' and validates model-relative paths. Actual requests exercise explicit inline paths and wildcard projection, while invalid name inlining returns the exact Core error. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -96386,9 +96741,12 @@
       ],
       "text": "- The value portion of the `?inline` query parameter MAY Include a single `<PATH>` value or be a comma-separated list of `<PATH>` values.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "RequestFlags splits a supplied inline value on commas, and projection handles each requested path with implicit collection ancestors. Actual HTTP requests assert simultaneous meta and versions.schema inlining, not just one path. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -96417,9 +96775,12 @@
       ],
       "text": "- The `?inline` query parameter MAY be specified more than once.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Each repeated inline field appends paths and Includes/Child evaluates their union. The inspected tests cover comma lists and generic repeated query transport, but not multiple actual inline fields selecting different branches. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -96448,9 +96809,12 @@
       ],
       "text": "A server MAY support the `?sort` query parameter on any request directed to a collection of Groups, Resources or Versions.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "QueryPlan allows sorting only direct Group, Resource and Version collections and rejects owner sorting. Direct tests establish Group scalar ordering and Resource meta sorting; an explicit Version collection sort operation is not directly evidenced. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -96479,9 +96843,12 @@
       ],
       "text": "This query parameter MUST be serialized as:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "sort is serialized as one attribute expression with optional =asc/desc; the host decodes it once and QueryExpression validates a known scalar projection/direction. Actual HTTP uses escaped rank=desc and checks returned order; direct cases cover default direction and invalid projections. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -96914,8 +97281,8 @@
       ],
       "text": "This specification defines the events that an xRegistry server MAY generate.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
+        "status": "informative",
+        "note": "Abstract identifying the optional event specification; executable generation policy is reviewed below. This is semantic/managed evidence, not all-platform release qualification. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
         "roles": []
       },
       "implementation": {
@@ -96987,8 +97354,8 @@
       ],
       "text": "The key words \"MUST\", \"MUST NOT\", \"REQUIRED\", \"SHALL\", \"SHALL NOT\", \"SHOULD\", \"SHOULD NOT\", \"RECOMMENDED\", \"MAY\", and \"OPTIONAL\" in this document are to be interpreted as described in [RFC 2119](https://tools.ietf.org/html/rfc2119).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
+        "status": "informative",
+        "note": "RFC 2119 interpretation, not a separate runtime operation; applied to the following reviewed clauses. This is semantic/managed evidence, not all-platform release qualification. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
         "roles": []
       },
       "implementation": {
@@ -97020,8 +97387,8 @@
       ],
       "text": "In the pseudo JSON format snippets `?` means the preceding item is OPTIONAL, `*` means the preceding item MAY appear zero or more times, and `+` means the preceding item MUST appear at least once. The presence of the `#` character means the remaining portion of the line is a comment. Whitespace characters in the JSON snippets are used for readability and are not normative.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
+        "status": "informative",
+        "note": "Pseudo-JSON reading notation, not a wire encoding requirement. This is semantic/managed evidence, not all-platform release qualification. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
         "roles": []
       },
       "implementation": {
@@ -97361,9 +97728,11 @@
       ],
       "text": "The xRegistry in which the entity exists. The value MUST be an absolute URL to the root of the xRegistry instance.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Source is the configured absolute Registry root, subject is the typed canonical entity XID, and neither is omitted. Root decorations and mismatched entity/subject kinds are rejected; URI aliases coalesce without folding ID case. This is semantic/managed evidence, not all-platform release qualification. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -97392,9 +97761,11 @@
       ],
       "text": "This context attribute MUST be present in each event.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Source is the configured absolute Registry root, subject is the typed canonical entity XID, and neither is omitted. Root decorations and mismatched entity/subject kinds are rejected; URI aliases coalesce without folding ID case. This is semantic/managed evidence, not all-platform release qualification. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -97424,9 +97795,11 @@
       ],
       "text": "The `xid` of the entity acted upon. While this attribute is OPTIONAL in the CloudEvents specification, it is REQUIRED to be present in an xRegistry event.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Source is the configured absolute Registry root, subject is the typed canonical entity XID, and neither is omitted. Root decorations and mismatched entity/subject kinds are rejected; URI aliases coalesce without folding ID case. This is semantic/managed evidence, not all-platform release qualification. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -97455,9 +97828,11 @@
       ],
       "text": "Note: constructing a URL by appending the `subject` value to the `source` value MUST result in an absolute URL to the entity (assuming any trailing `/` on `source` is removed since XIDs always start with `/`).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Source is the configured absolute Registry root, subject is the typed canonical entity XID, and neither is omitted. Root decorations and mismatched entity/subject kinds are rejected; URI aliases coalesce without folding ID case. This is semantic/managed evidence, not all-platform release qualification. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -97486,9 +97861,11 @@
       ],
       "text": "This context attribute MUST be present in each event.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Source is the configured absolute Registry root, subject is the typed canonical entity XID, and neither is omitted. Root decorations and mismatched entity/subject kinds are rejected; URI aliases coalesce without folding ID case. This is semantic/managed evidence, not all-platform release qualification. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -97517,9 +97894,11 @@
       ],
       "text": "The time when the interaction occurred. This value MUST be the same for all events generated within the same interaction.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Chosen RECOMMENDED policy: emit the common authoritative processing time on every event, normalized to RFC3339 UTC. The same engine clock determines mutation metadata and the prepared batch. This is semantic/managed evidence, not all-platform release qualification. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -97550,9 +97929,11 @@
       ],
       "text": "Its value MUST be an [RFC3339](https://tools.ietf.org/html/rfc3339) timestamp normalized to UTC. Use of a `time-zone` notation is RECOMMENDED. The value used SHOULD match the current date/time used by the Registry during the processing of the interaction. Typically, this will be the `modifiedat` value assigned to the entities being processed.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Chosen RECOMMENDED policy: emit the common authoritative processing time on every event, normalized to RFC3339 UTC. The same engine clock determines mutation metadata and the prepared batch. This is semantic/managed evidence, not all-platform release qualification. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -97582,9 +97963,11 @@
       ],
       "text": "This context attribute is NOT REQUIRED to be present in the event, but is RECOMMENDED.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Chosen RECOMMENDED policy: emit the common authoritative processing time on every event, normalized to RFC3339 UTC. The same engine clock determines mutation metadata and the prepared batch. This is semantic/managed evidence, not all-platform release qualification. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -97613,9 +97996,11 @@
       ],
       "text": "- MUST be a non-empty string.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Correlation is a nonempty bounded UTF-8 string; empty/control-containing values reject. Engine-created IDs are compact GUIDs. This is semantic/managed evidence, not all-platform release qualification. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -97644,9 +98029,11 @@
       ],
       "text": "- MUST be case-insensitively unique within the scope of the Registry instance, for the lifetime of the Registry.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Server reserves lowercase correlation IDs in the same authoritative transaction as entities and outbox records, checks for reuse, and retains reservations after acknowledgement and restart. Core alone delegates lifetime uniqueness to its host. This is semantic/managed evidence, not all-platform release qualification. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -97675,9 +98062,11 @@
       ],
       "text": "- All events generated from the same interaction MUST have the same `xregcorrelationid` value. Conceptually, this can be thought of as the \"transaction ID\" of the interaction.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Chosen RECOMMENDED policy: all emitted events carry the interaction correlation, and the mutation result retains that same value. This is semantic/managed evidence, not all-platform release qualification. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -97706,9 +98095,11 @@
       ],
       "text": "When an interaction has a request-response message exchange pattern, and `xregcorrelationid` values are included in resulting events, then the response message for the interaction MUST include this value. In the case of an HTTP interaction, the following HTTP header MUST be present in the response flow:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Actual Kestrel response header is compared with the committed outbox key, batch correlation and every CloudEvent, rather than asserting header presence alone. This is semantic/managed evidence, not all-platform release qualification. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -97738,9 +98129,11 @@
       ],
       "text": "This context attribute is NOT REQUIRED to be present in the event, but is RECOMMENDED.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Chosen RECOMMENDED policy: all emitted events carry the interaction correlation, and the mutation result retains that same value. This is semantic/managed evidence, not all-platform release qualification. Reused for the pinned successor after exact clause, section, and complete-section-byte equality with the reviewed baseline. This transfers semantic disposition only; implementation, test, and native evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -98268,13 +98661,17 @@
       ],
       "text": "- MUST be generated when a Registry's attribute is updated, where each modified attribute MUST be included in `changed`, if present.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The server event contract applies to each updated Registry attribute; a direct mutation test verifies the changed name alongside automatically updated epoch and modifiedat fields.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "RegistryAttributeUpdatesReportChangedNamesAndFinalEpoch"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98609,13 +99006,17 @@
       ],
       "text": "- MUST be generated when a Registry's capabilities are updated, where the top-level capability names are included in `changed`, if present.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The event requirement applies to a server that implements this optional event mechanism. Capability updates must expose changed top-level capability names; the direct Server event test verifies the emitted capability event and exact changed set.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CapabilityUpdatesEmitBothCapabilityAndRegistryEvents"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98640,13 +99041,17 @@
       ],
       "text": "- An `io.xregistry.registry.updated` event MUST also be generated where the `capabilities` attribute MUST be included in `changed`, if present.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The Registry projection must also report a capability update through its registry.updated event; the direct Server event test verifies the capabilities changed name on that event.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CapabilityUpdatesEmitBothCapabilityAndRegistryEvents"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98951,13 +99356,18 @@
       ],
       "text": "- MUST be generated when a new Resource is created.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The server emits resource.created for locally created Resources and xref Resource mappings; the direct lifecycle and xref tests verify those event types and final epochs. The adjacent Version-created clause remains a separate unresolved xref case.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "NewResourceAndNondefaultVersionCreationReportExactMembershipChanges",
+          "CrossReferenceResourceEventsUseTheFinalVisibleEpochs"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98982,9 +99392,11 @@
       ],
       "text": "- At least one `io.xregistry.version.created` event MUST also be generated since at least one Version MUST also be created.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "For a new xref Resource mapping, Core permits a Resource with no locally owned Version, while this clause requires a Version-created event. Emitting the target's existing Version as created would be false; omitting the Resource event would conflict with the preceding requirement. Resolve this authority conflict before changing behavior.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",

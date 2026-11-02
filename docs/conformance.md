@@ -40,11 +40,11 @@ it does not transfer historical qualification to a successor.
 | cloudevents | 8 | 4 | 0 |
 | core | 1209 | 1209 | 8 |
 | endpoint | 189 | 189 | 0 |
-| events | 144 | 59 | 0 |
+| events | 144 | 80 | 0 |
 | federation | 120 | 56 | 0 |
 | file | 41 | 19 | 0 |
 | git | 39 | 18 | 0 |
-| http | 520 | 258 | 0 |
+| http | 520 | 397 | 0 |
 | http-federation | 84 | 36 | 0 |
 | mapping | 95 | 39 | 0 |
 | media-endpoints | 7 | 7 | 0 |

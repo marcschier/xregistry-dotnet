@@ -182,12 +182,22 @@ public sealed partial class RegistryEngine
                 ["xid"] = key + "/meta",
                 ["xref"] = source.Attributes["xref"]!.DeepClone()
             };
+            if (!DocumentView)
+            {
+                meta["epoch"] = source.Attributes["epoch"]?.DeepClone();
+            }
+
             if (_capabilities.ShortSelf && !DocumentView)
             {
                 meta["shortself"] = ShortSelf(RegistryPath.Parse(key + "/meta"));
             }
 
-            return path.Kind == RegistryPathKind.Meta ? meta : new JsonObject
+            if (path.Kind == RegistryPathKind.Meta)
+            {
+                return meta;
+            }
+
+            var resource = new JsonObject
             {
                 [definition.Singular + "id"] = path.ResourceId!.Value,
                 ["self"] = DocumentView ? Relative(pointer) : _engine.Url(key, definition.HasDocument),
@@ -195,6 +205,12 @@ public sealed partial class RegistryEngine
                 ["metaurl"] = DocumentView ? Relative(pointer + "/meta") : _engine.Url(key + "/meta"),
                 ["meta"] = meta
             };
+            if (!DocumentView)
+            {
+                resource["epoch"] = source.Attributes["epoch"]?.DeepClone();
+            }
+
+            return resource;
         }
     }
 }

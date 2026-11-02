@@ -15,6 +15,8 @@ public class OpcUaRegistryEventDecoderTests
     private static readonly NodeId s_groupCreated = new(5102u, 2);
     private static readonly NodeId s_resourceDeleted = new(5103u, 2);
     private static readonly NodeId s_modelUpdated = new(5104u, 2);
+    private static readonly NodeId s_groupDeprecated = new(5105u, 2);
+    private static readonly NodeId s_resourceDeprecated = new(5106u, 2);
     private static readonly NodeId s_unknown = new(5199u, 2);
     private static readonly string[] s_changed = ["description", "name"];
     private static readonly string[] s_singleChanged = ["name"];
@@ -210,6 +212,24 @@ public class OpcUaRegistryEventDecoderTests
     public async Task ConstructorRejectsNonCanonicalEventTypes()
     {
         await Assert.That(() => Decoder((s_resourceUpdated, "io.xregistry.resource.created.extra")))
+            .Throws<ArgumentException>();
+    }
+
+    [Test]
+    [Arguments("group", "/teams/g")]
+    [Arguments("resource", "/teams/g/files/f")]
+    public async Task DeprecatedEventUsesTheStandardizedActionName(string entity, string subject)
+    {
+        var nodeId = entity == "group" ? s_groupDeprecated : s_resourceDeprecated;
+        var type = $"io.xregistry.{entity}.deprecated";
+        var decoder = Decoder((nodeId, type));
+        var notification = Notification(nodeId, subject, eventId: [1]);
+
+        var found = decoder.TryDecode(notification, out var decoded);
+
+        await Assert.That(found).IsTrue();
+        await Assert.That(decoded!.Type).IsEqualTo(type);
+        await Assert.That(() => Decoder((nodeId, $"io.xregistry.{entity}.deprecation")))
             .Throws<ArgumentException>();
     }
 

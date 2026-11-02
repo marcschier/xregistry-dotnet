@@ -6,6 +6,7 @@ using TUnit.Assertions;
 using TUnit.Core;
 using static XRegistry.Server.Tests.EngineTests;
 using static XRegistry.Server.Tests.LifecycleTests;
+using static XRegistry.Server.Tests.RegistryCapabilityTests;
 
 namespace XRegistry.Server.Tests;
 
@@ -77,8 +78,15 @@ public class EventTests
                 subject == resource ? "resource" : "version";
             await Assert.That(item.GetProperty("type").GetString()).IsEqualTo("io.xregistry." + entity +
                 (subject == parent ? ".updated" : ".deleted"));
-            if (subject == parent) { await Assert.That(ChangedNames(item)).IsEquivalentTo(changed, StringComparer.Ordinal); }
-            else { await Assert.That(item.TryGetProperty("data", out _)).IsFalse(); }
+            if (subject == parent)
+            {
+                await Assert.That(ChangedNames(item)).IsEquivalentTo(changed, StringComparer.Ordinal);
+                await AssertEventEpochMatchesRead(engine, item, parent, parent == resource ? parent + "/meta" : null);
+            }
+            else
+            {
+                await Assert.That(item.TryGetProperty("data", out _)).IsFalse();
+            }
         }
     }
 
@@ -98,10 +106,10 @@ public class EventTests
         var events = await EventsFor(engine, result);
         var prefix = resource ? "io.xregistry.resource." : "io.xregistry.group.";
         await Assert.That(events.Select(static item => item.GetProperty("type").GetString()!).ToArray())
-            .IsEquivalentTo([prefix + "updated", prefix + "deprecation"], StringComparer.Ordinal);
+            .IsEquivalentTo([prefix + "updated", prefix + "deprecated"], StringComparer.Ordinal);
         await Assert.That(events.All(item => item.GetProperty("subject").GetString() == subject)).IsTrue();
-        await Assert.That(ChangedNames(events.Single(item => item.GetProperty("type").GetString() == prefix + "deprecation")))
-            .IsEquivalentTo(["effective", "reason"], StringComparer.Ordinal);
+        var deprecationEvent = events.Single(item => item.GetProperty("type").GetString() == prefix + "deprecated");
+        await Assert.That(HasChangedData(deprecationEvent)).IsFalse();
         var expected = resource ? new[] { "meta.epoch", "meta.modifiedat", "meta.deprecated" } :
             ["epoch", "modifiedat", "deprecated"];
         await Assert.That(ChangedNames(events.Single(item => item.GetProperty("type").GetString() == prefix + "updated")))
@@ -122,20 +130,24 @@ public class EventTests
             .IsEquivalentTo(newResource ? new[] { "/teams/g", resource, path } : [resource, path], StringComparer.Ordinal);
         var createdVersion = events.Single(item => item.GetProperty("subject").GetString() == path);
         await Assert.That(createdVersion.GetProperty("type").GetString()).IsEqualTo("io.xregistry.version.created");
-        await Assert.That(createdVersion.TryGetProperty("data", out _)).IsFalse();
+        await Assert.That(createdVersion.GetProperty("data").TryGetProperty("changed", out _)).IsFalse();
+        await AssertEventEpochMatchesRead(engine, createdVersion, path);
         var resourceEvent = events.Single(item => item.GetProperty("subject").GetString() == resource);
         await Assert.That(resourceEvent.GetProperty("type").GetString())
             .IsEqualTo("io.xregistry.resource." + (newResource ? "created" : "updated"));
         if (newResource)
         {
-            await Assert.That(resourceEvent.TryGetProperty("data", out _)).IsFalse();
+            await Assert.That(resourceEvent.GetProperty("data").TryGetProperty("changed", out _)).IsFalse();
+            await AssertEventEpochMatchesRead(engine, resourceEvent, resource, resource + "/meta");
             var group = events.Single(static item => item.GetProperty("subject").GetString() == "/teams/g");
             await Assert.That(group.GetProperty("type").GetString()).IsEqualTo("io.xregistry.group.updated");
             await Assert.That(ChangedNames(group)).IsEquivalentTo(["epoch", "modifiedat", "notes", "notescount"], StringComparer.Ordinal);
+            await AssertEventEpochMatchesRead(engine, group, "/teams/g");
         }
         else
         {
             await Assert.That(ChangedNames(resourceEvent)).IsEquivalentTo(["meta.epoch", "meta.modifiedat", "versions", "versionscount"], StringComparer.Ordinal);
+            await AssertEventEpochMatchesRead(engine, resourceEvent, resource, resource + "/meta");
         }
     }
 
@@ -305,12 +317,116 @@ public class EventTests
         var batch = (await engine.ReadEventBatchesAsync(Writer())).Single();
         var group = batch.Events.RootElement.EnumerateArray().Where(static item => item.GetProperty("subject").GetString() == "/teams/g").ToArray();
         await Assert.That(group.Select(static item => item.GetProperty("type").GetString()!).ToArray())
-            .IsEquivalentTo(["io.xregistry.group.created", "io.xregistry.group.deprecation"], StringComparer.Ordinal);
-        await Assert.That(group.Single(static item => item.GetProperty("type").GetString() == "io.xregistry.group.created")
-            .TryGetProperty("data", out _)).IsFalse();
-        await Assert.That(group.Single(static item => item.GetProperty("type").GetString() == "io.xregistry.group.deprecation")
-            .GetProperty("data").GetProperty("changed")[0].GetString()).IsEqualTo("effective");
+            .IsEquivalentTo(["io.xregistry.group.created", "io.xregistry.group.deprecated"], StringComparer.Ordinal);
+        var createdGroup = group.Single(static item => item.GetProperty("type").GetString() == "io.xregistry.group.created");
+        await Assert.That(createdGroup.GetProperty("data").TryGetProperty("changed", out _)).IsFalse();
+        await AssertEventEpochMatchesRead(engine, createdGroup, "/teams/g");
+        var deprecatedEvent = group.Single(static item => item.GetProperty("type").GetString() == "io.xregistry.group.deprecated");
+        await Assert.That(HasChangedData(deprecatedEvent)).IsFalse();
         await Assert.That(group.All(item => item.GetProperty("xregcorrelationid").GetString() == result.CorrelationId)).IsTrue();
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task CrossReferenceResourceEventsUseTheFinalVisibleEpochs(bool secondHop)
+    {
+        var engine = Create();
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/target", """{"name":"target"}""");
+        var target = "/teams/g/notes/target";
+        if (secondHop)
+        {
+            await Send(engine, RegistryAction.Replace, "/teams/g/notes/first-alias",
+                "{\"meta\":{\"xref\":\"" + target + "\"}}");
+            target = "/teams/g/notes/first-alias";
+        }
+
+        const string alias = "/teams/g/notes/alias";
+        var result = await Send(engine, RegistryAction.Replace, alias,
+            "{\"meta\":{\"xref\":\"" + target + "\"}}");
+        var resourceEvent = (await EventsFor(engine, result))
+            .Single(item => item.GetProperty("subject").GetString() == alias);
+
+        await Assert.That(resourceEvent.GetProperty("type").GetString()).IsEqualTo("io.xregistry.resource.created");
+        await AssertEventEpochMatchesRead(engine, resourceEvent, alias, alias + "/meta");
+    }
+
+    [Test]
+    [Arguments("registry")]
+    [Arguments("group")]
+    [Arguments("resource")]
+    [Arguments("version")]
+    public async Task UpdatedLifecycleEventsCarryFinalEpochsAndResourceMetaEpoch(string target)
+    {
+        var engine = target == "version" ? await CreateVersionedNotes() : Create();
+
+        // Creating a nested entity also updates the Registry in the same interaction.
+        var created = target == "version" ? null :
+            await Send(engine, RegistryAction.Replace, "/teams/g/notes/n", "{}");
+        JsonElement lifecycleEvent;
+        string eventType;
+        string readPath;
+        string? metaPath = null;
+        if (target == "registry")
+        {
+            lifecycleEvent = (await EventsFor(engine, created!))
+                .Single(item => item.GetProperty("subject").GetString() == "/");
+            eventType = "io.xregistry.registry.updated";
+            readPath = "/";
+        }
+        else
+        {
+            var subject = target switch
+            {
+                "group" => "/teams/g",
+                "resource" => "/teams/g/notes/n",
+                "version" => "/teams/g/notes/n/versions/v1",
+                _ => throw new ArgumentOutOfRangeException(nameof(target))
+            };
+            var (path, body, entity) = target switch
+            {
+                "group" => (subject, """{"name":"group-updated"}""", "group"),
+                "resource" => (subject + "/meta", """{"labels":{"site":"west"}}""", "resource"),
+                "version" => (subject, """{"name":"version-updated"}""", "version"),
+                _ => throw new ArgumentOutOfRangeException(nameof(target))
+            };
+            var update = await Send(engine, RegistryAction.Patch, path, body);
+            lifecycleEvent = (await EventsFor(engine, update))
+                .Single(item => item.GetProperty("subject").GetString() == subject);
+            eventType = "io.xregistry." + entity + ".updated";
+            readPath = subject;
+            if (target == "resource") { metaPath = subject + "/meta"; }
+        }
+
+        await Assert.That(lifecycleEvent.GetProperty("type").GetString()).IsEqualTo(eventType);
+        await AssertEventEpochMatchesRead(engine, lifecycleEvent, readPath, metaPath);
+    }
+
+    [Test]
+    public async Task RepeatedResourceUpdatesCoalesceChangedNamesAndKeepFinalEpochs()
+    {
+        var engine = Create("""
+            {"groups":{"teams":{"singular":"team","resources":{"notes":{"singular":"note","hasdocument":false,
+              "attributes":{"oldonly":{"type":"boolean"},"newonly":{"type":"string"}}}}}}}
+            """);
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n", """{"versionid":"v1","oldonly":false}""");
+        await Send(engine, RegistryAction.Post, "/teams/g/notes/n", """{"versionid":"v2","newonly":""}""");
+
+        // This one operation records the ordinary Resource update and the default-Version projection update.
+        var result = await Send(engine, RegistryAction.Patch, "/teams/g/notes/n/meta",
+            """{"defaultversionid":"v1","labels":{"site":"west"}}""");
+        var events = await EventsFor(engine, result);
+        await Assert.That(events.Length).IsEqualTo(1);
+        var resourceEvent = events.Single();
+        await Assert.That(resourceEvent.GetProperty("type").GetString()).IsEqualTo("io.xregistry.resource.updated");
+        await Assert.That(resourceEvent.GetProperty("subject").GetString()).IsEqualTo("/teams/g/notes/n");
+        var mergedNames = ChangedNames(resourceEvent);
+        await Assert.That(mergedNames).IsEquivalentTo([
+            "ancestorid", "createdat", "epoch", "isdefault", "meta.defaultversionid",
+            "meta.defaultversionsticky", "meta.defaultversionurl", "meta.epoch", "meta.labels",
+            "meta.modifiedat", "modifiedat", "newonly", "noteid", "oldonly", "self", "versionid", "xid"
+        ], StringComparer.Ordinal);
+        await AssertEventEpochMatchesRead(engine, resourceEvent, "/teams/g/notes/n", "/teams/g/notes/n/meta");
     }
 
     [Test]
@@ -331,6 +447,40 @@ public class EventTests
     }
 
     [Test]
+    public async Task RegistryAttributeUpdatesReportChangedNamesAndFinalEpoch()
+    {
+        var engine = Create();
+        var result = await Send(engine, RegistryAction.Patch, "/", """{"name":"registry"}""");
+        var registryEvent = (await EventsFor(engine, result)).Single();
+
+        await Assert.That(registryEvent.GetProperty("type").GetString()).IsEqualTo("io.xregistry.registry.updated");
+        await Assert.That(ChangedNames(registryEvent))
+            .IsEquivalentTo(["epoch", "modifiedat", "name"], StringComparer.Ordinal);
+        await AssertEventEpochMatchesRead(engine, registryEvent, "/");
+    }
+
+    [Test]
+    public async Task CapabilityUpdatesEmitBothCapabilityAndRegistryEvents()
+    {
+        var engine = MutableEngine();
+        var result = await Send(engine, RegistryAction.Patch, "/", """{"capabilities":{"pagination":true}}""");
+        var events = await EventsFor(engine, result);
+        var registryEvent = events.Single(static item => item.GetProperty("subject").GetString() == "/");
+        var capabilitiesEvent = events.Single(static item =>
+            item.GetProperty("subject").GetString() == "/capabilities");
+
+        await Assert.That(events.Select(static item => item.GetProperty("type").GetString()!).ToArray())
+            .IsEquivalentTo([
+                "io.xregistry.capabilities.updated",
+                "io.xregistry.registry.updated"
+            ], StringComparer.Ordinal);
+        await Assert.That(ChangedNames(registryEvent))
+            .IsEquivalentTo(["capabilities", "epoch", "modifiedat"], StringComparer.Ordinal);
+        await Assert.That(ChangedNames(capabilitiesEvent)).IsEquivalentTo(["flags", "pagination"], StringComparer.Ordinal);
+        await AssertEventEpochMatchesRead(engine, registryEvent, "/");
+    }
+
+    [Test]
     public async Task OutboxEventsAreAtomicDeduplicatedAndCorrelated()
     {
         var engine = Create();
@@ -345,8 +495,17 @@ public class EventTests
         await Assert.That(events.Select(static item => item.GetProperty("subject").GetString()).Distinct().Count()).IsEqualTo(4);
         await Assert.That(events.All(item => item.GetProperty("xregcorrelationid").GetString() == result.CorrelationId)).IsTrue();
         await Assert.That(events.Select(static item => item.GetProperty("time").GetString()).Distinct().Count()).IsEqualTo(1);
-        await Assert.That(events.Single(item => item.GetProperty("subject").GetString() == "/teams/g")
-            .TryGetProperty("data", out _)).IsFalse();
+        var registryEvent = events.Single(static item => item.GetProperty("subject").GetString() == "/");
+        var groupEvent = events.Single(static item => item.GetProperty("subject").GetString() == "/teams/g");
+        var resourceEvent = events.Single(static item => item.GetProperty("subject").GetString() == "/teams/g/notes/n");
+        var versionEvent = events.Single(static item =>
+            item.GetProperty("type").GetString() == "io.xregistry.version.created");
+        await AssertEventEpochMatchesRead(engine, registryEvent, "/");
+        await AssertEventEpochMatchesRead(engine, groupEvent, "/teams/g");
+        await AssertEventEpochMatchesRead(engine, resourceEvent, "/teams/g/notes/n", "/teams/g/notes/n/meta");
+        await AssertEventEpochMatchesRead(engine, versionEvent, versionEvent.GetProperty("subject").GetString()!);
+        await Assert.That(resourceEvent.GetProperty("data").TryGetProperty("changed", out _)).IsFalse();
+        await Assert.That(versionEvent.GetProperty("data").TryGetProperty("changed", out _)).IsFalse();
         await Assert.That(ChangedNames(events.Single(static item => item.GetProperty("subject").GetString() == "/")))
             .IsEquivalentTo(["epoch", "modifiedat", "teams", "teamscount"], StringComparer.Ordinal);
         await Assert.That(async () => await Send(engine, RegistryAction.Patch, "/", """{"teams":{"bad":{"unknown":1}}}"""))
@@ -380,6 +539,24 @@ public class EventTests
 
     private static string[] ChangedNames(JsonElement item) => item.GetProperty("data").GetProperty("changed")
         .EnumerateArray().Select(static value => value.GetString()!).ToArray();
+
+    private static bool HasChangedData(JsonElement cloudEvent) =>
+        cloudEvent.TryGetProperty("data", out var data) && data.TryGetProperty("changed", out _);
+
+    private static async Task AssertEventEpochMatchesRead(RegistryEngine engine, JsonElement item, string path,
+        string? metaPath = null)
+    {
+        var expectedEpoch = (await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement
+            .GetProperty("epoch").GetUInt64();
+        var data = item.GetProperty("data");
+        await Assert.That(data.GetProperty("epoch").GetUInt64()).IsEqualTo(expectedEpoch);
+        if (metaPath is not null)
+        {
+            var expectedMetaEpoch = (await Send(engine, RegistryAction.Read, metaPath)).Metadata!.RootElement
+                .GetProperty("epoch").GetUInt64();
+            await Assert.That(data.GetProperty("meta.epoch").GetUInt64()).IsEqualTo(expectedMetaEpoch);
+        }
+    }
 
     private sealed class EventClock : TimeProvider
     {

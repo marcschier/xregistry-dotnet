@@ -1,6 +1,7 @@
 // Copyright (c) 2026 xregistry-dotnet contributors.
 // SPDX-License-Identifier: MIT
 
+using System.Numerics;
 using System.Text;
 using System.Text.Json;
 using XRegistry.Http;
@@ -59,7 +60,7 @@ public sealed class RegistryInteractionEvents
     /// Created/deleted and model/modelsource events cannot receive a changed list.
     /// </remarks>
     public void Record(RegistryEventEntity entity, RegistryEventAction action, string subject,
-        IEnumerable<string>? changed = null)
+        IEnumerable<string>? changed = null, BigInteger? epoch = null, BigInteger? metaEpoch = null)
     {
         if (_sealed is not null)
         {
@@ -72,15 +73,27 @@ public sealed class RegistryInteractionEvents
         var canonical = ValidateSubject(entity, subject);
         if ((entity is RegistryEventEntity.Registry or RegistryEventEntity.Model or RegistryEventEntity.ModelSource or
                 RegistryEventEntity.Capabilities && action != RegistryEventAction.Updated) ||
-            (action == RegistryEventAction.Deprecation && entity is not (RegistryEventEntity.Group or RegistryEventEntity.Resource)))
+            (action == RegistryEventAction.Deprecated && entity is not (RegistryEventEntity.Group or RegistryEventEntity.Resource)))
         {
             throw new ArgumentException("This action is not defined for the event entity.", nameof(action));
         }
-        var prohibitChanges = action is RegistryEventAction.Created or RegistryEventAction.Deleted ||
+        var prohibitChanges = action is RegistryEventAction.Created or RegistryEventAction.Deprecated or RegistryEventAction.Deleted ||
             entity is RegistryEventEntity.Model or RegistryEventEntity.ModelSource;
         if (prohibitChanges && changed is not null)
         {
             throw new ArgumentException("This event must not include changed attributes.", nameof(changed));
+        }
+        var epochEntity = entity is RegistryEventEntity.Registry or RegistryEventEntity.Group or
+            RegistryEventEntity.Resource or RegistryEventEntity.Version;
+        var epochAction = action is RegistryEventAction.Created or RegistryEventAction.Updated;
+        var requiresEpoch = epochEntity && epochAction;
+        var requiresMetaEpoch = entity == RegistryEventEntity.Resource && epochAction;
+        if (epoch.HasValue && epoch.Value < BigInteger.Zero ||
+            metaEpoch.HasValue && metaEpoch.Value < BigInteger.Zero ||
+            epoch.HasValue != requiresEpoch ||
+            metaEpoch.HasValue != requiresMetaEpoch)
+        {
+            throw new ArgumentException("Created and updated entity events require valid final epochs.", nameof(epoch));
         }
         if (_observations == _limits.MaxObservations)
         {
@@ -105,7 +118,7 @@ public sealed class RegistryInteractionEvents
                 names!.Add(name);
             }
         }
-        var key = (canonical, action == RegistryEventAction.Deprecation);
+        var key = (canonical, action == RegistryEventAction.Deprecated);
         _entries.TryGetValue(key, out var prior);
         if (prior is null && _entries.Count == _limits.MaxEvents)
         {
@@ -117,6 +130,8 @@ public sealed class RegistryInteractionEvents
             {
                 action = prior.Action;
                 names = prior.Changed;
+                epoch ??= prior.Epoch;
+                metaEpoch ??= prior.MetaEpoch;
             }
             else if (Priority(prior.Action) == Priority(action))
             {
@@ -128,7 +143,19 @@ public sealed class RegistryInteractionEvents
                 {
                     names.UnionWith(prior.Changed);
                 }
+                epoch ??= prior.Epoch;
+                metaEpoch ??= prior.MetaEpoch;
             }
+            else
+            {
+                epoch ??= prior.Epoch;
+                metaEpoch ??= prior.MetaEpoch;
+            }
+        }
+        if (action is RegistryEventAction.Deleted or RegistryEventAction.Deprecated)
+        {
+            epoch = null;
+            metaEpoch = null;
         }
         if (names?.Count > _limits.MaxChangedAttributes)
         {
@@ -139,14 +166,15 @@ public sealed class RegistryInteractionEvents
         {
             throw Diagnostics.Error("event_limit", subject, "The interaction exceeds its changed-name byte budget.");
         }
-        _entries[key] = new(entity, action, canonical, names, checked((int)bytes));
+        _entries[key] = new(entity, action, canonical, names, epoch, metaEpoch, checked((int)bytes));
         _nameBytes = checked(_nameBytes - (prior?.Bytes ?? 0) + (int)bytes);
         _observations++;
     }
 
     /// <summary>Records a Resource default-pointer change without inventing updates to either Version.</summary>
     /// <remarks>Includes every non-null old/new Version attribute plus the Resource Meta pointer and processing fields.</remarks>
-    public void RecordDefaultVersionChange(string resourceSubject, JsonElement previousVersion, JsonElement nextVersion)
+    public void RecordDefaultVersionChange(string resourceSubject, JsonElement previousVersion, JsonElement nextVersion,
+        BigInteger epoch, BigInteger metaEpoch)
     {
         if (previousVersion.ValueKind != JsonValueKind.Object || nextVersion.ValueKind != JsonValueKind.Object)
         {
@@ -156,7 +184,7 @@ public sealed class RegistryInteractionEvents
             .Where(static property => property.Value.ValueKind != JsonValueKind.Null)
             .Select(static property => property.Name)
             .Concat(["meta.defaultversionid", "meta.epoch", "meta.modifiedat"]);
-        Record(RegistryEventEntity.Resource, RegistryEventAction.Updated, resourceSubject, names);
+        Record(RegistryEventEntity.Resource, RegistryEventAction.Updated, resourceSubject, names, epoch, metaEpoch);
     }
 
     /// <summary>Prepares serializable immutable events and stable per-interaction IDs. Repeated calls return the same batch.</summary>
@@ -169,7 +197,7 @@ public sealed class RegistryInteractionEvents
         var result = _entries.Values.OrderBy(static entry => entry.Subject, StringComparer.Ordinal)
             .ThenBy(static entry => entry.Action).Select((entry, ordinal) => new RegistryChangeEvent(
                 Source, CorrelationId, Time, ordinal, entry.Entity, entry.Action, entry.Subject,
-                entry.Changed?.Order(StringComparer.Ordinal).ToArray())).ToArray();
+                entry.Changed?.Order(StringComparer.Ordinal).ToArray(), entry.Epoch, entry.MetaEpoch)).ToArray();
         foreach (var change in result)
         {
             change.ToJson();
@@ -183,7 +211,7 @@ public sealed class RegistryInteractionEvents
         RegistryEventAction.Updated => 0,
         RegistryEventAction.Created => 1,
         RegistryEventAction.Deleted => 2,
-        RegistryEventAction.Deprecation => 0,
+        RegistryEventAction.Deprecated => 0,
         _ => throw new ArgumentOutOfRangeException(nameof(action))
     };
 
@@ -218,5 +246,5 @@ public sealed class RegistryInteractionEvents
     }
 
     private sealed record Entry(RegistryEventEntity Entity, RegistryEventAction Action, string Subject,
-        HashSet<string>? Changed, int Bytes);
+        HashSet<string>? Changed, BigInteger? Epoch, BigInteger? MetaEpoch, int Bytes);
 }
