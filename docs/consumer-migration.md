@@ -747,21 +747,24 @@ without inserting defaults or acquiring extension values.
 Swagger Header, non-body Parameter and nested Items constraint keywords receive
 native JSON type checks. Numeric bounds must be numbers; exclusive-bound flags
 must be booleans and require their corresponding bounds. Item and length limits
-must be nonnegative mathematical integers, including integral decimal and
-exponent forms. `multipleOf` must be positive. These numeric checks preserve
+must be nonnegative integer tokens without fractional or exponent parts,
+as defined by Swagger's referenced Draft4 core. `multipleOf` must be positive.
+Numeric bounds and multiples preserve
 exact values without conversion to floating point; numeric source tokens beyond
 256 characters report an indeterminate limit instead of rounding or overflow.
 `uniqueItems` is boolean, `pattern` is a string and `enum` is a nonempty array
 whose values remain opaque. Checks reach unused reusable declarations and
 retrieved targets without rewriting authored values. Enum uniqueness, pattern
-syntax and runtime constraint evaluation remain
-unverified; contradictory bounds are not rejected merely because they describe
+syntax and runtime constraint evaluation remain unverified; contradictory
+bounds are not rejected merely because they describe
 an unsatisfiable domain.
 Swagger scalar defaults must match their declared primitive type; array defaults
 must also match nested Items types. Each nested Items declaration receives its
-own default checks. Integer defaults use exact mathematical values, with the
-same 256-character token limit; number defaults do not require conversion to
-floating point. A file-typed default reports an indeterminate result because
+own default checks. The Draft4 integer rule also applies to defaults: `1.0`,
+`100e-2` and `1e999` do not satisfy an integer declaration, even when their
+mathematical value is integral. Signed zero remains valid. Integer defaults
+retain the 256-character token limit; number defaults do not require conversion
+to floating point. A file-typed default reports an indeterminate result because
 Swagger does not assign a JSON representation for that type. Errors identify
 the default or nested array value that fails its type check. These checks reach
 unused reusable declarations and retrieved targets, while pointers retain

@@ -57,10 +57,12 @@ public class ApiOperationReferenceTests
                 ("string", "null", false), ("boolean", "true", true), ("boolean", "false", true),
                 ("boolean", "0", false), ("boolean", "null", false),
                 ("number", "1e999", true), ("number", "-0.25", true), ("number", "\"1\"", false),
-                ("number", "null", false), ("integer", "1.0", true), ("integer", "100e-2", true),
-                ("integer", "-0", true), ("integer", "-1", true), ("integer", "1e999", true),
+                ("number", "null", false), ("integer", "1.0", false), ("integer", "100e-2", false),
+                ("integer", "-0", true), ("integer", "-1", true), ("integer", "1e999", false),
+                ("integer", "0.0", false), ("integer", "-0e0", false), ("integer", "1E2", false),
                 ("integer", "0.1", false), ("integer", "1e-999", false), ("integer", "null", false),
-                ("array", "[]", true), ("array", "[1,2.0,300e-2]", true), ("array", "[1,\"2\"]", false),
+                ("array", "[]", true), ("array", "[1,2,3]", true), ("array", "[1,2.0,300e-2]", false),
+                ("array", "[1,\"2\"]", false),
                 ("array", "[null]", false), ("array", "{}", false), ("array", "null", false)
             })
             {
@@ -74,7 +76,7 @@ public class ApiOperationReferenceTests
                 }
                 else
                 {
-                    declaration["name"] = "p"; declaration["in"] = "query";
+                    declaration["name"] = "p"; declaration["in"] = "query"; declaration["required"] = true;
                     operation["parameters"] = new JsonArray(declaration);
                 }
                 var document = new JsonObject { ["swagger"] = "2.0",
@@ -244,20 +246,20 @@ public class ApiOperationReferenceTests
     }
 
     [Test]
-    public async Task SwaggerScalarConstraintNumbersUseExactMathematicalValuesAndBoundSourceLength()
+    public async Task SwaggerScalarConstraintNumbersUseDraft4IntegerSyntaxAndExactBoundsWithinSourceLength()
     {
         foreach (var header in new[] { true, false })
         {
             foreach (var field in new[] { "minLength", "maxLength", "minItems", "maxItems", "multipleOf", "minimum", "maximum" })
             {
-                foreach (var number in new[] { "-0", "0", "1.0", "1e2", "100e-2", "1e-2", "-1", "-0.01",
+                foreach (var number in new[] { "-0", "0", "0.0", "-0e0", "1.0", "1e2", "1E2", "100e-2", "1e-2", "-1", "-0.01",
                     "1e999", "1e-999", "1" + new string('0', 254), "1" + new string('0', 255),
                     "1" + new string('0', 256) })
                 {
                     var count = field is "minLength" or "maxLength" or "minItems" or "maxItems";
                     var overLimit = number.Length > 256;
-                    var positive = number is not ("-0" or "0" or "-1" or "-0.01");
-                    var integral = number is not ("1e-2" or "-0.01" or "1e-999");
+                    var positive = number is not ("-0" or "0" or "0.0" or "-0e0" or "-1" or "-0.01");
+                    var integral = number.All(character => char.IsAsciiDigit(character) || character == '-');
                     var negative = number is "-1" or "-0.01";
                     var valid = field == "multipleOf" ? positive : !count || integral && !negative;
                     var scalar = new JsonObject { ["type"] = "integer", [field] = JsonNode.Parse(number) };
@@ -361,7 +363,7 @@ public class ApiOperationReferenceTests
             var scalar = JsonNode.Parse("""
                 {"type":"string","minimum":-1e999,"maximum":1e999,"multipleOf":0.001,
                 "exclusiveMinimum":false,"exclusiveMaximum":true,"uniqueItems":false,
-                "minItems":0,"maxItems":100,"minLength":0,"maxLength":1e999,
+                "minItems":0,"maxItems":100,"minLength":0,"maxLength":999999999999999999999999999999,
                 "pattern":"","enum":[null,false,{"$ref":"https://must-not-load.test/enum"},[1]]}
                 """)!.AsObject();
             var operation = new JsonObject { ["operationId"] = "Target" };

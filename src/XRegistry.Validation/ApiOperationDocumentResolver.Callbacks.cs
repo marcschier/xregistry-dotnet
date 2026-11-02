@@ -534,9 +534,9 @@ public static partial class ApiOperationDocumentResolver
                         return InvalidScalar("Swagger multipleOf requires a positive number.", path + "/" + field);
                     }
                     if (field is "minLength" or "maxLength" or "minItems" or "maxItems" &&
-                        (number.Negative || !number.IsInteger))
+                        (number.Negative || value.GetRawText().AsSpan().IndexOfAny('.', 'e', 'E') >= 0))
                     {
-                        return InvalidScalar("A Swagger length or item count requires a nonnegative integer.", path + "/" + field);
+                        return InvalidScalar("A Swagger length or item count requires a nonnegative Draft4 integer token without fraction or exponent.", path + "/" + field);
                     }
                 }
                 if (field is "exclusiveMinimum" or "exclusiveMaximum" &&
@@ -591,12 +591,12 @@ public static partial class ApiOperationDocumentResolver
             };
             if (valid && type == "integer")
             {
-                if (!JsonNumber.TryRead(item.Value, out var number))
+                if (!JsonNumber.TryRead(item.Value, out _))
                 {
                     return Failure(ApiOperationResolutionStatus.Indeterminate, "limit.number",
                         "Integer Swagger default tokens are limited to 256 source characters.", item.Pointer);
                 }
-                valid = number.IsInteger;
+                valid = item.Value.GetRawText().AsSpan().IndexOfAny('.', 'e', 'E') < 0;
             }
             if (!valid)
             {
