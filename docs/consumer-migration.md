@@ -889,8 +889,8 @@ declarations, callback-map types and servers receive bounded shape checks.
 Acquisition failures report the authored link's `operationRef`; malformed
 targets report the resolved target's path. Selected operations retain their
 authored links and response references.
-Target admission does not recursively follow the target's response links or
-callbacks, establish an invocation URL for multiply mounted Path Items,
+Target admission does not recursively follow the target's response links,
+establish an invocation URL for multiply mounted Path Items,
 evaluate schemas or runtime expressions, or invoke the operation.
 For OpenAPI 3.0 targets with `requestBody`, admission derives the HTTP method
 only from a supported Paths or Callback operation location. POST, PUT and PATCH
@@ -935,6 +935,18 @@ prevent selection with the existing security or dependency diagnostics.
 Admission does not retrieve discovery, token or authorization addresses,
 authenticate a caller or evaluate whether the caller can invoke the target.
 The source operation's security declaration remains absent when unauthored.
+Linked targets' callbacks use the existing bounded Callback and Path Item
+traversal. Callback reference chains and Path Item references resolve from
+their containing documents; callback operations receive the existing metadata,
+parameter, request-body, response and security checks. Nested callbacks retain
+cycle detection and shared work, depth and acquisition limits. Malformed
+expressions, invalid declarations and unavailable dependencies prevent source
+selection with the failing declaration's diagnostic. Callback extensions remain
+opaque. Response links inside these callback operations remain inactive,
+including named links and referenced Link Objects. Callback occurrences reached
+only through a linked target do not become members of the selected entry
+description's operation-ID lookup. Admission neither evaluates callback
+expressions nor sends callback requests.
 Unused reusable Link references remain inactive. These checks do not qualify
 the complete linked description.
 Root and reached HTTP operation `externalDocs` values must be objects with a

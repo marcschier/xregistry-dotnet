@@ -35,7 +35,7 @@ public static partial class ApiOperationDocumentResolver
         OperationLocation location, string? operationId, bool includeCallbacks, List<OperationLocation> matches,
         Dictionary<string, int> operationCounts, ReferenceContext references, ValidationContext budget,
         HashSet<string> active, int depth,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, bool followLinks = true)
     {
         budget.Work(path: location.Pointer);
         if (depth > Capabilities.MaxReferenceDepth)
@@ -53,7 +53,7 @@ public static partial class ApiOperationDocumentResolver
             location.HttpMethod, cancellationToken);
         if (metadataFailure is not null) { return metadataFailure; }
         var responseFailure = await ValidateEffectiveHttpDeclarationsAsync(location.Operation, location.Source,
-            location.Pointer, location.HttpMethod, references, cancellationToken).ConfigureAwait(false);
+            location.Pointer, location.HttpMethod, references, cancellationToken, followLinks).ConfigureAwait(false);
         if (responseFailure is not null) { return responseFailure; }
         if (location.PathTemplate is not null)
         {
@@ -102,7 +102,7 @@ public static partial class ApiOperationDocumentResolver
                 budget.Work(path: location.Pointer);
                 var failure = await CollectCallbackMatchesAsync(callback.Value, location.Source,
                     location.Pointer + "/callbacks/" + Escape(callback.Name), operationId, matches, operationCounts,
-                    references, budget, active, depth + 1, cancellationToken).ConfigureAwait(false);
+                    references, budget, active, depth + 1, cancellationToken, followLinks).ConfigureAwait(false);
                 if (failure is not null) { return failure; }
             }
         }
@@ -1377,7 +1377,7 @@ public static partial class ApiOperationDocumentResolver
 
     private static async ValueTask<ApiOperationResolutionResult?> ValidateEffectiveHttpDeclarationsAsync(
         JsonElement operation, ReferencedDocument source, string pointer, string? httpMethod, ReferenceContext references,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, bool followLinks = true)
     {
         var parameterFailure = await ValidateEffectiveOpenApiParametersAsync(operation, source, pointer,
             references, cancellationToken).ConfigureAwait(false);
@@ -1385,7 +1385,7 @@ public static partial class ApiOperationDocumentResolver
         var bodyFailure = await ValidateEffectiveOpenApiRequestBodyAsync(
             new ReferenceTarget(source, operation, pointer), httpMethod, references, cancellationToken).ConfigureAwait(false);
         if (bodyFailure is not null) { return bodyFailure; }
-        return await ValidateEffectiveHttpResponsesAsync(operation, source, pointer, references, true,
+        return await ValidateEffectiveHttpResponsesAsync(operation, source, pointer, references, followLinks,
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -1505,8 +1505,27 @@ public static partial class ApiOperationDocumentResolver
         if (parameterFailure is not null) { return parameterFailure; }
         var bodyFailure = await ValidateEffectiveOpenApiRequestBodyAsync(target, httpMethod, references,
             cancellationToken).ConfigureAwait(false);
-        return bodyFailure ?? await ValidateEffectiveHttpResponsesAsync(target.Value, target.Document, target.Pointer,
+        if (bodyFailure is not null) { return bodyFailure; }
+        var responseFailure = await ValidateEffectiveHttpResponsesAsync(target.Value, target.Document, target.Pointer,
             references, false, cancellationToken).ConfigureAwait(false);
+        if (responseFailure is not null) { return responseFailure; }
+        if (callbacks.ValueKind == JsonValueKind.Object)
+        {
+            var matches = new List<OperationLocation>();
+            var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+            var active = new HashSet<string>(StringComparer.Ordinal)
+            {
+                target.Document.Identity + "#" + target.Pointer
+            };
+            foreach (var callback in callbacks.EnumerateObject())
+            {
+                var failure = await CollectCallbackMatchesAsync(callback.Value, target.Document,
+                    target.Pointer + "/callbacks/" + Escape(callback.Name), null, matches, counts,
+                    references, references.Budget, active, 1, cancellationToken, false).ConfigureAwait(false);
+                if (failure is not null) { return failure; }
+            }
+        }
+        return null;
 
         static ApiOperationResolutionResult InvalidTarget(string message, string path) =>
             Failure(ApiOperationResolutionStatus.Invalid, "document.link_operation_ref", message, path);
@@ -2087,7 +2106,7 @@ public static partial class ApiOperationDocumentResolver
         JsonElement callback, ReferencedDocument source, string pointer, string? operationId,
         List<OperationLocation> matches, Dictionary<string, int> operationCounts,
         ReferenceContext references, ValidationContext budget,
-        HashSet<string> active, int depth, CancellationToken cancellationToken)
+        HashSet<string> active, int depth, CancellationToken cancellationToken, bool followLinks = true)
     {
         var referencePath = new HashSet<string>(StringComparer.Ordinal);
         while (true)
@@ -2136,7 +2155,7 @@ public static partial class ApiOperationDocumentResolver
             foreach (var operation in pathItem.Operations.Values)
             {
                 var failure = await CollectOperationMatchesAsync(operation, operationId, true, matches, operationCounts,
-                    references, budget, active, depth, cancellationToken).ConfigureAwait(false);
+                    references, budget, active, depth, cancellationToken, followLinks).ConfigureAwait(false);
                 if (failure is not null) { return failure; }
             }
         }
