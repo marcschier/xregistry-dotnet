@@ -189,6 +189,12 @@ before opening a binding for a programmatically supplied channel head.
 These checks do not authorize acquisition or select an alternate binding.
 Document-tree and extension bindings retain their own selection rules.
 
+Parsed references and programmatic channel access use the same endpoint
+guard before the binding resolver runs. Endpoints must be well-formed absolute
+URIs without embedded user information; local path spellings are not converted
+into File access. This check does not authorize a destination or replace the
+selected binding's endpoint and parameter rules.
+
 A `source-snapshot` manifest must declare at least one included mandatory
 extension. Missing or empty `requiredExtensions` rejects before a channel
 update changes persistence. This is a necessary structural check, not proof

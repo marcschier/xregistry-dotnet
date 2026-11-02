@@ -399,7 +399,17 @@ internal static class PublicationJson
     internal static string RequireCredentialFreeEndpoint(JsonElement value, string path)
     {
         var endpoint = RequireAbsoluteUri(value, path);
-        if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri) || uri.UserInfo.Length != 0)
+        return RequireCredentialFreeEndpoint(endpoint, path);
+    }
+
+    internal static string RequireCredentialFreeEndpoint(string endpoint, string path)
+    {
+        if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri) || !uri.IsWellFormedOriginalString())
+        {
+            throw Error("invalid_uri", path, "An absolute endpoint URI is required.");
+        }
+
+        if (uri.UserInfo.Length != 0)
         {
             throw Error("credentialed_endpoint", path, "A credential-free absolute endpoint URI is required.");
         }

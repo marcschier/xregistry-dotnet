@@ -18,6 +18,51 @@ public class PublicationReadClientTests
         new Dictionary<string, string>(StringComparer.Ordinal));
 
     [Test]
+    [Arguments(false, "https://reader:password@publisher.example.test", "credentialed_endpoint")]
+    [Arguments(true, "https://reader:password@publisher.example.test", "credentialed_endpoint")]
+    [Arguments(false, "/relative", "invalid_uri")]
+    [Arguments(true, "/relative", "invalid_uri")]
+    [Arguments(false, "", "invalid_uri")]
+    [Arguments(true, "", "invalid_uri")]
+    [Arguments(false, "D:\\captured", "invalid_uri")]
+    [Arguments(true, "D:\\captured", "invalid_uri")]
+    [Arguments(false, "https://publisher.example.test/a b", "invalid_uri")]
+    [Arguments(true, "https://publisher.example.test/a b", "invalid_uri")]
+    public async Task ProgrammaticAccessRejectsInvalidEndpointsBeforeBindingAcquisition(
+        bool channelHead, string endpoint, string expectedCode)
+    {
+        var fixture = Fixture.Create();
+        var access = Access with { Endpoint = endpoint };
+        if (channelHead)
+        {
+            fixture.ChannelMetadata = fixture.ChannelMetadata with
+            {
+                Head = fixture.ManifestDescriptor with
+                {
+                    Reference = fixture.ManifestDescriptor.Reference with { Registry = access }
+                }
+            };
+        }
+        var binding = fixture.Binding();
+        var calls = 0;
+        var client = new PublicationReadClient((_, _) =>
+        {
+            calls++;
+            return ValueTask.FromResult<IPublicationReadBinding>(binding);
+        });
+
+        var error = await Assert.That(async () =>
+                await client.OpenChannelAsync(channelHead ? Access : access, ChannelResource))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected endpoint rejection.");
+
+        await Assert.That(error.Code).IsEqualTo(expectedCode);
+        await Assert.That(error.Path).IsEqualTo("/reference/registry/endpoint");
+        await Assert.That(calls).IsEqualTo(channelHead ? 1 : 0);
+        await Assert.That(binding.ChannelReadCount).IsEqualTo(channelHead ? 1 : 0);
+        await Assert.That(binding.OpenedVersions.Count).IsZero();
+    }
+
+    [Test]
     [Arguments("git")]
     [Arguments("oci")]
     [Arguments("file")]

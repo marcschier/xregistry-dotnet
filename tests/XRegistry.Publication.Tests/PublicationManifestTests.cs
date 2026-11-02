@@ -435,6 +435,22 @@ public class PublicationManifestTests
     }
 
     [Test]
+    [Arguments("/relative")]
+    [Arguments("D:\\captured")]
+    [Arguments("https://publisher.example.test/a b")]
+    public async Task ParsedPublicationEndpointsRejectPlatformPathsAndMalformedUriSpellings(string endpoint)
+    {
+        var json = JsonNode.Parse(ValidManifest)!.AsObject();
+        json["registry"]!["reference"]!["registry"]!["endpoint"] = endpoint;
+
+        var error = await Assert.That(() => PublicationManifest.Parse(Encoding.UTF8.GetBytes(json.ToJsonString())))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected endpoint syntax rejection.");
+
+        await Assert.That(error.Code).IsEqualTo("invalid_uri");
+        await Assert.That(error.Path).IsEqualTo("/reference/registry/endpoint");
+    }
+
+    [Test]
     public async Task RejectsSelfDigestRatherThanMakingManifestIdentityRecursive()
     {
         var json = JsonNode.Parse(ValidManifest)!.AsObject();
