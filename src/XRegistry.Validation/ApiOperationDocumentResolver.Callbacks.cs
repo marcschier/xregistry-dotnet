@@ -351,6 +351,28 @@ public static partial class ApiOperationDocumentResolver
     private static ApiOperationResolutionResult? ValidateSwaggerTransportDeclarations(
         JsonElement value, string pointer, CancellationToken cancellationToken)
     {
+        if (pointer == "$")
+        {
+            foreach (var field in new[] { "host", "basePath" })
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!value.TryGetProperty(field, out var address)) { continue; }
+                if (address.ValueKind != JsonValueKind.String)
+                {
+                    return Failure(ApiOperationResolutionStatus.Invalid, "document.swagger_endpoint",
+                        "Swagger host and basePath declarations must be strings.", "$/" + field);
+                }
+                var text = address.GetString()!;
+                if (text.AsSpan().IndexOfAny('{', '}') >= 0 ||
+                    field == "basePath" && !text.StartsWith('/') ||
+                    field == "host" && text.AsSpan().IndexOfAny("/\\?#@".AsSpan()) >= 0)
+                {
+                    return Failure(ApiOperationResolutionStatus.Invalid, "document.swagger_endpoint",
+                        "Swagger host must contain only a host and optional port; basePath must start with '/'; neither supports templates.",
+                        "$/" + field);
+                }
+            }
+        }
         foreach (var field in new[] { "schemes", "consumes", "produces" })
         {
             cancellationToken.ThrowIfCancellationRequested();

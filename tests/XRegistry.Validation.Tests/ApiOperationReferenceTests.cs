@@ -11,6 +11,118 @@ namespace XRegistry.Validation.Tests;
 public class ApiOperationReferenceTests
 {
     [Test]
+    public async Task SwaggerEndpointDeclarationsRejectNativeShapeAndForbiddenAddressPartsBeforeAcquisition()
+    {
+        foreach (var (field, json) in new (string, string)[]
+        {
+            ("host", "null"), ("host", "12"), ("host", "[]"),
+            ("host", "\"https://example.test\""), ("host", "\"example.test/path\""),
+            ("host", "\"example.test?query\""), ("host", "\"example.test#fragment\""),
+            ("host", "\"user@example.test\""), ("host", "\"{host}.test\""),
+            ("host", "\"example.test}\""), ("host", "\"bad\\\\host\""),
+            ("basePath", "null"), ("basePath", "true"), ("basePath", "{}"),
+            ("basePath", "\"\""), ("basePath", "\"relative\""),
+            ("basePath", "\"/api/{version}\""), ("basePath", "\"/api}\"")
+        })
+        {
+            foreach (var selector in new[] { "operations/Target", "operations/Missing", "/paths/~1items/get" })
+            {
+                var document = JsonNode.Parse("""
+                    {"swagger":"2.0","paths":{"/items":{"get":{"operationId":"Target"}},
+                    "/remote":{"$ref":"https://allowed.test/path"}}}
+                    """)!;
+                document[field] = JsonNode.Parse(json);
+                var calls = 0;
+                var result = await ApiOperationDocumentResolver.ResolveAsync("Swagger/2.0", "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                    resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+                await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.swagger_endpoint");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo("$/" + field);
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                await Assert.That(calls).IsEqualTo(0);
+            }
+        }
+    }
+
+    [Test]
+    public async Task SwaggerEndpointDeclarationsPreserveAuthoredAddressesAndRemainRootOnly()
+    {
+        foreach (var (host, basePath) in new[]
+        {
+            ("Example.test:8443", "/api"), ("127.0.0.1:80", "/"),
+            ("[2001:db8::1]:443", "/api/%7Bversion%7D"), ("localhost", "/a//b/../c")
+        })
+        {
+            var operation = JsonNode.Parse("""{"operationId":"Target","host":false,"basePath":null}""")!;
+            var document = new JsonObject
+            {
+                ["swagger"] = "2.0", ["host"] = host, ["basePath"] = basePath,
+                ["paths"] = new JsonObject { ["/items"] = new JsonObject { ["get"] = operation.DeepClone() } },
+                ["x-private"] = JsonNode.Parse("""{"host":"https://not-acquired.test/{host}","basePath":false}""")
+            };
+            foreach (var selector in new[] { "operations/Target", "/paths/~1items/get" })
+            {
+                var calls = 0;
+                var result = await ApiOperationDocumentResolver.ResolveAsync("Swagger/2.0", "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                    resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+                await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+                await Assert.That(JsonNode.DeepEquals(operation, JsonNode.Parse(result.Operation.GetRawText()))).IsTrue();
+                await Assert.That(calls).IsEqualTo(0);
+                await Assert.That(document["host"]!.GetValue<string>()).IsEqualTo(host);
+                await Assert.That(document["basePath"]!.GetValue<string>()).IsEqualTo(basePath);
+            }
+        }
+        foreach (var version in new[] { "3.0.4", "3.1.1" })
+        {
+            var document = new JsonObject { ["openapi"] = version, ["host"] = false, ["basePath"] = 1,
+                ["paths"] = JsonNode.Parse("""{"/items":{"get":{"operationId":"Target"}}}""") };
+            var result = ApiOperationDocumentResolver.Resolve("OpenAPI/" + version[..3], "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"));
+            await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+            await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("Target");
+        }
+    }
+
+    [Test]
+    public async Task SwaggerEndpointAdmissionTracksRootRestorationWithoutApplyingFragmentRootFields()
+    {
+        foreach (var valid in new[] { true, false, true })
+        {
+            var document = new JsonObject
+            {
+                ["swagger"] = "2.0", ["host"] = valid ? "example.test:443" : "https://example.test",
+                ["basePath"] = "/api",
+                ["paths"] = JsonNode.Parse("""{"/items":{"$ref":"https://allowed.test/path#/item"}}""")
+            };
+            var calls = 0;
+            var result = await ApiOperationDocumentResolver.ResolveAsync("Swagger/2.0", "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+                resolveReference: (_, _) =>
+                {
+                    calls++;
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(
+                        """{"host":false,"basePath":false,"item":{"get":{"operationId":"Target"}}}"""));
+                });
+            await Assert.That(result.Status).IsEqualTo(valid
+                ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+            await Assert.That(calls).IsEqualTo(valid ? 1 : 0);
+            if (valid) { await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("Target"); }
+            else
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.swagger_endpoint");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo("$/host");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+        }
+    }
+
+    [Test]
     [Arguments("Swagger/2.0", "2.0")]
     [Arguments("OpenAPI/3.0", "3.0.4")]
     [Arguments("OpenAPI/3.1", "3.1.1")]
