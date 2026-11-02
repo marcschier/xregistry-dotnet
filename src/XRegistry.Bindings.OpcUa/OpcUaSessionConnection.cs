@@ -38,19 +38,30 @@ public sealed class OpcUaSessionConnection : IAsyncDisposable
     public static async ValueTask<OpcUaSessionConnection> OpenAsync(OpcUaFederationTarget target,
         ApplicationConfiguration configuration, ITelemetryContext telemetry, IUserIdentity userIdentity,
         NodeId registryType, Func<EndpointDescription, bool> isPermitted,
-        Func<string, bool> isSupportedSpecVersion, CancellationToken cancellationToken = default)
+        Func<string, bool> isSupportedTransportProfile, Func<string, bool> isSupportedSpecVersion,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(telemetry);
         ArgumentNullException.ThrowIfNull(userIdentity);
         ArgumentNullException.ThrowIfNull(isPermitted);
+        ArgumentNullException.ThrowIfNull(isSupportedTransportProfile);
         ArgumentNullException.ThrowIfNull(isSupportedSpecVersion);
+        cancellationToken.ThrowIfCancellationRequested();
 
-        using var discovery = await DiscoveryClient.CreateAsync(configuration, new Uri(target.Endpoint),
+        target.RequireSupportedTransportProfile(isSupportedTransportProfile);
+        var endpointUri = new Uri(target.Endpoint);
+        if (!ClientChannelManager.DefaultChannelBindings.HasChannelFactory(endpointUri.Scheme))
+        {
+            throw new FederationException(FederationErrorCode.UnsupportedOperation,
+                "No OPC UA client transport factory is registered for the advertised endpoint scheme.");
+        }
+
+        using var discovery = await DiscoveryClient.CreateAsync(configuration, endpointUri,
             DiagnosticsMasks.None, cancellationToken).ConfigureAwait(false);
         var endpoints = await discovery.GetEndpointsAsync([], cancellationToken).ConfigureAwait(false);
-        var selected = target.SelectEndpoint(endpoints.ToArray() ?? [], isPermitted);
+        var selected = target.SelectEndpoint(endpoints.ToArray() ?? [], isPermitted, isSupportedTransportProfile);
         var serverApplicationUri = selected.Server?.ApplicationUri;
         if (string.IsNullOrEmpty(serverApplicationUri))
         {

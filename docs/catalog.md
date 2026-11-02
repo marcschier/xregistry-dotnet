@@ -109,6 +109,23 @@ interpreting Registry contents and parses the `Capabilities` and `Model` files
 as JSON. `OpcUaSessionConnection` discovers endpoints and opens a Session only
 after caller policy selects one; it maps the advertised root through the
 Session's `NamespaceArray` and verifies the root and Core version.
+
+`OpcUaSessionConnection.OpenAsync` and `OpcUaFederationTarget.SelectEndpoint`
+require an `isSupportedTransportProfile` predicate in addition to endpoint
+permission. The caller identifies the profiles its installed transports support;
+the binding does not restrict custom profiles to a built-in list. A rejected
+requested profile produces `unsupported_operation` before discovery, without
+dropping the request or trying another transport. An endpoint scheme without a
+factory in the SDK's default client transport registry also rejects before
+discovery.
+
+Discovered endpoints must first match the advertised URL and optional application
+and transport identities. No identity match remains `not_found`. Matching
+endpoints with no supported profile produce `unsupported_operation`; supported
+matches denied by caller policy produce `policy_denied`. Multiple supported,
+permitted matches remain `ambiguous`. Transport support does not grant endpoint
+permission, establish trust, or replace certificate verification.
+
 `OpcUaSessionAdapter` maps read and write operations onto an `ISessionClient`,
 using OPC Foundation .NET Stack 2.0.1. `OpcUaRegistryReader` maps Registry,
 Group, logical Resource and exact Version properties. Default Resource

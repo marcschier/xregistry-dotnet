@@ -137,7 +137,8 @@ public class OpcUaFederationTargetTests
             "urn:example:registry",
             "urn:example:transport");
 
-        var selected = target.SelectEndpoint([candidate], _ => true);
+        var selected = target.SelectEndpoint([candidate], _ => true,
+            profile => profile == "urn:example:transport");
 
         await Assert.That(ReferenceEquals(selected, candidate)).IsTrue();
         await Assert.That(selected.EndpointUrl).IsEqualTo("opc.tcp://registry.example.test:4840");
@@ -155,7 +156,8 @@ public class OpcUaFederationTargetTests
             "urn:other:registry",
             "urn:example:transport");
 
-        await Check.Error(() => target.SelectEndpoint([candidate], _ => true), FederationErrorCode.NotFound);
+        await Check.Error(() => target.SelectEndpoint([candidate], _ => true, _ => true),
+            FederationErrorCode.NotFound);
     }
 
     [Test]
@@ -168,7 +170,8 @@ public class OpcUaFederationTargetTests
             "urn:example:registry",
             "urn:other:transport");
 
-        await Check.Error(() => target.SelectEndpoint([candidate], _ => true), FederationErrorCode.NotFound);
+        await Check.Error(() => target.SelectEndpoint([candidate], _ => true, _ => true),
+            FederationErrorCode.NotFound);
     }
 
     [Test]
@@ -182,7 +185,7 @@ public class OpcUaFederationTargetTests
         {
             policyWasApplied = true;
             return false;
-        }), FederationErrorCode.PolicyDenied);
+        }, _ => true), FederationErrorCode.PolicyDenied);
 
         await Assert.That(policyWasApplied).IsTrue();
     }
@@ -192,7 +195,7 @@ public class OpcUaFederationTargetTests
     {
         var target = Target("""{"registryroot":"i=85"}""");
 
-        await Check.Error(() => target.SelectEndpoint([], _ => true), FederationErrorCode.NotFound);
+        await Check.Error(() => target.SelectEndpoint([], _ => true, _ => true), FederationErrorCode.NotFound);
     }
 
     [Test]
@@ -202,7 +205,8 @@ public class OpcUaFederationTargetTests
         var first = Endpoint("opc.tcp://registry.example.test:4840");
         var second = Endpoint("opc.tcp://registry.example.test:4840");
 
-        await Check.Error(() => target.SelectEndpoint([first, second], _ => true), FederationErrorCode.Ambiguous);
+        await Check.Error(() => target.SelectEndpoint([first, second], _ => true, _ => true),
+            FederationErrorCode.Ambiguous);
     }
 
     [Test]
@@ -211,7 +215,106 @@ public class OpcUaFederationTargetTests
         var target = Target("""{"registryroot":"i=85"}""");
         var otherEndpoint = Endpoint("opc.tcp://other.example.test:4840");
 
-        await Check.Error(() => target.SelectEndpoint([otherEndpoint], _ => true), FederationErrorCode.NotFound);
+        await Check.Error(() => target.SelectEndpoint([otherEndpoint], _ => true, _ => true),
+            FederationErrorCode.NotFound);
+    }
+
+    [Test]
+    public async Task SelectEndpointRejectsUnsupportedRequestedTransportBeforeEnumeratingCandidates()
+    {
+        var target = Target("""{"registryroot":"i=85","transportprofileuri":"urn:example:unsupported"}""");
+        var profileChecks = new List<string>();
+        var candidates = Enumerable.Repeat(0, 1).Select<int, EndpointDescription>(
+            _ => throw new InvalidOperationException("Endpoint enumeration must not run."));
+
+        await Check.Error(() => target.SelectEndpoint(candidates,
+            _ => throw new InvalidOperationException("Endpoint policy must not run."),
+            profile =>
+            {
+                profileChecks.Add(profile);
+                return false;
+            }), FederationErrorCode.UnsupportedOperation);
+
+        await Assert.That(profileChecks).IsEquivalentTo(["urn:example:unsupported"]);
+    }
+
+    [Test]
+    public async Task SelectEndpointDoesNotDropUnsupportedRequestedTransportForASupportedCandidate()
+    {
+        var target = Target("""{"registryroot":"i=85","transportprofileuri":"urn:example:unsupported"}""");
+        var candidate = Endpoint("opc.tcp://registry.example.test:4840",
+            transportProfileUri: "urn:example:supported");
+
+        await Check.Error(() => target.SelectEndpoint([candidate],
+            _ => throw new InvalidOperationException("Endpoint policy must not run."),
+            profile => profile == "urn:example:supported"), FederationErrorCode.UnsupportedOperation);
+    }
+
+    [Test]
+    public async Task SelectEndpointExcludesUnsupportedProfilesBeforePolicyAndAmbiguityChecks()
+    {
+        var target = Target("""{"registryroot":"i=85"}""");
+        var unsupported = Endpoint("opc.tcp://registry.example.test:4840",
+            transportProfileUri: "urn:example:unsupported");
+        var supported = Endpoint("opc.tcp://registry.example.test:4840",
+            transportProfileUri: "urn:example:custom");
+        var policyInputs = new List<EndpointDescription>();
+
+        var selected = target.SelectEndpoint([unsupported, supported], endpoint =>
+        {
+            policyInputs.Add(endpoint);
+            return true;
+        }, profile => profile == "urn:example:custom");
+
+        await Assert.That(ReferenceEquals(selected, supported)).IsTrue();
+        await Assert.That(policyInputs.Count).IsEqualTo(1);
+        await Assert.That(ReferenceEquals(policyInputs[0], supported)).IsTrue();
+    }
+
+    [Test]
+    [Arguments(null)]
+    [Arguments("")]
+    [Arguments("urn:example:unsupported")]
+    public async Task SelectEndpointReportsUnsupportedMatchingProfilesSeparatelyFromPolicy(string? profile)
+    {
+        var target = Target("""{"registryroot":"i=85"}""");
+        var candidate = Endpoint("opc.tcp://registry.example.test:4840", transportProfileUri: profile);
+
+        await Check.Error(() => target.SelectEndpoint([candidate],
+            _ => throw new InvalidOperationException("Endpoint policy must not run."),
+            value => value == "urn:example:supported"), FederationErrorCode.UnsupportedOperation);
+    }
+
+    [Test]
+    public async Task SelectEndpointDoesNotUseASupportedTransportFromAnUnmatchedIdentity()
+    {
+        var target = Target("""{"registryroot":"i=85","applicationuri":"urn:example:registry"}""");
+        var unsupported = Endpoint("opc.tcp://registry.example.test:4840",
+            transportProfileUri: "urn:example:unsupported");
+        var unrelated = Endpoint("opc.tcp://registry.example.test:4840",
+            applicationUri: "urn:other:registry", transportProfileUri: "urn:example:supported");
+        var checkedProfiles = new List<string>();
+
+        await Check.Error(() => target.SelectEndpoint([unsupported, unrelated],
+            _ => throw new InvalidOperationException("Endpoint policy must not run."),
+            profile =>
+            {
+                checkedProfiles.Add(profile);
+                return profile == "urn:example:supported";
+            }), FederationErrorCode.UnsupportedOperation);
+
+        await Assert.That(checkedProfiles).IsEquivalentTo(["urn:example:unsupported"]);
+    }
+
+    [Test]
+    public async Task SelectEndpointRejectsNullTransportSupportPolicy()
+    {
+        var target = Target("""{"registryroot":"i=85"}""");
+
+        var error = await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            Task.FromResult(target.SelectEndpoint([], _ => true, null!)));
+
+        await Assert.That(error!.ParamName).IsEqualTo("isSupportedTransportProfile");
     }
 
     internal static OpcUaFederationTarget Target(string parameters) =>
@@ -230,7 +333,7 @@ public class OpcUaFederationTargetTests
     private static EndpointDescription Endpoint(
         string endpointUrl,
         string applicationUri = "urn:example:registry",
-        string transportProfileUri = "urn:example:transport") =>
+        string? transportProfileUri = "urn:example:transport") =>
         new()
         {
             EndpointUrl = endpointUrl,

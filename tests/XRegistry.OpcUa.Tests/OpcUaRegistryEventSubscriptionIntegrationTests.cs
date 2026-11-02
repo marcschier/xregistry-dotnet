@@ -70,6 +70,7 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
             server.RegistryType,
             static endpoint => endpoint.SecurityMode == MessageSecurityMode.None &&
                 endpoint.SecurityPolicyUri == SecurityPolicies.None,
+            static profile => profile == Profiles.UaTcpTransport,
             static version => version == "1.0",
             cancellation.Token);
         await using var subscription = await OpcUaRegistryEventSubscription.CreateAsync(
@@ -121,6 +122,7 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
             sourceServer.RegistryType,
             static endpoint => endpoint.SecurityMode == MessageSecurityMode.None &&
                 endpoint.SecurityPolicyUri == SecurityPolicies.None,
+            static profile => profile == Profiles.UaTcpTransport,
             static version => version == "1.0",
             cancellation.Token);
         _ = await sourceConnection.Reader.ReadModelDefinitionAsync(
@@ -173,6 +175,7 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
                 targetServer.RegistryType,
                 static endpoint => endpoint.SecurityMode == MessageSecurityMode.None &&
                     endpoint.SecurityPolicyUri == SecurityPolicies.None,
+                static profile => profile == Profiles.UaTcpTransport,
                 static version => version == "1.0",
                 token);
             return new OpcUaTrustedProviderLease(
@@ -266,6 +269,7 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
             server.RegistryType,
             static endpoint => endpoint.SecurityMode == MessageSecurityMode.None &&
                 endpoint.SecurityPolicyUri == SecurityPolicies.None,
+            static profile => profile == Profiles.UaTcpTransport,
             static version => version == "1.0",
             cancellation.Token);
         _ = await connection.Reader.ReadModelDefinitionAsync(

@@ -121,12 +121,13 @@ public sealed class OpcUaFederationTarget
         return node;
     }
 
-    /// <summary>Selects the unique discovered endpoint matching this advertisement and caller policy.</summary>
+    /// <summary>Selects the unique matching endpoint with a supported transport and caller permission.</summary>
     public EndpointDescription SelectEndpoint(IEnumerable<EndpointDescription> candidates,
-        Func<EndpointDescription, bool> isPermitted)
+        Func<EndpointDescription, bool> isPermitted, Func<string, bool> isSupportedTransportProfile)
     {
         ArgumentNullException.ThrowIfNull(candidates);
         ArgumentNullException.ThrowIfNull(isPermitted);
+        RequireSupportedTransportProfile(isSupportedTransportProfile);
 
         var identityMatches = new List<EndpointDescription>();
         foreach (var candidate in candidates)
@@ -149,7 +150,16 @@ public sealed class OpcUaFederationTarget
                 "No discovered OPC UA endpoint matches the selected advertisement.");
         }
 
-        var permitted = identityMatches.Where(isPermitted).Take(2).ToArray();
+        var supported = identityMatches
+            .Where(candidate => candidate.TransportProfileUri is { Length: > 0 } profile &&
+                isSupportedTransportProfile(profile)).ToArray();
+        if (supported.Length == 0)
+        {
+            throw new FederationException(FederationErrorCode.UnsupportedOperation,
+                "No matching OPC UA endpoint has a supported transport profile.");
+        }
+
+        var permitted = supported.Where(isPermitted).Take(2).ToArray();
         if (permitted.Length == 0)
         {
             throw new FederationException(FederationErrorCode.PolicyDenied,
@@ -161,6 +171,16 @@ public sealed class OpcUaFederationTarget
                 "More than one matching OPC UA endpoint is permitted.");
         }
         return permitted[0];
+    }
+
+    internal void RequireSupportedTransportProfile(Func<string, bool> isSupportedTransportProfile)
+    {
+        ArgumentNullException.ThrowIfNull(isSupportedTransportProfile);
+        if (TransportProfileUri is not null && !isSupportedTransportProfile(TransportProfileUri))
+        {
+            throw new FederationException(FederationErrorCode.UnsupportedOperation,
+                "The requested OPC UA transport profile is not supported.");
+        }
     }
 
     private static string? OptionalAbsoluteUri(JsonElement parameters, string name)

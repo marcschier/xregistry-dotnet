@@ -113418,7 +113418,7 @@
       "text": "- MUST be an absolute transport-profile URI recognized by the consumer.",
       "review": {
         "status": "reviewed",
-        "note": "Optional application/transport URI syntax is not certificate trust or consumer transport support. Exact endpoint mismatch tests report not_found; unsupported requested transport must separately report unsupported_operation. Audit the connection layer before changing semantics. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "note": "Selected d757328e Registry section 5.6.3: advertisement parsing requires an absolute URI; consumption requires the caller's explicit transport-profile support predicate. Unrecognized requested profiles reject before discovery. Custom supported URIs are not restricted by a built-in profile list. SDK default client-registry factory availability is checked independently by endpoint scheme. This is managed source-specific evidence, not certificate trust or native qualification.",
         "roles": [
           "client",
           "server",
@@ -113426,8 +113426,13 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "OpcUaParametersAreClosedAndRequireRegistryRoot",
+          "SelectEndpointRequiresExactAdvertisedOptionalIdentities",
+          "OpenAsyncRejectsUnsupportedRequestedTransportBeforeEndpointDiscovery",
+          "OpenAsyncRejectsUnregisteredTransportSchemesBeforeEndpointDiscovery"
+        ],
         "nativeEvidence": []
       }
     },
@@ -113454,7 +113459,7 @@
       "text": "- An unsupported requested profile MUST produce `unsupported_operation`. It MUST NOT be silently dropped to select a weaker transport.",
       "review": {
         "status": "reviewed",
-        "note": "Optional application/transport URI syntax is not certificate trust or consumer transport support. Exact endpoint mismatch tests report not_found; unsupported requested transport must separately report unsupported_operation. Audit the connection layer before changing semantics. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "note": "Selected d757328e Registry section 5.6.3: an unsupported requested profile raises unsupported_operation before candidate enumeration or endpoint discovery, even when another transport is available. Implicit selection filters unsupported profiles before policy and ambiguity checks. A supported requested profile absent from the discovered identities remains not_found; policy denial remains policy_denied. No transport request is dropped or replaced. Source-specific managed evidence does not establish native qualification.",
         "roles": [
           "client",
           "server",
@@ -113462,8 +113467,16 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "OpenAsyncRejectsUnsupportedRequestedTransportBeforeEndpointDiscovery",
+          "SelectEndpointRejectsUnsupportedRequestedTransportBeforeEnumeratingCandidates",
+          "SelectEndpointDoesNotDropUnsupportedRequestedTransportForASupportedCandidate",
+          "SelectEndpointExcludesUnsupportedProfilesBeforePolicyAndAmbiguityChecks",
+          "SelectEndpointReportsUnsupportedMatchingProfilesSeparatelyFromPolicy",
+          "SelectEndpointRejectsTransportProfileUriMismatch",
+          "SelectEndpointRejectsCandidatesOutsideCallerPolicy"
+        ],
         "nativeEvidence": []
       }
     },
