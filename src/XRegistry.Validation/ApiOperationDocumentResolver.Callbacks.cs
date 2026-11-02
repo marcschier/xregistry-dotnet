@@ -562,10 +562,103 @@ public static partial class ApiOperationDocumentResolver
         {
             return InvalidBody("A Request Body Object requires a content map.", pointer + "/content");
         }
-        return ValidateOpenApiMediaDeclarations(content, pointer + "/content", format, cancellationToken);
+        var mediaFailure = ValidateOpenApiMediaDeclarations(content, pointer + "/content", format, cancellationToken);
+        return mediaFailure ?? ValidateOpenApiRequestEncodings(content, pointer + "/content", format, cancellationToken);
 
         static ApiOperationResolutionResult InvalidBody(string message, string path) =>
             Failure(ApiOperationResolutionStatus.Invalid, "document.request_body", message, path);
+    }
+
+    private static (bool Applies, bool Multipart, bool Serialization) OpenApiEncodingApplicability(string media, string format)
+    {
+        var type = media.AsSpan();
+        var separator = type.IndexOf(';');
+        if (separator >= 0) { type = type[..separator]; }
+        type = type.Trim();
+        var multipart = type.StartsWith("multipart/", StringComparison.OrdinalIgnoreCase);
+        var form = type.Equals("application/x-www-form-urlencoded", StringComparison.OrdinalIgnoreCase);
+        return (multipart || form, multipart, form ||
+            format == "OpenAPI/3.1" && type.Equals("multipart/form-data", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static ApiOperationResolutionResult? ValidateOpenApiRequestEncodings(
+        JsonElement content, string pointer, string format, CancellationToken cancellationToken)
+    {
+        foreach (var media in content.EnumerateObject())
+        {
+            var applicability = OpenApiEncodingApplicability(media.Name, format);
+            if (!applicability.Applies || !media.Value.TryGetProperty("encoding", out var encodings)) { continue; }
+            foreach (var encoding in encodings.EnumerateObject())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var path = pointer + "/" + Escape(media.Name) + "/encoding/" + Escape(encoding.Name);
+                var value = encoding.Value;
+                if (value.ValueKind != JsonValueKind.Object)
+                {
+                    return InvalidEncoding("An encoding declaration must be an Encoding Object.", path);
+                }
+                var hasSerialization = false;
+                if (applicability.Serialization)
+                {
+                    foreach (var field in new[] { "style", "explode", "allowReserved" })
+                    {
+                        if (!value.TryGetProperty(field, out var metadata)) { continue; }
+                        hasSerialization = true;
+                        var valid = field == "style"
+                            ? metadata.ValueKind == JsonValueKind.String &&
+                                metadata.GetString() is "form" or "spaceDelimited" or "pipeDelimited" or "deepObject"
+                            : metadata.ValueKind is JsonValueKind.True or JsonValueKind.False;
+                        if (!valid)
+                        {
+                            return InvalidEncoding("Encoding serialization fields require query styles and native boolean flags.", path + "/" + field);
+                        }
+                    }
+                }
+                if (!(format == "OpenAPI/3.1" && hasSerialization) && value.TryGetProperty("contentType", out var contentType) &&
+                    (contentType.ValueKind != JsonValueKind.String || !IsOpenApiEncodingContentType(contentType.GetString()!, cancellationToken)))
+                {
+                    return InvalidEncoding("Encoding contentType requires a comma-separated list of media types or ranges.", path + "/contentType");
+                }
+                if (applicability.Multipart && value.TryGetProperty("headers", out var headers))
+                {
+                    if (headers.ValueKind != JsonValueKind.Object)
+                    {
+                        return InvalidEncoding("Encoding headers must be a Header Object map.", path + "/headers");
+                    }
+                    foreach (var header in headers.EnumerateObject())
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        if (header.Name.Equals("Content-Type", StringComparison.OrdinalIgnoreCase)) { continue; }
+                        var failure = ValidateOpenApiHeaderDeclaration(header.Value,
+                            path + "/headers/" + Escape(header.Name), format, cancellationToken);
+                        if (failure is not null) { return failure; }
+                    }
+                }
+            }
+        }
+        return null;
+
+        static ApiOperationResolutionResult InvalidEncoding(string message, string path) =>
+            Failure(ApiOperationResolutionStatus.Invalid, "document.encoding", message, path);
+    }
+
+    private static bool IsOpenApiEncodingContentType(string value, CancellationToken cancellationToken)
+    {
+        var start = 0;
+        var quoted = false;
+        var escaped = false;
+        for (var index = 0; index < value.Length; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (escaped) { escaped = false; continue; }
+            var character = value[index];
+            if (quoted && character == '\\') { escaped = true; continue; }
+            if (character == '"') { quoted = !quoted; }
+            if (character != ',' || quoted) { continue; }
+            if (!IsResponseMediaRange(value[start..index])) { return false; }
+            start = index + 1;
+        }
+        return !quoted && !escaped && IsResponseMediaRange(value[start..]);
     }
 
     private static ApiOperationResolutionResult? ValidateOpenApiHeaderDeclaration(
@@ -982,6 +1075,8 @@ public static partial class ApiOperationDocumentResolver
             if (resolution.Failure is not null) { return resolution.Failure; }
             var failure = await ValidateEffectiveOpenApiContentAsync(resolution.Target!, references, cancellationToken).ConfigureAwait(false);
             if (failure is not null) { return failure; }
+            failure = await ValidateEffectiveOpenApiRequestEncodingsAsync(resolution.Target!, references, cancellationToken).ConfigureAwait(false);
+            if (failure is not null) { return failure; }
         }
         if (!operation.TryGetProperty("responses", out var responses)) { return null; }
         foreach (var entry in responses.EnumerateObject())
@@ -995,24 +1090,8 @@ public static partial class ApiOperationDocumentResolver
             if (resolution.Failure is not null) { return resolution.Failure; }
             if (references.Format == "Swagger/2.0") { continue; }
             var response = resolution.Target!;
-            if (response.Value.TryGetProperty("headers", out var headers))
-            {
-                foreach (var header in headers.EnumerateObject())
-                {
-                    if (header.Name.Equals("Content-Type", StringComparison.OrdinalIgnoreCase)) { continue; }
-                    var target = await ResolveHttpDeclarationAsync(
-                        new ReferenceTarget(response.Document, header.Value, response.Pointer + "/headers/" + Escape(header.Name)),
-                        references, ValidateOpenApiHeaderDeclaration, "header", cancellationToken).ConfigureAwait(false);
-                    if (target.Failure is not null) { return target.Failure; }
-                    var resolved = target.Target!;
-                    var exampleFailure = await ValidateEffectiveOpenApiExamplesAsync(resolved, references,
-                        cancellationToken).ConfigureAwait(false);
-                    if (exampleFailure is not null) { return exampleFailure; }
-                    var contentFailure = await ValidateEffectiveOpenApiContentAsync(resolved, references,
-                        cancellationToken).ConfigureAwait(false);
-                    if (contentFailure is not null) { return contentFailure; }
-                }
-            }
+            var headerFailure = await ValidateEffectiveOpenApiHeadersAsync(response, references, cancellationToken).ConfigureAwait(false);
+            if (headerFailure is not null) { return headerFailure; }
             if (response.Value.TryGetProperty("links", out var links))
             {
                 foreach (var link in links.EnumerateObject())
@@ -1025,6 +1104,45 @@ public static partial class ApiOperationDocumentResolver
             }
             var failure = await ValidateEffectiveOpenApiContentAsync(response, references, cancellationToken).ConfigureAwait(false);
             if (failure is not null) { return failure; }
+        }
+        return null;
+    }
+
+    private static async ValueTask<ApiOperationResolutionResult?> ValidateEffectiveOpenApiRequestEncodingsAsync(
+        ReferenceTarget body, ReferenceContext references, CancellationToken cancellationToken)
+    {
+        foreach (var media in body.Value.GetProperty("content").EnumerateObject())
+        {
+            if (!OpenApiEncodingApplicability(media.Name, references.Format).Multipart ||
+                !media.Value.TryGetProperty("encoding", out var encodings)) { continue; }
+            foreach (var encoding in encodings.EnumerateObject())
+            {
+                var pointer = body.Pointer + "/content/" + Escape(media.Name) + "/encoding/" + Escape(encoding.Name);
+                references.Work(pointer);
+                var failure = await ValidateEffectiveOpenApiHeadersAsync(
+                    new ReferenceTarget(body.Document, encoding.Value, pointer), references, cancellationToken).ConfigureAwait(false);
+                if (failure is not null) { return failure; }
+            }
+        }
+        return null;
+    }
+
+    private static async ValueTask<ApiOperationResolutionResult?> ValidateEffectiveOpenApiHeadersAsync(
+        ReferenceTarget location, ReferenceContext references, CancellationToken cancellationToken)
+    {
+        if (!location.Value.TryGetProperty("headers", out var headers)) { return null; }
+        foreach (var header in headers.EnumerateObject())
+        {
+            if (header.Name.Equals("Content-Type", StringComparison.OrdinalIgnoreCase)) { continue; }
+            var target = await ResolveHttpDeclarationAsync(
+                new ReferenceTarget(location.Document, header.Value, location.Pointer + "/headers/" + Escape(header.Name)),
+                references, ValidateOpenApiHeaderDeclaration, "header", cancellationToken).ConfigureAwait(false);
+            if (target.Failure is not null) { return target.Failure; }
+            var resolved = target.Target!;
+            var exampleFailure = await ValidateEffectiveOpenApiExamplesAsync(resolved, references, cancellationToken).ConfigureAwait(false);
+            if (exampleFailure is not null) { return exampleFailure; }
+            var contentFailure = await ValidateEffectiveOpenApiContentAsync(resolved, references, cancellationToken).ConfigureAwait(false);
+            if (contentFailure is not null) { return contentFailure; }
         }
         return null;
     }

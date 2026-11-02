@@ -636,8 +636,26 @@ GET, HEAD, DELETE, OPTIONS and TRACE are ignored without retrieval, including
 through referenced operations and callback ancestors. OpenAPI 3.1 permits
 request bodies on every supported method; Swagger's non-native `requestBody`
 field remains uninterpreted. Selection preserves authored declarations without
-injecting defaults or replacing references. These checks do not validate nested
-encodings, evaluate body schemas or send requests.
+injecting defaults or replacing references. These checks do not evaluate body
+schemas or send requests.
+Request-body encoding entries receive Encoding Object checks only for
+multipart and `application/x-www-form-urlencoded` media. Active `contentType`
+values require comma-separated media types or ranges; quoted parameter commas
+remain inside their media type. Serialization fields use query styles and
+boolean flags. OpenAPI 3.0 interprets those fields only for URL-encoded bodies;
+OpenAPI 3.1 also interprets them for `multipart/form-data` and ignores
+`contentType` when a serialization field is explicitly present. Media-type
+casing and parameters do not change these applicability rules.
+Encoding headers receive Header Object checks only for multipart bodies;
+`Content-Type` entries are ignored case-insensitively. Reached header references
+and nested examples resolve through the shared bounded helpers, using the
+containing request-body document's base and acquisition cache. Dependency
+failures, malformed targets, cycles and depth exhaustion prevent partial
+selection. Ignored fields and response encodings do not activate nested
+retrieval. Unused reusable body references remain inactive, and selection
+retains authored declarations without adding encoding defaults. Encoding-key
+membership in the effective schema, serialization compatibility and runtime
+body construction remain unverified.
 OpenAPI operation and Path Item `parameters` must be arrays of Parameter or
 Reference Objects. Root reusable parameters receive the same declaration
 checks. Inline parameters require string names and native locations; path
@@ -728,8 +746,8 @@ or unavailable dependencies and malformed targets prevent partial selection.
 Callback ancestors and unrelated operations retain the named-versus-pointer
 traversal rules above. Unused reusable example references remain inactive;
 selection retains authored references and does not retrieve `externalValue`
-addresses. Format-specific response-presence requirements, nested encoding
-validation and schema evaluation remain unverified.
+addresses. Format-specific response-presence requirements and schema evaluation
+remain unverified.
 OpenAPI response headers and root reusable headers require Header or Reference
 Objects. Inline headers require exactly one `schema` or `content`; a content
 map contains one concrete media type and receives the shared Media Type Object
