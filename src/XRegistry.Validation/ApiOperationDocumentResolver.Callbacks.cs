@@ -55,6 +55,13 @@ public static partial class ApiOperationDocumentResolver
         var responseFailure = await ValidateEffectiveHttpDeclarationsAsync(location.Operation, location.Source,
             location.Pointer, location.HttpMethod, references, cancellationToken).ConfigureAwait(false);
         if (responseFailure is not null) { return responseFailure; }
+        if (location.PathTemplate is not null)
+        {
+            var pathFailure = await ValidateOpenApiPathParameterCorrespondenceAsync(location.PathTemplate,
+                location.PathParameterOwner, new ReferenceTarget(location.Source, location.Operation, location.Pointer),
+                references, cancellationToken).ConfigureAwait(false);
+            if (pathFailure is not null) { return pathFailure; }
+        }
         var serverFailure = ValidateOpenApiServers(location.Operation, location.Pointer, references.Format, cancellationToken);
         if (serverFailure is not null) { return serverFailure; }
         var nameFailure = ValidateHttpSecurityNames(location.Operation, location.Pointer,
@@ -766,6 +773,52 @@ public static partial class ApiOperationDocumentResolver
     private static ApiOperationResolutionResult DuplicateParameter(string path) =>
         Failure(ApiOperationResolutionStatus.Invalid, "document.parameters",
             "A parameter list cannot repeat the same name and location.", path);
+
+    private static async ValueTask<ApiOperationResolutionResult?> ValidateOpenApiPathParameterCorrespondenceAsync(
+        string pathTemplate, ReferenceTarget? pathOwner, ReferenceTarget operation,
+        ReferenceContext references, CancellationToken cancellationToken)
+    {
+        if (references.Format == "Swagger/2.0") { return null; }
+        var templates = new HashSet<string>(StringComparer.Ordinal);
+        foreach (Match match in PathTemplateExpression().Matches(pathTemplate))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            references.Work(operation.Pointer);
+            templates.Add(match.Value[1..^1]);
+        }
+        var declared = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var owner in new[] { pathOwner, operation })
+        {
+            if (owner is null || !owner.Value.TryGetProperty("parameters", out var parameters)) { continue; }
+            var index = 0;
+            foreach (var parameter in parameters.EnumerateArray())
+            {
+                var resolution = await ResolveHttpDeclarationAsync(
+                    new ReferenceTarget(owner.Document, parameter, owner.Pointer + "/parameters/" + index),
+                    references, ValidateOpenApiParameterDeclaration, "parameter", cancellationToken).ConfigureAwait(false);
+                if (resolution.Failure is not null) { return resolution.Failure; }
+                var target = resolution.Target!;
+                if (target.Value.GetProperty("in").GetString() == "path")
+                {
+                    var name = target.Value.GetProperty("name").GetString()!;
+                    if (!templates.Contains(name))
+                    {
+                        return Failure(ApiOperationResolutionStatus.Invalid, "document.path_parameter",
+                            "A path parameter name must match an expression in the authored path.", target.Pointer + "/name");
+                    }
+                    declared.Add(name);
+                }
+                index++;
+            }
+        }
+        if (!templates.IsSubsetOf(declared))
+        {
+            return Failure(ApiOperationResolutionStatus.Invalid, "document.path_parameter",
+                "Each authored path expression requires a path parameter at the Path Item or operation level.",
+                operation.Pointer + "/parameters");
+        }
+        return null;
+    }
 
     private static async ValueTask<ApiOperationResolutionResult?> ValidateEffectiveOpenApiParametersAsync(
         JsonElement owner, ReferencedDocument source, string pointer, ReferenceContext references, CancellationToken cancellationToken)

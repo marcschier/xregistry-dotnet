@@ -11,6 +11,219 @@ namespace XRegistry.Validation.Tests;
 public class ApiOperationReferenceTests
 {
     [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiPathParameterCorrespondenceChecksCallbackAncestorsWithoutTreatingCallbackExpressionsAsPaths(string format, string version)
+    {
+        foreach (var valid in new[] { true, false, true })
+        {
+            var document = new JsonObject { ["openapi"] = version,
+                ["paths"] = JsonNode.Parse("""
+                    {"/items/{id}":{"parameters":[{"name":"id","in":"path","required":true,"schema":{}}],
+                    "post":{"operationId":"Parent","callbacks":{"event":{"{$request.query.url}":{
+                    "post":{"operationId":"Child"}}}}}}}
+                    """) };
+            if (!valid) { document["paths"]!["/items/{id}"]!["parameters"] = new JsonArray(); }
+            foreach (var selector in new[] { "operations/Child",
+                "/paths/~1items~1%7Bid%7D/post/callbacks/event/%7B$request.query.url%7D/post" })
+            {
+                var result = ApiOperationDocumentResolver.Resolve(format, "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector));
+                await Assert.That(result.Status).IsEqualTo(valid
+                    ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+                if (valid) { await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("Child"); }
+                else
+                {
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.path_parameter");
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo("$/paths/~1items~1{id}/post/parameters");
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                }
+            }
+        }
+        if (format == "OpenAPI/3.1")
+        {
+            var result = ApiOperationDocumentResolver.Resolve(format, "application/json",
+                """{"openapi":"3.1.1","webhooks":{"{event}":{"post":{"operationId":"Target"}}}}"""u8.ToArray(),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"));
+            await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+            await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("Target");
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiPathParameterCorrespondenceRetainsRepeatedExpressionsAndRejectsUndefinedReferenceFieldMerging(string format, string version)
+    {
+        foreach (var conflicting in new[] { false, true, false })
+        {
+            var document = new JsonObject { ["openapi"] = version,
+                ["paths"] = JsonNode.Parse("""{"/items/{id}/again/{id}":{"$ref":"#/P"}}"""),
+                ["P"] = JsonNode.Parse("""
+                    {"parameters":[{"name":"id","in":"path","required":true,"schema":{}}],
+                    "get":{"operationId":"Target","parameters":[]}}
+                    """) };
+            if (conflicting) { document["paths"]!["/items/{id}/again/{id}"]!["parameters"] = new JsonArray(); }
+            var result = ApiOperationDocumentResolver.Resolve(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"));
+            await Assert.That(result.Status).IsEqualTo(conflicting
+                ? ApiOperationResolutionStatus.Indeterminate : ApiOperationResolutionStatus.Selected);
+            if (conflicting)
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("dependency.path_item_conflict");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo("$/paths/~1items~1{id}~1again~1{id}/parameters");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+            else
+            {
+                await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("Target");
+                await Assert.That(result.Operation.GetProperty("parameters").GetArrayLength()).IsEqualTo(0);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiPathParameterCorrespondenceUsesBothLevelsAndExactNamesWithoutInjectingParameters(string format, string version)
+    {
+        foreach (var placement in new[] { "path", "operation", "split", "override", "missing", "extra", "case" })
+        {
+            foreach (var referenced in new[] { false, true })
+            {
+                var pathParameters = new JsonArray();
+                var operationParameters = new JsonArray();
+                foreach (var name in new[] { "id", "part" })
+                {
+                    if (placement == "missing" && name == "part") { continue; }
+                    var parameter = new JsonObject { ["name"] = placement == "case" && name == "part" ? "Part" : name,
+                        ["in"] = "path", ["required"] = true, ["schema"] = new JsonObject() };
+                    var value = referenced ? new JsonObject { ["$ref"] = "#/P_" + name } : parameter.DeepClone();
+                    var pathLevel = placement is "path" or "override" || placement == "split" && name == "id";
+                    (pathLevel ? pathParameters : operationParameters).Add(value);
+                    if (placement == "override") { operationParameters.Add(value.DeepClone()); }
+                }
+                if (placement == "extra")
+                {
+                    operationParameters.Add(JsonNode.Parse("""{"name":"other","in":"path","required":true,"schema":{}}"""));
+                }
+                var operation = new JsonObject { ["operationId"] = "Target", ["parameters"] = operationParameters };
+                var document = new JsonObject { ["openapi"] = version,
+                    ["paths"] = new JsonObject { ["/items/{id}/{part}"] = new JsonObject {
+                        ["parameters"] = pathParameters, ["get"] = operation.DeepClone() } } };
+                foreach (var name in new[] { "id", "part" })
+                {
+                    document["P_" + name] = new JsonObject { ["name"] = placement == "case" && name == "part" ? "Part" : name,
+                        ["in"] = "path", ["required"] = true, ["schema"] = new JsonObject() };
+                }
+                foreach (var selector in new[] { "operations/Target", "/paths/~1items~1%7Bid%7D~1%7Bpart%7D/get" })
+                {
+                    var result = ApiOperationDocumentResolver.Resolve(format, "application/json",
+                        System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                        ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector));
+                    var valid = placement is "path" or "operation" or "split" or "override";
+                    await Assert.That(result.Status).IsEqualTo(valid
+                        ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+                    if (valid)
+                    {
+                        await Assert.That(JsonNode.DeepEquals(operation, JsonNode.Parse(result.Operation.GetRawText()))).IsTrue();
+                    }
+                    else
+                    {
+                        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.path_parameter");
+                        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                    }
+                }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiPathParameterCorrespondenceRetainsAuthoredPathAcrossRetrievedPathItemsAndOperations(string format, string version)
+    {
+        foreach (var valid in new[] { true, false, true })
+        {
+            var document = new JsonObject { ["openapi"] = version,
+                ["paths"] = JsonNode.Parse("""{"/items/{id}":{"$ref":"https://allowed.test/path#/P"}}""") };
+            var calls = new List<string>();
+            var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+                resolveReference: (uri, _) =>
+                {
+                    calls.Add(uri);
+                    var text = uri switch
+                    {
+                        "https://allowed.test/path" => """{"P":{"$ref":"nested/item#/Item"}}""",
+                        "https://allowed.test/nested/item" => """
+                            {"Item":{"parameters":[{"$ref":"../parameters#/P"}],"get":{"$ref":"../operations#/O"}}}
+                            """,
+                        "https://allowed.test/parameters" => valid
+                            ? """{"P":{"name":"id","in":"path","required":true,"schema":{}}}"""
+                            : """{"P":{"name":"wrong","in":"path","required":true,"schema":{}}}""",
+                        "https://allowed.test/operations" => """{"O":{"operationId":"Target"}}""",
+                        _ => throw new UnauthorizedAccessException()
+                    };
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(text));
+                });
+            await Assert.That(result.Status).IsEqualTo(valid
+                ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+            await Assert.That(string.Join("|", calls)).IsEqualTo(
+                "https://allowed.test/path|https://allowed.test/nested/item|https://allowed.test/parameters|https://allowed.test/operations");
+            if (valid)
+            {
+                await Assert.That(result.Operation.GetRawText()).IsEqualTo("""{"operationId":"Target"}""");
+                await Assert.That(result.DocumentUri!.AbsoluteUri).IsEqualTo("https://allowed.test/operations");
+            }
+            else
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.path_parameter");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo("$/P/name");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiPathParameterCorrespondenceChecksEveryReachedMethodButPreservesPointerAndEmptyPathLocality(string format, string version)
+    {
+        var document = new JsonObject { ["openapi"] = version,
+            ["paths"] = JsonNode.Parse("""
+                {"/empty/{id}":{},"/items/{id}":{
+                "get":{"operationId":"Target","parameters":[{"name":"id","in":"path","required":true,"schema":{}}]},
+                "post":{"operationId":"Other","parameters":[{"name":"id","in":"query","schema":{}}]}}}
+                """) };
+        foreach (var selector in new[] { "operations/Target", "operations/Missing",
+            "/paths/~1items~1%7Bid%7D/get", "/paths/~1items~1%7Bid%7D/post" })
+        {
+            var local = selector.EndsWith("/get", StringComparison.Ordinal);
+            var result = ApiOperationDocumentResolver.Resolve(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector));
+            await Assert.That(result.Status).IsEqualTo(local
+                ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+            if (local) { await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("Target"); }
+            else
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.path_parameter");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+        }
+        document["paths"]!["/items/{id}"]!.AsObject().Remove("post");
+        var restored = ApiOperationDocumentResolver.Resolve(format, "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"));
+        await Assert.That(restored.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(restored.Operation.GetProperty("operationId").GetString()).IsEqualTo("Target");
+    }
+
+    [Test]
     public async Task OpenApiPathItemMetadataCoversWebhooksAndUnusedReusableItemsWithoutAcquisition()
     {
         foreach (var location in new[] { "webhook", "component" })
@@ -568,6 +781,11 @@ public class ApiOperationReferenceTests
                     "examples":{"e":{"$ref":"https://must-not-load.test/example"}},"required":null},
                     "Unused":{"$ref":"https://must-not-load.test/unused"}}}
                     """) };
+                if (location != "path")
+                {
+                    document["paths"]!["/items/{p}"]!["parameters"]!.AsArray().Add(
+                        JsonNode.Parse("""{"name":"p","in":"path","required":true,"schema":{}}"""));
+                }
                 foreach (var selector in new[] { "operations/Target", "/paths/~1items~1%7Bp%7D/get" })
                 {
                     var calls = 0;
@@ -5487,7 +5705,8 @@ public class ApiOperationReferenceTests
     {
         var paths = new JsonObject
         {
-            ["/pets/{id}"] = new JsonObject { ["get"] = new JsonObject { ["operationId"] = "Target" } },
+            ["/pets/{id}"] = new JsonObject { ["get"] = new JsonObject { ["operationId"] = "Target" },
+                ["parameters"] = JsonNode.Parse("""[{"name":"id","in":"path","required":true,"schema":{}}]""") },
             ["/pets/mine"] = new JsonObject(),
             ["/pets/{id}/owners"] = new JsonObject(),
             ["/{entity}/me"] = new JsonObject(),
@@ -5804,6 +6023,7 @@ public class ApiOperationReferenceTests
           "openapi": "3.1.1",
           "paths": {
             "/users/{id}": {
+              "parameters": [{"name":"id","in":"path","required":true,"schema":{}}],
               "get": { "operationId": "GetUser" },
               "post": { "operationId": "CreateUser" }
             }

@@ -655,9 +655,25 @@ operation may redefine a Path Item parameter. Header parameters named
 `Accept`, `Content-Type` or `Authorization` are ignored case-insensitively,
 without acquiring nested examples. Unused reusable references remain inactive,
 and operation pointers do not traverse referenced Path Items. Selection retains
-authored parameter declarations. Complete path-template correspondence,
-effective cross-level parameter merging, schema evaluation and serialization
-compatibility remain unverified; Swagger parameter semantics are unchanged.
+authored parameter declarations. Effective cross-level parameter merging,
+schema evaluation and serialization compatibility remain unverified;
+Swagger parameter semantics are unchanged.
+For reached operations under OpenAPI `paths`, every authored template
+expression requires an exact, case-sensitive path parameter at the Path Item
+or operation level. Conversely, declared path parameters must name expressions
+in that path; a query parameter with the same name does not satisfy this rule.
+Checks retain the authored path across referenced Path Items and operations,
+using the containing documents to resolve inherited parameter references.
+Repeated expressions may share one declaration, and an operation cannot remove
+an inherited path parameter by declaring an empty parameter list. Empty Path
+Items require no parameter declarations. Named selection checks every reached
+method; pointers check the selected operation and its ancestors without
+activating unrelated operations. Selected operations are not rewritten with
+inherited parameters. If a Path Item and its referenced target both define
+`parameters`, selection reports an indeterminate reference conflict rather
+than inventing a merge for behavior the specification leaves undefined.
+These checks do not establish complete path-template grammar or validate
+runtime path values, callback URLs or webhook identities.
 Present operation `responses` declarations must be nonempty response maps.
 Keys are `default`, HTTP status codes from 100 through 599, or, for OpenAPI,
 the uppercase ranges `1XX` through `5XX`. Specification extensions remain

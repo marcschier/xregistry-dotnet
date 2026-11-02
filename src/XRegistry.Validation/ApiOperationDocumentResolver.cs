@@ -872,7 +872,12 @@ public static partial class ApiOperationDocumentResolver
 
                 foreach (var operation in pathItem.Operations)
                 {
-                    var failure = await CollectOperationMatchesAsync(operation.Value, operationId,
+                    var location = operation.Value with
+                    {
+                        PathTemplate = collectionName == "paths" ? path.Name : null,
+                        PathParameterOwner = pathItem.ParameterOwner
+                    };
+                    var failure = await CollectOperationMatchesAsync(location, operationId,
                         format != "Swagger/2.0", matches, operationCounts, references, budget,
                         new(StringComparer.Ordinal), 0, cancellationToken).ConfigureAwait(false);
                     if (failure is not null)
@@ -912,6 +917,8 @@ public static partial class ApiOperationDocumentResolver
         parameterFailure = await ValidateEffectiveOpenApiParametersAsync(pathItem, source, sourcePointer,
             references, cancellationToken).ConfigureAwait(false);
         if (parameterFailure is not null) { return PathItemResolution.Failed(parameterFailure); }
+        ReferenceTarget? parameterOwner = pathItem.TryGetProperty("parameters", out _)
+            ? new ReferenceTarget(source, pathItem, sourcePointer) : null;
         var operations = new Dictionary<string, OperationLocation>(StringComparer.Ordinal);
         if (pathItem.TryGetProperty("$ref", out var referenceValue))
         {
@@ -949,6 +956,14 @@ public static partial class ApiOperationDocumentResolver
             {
                 return inherited;
             }
+            if (references.Format != "Swagger/2.0" && parameterOwner is not null && inherited.ParameterOwner is not null)
+            {
+                return PathItemResolution.Failed(Failure(ApiOperationResolutionStatus.Indeterminate,
+                    "dependency.path_item_conflict",
+                    "The referenced and containing Path Items both define parameters; their combination is undefined.",
+                    sourcePointer + "/parameters"));
+            }
+            parameterOwner ??= inherited.ParameterOwner;
 
             operations = new(inherited.Operations, StringComparer.Ordinal);
         }
@@ -984,7 +999,7 @@ public static partial class ApiOperationDocumentResolver
             operations[method] = resolvedOperation.Operation! with { HttpMethod = method };
         }
 
-        return PathItemResolution.Succeeded(operations);
+        return PathItemResolution.Succeeded(operations, parameterOwner);
     }
 
     private static async ValueTask<OperationReferenceResolution> ResolveOperationAsync(JsonElement operation,
@@ -1147,6 +1162,13 @@ public static partial class ApiOperationDocumentResolver
             var responseFailure = await ValidateEffectiveHttpDeclarationsAsync(operation, references.Root, pathPointer,
                 tokens[methodIndex], references, cancellationToken).ConfigureAwait(false);
             if (responseFailure is not null) { return responseFailure; }
+            if (methodIndex == 2 && tokens[0] == "paths")
+            {
+                var pathFailure = await ValidateOpenApiPathParameterCorrespondenceAsync(tokens[1],
+                    new ReferenceTarget(references.Root, pathItem, pathPointer[..pathPointer.LastIndexOf('/')]),
+                    new ReferenceTarget(references.Root, operation, pathPointer), references, cancellationToken).ConfigureAwait(false);
+                if (pathFailure is not null) { return pathFailure; }
+            }
             var serverFailure = ValidateOpenApiServers(operation, pathPointer, format, cancellationToken);
             if (serverFailure is not null) { return serverFailure; }
             var securityNameFailure = ValidateHttpSecurityNames(operation, pathPointer, root,
@@ -1225,14 +1247,19 @@ public static partial class ApiOperationDocumentResolver
     private sealed record OperationLocation(JsonElement Operation, string Pointer, ReferencedDocument Source)
     {
         internal string? HttpMethod { get; init; }
+        internal string? PathTemplate { get; init; }
+        internal ReferenceTarget? PathParameterOwner { get; init; }
         internal Uri? DocumentUri => Source.IsRoot ? null : Source.Uri;
     }
 
     private sealed record PathItemResolution(IReadOnlyDictionary<string, OperationLocation> Operations,
         ApiOperationResolutionResult? Failure)
     {
-        internal static PathItemResolution Succeeded(IReadOnlyDictionary<string, OperationLocation> operations) =>
-            new(operations, null);
+        internal ReferenceTarget? ParameterOwner { get; init; }
+
+        internal static PathItemResolution Succeeded(IReadOnlyDictionary<string, OperationLocation> operations,
+            ReferenceTarget? parameterOwner = null) =>
+            new(operations, null) { ParameterOwner = parameterOwner };
 
         internal static PathItemResolution Failed(ApiOperationResolutionResult failure) =>
             new(new Dictionary<string, OperationLocation>(), failure);
