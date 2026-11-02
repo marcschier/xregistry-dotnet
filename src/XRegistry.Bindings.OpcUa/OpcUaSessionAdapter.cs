@@ -367,19 +367,33 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
                 "OriginRegistry does not use the expected RegistryOriginDataType.");
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         var context = ServiceMessageContext.CreateEmpty(s_telemetry.Value);
-        if (!value.TryGetAsBinary(out var bytes, context))
-        {
-            throw new FederationException(FederationErrorCode.UnsupportedOperation,
-                "The OriginRegistry encoding cannot be decoded without losing its typed fields.");
-        }
-        if (bytes.Length > 64 * 1024)
-        {
-            throw new FederationException(FederationErrorCode.LimitExceeded,
-                "The OriginRegistry structure exceeds the byte budget.");
-        }
         try
         {
+            if (!value.TryGetAsBinary(out var bytes, context))
+            {
+                if (!value.TryGetValue<IEncodeable>(out var encodeable, context))
+                {
+                    throw new FederationException(FederationErrorCode.UnsupportedOperation,
+                        "The OriginRegistry encoding cannot be decoded without losing its typed fields.");
+                }
+                if (Local(encodeable.TypeId) != expectedDataType)
+                {
+                    throw new FederationException(FederationErrorCode.InvalidPackage,
+                        "The decoded OriginRegistry body does not identify the expected RegistryOriginDataType.");
+                }
+                using var encoder = new BinaryEncoder(context);
+                encodeable.Encode(encoder);
+                bytes = ByteString.From(encoder.CloseAndReturnBuffer() ??
+                    throw new FederationException(FederationErrorCode.InvalidPackage,
+                        "The decoded OriginRegistry body produced no binary fields."));
+            }
+            if (bytes.Length > 64 * 1024)
+            {
+                throw new FederationException(FederationErrorCode.LimitExceeded,
+                    "The OriginRegistry structure exceeds the byte budget.");
+            }
             using var decoder = new BinaryDecoder(bytes.ToArray(), context);
             var origin = new OpcUaRegistryOriginValue(decoder.ReadString("OriginUri"),
                 decoder.ReadString("ServerUri"), decoder.ReadExpandedNodeId("RegistryNodeId"));

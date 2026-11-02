@@ -159,6 +159,110 @@ public class OpcUaSessionAdapterTests
     }
 
     [Test]
+    [Arguments("numeric")]
+    [Arguments("string")]
+    [Arguments("guid")]
+    [Arguments("opaque")]
+    [Arguments("uri")]
+    [Arguments("null")]
+    [Arguments("stable")]
+    public async Task RegistryOriginDecodedBodyPreservesScalarFieldsAndSourceNodeContext(string kind)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        await adapter.ReadNamespaceArrayAsync(CancellationToken.None);
+        var root = kind switch
+        {
+            "numeric" => new ExpandedNodeId(new NodeId(42u, 2), null, 2u),
+            "string" => new ExpandedNodeId(new NodeId("CaseSensitive%2f", 2), null, 2u),
+            "guid" => new ExpandedNodeId(new NodeId(Guid.Parse("9b81dd7d-333a-4746-ad52-403a07e353df"), 2),
+                null, 2u),
+            "opaque" => new ExpandedNodeId(new NodeId(ByteString.From(new byte[] { 0, 128, 255 }), 2),
+                null, 2u),
+            "uri" => new ExpandedNodeId(new NodeId("Registry", 2), s_externalNamespaceUris[2], 2u),
+            _ => ExpandedNodeId.Null
+        };
+        var originUri = kind == "null" ? null : kind == "stable" ? "urn:Origin:Exact%2f" : "";
+        var serverUri = kind == "null" ? null : kind == "stable" ? "" : s_serverUris[2];
+        proxy.Extension = new ExtensionObject(new OriginStructure(originUri, serverUri, root), true);
+
+        var origin = await adapter.ReadRegistryOriginAsync(new NodeId("OriginRegistry", 2),
+            new NodeId(338u), CancellationToken.None);
+
+        await Assert.That(origin.OriginUri).IsEqualTo(originUri);
+        await Assert.That(origin.ServerUri).IsEqualTo(serverUri);
+        await Assert.That(origin.RegistryNodeId).IsEqualTo(root);
+    }
+
+    [Test]
+    public async Task RegistryOriginDecodedBodyRejectsContradictoryDataTypeBeforeEncoding()
+    {
+        var (adapter, proxy) = CreateAdapter();
+        await adapter.ReadNamespaceArrayAsync(CancellationToken.None);
+        var encoded = false;
+        proxy.Extension = new ExtensionObject(new OriginStructure("urn:origin", "", ExpandedNodeId.Null,
+            () => encoded = true, typeId: new ExpandedNodeId(339u)), true);
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.ReadRegistryOriginAsync(new NodeId("OriginRegistry", 2),
+                new NodeId(338u), CancellationToken.None));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(encoded).IsFalse();
+    }
+
+    [Test]
+    [Arguments("truncated")]
+    [Arguments("extra")]
+    public async Task RegistryOriginDecodedBodyRejectsMalformedScalarStructure(string state)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        await adapter.ReadNamespaceArrayAsync(CancellationToken.None);
+        proxy.Extension = new ExtensionObject(new OriginStructure("urn:origin", "", ExpandedNodeId.Null,
+            malformed: state), true);
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.ReadRegistryOriginAsync(new NodeId("OriginRegistry", 2),
+                new NodeId(338u), CancellationToken.None));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    public async Task RegistryOriginDecodedBodyRetainsNativeEncodingFailure()
+    {
+        var (adapter, proxy) = CreateAdapter();
+        await adapter.ReadNamespaceArrayAsync(CancellationToken.None);
+        var failure = new ServiceResultException(StatusCodes.BadEncodingError, "Origin encoding failed.");
+        proxy.Extension = new ExtensionObject(new OriginStructure("urn:origin", "", ExpandedNodeId.Null,
+            () => throw failure), true);
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.ReadRegistryOriginAsync(new NodeId("OriginRegistry", 2),
+                new NodeId(338u), CancellationToken.None));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(ReferenceEquals(error.InnerException, failure)).IsTrue();
+        await Assert.That(error.Diagnostic).IsEqualTo(failure.StatusCode.ToString());
+    }
+
+    [Test]
+    public async Task RegistryOriginDecodedBodyPreservesCancellationDuringEncoding()
+    {
+        var (adapter, proxy) = CreateAdapter();
+        await adapter.ReadNamespaceArrayAsync(CancellationToken.None);
+        using var cancellation = new CancellationTokenSource();
+        proxy.Extension = new ExtensionObject(new OriginStructure("urn:origin", "", ExpandedNodeId.Null,
+            cancellation.Cancel), true);
+
+        var error = await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+            await adapter.ReadRegistryOriginAsync(new NodeId("OriginRegistry", 2),
+                new NodeId(338u), cancellation.Token));
+
+        await Assert.That(error!.CancellationToken).IsEqualTo(cancellation.Token);
+        await Assert.That(proxy.ReadCount).IsEqualTo(3);
+    }
+
+    [Test]
     [Arguments("truncated")]
     [Arguments("extra")]
     [Arguments("scalar")]
@@ -182,16 +286,24 @@ public class OpcUaSessionAdapterTests
     }
 
     [Test]
-    [Arguments(65536, true)]
-    [Arguments(65537, false)]
-    public async Task RegistryOriginDecodingEnforcesExactStructureByteBudget(int length, bool succeeds)
+    [Arguments(65535, true, false)]
+    [Arguments(65536, true, false)]
+    [Arguments(65537, false, false)]
+    [Arguments(65535, true, true)]
+    [Arguments(65536, true, true)]
+    [Arguments(65537, false, true)]
+    public async Task RegistryOriginDecodingEnforcesExactStructureByteBudget(
+        int length, bool succeeds, bool decodedBody)
     {
         var (adapter, proxy) = CreateAdapter();
         await adapter.ReadNamespaceArrayAsync(CancellationToken.None);
         var overhead = EncodeOriginBytes("", "", ExpandedNodeId.Null).Length;
-        var bytes = EncodeOriginBytes(new string('a', length - overhead), "", ExpandedNodeId.Null);
+        var originUri = new string('a', length - overhead);
+        var bytes = EncodeOriginBytes(originUri, "", ExpandedNodeId.Null);
         await Assert.That(bytes.Length).IsEqualTo(length);
-        proxy.Extension = new ExtensionObject(new ExpandedNodeId(43u), ByteString.From(bytes));
+        proxy.Extension = decodedBody
+            ? new ExtensionObject(new OriginStructure(originUri, "", ExpandedNodeId.Null), true)
+            : new ExtensionObject(new ExpandedNodeId(43u), ByteString.From(bytes));
 
         if (succeeds)
         {
@@ -345,6 +457,34 @@ public class OpcUaSessionAdapterTests
         encoder.WriteString("ServerUri", serverUri);
         encoder.WriteExpandedNodeId("RegistryNodeId", root);
         return encoder.CloseAndReturnBuffer() ?? throw new InvalidOperationException("No encoded origin bytes.");
+    }
+
+    private sealed class OriginStructure(
+        string? originUri, string? serverUri, ExpandedNodeId root, Action? beforeEncode = null,
+        ExpandedNodeId? typeId = null, string? malformed = null) : IEncodeable
+    {
+        public ExpandedNodeId TypeId => typeId ?? new(338u);
+        public ExpandedNodeId BinaryEncodingId => new(43u);
+        public ExpandedNodeId XmlEncodingId => new(44u);
+
+        public void Encode(IEncoder encoder)
+        {
+            beforeEncode?.Invoke();
+            encoder.WriteString("OriginUri", originUri);
+            encoder.WriteString("ServerUri", serverUri);
+            if (malformed != "truncated")
+            {
+                encoder.WriteExpandedNodeId("RegistryNodeId", root);
+            }
+            if (malformed == "extra")
+            {
+                encoder.WriteByte("Extra", 1);
+            }
+        }
+
+        public void Decode(IDecoder decoder) => throw new NotSupportedException();
+        public bool IsEqual(IEncodeable? encodeable) => ReferenceEquals(this, encodeable);
+        public object Clone() => MemberwiseClone();
     }
 
     [Test]

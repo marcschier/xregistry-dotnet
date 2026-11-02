@@ -253,7 +253,11 @@ The adapter checks the Variable's declared DataType and the ExtensionObject's
 encoding DataType against the supplied RegistryOriginDataType NodeId. It
 decodes the three scalar fields in order from binary, rejects malformed or
 trailing data and limits the encoded body to 64 KiB. URI spelling, identifier
-kind and source table indexes remain unchanged. The reader rejects missing,
+kind and source table indexes remain unchanged. When the SDK has decoded the
+ExtensionObject body, the adapter checks the body's DataType identity and uses
+its binary encoder before reading the three scalar fields. It does not convert
+through JSON. Native encoding failures retain their status and cause; both raw
+and decoded bodies have the same byte limit. The reader rejects missing,
 duplicate or non-Variable properties and mixed or incomplete origin forms.
 The returned `OpcUaRegistryOriginValue` is an untrusted source value, not a
 provider binding or portable stored identity.
