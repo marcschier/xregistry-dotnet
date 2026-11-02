@@ -490,6 +490,7 @@ public class OpcUaTrustedProviderLeaseTests
         public ValueTask<OpcUaJsonValue> ReadJsonValueAsync(NodeId variable, CancellationToken cancellationToken) =>
             new(values[variable]);
         public int OpenCount { get; private set; }
+        public ValueTask<ulong?> ReadFileSizeAsync(NodeId file, CancellationToken cancellationToken) => new((ulong?)null);
         public ValueTask<uint> OpenAsync(NodeId file, byte mode, CancellationToken cancellationToken)
         {
             OpenCount++;

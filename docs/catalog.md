@@ -125,6 +125,16 @@ still pass through Open, Read and Close. The adapter rejects nonpositive Read
 lengths before any native operation, and both reader and adapter reject a
 response larger than its request. Read failures still attempt an uncancelled
 Close and retain a cleanup failure on the original error.
+Before Open, the reader obtains the mandatory namespace-zero Size Property as
+UInt64. A reported size above the byte budget rejects before acquiring a
+handle. Only an operation status of `Bad_NotSupported` means unknown size;
+missing or ambiguous Properties, wrong types and other native failures remain
+errors. Known Size must agree with the bytes and EOF. After EOF, the reader
+checks Size again before Close: changed or lost known Size, or a final Size
+that disagrees with the captured length, reports `inconsistent_snapshot`.
+Unknown Size still requires EOF, and a known zero retains the complete
+Open/Read/Close sequence. Size failures after Open attempt uncancelled Close
+and preserve any cleanup error.
 FileTransfer Method results must match their Part 20 signatures: Open returns
 one UInt32 handle, Read returns one ByteString, and Write, SetPosition and Close
 return no output arguments. Unexpected output counts or types report
@@ -210,9 +220,9 @@ them with the values obtained before file access. Changed Properties report
 Default selection also rechecks Resource Meta; an exact Version read does not
 depend on later changes to the default. Cancellation during Close or either
 recheck prevents a document result. File and recheck failures retain their
-original outcomes. These observations do not establish reliable Size,
-an immutable revision pin or a Registry-wide transaction; generic
-`ReadFileAsync` remains a bounded byte read.
+original outcomes. The shared reader also checks Size, but these observations
+do not establish an immutable revision pin or a Registry-wide transaction.
+Generic `ReadFileAsync` does not recheck Version metadata.
 
 `OpcUaRegistryWriter` writes scalar Properties; calls create,
 get-or-create, delete and attribute Methods; and replaces model-declared

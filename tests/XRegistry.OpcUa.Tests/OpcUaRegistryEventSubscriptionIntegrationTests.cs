@@ -1352,6 +1352,20 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
             AddResourceProperty(file, "ResourceId", resourceId);
             AddResourceProperty(file, "VersionId", "v1");
             AddResourceProperty(file, "Name", "Schema A");
+            file.Size = PropertyState<ulong>.With<VariantBuilder>(file, 0UL);
+            file.Size.NodeId = new NodeId(node.IdentifierAsString + ".Size", NamespaceIndex);
+            file.Size.BrowseName = new QualifiedName(BrowseNames.Size);
+            file.Size.DisplayName = new LocalizedText(BrowseNames.Size);
+            file.Size.ReferenceTypeId = ReferenceTypeIds.HasProperty;
+            file.Size.DataType = DataTypeIds.UInt64;
+            file.Size.ValueRank = ValueRanks.Scalar;
+            file.Size.AccessLevel = AccessLevels.CurrentRead;
+            file.Size.UserAccessLevel = AccessLevels.CurrentRead;
+            file.Size.OnSimpleReadValue = (ISystemContext _, NodeState _, ref Variant value) =>
+            {
+                value = new Variant((ulong)documentContents[resourceId].Length);
+                return ServiceResult.Good;
+            };
             file.Open = new OpenMethodState(file)
             {
                 Executable = true,
@@ -1536,6 +1550,15 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
                 DisplayName = new LocalizedText(browseName),
                 TypeDefinitionId = typeDefinitionId ?? ObjectTypeIds.FileType,
             };
+            file.Size = PropertyState<ulong>.With<VariantBuilder>(file, (ulong)contents.Length);
+            file.Size.NodeId = new NodeId(nodeId.IdentifierAsString + ".Size", NamespaceIndex);
+            file.Size.BrowseName = new QualifiedName(BrowseNames.Size);
+            file.Size.DisplayName = new LocalizedText(BrowseNames.Size);
+            file.Size.ReferenceTypeId = ReferenceTypeIds.HasProperty;
+            file.Size.DataType = DataTypeIds.UInt64;
+            file.Size.ValueRank = ValueRanks.Scalar;
+            file.Size.AccessLevel = AccessLevels.CurrentRead;
+            file.Size.UserAccessLevel = AccessLevels.CurrentRead;
             file.Open = new OpenMethodState(file)
             {
                 Executable = true,

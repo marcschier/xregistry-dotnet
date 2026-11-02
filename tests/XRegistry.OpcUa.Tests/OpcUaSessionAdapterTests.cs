@@ -12,6 +12,227 @@ namespace XRegistry.OpcUa.Tests;
 
 public class OpcUaSessionAdapterTests
 {
+    [Test]
+    [Arguments(0UL)]
+    [Arguments(1UL)]
+    [Arguments(ulong.MaxValue)]
+    public async Task FileSizeReadsExactNamespaceZeroPropertyAndUInt64WithoutMutationPermission(ulong size)
+    {
+        var (adapter, proxy) = await SizeAdapter();
+        proxy.Endpoint = new EndpointDescription { SecurityMode = MessageSecurityMode.None };
+        proxy.ReadValue = new Variant(size);
+
+        var result = await adapter.ReadFileSizeAsync(new NodeId("File", 1), CancellationToken.None);
+
+        await Assert.That(result).IsEqualTo((ulong?)size);
+        await Assert.That(proxy.BrowseRequests.Single().NodeId).IsEqualTo(new NodeId("File", 1));
+        await Assert.That(proxy.BrowseRequests.Single().ReferenceTypeId).IsEqualTo(ReferenceTypeIds.HasProperty);
+        await Assert.That(proxy.ReadRequests[^1].NodeId).IsEqualTo(new NodeId("Actual.Size", 1));
+        await Assert.That(proxy.ReadRequests[^1].AttributeId).IsEqualTo(Attributes.Value);
+        await Assert.That(proxy.MethodCalls.Count).IsEqualTo(0);
+        await Assert.That(proxy.EndpointReads).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("unknown")]
+    [Arguments("denied")]
+    [Arguments("uncertain")]
+    [Arguments("service")]
+    [Arguments("good-subcode")]
+    public async Task FileSizeTreatsOnlyOperationBadNotSupportedAsUnknown(string outcome)
+    {
+        var (adapter, proxy) = await SizeAdapter();
+        proxy.ReadValue = new Variant(0UL);
+        proxy.ReadStatus = outcome switch
+        {
+            "unknown" or "service" => StatusCodes.BadNotSupported,
+            "denied" => StatusCodes.BadUserAccessDenied,
+            "good-subcode" => StatusCodes.GoodClamped,
+            _ => StatusCodes.Uncertain
+        };
+        if (outcome == "service")
+        {
+            proxy.Header.ServiceResult = StatusCodes.BadNotSupported;
+        }
+        if (outcome == "good-subcode")
+        {
+            var size = await adapter.ReadFileSizeAsync(new NodeId("File", 1), CancellationToken.None);
+            await Assert.That(size).IsEqualTo((ulong?)0);
+        }
+        else if (outcome == "unknown")
+        {
+            var size = await adapter.ReadFileSizeAsync(new NodeId("File", 1), CancellationToken.None);
+            await Assert.That(size).IsNull();
+        }
+        else
+        {
+            var error = await Assert.ThrowsAsync<FederationException>(
+                async () => await adapter.ReadFileSizeAsync(new NodeId("File", 1), CancellationToken.None));
+            await Assert.That(error!.Code).IsEqualTo(outcome switch
+            {
+                "denied" => FederationErrorCode.PolicyDenied,
+                "service" => FederationErrorCode.UnsupportedOperation,
+                _ => FederationErrorCode.Unavailable
+            });
+            await Assert.That(error.InnerException is ServiceResultException).IsTrue();
+            await Assert.That(error.Data.Contains("OpcUa.ResponseHeader")).IsTrue();
+        }
+    }
+
+    [Test]
+    [Arguments("uint")]
+    [Arguments("negative")]
+    [Arguments("text")]
+    [Arguments("array")]
+    [Arguments("null")]
+    public async Task FileSizeRejectsNonUInt64ScalarValues(string kind)
+    {
+        var (adapter, proxy) = await SizeAdapter();
+        proxy.ReadValue = kind switch
+        {
+            "uint" => new Variant(1u),
+            "negative" => new Variant(-1L),
+            "text" => new Variant("1"),
+            "array" => Variant.From(new ulong[] { 1 }),
+            _ => Variant.Null
+        };
+
+        var error = await Assert.ThrowsAsync<FederationException>(
+            async () => await adapter.ReadFileSizeAsync(new NodeId("File", 1), CancellationToken.None));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(error.Message).IsEqualTo("FileType Size is not a UInt64.");
+    }
+
+    [Test]
+    [Arguments("missing")]
+    [Arguments("namespace")]
+    [Arguments("case")]
+    [Arguments("duplicate")]
+    [Arguments("class")]
+    [Arguments("remote")]
+    public async Task FileSizeRejectsMissingAmbiguousOrNonlocalPropertyWithoutReadingValue(string kind)
+    {
+        var (adapter, proxy) = await SizeAdapter();
+        var reference = SizeReference();
+        if (kind == "namespace") reference.BrowseName = new QualifiedName("Size", 1);
+        if (kind == "case") reference.BrowseName = new QualifiedName("size");
+        if (kind == "class") reference.NodeClass = NodeClass.Object;
+        if (kind == "remote") reference.NodeId = new ExpandedNodeId(new NodeId("Size", 1), null, 1u);
+        proxy.BrowseResultFactory = _ => new BrowseResult
+        {
+            References = kind switch
+            {
+                "missing" => [],
+                "duplicate" => [reference, SizeReference()],
+                _ => [reference]
+            }
+        };
+        var before = proxy.ReadCount;
+
+        var error = await Assert.ThrowsAsync<FederationException>(
+            async () => await adapter.ReadFileSizeAsync(new NodeId("File", 1), CancellationToken.None));
+
+        await Assert.That(error!.Code).IsEqualTo(kind switch
+        {
+            "duplicate" => FederationErrorCode.Ambiguous,
+            "class" or "remote" => FederationErrorCode.InvalidPackage,
+            _ => FederationErrorCode.NotFound
+        });
+        await Assert.That(proxy.ReadCount).IsEqualTo(before);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task FileSizeRejectsSessionChangeDuringPropertyDiscoveryOrRead(bool duringRead)
+    {
+        var (adapter, proxy) = await SizeAdapter();
+        proxy.ReadValue = new Variant(7UL);
+        Action change = () => proxy.SessionId = new NodeId("Replacement", 0);
+        proxy.AfterRead = duringRead ? change : null;
+        proxy.AfterBrowse = duringRead ? null : change;
+        var before = proxy.ReadCount;
+
+        var error = await Assert.ThrowsAsync<FederationException>(
+            async () => await adapter.ReadFileSizeAsync(new NodeId("File", 1), CancellationToken.None));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.Unavailable);
+        await Assert.That(proxy.ReadCount).IsEqualTo(before + (duringRead ? 1 : 0));
+    }
+
+    [Test]
+    [Arguments("before")]
+    [Arguments("browse")]
+    [Arguments("read")]
+    public async Task FileSizeObservesCancellationBeforeAndAfterNativeOperations(string phase)
+    {
+        var (adapter, proxy) = await SizeAdapter();
+        proxy.ReadValue = new Variant(7UL);
+        using var cancellation = new CancellationTokenSource();
+        proxy.AfterBrowse = phase == "browse" ? cancellation.Cancel : null;
+        proxy.AfterRead = phase == "read" ? cancellation.Cancel : null;
+        if (phase == "before") cancellation.Cancel();
+        var before = proxy.NativeOperationCount;
+
+        var error = await Assert.ThrowsAsync<OperationCanceledException>(
+            async () => await adapter.ReadFileSizeAsync(new NodeId("File", 1), cancellation.Token));
+
+        await Assert.That(error!.CancellationToken).IsEqualTo(cancellation.Token);
+        await Assert.That(proxy.NativeOperationCount).IsEqualTo(before + (phase switch
+        {
+            "before" => 0,
+            "browse" => 1,
+            _ => 2
+        }));
+    }
+
+    private static ReferenceDescription SizeReference() => new()
+    {
+        NodeId = new ExpandedNodeId(new NodeId("Actual.Size", 1)),
+        BrowseName = new QualifiedName(BrowseNames.Size),
+        NodeClass = NodeClass.Variable
+    };
+
+    [Test]
+    [Arguments(1)]
+    [Arguments(2)]
+    public async Task FileSizeCompletesDiscoveryWithinPageBudgetBeforeReadingProperty(int maxPages)
+    {
+        var (adapter, proxy) = CreateAdapter(maxPages);
+        _ = await adapter.ReadNamespaceArrayAsync(CancellationToken.None);
+        proxy.ReadValue = new Variant(3UL);
+        byte[] continuation = [1];
+        proxy.BrowseResultFactory = _ => new BrowseResult { ContinuationPoint = new ByteString(continuation) };
+        proxy.NextBrowseReferences = [SizeReference()];
+        proxy.NextBrowseContinuation = [];
+        var before = proxy.ReadCount;
+        if (maxPages == 1)
+        {
+            var error = await Assert.ThrowsAsync<FederationException>(
+                async () => await adapter.ReadFileSizeAsync(new NodeId("File", 1), CancellationToken.None));
+            await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+            await Assert.That(proxy.ReadCount).IsEqualTo(before);
+            await Assert.That(proxy.NextBrowseCount).IsEqualTo(0);
+            await Assert.That(proxy.ReleasedContinuations.Single()).IsEquivalentTo(new byte[] { 1 });
+        }
+        else
+        {
+            var result = await adapter.ReadFileSizeAsync(new NodeId("File", 1), CancellationToken.None);
+            await Assert.That(result).IsEqualTo((ulong?)3);
+            await Assert.That(proxy.NextBrowseCount).IsEqualTo(1);
+            await Assert.That(proxy.ReleasedContinuations.Count).IsEqualTo(0);
+        }
+    }
+
+    private static async ValueTask<(OpcUaSessionAdapter Adapter, SessionProxy Proxy)> SizeAdapter()
+    {
+        var (adapter, proxy) = CreateAdapter();
+        _ = await adapter.ReadNamespaceArrayAsync(CancellationToken.None);
+        proxy.BrowseResultFactory = _ => new BrowseResult { References = [SizeReference()] };
+        return (adapter, proxy);
+    }
+
     private static readonly string[] s_namespaceUris = ["http://opcfoundation.org/UA/"];
     private static readonly string[] s_serverUris =
         ["urn:example:local-server", "urn:remote:server-one", "urn:Remote:Server%2fTwo"];
@@ -2151,6 +2372,7 @@ public class OpcUaSessionAdapterTests
         public Variant? ReadValue { get; set; }
         public Variant? DeclaredDataType { get; set; }
         public int ReadCount { get; private set; }
+        public List<ReadValueId> ReadRequests { get; } = [];
         public Action? AfterRead { get; set; }
         public StatusCode ReadStatus { get; set; }
         public StatusCode BrowseStatus { get; set; }
@@ -2259,6 +2481,7 @@ public class OpcUaSessionAdapterTests
         private ValueTask<ReadResponse> Read(ArrayOf<ReadValueId> nodes)
         {
             ReadCount++;
+            ReadRequests.Add(nodes[0]);
             var node = nodes[0].NodeId;
             var value = node.TryGetValue(out uint identifier) && node.NamespaceIndex == 0
                 ? identifier switch

@@ -137156,16 +137156,28 @@
       "text": "4. Continue after a short, nonempty Read. Part 20 permits fewer bytes than requested. An empty ByteString indicates end-of-file. A known, reliable `Size` can also establish the total, but a premature end or a size change MUST invalidate a complete-capture claim. Unknown size requires an end-of-file observation. A successful zero-byte file still has an Open/Read/Close lifecycle.",
       "review": {
         "status": "reviewed",
-        "note": "The selected EOF and Size obligations were reviewed with the complete FileTransfer procedure. ReadFileAsync continues after short chunks and requires an empty chunk before returning captured bytes, including zero-byte documents. Request lengths now respect chunk size and remaining capture capacity; at the exact byte limit a positive one-byte probe distinguishes EOF from excess content without accepting another byte. Both adapter and reader reject chunks larger than their request, and the adapter rejects nonpositive request lengths before native operations. Reader errors retain uncancelled Close behavior and any cleanup failure. Before-limit, exact-limit and excess-content cases verify exact requested lengths; separate cases cover short/empty/native responses and malformed chunks. The federation source now also follows procedure step 6 for selected Version entity Properties: after local Read and Close it rereads the selected Version and rejects changed Epoch, Name, ContentType, Format or ModifiedAt as inconsistent_snapshot before constructing a result. Both default and exact requests have stable and changed cases, with mutations during a chunk, EOF or Close. Default Meta epoch/Version selection changes reject only default reads. File read/Close and Version recheck errors retain their identity and causes; cancellation during Close or rechecks prevents a document result. Generic ReadFileAsync and direct reader document operations do not gain this source-level capture check. Reliable Size admission, native identity changes and complete capture consistency remain pending, so this compound requirement is not marked implemented.",
+        "note": "The selected EOF and Size paragraph is implemented for client complete reads. ReadFileAsync continues after short chunks and requires EOF even at known zero or an exact byte budget. Request lengths respect chunk size and remaining capacity; a one-byte probe distinguishes EOF from excess content at the limit. Both adapter and reader reject overlong chunks. The adapter resolves the actual namespace-zero Size Variable through complete bounded HasProperty discovery and admits only UInt64; operation Bad_NotSupported means unknown, while service failures and other native statuses retain their outcomes and diagnostics. Missing, competing, remote or wrong-kind Properties reject rather than becoming unknown. Before Open, a known Size above budget rejects without acquiring a handle. Premature EOF, bytes beyond known Size, changed or lost final Size, and final Size unequal to captured bytes report inconsistent_snapshot. Unknown-to-known Size is accepted only when the final length agrees; unknown throughout still requires EOF. Size acquisition/recheck errors and cancellation retain uncancelled Close and cleanup diagnostics after Open. Actual Session model, capability, exact Version and replacement reads use static or dynamic UInt64 Size Properties. The federation source separately rechecks selected Version entity Properties after Read/Close and default Meta for default selection, with retained native errors and cancellation. This closes the bounded EOF/Size paragraph, not server limits, native identity races, stale-handle prevention, direct reader Version capture checks or complete source qualification.",
         "roles": [
           "client"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "FileReadContinuesPastShortReadsUntilAnEmptyChunkThenCloses",
           "FileReadRequestsOnlyRemainingBudgetAndProbesExactLimitForEof",
+          "FileReadConfirmsKnownSizeThroughEofAndCloses",
+          "FileReadRejectsReportedSizeAboveBudgetBeforeOpen",
+          "FileReadRejectsEofOrBytesThatContradictKnownSize",
+          "FileReadRechecksSizeBeforeClosingAndAcceptsOnlyMatchingObservations",
+          "FileReadSizeFailureOrCancellationRetainsCleanupAndPreventsByteResults",
+          "FileSizeReadsExactNamespaceZeroPropertyAndUInt64WithoutMutationPermission",
+          "FileSizeTreatsOnlyOperationBadNotSupportedAsUnknown",
+          "FileSizeRejectsNonUInt64ScalarValues",
+          "FileSizeRejectsMissingAmbiguousOrNonlocalPropertyWithoutReadingValue",
+          "FileSizeRejectsSessionChangeDuringPropertyDiscoveryOrRead",
+          "FileSizeObservesCancellationBeforeAndAfterNativeOperations",
+          "FileSizeCompletesDiscoveryWithinPageBudgetBeforeReadingProperty",
           "FileReadRejectsChunkLargerThanRequestAndRetainsCloseFailure",
           "FileReadRespectsChunkCapBeforeRemainingBudgetAndEofProbe",
           "FileTransferReadRejectsNonpositiveLengthBeforeNativeOperations",

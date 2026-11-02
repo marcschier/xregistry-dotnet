@@ -35,6 +35,8 @@ public interface IOpcUaRegistrySession
     ValueTask<OpcUaBrowsePage> BrowseAsync(NodeId node, CancellationToken cancellationToken);
     /// <summary>Continues, or when <paramref name="release"/> is true only releases, a continuation point.</summary>
     ValueTask<OpcUaBrowsePage> BrowseNextAsync(byte[] continuationPoint, bool release, CancellationToken cancellationToken);
+    /// <summary>Reads FileType Size as UInt64; null means the server reports Bad_NotSupported.</summary>
+    ValueTask<ulong?> ReadFileSizeAsync(NodeId file, CancellationToken cancellationToken);
     /// <summary>Calls FileType Open and returns the file handle.</summary>
     ValueTask<uint> OpenAsync(NodeId file, byte mode, CancellationToken cancellationToken);
     /// <summary>Calls FileType Read; an empty result is end of file and a short read is not.</summary>
@@ -203,6 +205,13 @@ public sealed class OpcUaRegistryReader
     {
         EnsureSpecVersionValidated();
         cancellationToken.ThrowIfCancellationRequested();
+        var size = await session.ReadFileSizeAsync(file, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (size > (ulong)maxBytes)
+        {
+            throw new FederationException(FederationErrorCode.LimitExceeded,
+                "The reported file Size exceeds the byte budget.");
+        }
         var handle = await session.OpenAsync(file, ReadMode, cancellationToken).ConfigureAwait(false);
         using var buffer = new MemoryStream();
         Exception? failure = null;
@@ -221,6 +230,11 @@ public sealed class OpcUaRegistryReader
                 cancellationToken.ThrowIfCancellationRequested();
                 if (chunk.Length == 0)
                 {
+                    if (size is { } expected && (ulong)buffer.Length != expected)
+                    {
+                        throw new FederationException(FederationErrorCode.InconsistentSnapshot,
+                            "FileType EOF does not match the reported Size.");
+                    }
                     break;
                 }
                 if (buffer.Length + chunk.Length > maxBytes)
@@ -233,7 +247,20 @@ public sealed class OpcUaRegistryReader
                     throw new FederationException(FederationErrorCode.InvalidPackage,
                         "The FileType Read returned more bytes than requested.");
                 }
+                if (size is { } known && (ulong)(buffer.Length + chunk.Length) > known)
+                {
+                    throw new FederationException(FederationErrorCode.InconsistentSnapshot,
+                        "The FileType returned more bytes than its reported Size.");
+                }
                 buffer.Write(chunk);
+            }
+            var afterSize = await session.ReadFileSizeAsync(file, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (size is not null && afterSize != size ||
+                afterSize is { } finalSize && finalSize != (ulong)buffer.Length)
+            {
+                throw new FederationException(FederationErrorCode.InconsistentSnapshot,
+                    "FileType Size changed or could not be confirmed during the read.");
             }
         }
         catch (Exception ex)

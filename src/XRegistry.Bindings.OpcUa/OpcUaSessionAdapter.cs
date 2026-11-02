@@ -404,6 +404,54 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
             "The OPC UA continuation cannot be released in a replacement Session.");
 
     /// <inheritdoc />
+    public async ValueTask<ulong?> ReadFileSizeAsync(NodeId file, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var sourceSession = session.SessionId;
+        if (namespaceUris is null)
+        {
+            _ = await ReadNamespaceArrayAsync(cancellationToken).ConfigureAwait(false);
+        }
+        RequireFileSession(sourceSession);
+        var properties = await BrowseOnce(file, BrowseDirection.Forward, ReferenceTypeIds.HasProperty,
+            cancellationToken, sourceSession).ConfigureAwait(false);
+        RequireFileSession(sourceSession);
+        cancellationToken.ThrowIfCancellationRequested();
+        var matches = properties.Where(property =>
+            property.BrowseName.NamespaceIndex == 0 && property.BrowseName.Name == BrowseNames.Size).ToArray();
+        if (matches.Length != 1)
+        {
+            throw new FederationException(matches.Length == 0
+                ? FederationErrorCode.NotFound : FederationErrorCode.Ambiguous,
+                "The FileType must expose exactly one namespace-zero Size Property.");
+        }
+        var property = matches[0];
+        if (property.NodeClass != NodeClass.Variable || property.NodeId.ServerIndex != 0)
+        {
+            throw new FederationException(FederationErrorCode.InvalidPackage,
+                "FileType Size must be a local Variable.");
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        RequireFileSession(sourceSession);
+        var response = await InvokeAsync(() => session.ReadAsync(new RequestHeader(), 0, TimestampsToReturn.Neither,
+            [new ReadValueId { NodeId = Local(property.NodeId), AttributeId = Attributes.Value }],
+            cancellationToken)).ConfigureAwait(false);
+        RequireFileSession(sourceSession);
+        cancellationToken.ThrowIfCancellationRequested();
+        var result = Single(response.Results,
+            static result => result.StatusCode == StatusCodes.BadNotSupported ? StatusCodes.Good : result.StatusCode,
+            response.DiagnosticInfos, response.ResponseHeader);
+        if (result.StatusCode == StatusCodes.BadNotSupported)
+        {
+            return null;
+        }
+        return result.WrappedValue.TryGetValue(out ulong size)
+            ? size
+            : throw new FederationException(FederationErrorCode.InvalidPackage,
+                "FileType Size is not a UInt64.");
+    }
+
+    /// <inheritdoc />
     public async ValueTask<string> ReadStringAsync(NodeId variable, CancellationToken cancellationToken)
     {
         var response = await InvokeAsync(() => session.ReadAsync(new RequestHeader(), 0, TimestampsToReturn.Neither,

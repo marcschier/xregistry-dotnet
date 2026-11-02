@@ -25,6 +25,164 @@ public class OpcUaRegistryReaderTests
         """{"groups":{"teams":{"singular":"team","resources":{"schemas":{"singular":"schema"}}}}}""";
 
     [Test]
+    [Arguments(0)]
+    [Arguments(3)]
+    [Arguments(4)]
+    public async Task FileReadConfirmsKnownSizeThroughEofAndCloses(int length)
+    {
+        var session = new FakeSession();
+        session.FileSizes.Enqueue((ulong)length);
+        session.FileSizes.Enqueue((ulong)length);
+        var expected = Enumerable.Range(1, length).Select(i => (byte)i).ToArray();
+        session.Chunks.AddRange(expected.Chunk(2));
+        session.Chunks.Add([]);
+        var reader = await ValidatedReader(session, maxBytes: 4, chunkSize: 2);
+
+        var bytes = await reader.ReadFileAsync(File);
+
+        await Assert.That(bytes).IsEquivalentTo(expected);
+        await Assert.That(session.FileSizeReads).IsEqualTo(2);
+        await Assert.That(session.FileSizes.Count).IsEqualTo(0);
+        await Assert.That(session.Chunks.Count).IsEqualTo(0);
+        await Assert.That(session.Opened).IsEqualTo(1);
+        await Assert.That(session.Closed).IsEqualTo(1);
+        await Assert.That(session.CloseToken.CanBeCanceled).IsFalse();
+    }
+
+    [Test]
+    [Arguments(5UL)]
+    [Arguments(ulong.MaxValue)]
+    public async Task FileReadRejectsReportedSizeAboveBudgetBeforeOpen(ulong size)
+    {
+        var session = new FakeSession();
+        session.FileSizes.Enqueue(size);
+        var reader = await ValidatedReader(session, maxBytes: 4);
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () => await reader.ReadFileAsync(File));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        await Assert.That(session.FileSizeReads).IsEqualTo(1);
+        await Assert.That(session.Opened).IsEqualTo(0);
+        await Assert.That(session.FileReads).IsEqualTo(0);
+        await Assert.That(session.Closed).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(0UL, 1)]
+    [Arguments(1UL, 0)]
+    [Arguments(2UL, 1)]
+    [Arguments(1UL, 2)]
+    public async Task FileReadRejectsEofOrBytesThatContradictKnownSize(ulong size, int length)
+    {
+        var closeFailure = new IOException("Synthetic Size capture cleanup failure.");
+        var session = new FakeSession { CloseFailure = closeFailure };
+        session.FileSizes.Enqueue(size);
+        if (length > 0)
+        {
+            session.Chunks.Add(Enumerable.Range(1, length).Select(i => (byte)i).ToArray());
+        }
+        session.Chunks.Add([]);
+        var reader = await ValidatedReader(session);
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () => await reader.ReadFileAsync(File));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.InconsistentSnapshot);
+        await Assert.That(session.FileSizeReads).IsEqualTo(1);
+        await Assert.That(session.Closed).IsEqualTo(1);
+        await Assert.That(session.CloseToken.CanBeCanceled).IsFalse();
+        await Assert.That(ReferenceEquals(error.Data["OpcUa.FileCloseFailure"], closeFailure)).IsTrue();
+    }
+
+    [Test]
+    [Arguments("unchanged")]
+    [Arguments("larger")]
+    [Arguments("smaller")]
+    [Arguments("lost")]
+    [Arguments("unknown")]
+    [Arguments("learned")]
+    [Arguments("learned-wrong")]
+    public async Task FileReadRechecksSizeBeforeClosingAndAcceptsOnlyMatchingObservations(string change)
+    {
+        var session = new FakeSession { Chunks = { new byte[] { 1, 2 }, Array.Empty<byte>() } };
+        session.FileSizes.Enqueue(change is "unknown" or "learned" or "learned-wrong" ? null : 2UL);
+        session.FileSizes.Enqueue(change switch
+        {
+            "larger" or "learned-wrong" => 3UL,
+            "smaller" => 1UL,
+            "lost" or "unknown" => null,
+            _ => 2UL
+        });
+        var reader = await ValidatedReader(session);
+        var observedWhileOpen = false;
+        session.AfterSizeRead = () => observedWhileOpen = session.Opened == 1 && session.Closed == 0;
+        if (change is "unchanged" or "unknown" or "learned")
+        {
+            var bytes = await reader.ReadFileAsync(File);
+            await Assert.That(bytes).IsEquivalentTo(new byte[] { 1, 2 });
+        }
+        else
+        {
+            var error = await Assert.ThrowsAsync<FederationException>(async () => await reader.ReadFileAsync(File));
+            await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.InconsistentSnapshot);
+        }
+        await Assert.That(observedWhileOpen).IsTrue();
+        await Assert.That(session.FileSizeReads).IsEqualTo(2);
+        await Assert.That(session.Closed).IsEqualTo(1);
+        await Assert.That(session.CloseToken.CanBeCanceled).IsFalse();
+    }
+
+    [Test]
+    [Arguments(false, false)]
+    [Arguments(false, true)]
+    [Arguments(true, false)]
+    [Arguments(true, true)]
+    public async Task FileReadSizeFailureOrCancellationRetainsCleanupAndPreventsByteResults(
+        bool afterEof, bool cancelled)
+    {
+        var session = new FakeSession { Chunks = { Array.Empty<byte>() } };
+        var reader = await ValidatedReader(session);
+        using var cancellation = new CancellationTokenSource();
+        var failure = new FederationException(FederationErrorCode.PolicyDenied, "Size denied.");
+        var cleanup = new IOException("Size cleanup failed.");
+        session.CloseFailure = cleanup;
+        session.AfterSizeRead = () =>
+        {
+            if (session.FileSizeReads == (afterEof ? 2 : 1))
+            {
+                if (cancelled)
+                {
+                    cancellation.Cancel();
+                }
+                else
+                {
+                    session.SizeFailure = failure;
+                }
+            }
+        };
+        Exception error;
+        if (cancelled)
+        {
+            error = (await Assert.ThrowsAsync<OperationCanceledException>(
+                async () => await reader.ReadFileAsync(File, cancellation.Token)))!;
+            await Assert.That(((OperationCanceledException)error).CancellationToken).IsEqualTo(cancellation.Token);
+        }
+        else
+        {
+            error = (await Assert.ThrowsAsync<FederationException>(
+                async () => await reader.ReadFileAsync(File, cancellation.Token)))!;
+            await Assert.That(ReferenceEquals(error, failure)).IsTrue();
+        }
+        await Assert.That(session.Opened).IsEqualTo(afterEof ? 1 : 0);
+        await Assert.That(session.Closed).IsEqualTo(afterEof ? 1 : 0);
+        await Assert.That(error.Data.Contains("OpcUa.FileCloseFailure")).IsEqualTo(afterEof);
+        if (afterEof)
+        {
+            await Assert.That(ReferenceEquals(error.Data["OpcUa.FileCloseFailure"], cleanup)).IsTrue();
+            await Assert.That(session.CloseToken.CanBeCanceled).IsFalse();
+        }
+    }
+
+    [Test]
     public async Task FileReadContinuesPastShortReadsUntilAnEmptyChunkThenCloses()
     {
         var session = new FakeSession { Chunks = { new byte[] { 1, 2 }, new byte[] { 3 }, Array.Empty<byte>() } };
@@ -4103,6 +4261,20 @@ public class OpcUaRegistryReaderTests
         public List<(string Property, NodeId File)> PropertyReadsWhileFileOpen { get; } = [];
         public List<(NodeId File, uint Handle)> FileReadHandles { get; } = [];
         public List<int> FileReadLengths { get; } = [];
+        public Queue<ulong?> FileSizes { get; } = [];
+        public int FileSizeReads { get; private set; }
+        public Action? AfterSizeRead { get; set; }
+        public Exception? SizeFailure { get; set; }
+        public ValueTask<ulong?> ReadFileSizeAsync(NodeId file, CancellationToken cancellationToken)
+        {
+            FileSizeReads++;
+            AfterSizeRead?.Invoke();
+            if (SizeFailure is not null)
+            {
+                throw SizeFailure;
+            }
+            return new(FileSizes.Count == 0 ? null : FileSizes.Dequeue());
+        }
         public List<(NodeId File, uint Handle)> FileClosedHandles { get; } = [];
         public uint LastClosedHandle { get; private set; }
         private Dictionary<string, OpcUaJsonValue>? metadataPropertySnapshot;
