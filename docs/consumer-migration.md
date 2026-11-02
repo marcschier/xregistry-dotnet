@@ -665,8 +665,25 @@ Callback ancestors and unrelated operations retain the named-versus-pointer
 traversal rules above. Unused reusable example references remain inactive;
 selection retains authored references and does not retrieve `externalValue`
 addresses. Parameter examples, format-specific response-presence requirements,
-nested header/encoding validation and response schema
-evaluation remain unverified.
+nested encoding validation and schema evaluation remain unverified.
+OpenAPI response headers and root reusable headers require Header or Reference
+Objects. Inline headers require exactly one `schema` or `content`; a content
+map contains one concrete media type and receives the shared Media Type Object
+checks. Schemas must be objects, with booleans also permitted in OpenAPI 3.1.
+Headers cannot declare `name`, `in`, `allowEmptyValue` or `allowReserved`.
+Present metadata receives its declared string or boolean type checks, and
+`style` permits only `simple`. Singular and plural examples are mutually
+exclusive; example declarations receive the shared Example Object checks.
+Response `Content-Type` declarations are ignored by case-insensitive name,
+including malformed values and references, without altering the authored data.
+Reached Header Reference Objects resolve through the bounded chain helper.
+Header examples and content-media examples also resolve their Reference Objects,
+using the containing header document's base URI and shared acquisition cache.
+Dependency failures, malformed targets, cycles and depth exhaustion prevent
+partial selection; unused reusable header references remain inactive. Selected
+operations retain authored headers without injected defaults or resolved copies.
+These checks do not evaluate header schemas, serialize headers or compare
+example values with the selected serialization strategy.
 Response links and root reusable links require Link or Reference Objects.
 Response link names follow the component-name character rules. Inline links
 require exactly one string `operationId` or URI-reference `operationRef`;

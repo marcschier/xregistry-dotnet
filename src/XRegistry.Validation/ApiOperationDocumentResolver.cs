@@ -678,6 +678,11 @@ public static partial class ApiOperationDocumentResolver
                     var linkFailure = ValidateOpenApiLinkDeclaration(entry.Value, entryPath, format, cancellationToken);
                     if (linkFailure is not null) { return linkFailure; }
                 }
+                if (!swagger && collection.Name == "headers")
+                {
+                    var headerFailure = ValidateOpenApiHeaderDeclaration(entry.Value, entryPath, format, cancellationToken);
+                    if (headerFailure is not null) { return headerFailure; }
+                }
             }
         }
         return null;

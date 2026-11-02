@@ -398,6 +398,17 @@ public static partial class ApiOperationDocumentResolver
                 return InvalidHttpResponse("A Response Object structured field must be an object.", pointer + "/" + field);
             }
         }
+        if (format != "Swagger/2.0" && response.TryGetProperty("headers", out var headers))
+        {
+            foreach (var header in headers.EnumerateObject())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (header.Name.Equals("Content-Type", StringComparison.OrdinalIgnoreCase)) { continue; }
+                var failure = ValidateOpenApiHeaderDeclaration(header.Value,
+                    pointer + "/headers/" + Escape(header.Name), format, cancellationToken);
+                if (failure is not null) { return failure; }
+            }
+        }
         if (format != "Swagger/2.0" && response.TryGetProperty("links", out var links))
         {
             foreach (var link in links.EnumerateObject())
@@ -415,46 +426,53 @@ public static partial class ApiOperationDocumentResolver
         }
         if (format != "Swagger/2.0" && response.TryGetProperty("content", out var content))
         {
-            foreach (var media in content.EnumerateObject())
+            return ValidateOpenApiMediaDeclarations(content, pointer + "/content", format, cancellationToken);
+        }
+        return null;
+    }
+
+    private static ApiOperationResolutionResult? ValidateOpenApiMediaDeclarations(
+        JsonElement content, string pointer, string format, CancellationToken cancellationToken)
+    {
+        foreach (var media in content.EnumerateObject())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var path = pointer + "/" + Escape(media.Name);
+            if (!IsResponseMediaRange(media.Name))
+            {
+                return InvalidMedia("A content key must be a media type or media range.", path);
+            }
+            var declaration = media.Value;
+            if (declaration.ValueKind != JsonValueKind.Object)
+            {
+                return InvalidMedia("Content entries must be Media Type Objects.", path);
+            }
+            if (declaration.TryGetProperty("schema", out var schema) &&
+                schema.ValueKind != JsonValueKind.Object &&
+                !(format == "OpenAPI/3.1" && schema.ValueKind is JsonValueKind.True or JsonValueKind.False))
+            {
+                return InvalidMedia("A media schema must be a Schema Object or, in OpenAPI 3.1, a boolean.", path + "/schema");
+            }
+            foreach (var field in new[] { "examples", "encoding" })
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var path = pointer + "/content/" + Escape(media.Name);
-                if (!IsResponseMediaRange(media.Name))
+                if (declaration.TryGetProperty(field, out var value) && value.ValueKind != JsonValueKind.Object)
                 {
-                    return InvalidMedia("A response content key must be a media type or media range.", path);
+                    return InvalidMedia("Media examples and encoding declarations must be objects.", path + "/" + field);
                 }
-                var declaration = media.Value;
-                if (declaration.ValueKind != JsonValueKind.Object)
-                {
-                    return InvalidMedia("Response content entries must be Media Type Objects.", path);
-                }
-                if (declaration.TryGetProperty("schema", out var schema) &&
-                    schema.ValueKind != JsonValueKind.Object &&
-                    !(format == "OpenAPI/3.1" && schema.ValueKind is JsonValueKind.True or JsonValueKind.False))
-                {
-                    return InvalidMedia("A media schema must be a Schema Object or, in OpenAPI 3.1, a boolean.", path + "/schema");
-                }
-                foreach (var field in new[] { "examples", "encoding" })
+            }
+            if (declaration.TryGetProperty("example", out _) && declaration.TryGetProperty("examples", out _))
+            {
+                return InvalidMedia("Media example and examples are mutually exclusive.", path + "/examples");
+            }
+            if (declaration.TryGetProperty("examples", out var examples))
+            {
+                foreach (var example in examples.EnumerateObject())
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    if (declaration.TryGetProperty(field, out var value) && value.ValueKind != JsonValueKind.Object)
-                    {
-                        return InvalidMedia("Media examples and encoding declarations must be objects.", path + "/" + field);
-                    }
-                }
-                if (declaration.TryGetProperty("example", out _) && declaration.TryGetProperty("examples", out _))
-                {
-                    return InvalidMedia("Media example and examples are mutually exclusive.", path + "/examples");
-                }
-                if (declaration.TryGetProperty("examples", out var examples))
-                {
-                    foreach (var example in examples.EnumerateObject())
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        var failure = ValidateOpenApiExampleDeclaration(example.Value,
-                            path + "/examples/" + Escape(example.Name), format, cancellationToken);
-                        if (failure is not null) { return failure; }
-                    }
+                    var failure = ValidateOpenApiExampleDeclaration(example.Value,
+                        path + "/examples/" + Escape(example.Name), format, cancellationToken);
+                    if (failure is not null) { return failure; }
                 }
             }
         }
@@ -466,6 +484,97 @@ public static partial class ApiOperationDocumentResolver
 
     private static ApiOperationResolutionResult InvalidHttpResponse(string message, string pointer) =>
         Failure(ApiOperationResolutionStatus.Invalid, "document.responses", message, pointer);
+
+    private static ApiOperationResolutionResult? ValidateOpenApiHeaderDeclaration(
+        JsonElement header, string pointer, string format, CancellationToken cancellationToken)
+    {
+        if (header.ValueKind != JsonValueKind.Object)
+        {
+            return InvalidHeader("A header declaration must be a Header or Reference Object.", pointer);
+        }
+        if (header.TryGetProperty("$ref", out var reference))
+        {
+            if (reference.ValueKind != JsonValueKind.String || !IsHttpMetadataUriReference(reference.GetString()!))
+            {
+                return InvalidHeader("A header reference requires a string URI reference.", pointer + "/$ref");
+            }
+            if (format != "OpenAPI/3.1") { return null; }
+            foreach (var field in new[] { "summary", "description" })
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (header.TryGetProperty(field, out var value) && value.ValueKind != JsonValueKind.String)
+                {
+                    return InvalidHeader("Reference Object metadata must be strings.", pointer + "/" + field);
+                }
+            }
+            return null;
+        }
+        foreach (var field in new[] { "name", "in", "allowEmptyValue", "allowReserved" })
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (header.TryGetProperty(field, out _))
+            {
+                return InvalidHeader("A Header Object cannot declare parameter names, locations or query-only traits.", pointer + "/" + field);
+            }
+        }
+        foreach (var field in new[] { "description", "required", "deprecated", "explode", "style" })
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!header.TryGetProperty(field, out var value)) { continue; }
+            var valid = field switch
+            {
+                "description" => value.ValueKind == JsonValueKind.String,
+                "style" => value.ValueKind == JsonValueKind.String && value.GetString() == "simple",
+                _ => value.ValueKind is JsonValueKind.True or JsonValueKind.False
+            };
+            if (!valid) { return InvalidHeader("Header metadata must have its declared type and header serialization style.", pointer + "/" + field); }
+        }
+        var hasSchema = header.TryGetProperty("schema", out var schema);
+        var hasContent = header.TryGetProperty("content", out var content);
+        if (!hasSchema && !hasContent)
+        {
+            return InvalidHeader("A Header Object requires schema or content.", pointer + "/schema");
+        }
+        if (hasContent)
+        {
+            if (hasSchema || content.ValueKind != JsonValueKind.Object || content.EnumerateObject().Count() != 1)
+            {
+                return InvalidHeader("Header content must contain one media type and is exclusive of schema.", pointer + "/content");
+            }
+            foreach (var media in content.EnumerateObject())
+            {
+                if (!IsResponseMediaRange(media.Name, allowWildcards: false))
+                {
+                    return InvalidHeader("A header content key must be a concrete media type.", pointer + "/content/" + Escape(media.Name));
+                }
+            }
+            var failure = ValidateOpenApiMediaDeclarations(content, pointer + "/content", format, cancellationToken);
+            if (failure is not null) { return failure; }
+        }
+        else if (schema.ValueKind != JsonValueKind.Object &&
+            !(format == "OpenAPI/3.1" && schema.ValueKind is JsonValueKind.True or JsonValueKind.False))
+        {
+            return InvalidHeader("A header schema must be a Schema Object or, in OpenAPI 3.1, a boolean.", pointer + "/schema");
+        }
+        if (header.TryGetProperty("examples", out var examples))
+        {
+            if (examples.ValueKind != JsonValueKind.Object || header.TryGetProperty("example", out _))
+            {
+                return InvalidHeader("Header examples must be an object and are exclusive of example.", pointer + "/examples");
+            }
+            foreach (var example in examples.EnumerateObject())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var failure = ValidateOpenApiExampleDeclaration(example.Value,
+                    pointer + "/examples/" + Escape(example.Name), format, cancellationToken);
+                if (failure is not null) { return failure; }
+            }
+        }
+        return null;
+
+        static ApiOperationResolutionResult InvalidHeader(string message, string path) =>
+            Failure(ApiOperationResolutionStatus.Invalid, "document.header", message, path);
+    }
 
     private static ApiOperationResolutionResult? ValidateOpenApiLinkDeclaration(
         JsonElement link, string pointer, string format, CancellationToken cancellationToken)
@@ -522,7 +631,7 @@ public static partial class ApiOperationDocumentResolver
             Failure(ApiOperationResolutionStatus.Invalid, "document.link", message, path);
     }
 
-    private static bool IsResponseMediaRange(string value)
+    private static bool IsResponseMediaRange(string value, bool allowWildcards = true)
     {
         if (!ResponseMediaRangeSyntax().IsMatch(value) ||
             !System.Net.Http.Headers.MediaTypeHeaderValue.TryParse(value, out var mediaType) ||
@@ -533,7 +642,9 @@ public static partial class ApiOperationDocumentResolver
         }
         var slash = name.IndexOf('/');
         return slash > 0 && slash < name.Length - 1 &&
-            (name.AsSpan(0, slash) is not "*" || name.AsSpan(slash + 1) is "*");
+            (allowWildcards
+                ? name.AsSpan(0, slash) is not "*" || name.AsSpan(slash + 1) is "*"
+                : name.AsSpan(0, slash) is not "*" && name.AsSpan(slash + 1) is not "*");
     }
 
     [GeneratedRegex(
@@ -599,6 +710,24 @@ public static partial class ApiOperationDocumentResolver
             if (resolution.Failure is not null) { return resolution.Failure; }
             if (references.Format == "Swagger/2.0") { continue; }
             var response = resolution.Target!;
+            if (response.Value.TryGetProperty("headers", out var headers))
+            {
+                foreach (var header in headers.EnumerateObject())
+                {
+                    if (header.Name.Equals("Content-Type", StringComparison.OrdinalIgnoreCase)) { continue; }
+                    var target = await ResolveHttpDeclarationAsync(
+                        new ReferenceTarget(response.Document, header.Value, response.Pointer + "/headers/" + Escape(header.Name)),
+                        references, ValidateOpenApiHeaderDeclaration, "header", cancellationToken).ConfigureAwait(false);
+                    if (target.Failure is not null) { return target.Failure; }
+                    var resolved = target.Target!;
+                    var exampleFailure = await ValidateEffectiveOpenApiExamplesAsync(resolved, references,
+                        cancellationToken).ConfigureAwait(false);
+                    if (exampleFailure is not null) { return exampleFailure; }
+                    var contentFailure = await ValidateEffectiveOpenApiContentAsync(resolved, references,
+                        cancellationToken).ConfigureAwait(false);
+                    if (contentFailure is not null) { return contentFailure; }
+                }
+            }
             if (response.Value.TryGetProperty("links", out var links))
             {
                 foreach (var link in links.EnumerateObject())
@@ -609,20 +738,37 @@ public static partial class ApiOperationDocumentResolver
                     if (target.Failure is not null) { return target.Failure; }
                 }
             }
-            if (!response.Value.TryGetProperty("content", out var content)) { continue; }
-            foreach (var media in content.EnumerateObject())
-            {
-                var mediaPointer = response.Pointer + "/content/" + Escape(media.Name);
-                references.Work(mediaPointer);
-                if (!media.Value.TryGetProperty("examples", out var examples)) { continue; }
-                foreach (var example in examples.EnumerateObject())
-                {
-                    var target = await ResolveHttpDeclarationAsync(
-                        new ReferenceTarget(response.Document, example.Value, mediaPointer + "/examples/" + Escape(example.Name)),
-                        references, ValidateOpenApiExampleDeclaration, "example", cancellationToken).ConfigureAwait(false);
-                    if (target.Failure is not null) { return target.Failure; }
-                }
-            }
+            var failure = await ValidateEffectiveOpenApiContentAsync(response, references, cancellationToken).ConfigureAwait(false);
+            if (failure is not null) { return failure; }
+        }
+        return null;
+    }
+
+    private static async ValueTask<ApiOperationResolutionResult?> ValidateEffectiveOpenApiContentAsync(
+        ReferenceTarget location, ReferenceContext references, CancellationToken cancellationToken)
+    {
+        if (!location.Value.TryGetProperty("content", out var content)) { return null; }
+        foreach (var media in content.EnumerateObject())
+        {
+            var pointer = location.Pointer + "/content/" + Escape(media.Name);
+            references.Work(pointer);
+            var failure = await ValidateEffectiveOpenApiExamplesAsync(
+                new ReferenceTarget(location.Document, media.Value, pointer), references, cancellationToken).ConfigureAwait(false);
+            if (failure is not null) { return failure; }
+        }
+        return null;
+    }
+
+    private static async ValueTask<ApiOperationResolutionResult?> ValidateEffectiveOpenApiExamplesAsync(
+        ReferenceTarget location, ReferenceContext references, CancellationToken cancellationToken)
+    {
+        if (!location.Value.TryGetProperty("examples", out var examples)) { return null; }
+        foreach (var example in examples.EnumerateObject())
+        {
+            var target = await ResolveHttpDeclarationAsync(
+                new ReferenceTarget(location.Document, example.Value, location.Pointer + "/examples/" + Escape(example.Name)),
+                references, ValidateOpenApiExampleDeclaration, "example", cancellationToken).ConfigureAwait(false);
+            if (target.Failure is not null) { return target.Failure; }
         }
         return null;
     }

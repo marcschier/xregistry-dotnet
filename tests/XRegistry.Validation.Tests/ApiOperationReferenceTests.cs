@@ -13,6 +13,286 @@ public class ApiOperationReferenceTests
     [Test]
     [Arguments("OpenAPI/3.0", "3.0.4")]
     [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiHeaderReferencesResolveContainingBasesAndNestedExamplesWithRestoration(string format, string version)
+    {
+        foreach (var useContent in new[] { false, true })
+        {
+            foreach (var valid in new[] { true, false, true })
+            {
+                var document = new JsonObject { ["openapi"] = version,
+                    ["paths"] = JsonNode.Parse("""
+                        {"/items":{"get":{"operationId":"Target","responses":{"200":{"$ref":"https://allowed.test/responses/ok.json#/Ok"}}}}}
+                        """),
+                    ["components"] = JsonNode.Parse("""{"headers":{"Unused":{"$ref":"https://must-not-load.test/unused"}}}""") };
+                var calls = new List<string>();
+                var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+                    resolveReference: (uri, _) =>
+                    {
+                        calls.Add(uri);
+                        var text = uri switch
+                        {
+                            "https://allowed.test/responses/ok.json" => """
+                                {"Ok":{"description":"","headers":{"X-One":{"$ref":"../headers/first.json#/H"},
+                                "X-Two":{"$ref":"../headers/first.json#/H"},"CONTENT-TYPE":{"$ref":"https://must-not-load.test/content-type"}}}}
+                                """,
+                            "https://allowed.test/headers/first.json" => """{"H":{"$ref":"second.json#/Result"}}""",
+                            "https://allowed.test/headers/second.json" => useContent
+                                ? """{"Result":{"content":{"text/plain":{"examples":{"e":{"$ref":"../examples/e.json#/E"}}}}}}"""
+                                : """{"Result":{"schema":{},"examples":{"e":{"$ref":"../examples/e.json#/E"}}}}""",
+                            "https://allowed.test/examples/e.json" => valid
+                                ? """{"E":{"value":null}}""" : """{"E":{"summary":false}}""",
+                            _ => throw new UnauthorizedAccessException()
+                        };
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(text));
+                    });
+                await Assert.That(result.Status).IsEqualTo(valid
+                    ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+                await Assert.That(string.Join("|", calls)).IsEqualTo(
+                    "https://allowed.test/responses/ok.json|https://allowed.test/headers/first.json|https://allowed.test/headers/second.json|https://allowed.test/examples/e.json");
+                if (valid)
+                {
+                    await Assert.That(result.Operation.GetProperty("responses").GetProperty("200").GetProperty("$ref").GetString())
+                        .IsEqualTo("https://allowed.test/responses/ok.json#/Ok");
+                }
+                else
+                {
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.example");
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo("$/E/summary");
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiHeaderReferenceFailuresRespectCallbackAndPointerLocality(string format, string version)
+    {
+        foreach (var (target, status, code) in new (string?, ApiOperationResolutionStatus, string)[]
+        {
+            (null, ApiOperationResolutionStatus.Indeterminate, "dependency.unresolved"),
+            ("denied", ApiOperationResolutionStatus.Denied, "dependency.denied"),
+            ("not json", ApiOperationResolutionStatus.Invalid, "dependency.json"),
+            ("""{"H":false}""", ApiOperationResolutionStatus.Invalid, "document.header"),
+            ("""{"H":{}}""", ApiOperationResolutionStatus.Invalid, "document.header"),
+            ("""{"H":{"$ref":"#/H"}}""", ApiOperationResolutionStatus.Indeterminate, "dependency.cycle")
+        })
+        {
+            foreach (var selector in new[] { "operations/Target", "operations/Missing", "operations/Child",
+                "/paths/~1parent/get", "/paths/~1parent/get/callbacks/event/%7B$request.query.url%7D/post", "/paths/~1items/get" })
+            {
+                var local = selector == "/paths/~1items/get";
+                var document = new JsonObject { ["openapi"] = version,
+                    ["paths"] = JsonNode.Parse("""
+                        {"/items":{"get":{"operationId":"Target"}},
+                         "/parent":{"get":{"operationId":"Parent","responses":{"200":{"description":"",
+                         "headers":{"X":{"$ref":"https://allowed.test/header#/H"}}}},
+                         "callbacks":{"event":{"{$request.query.url}":{"post":{"operationId":"Child"}}}}}}}
+                        """) };
+                var calls = 0;
+                var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                    resolveReference: (_, _) =>
+                    {
+                        calls++;
+                        if (target == "denied") { throw new UnauthorizedAccessException(); }
+                        if (target is null) { return ValueTask.FromResult<ReadOnlyMemory<byte>?>(null); }
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(target));
+                    });
+                await Assert.That(result.Status).IsEqualTo(local ? ApiOperationResolutionStatus.Selected : status);
+                await Assert.That(calls).IsEqualTo(local ? 0 : 1);
+                if (local) { await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("Target"); }
+                else
+                {
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiHeaderReferenceChainsHonorInclusiveDepthWithoutReplacingDeclarations(string format, string version)
+    {
+        foreach (var depth in new[] { 63, 64, 65 })
+        {
+            var document = new JsonObject { ["openapi"] = version,
+                ["paths"] = JsonNode.Parse("""
+                    {"/items":{"get":{"operationId":"Target","responses":{"200":{"description":"","headers":{"X":{"$ref":"#/H0"}}}}}}}
+                    """) };
+            for (var index = 0; index < depth; index++)
+            {
+                document["H" + index] = index == depth - 1
+                    ? JsonNode.Parse("""{"schema":{}}""") : new JsonObject { ["$ref"] = "#/H" + (index + 1) };
+            }
+            var result = ApiOperationDocumentResolver.Resolve(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"));
+            await Assert.That(result.Status).IsEqualTo(depth <= 64
+                ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Indeterminate);
+            if (depth > 64)
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("limit.reference_depth");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+            else
+            {
+                await Assert.That(result.Operation.GetProperty("responses").GetProperty("200").GetProperty("headers")
+                    .GetProperty("X").GetProperty("$ref").GetString()).IsEqualTo("#/H0");
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiHeaderDeclarationsRejectMalformedSerializationAndMetadata(string format, string version)
+    {
+        var invalid = new List<(string Json, string Suffix, string Code)>
+        {
+            ("null", "", "document.header"), ("[]", "", "document.header"),
+            ("{}", "/schema", "document.header"),
+            ("""{"schema":{},"name":"X"}""", "/name", "document.header"),
+            ("""{"schema":{},"in":"header"}""", "/in", "document.header"),
+            ("""{"schema":{},"allowEmptyValue":false}""", "/allowEmptyValue", "document.header"),
+            ("""{"schema":{},"allowReserved":false}""", "/allowReserved", "document.header"),
+            ("""{"schema":{},"description":null}""", "/description", "document.header"),
+            ("""{"schema":{},"required":0}""", "/required", "document.header"),
+            ("""{"schema":{},"deprecated":null}""", "/deprecated", "document.header"),
+            ("""{"schema":{},"explode":"false"}""", "/explode", "document.header"),
+            ("""{"schema":{},"style":"form"}""", "/style", "document.header"),
+            ("""{"schema":{},"style":false}""", "/style", "document.header"),
+            ("""{"schema":null}""", "/schema", "document.header"),
+            ("""{"schema":[] }""", "/schema", "document.header"),
+            ("""{"schema":"string"}""", "/schema", "document.header"),
+            ("""{"schema":{},"content":{}}""", "/content", "document.header"),
+            ("""{"content":{}}""", "/content", "document.header"),
+            ("""{"content":false}""", "/content", "document.header"),
+            ("""{"content":null}""", "/content", "document.header"),
+            ("""{"content":{"text/plain":{},"application/json":{}}}""", "/content", "document.header"),
+            ("""{"content":{"text/*":{}}}""", "/content/text~1*", "document.header"),
+            ("""{"content":{"bad%key":{}}}""", "/content/bad%key", "document.header"),
+            ("""{"content":{"text/plain":false}}""", "/content/text~1plain", "document.response_media"),
+            ("""{"content":{"text/plain":{"example":null,"examples":{}}}}""",
+                "/content/text~1plain/examples", "document.response_media"),
+            ("""{"schema":{},"example":null,"examples":{}}""", "/examples", "document.header"),
+            ("""{"schema":{},"examples":[]}""", "/examples", "document.header"),
+            ("""{"schema":{},"examples":null}""", "/examples", "document.header"),
+            ("""{"schema":{},"examples":{"e":false}}""", "/examples/e", "document.example"),
+            ("""{"$ref":null}""", "/$ref", "document.header"),
+            ("""{"$ref":"bad%escape"}""", "/$ref", "document.header")
+        };
+        if (format == "OpenAPI/3.0") { invalid.Add(("""{"schema":false}""", "/schema", "document.header")); }
+        else
+        {
+            invalid.Add(("""{"$ref":"#/H","description":false}""", "/description", "document.header"));
+            invalid.Add(("""{"$ref":"#/H","summary":null}""", "/summary", "document.header"));
+        }
+        foreach (var location in new[] { "inline", "unused-response", "remote-response", "component" })
+        {
+            foreach (var (json, suffix, code) in invalid)
+            {
+                var header = JsonNode.Parse(json);
+                var response = new JsonObject { ["description"] = "", ["headers"] = new JsonObject { ["X/~"] = header?.DeepClone() } };
+                var document = new JsonObject { ["openapi"] = version,
+                    ["paths"] = JsonNode.Parse("""{"/items":{"get":{"operationId":"Target"}}}""") };
+                var path = "$/paths/~1items/get/responses/200/headers/X~1~0";
+                if (location == "component")
+                {
+                    document["components"] = new JsonObject { ["headers"] = new JsonObject { ["H"] = header?.DeepClone() } };
+                    path = "$/components/headers/H";
+                }
+                else if (location == "unused-response")
+                {
+                    document["components"] = new JsonObject { ["responses"] = new JsonObject { ["Unused"] = response.DeepClone() } };
+                    path = "$/components/responses/Unused/headers/X~1~0";
+                }
+                else
+                {
+                    document["paths"]!["/items"]!["get"]!["responses"] = new JsonObject
+                    { ["200"] = location == "inline" ? response.DeepClone()
+                        : JsonNode.Parse("""{"$ref":"https://allowed.test/response#/Ok"}""") };
+                    if (location == "remote-response") { path = "$/Ok/headers/X~1~0"; }
+                }
+                foreach (var selector in new[] { "operations/Target", "operations/Missing", "/paths/~1items/get" })
+                {
+                    var calls = 0;
+                    var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                        System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                        ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                        resolveReference: (_, _) =>
+                        {
+                            calls++;
+                            return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(
+                                new JsonObject { ["Ok"] = response.DeepClone() }.ToJsonString()));
+                        });
+                    await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo(location == "component" && header is not JsonObject
+                        ? "document.component_value" : code);
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo(path + suffix);
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                    await Assert.That(calls).IsEqualTo(location == "remote-response" ? 1 : 0);
+                }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiHeaderDeclarationsRetainSchemasExamplesAndIgnoredContentTypeWithRestoration(string format, string version)
+    {
+        var declarations = new List<string>
+        {
+            """{"schema":{}}""",
+            """{"schema":{"$ref":"https://must-not-load.test/schema"},"description":"","required":false,"deprecated":true,"style":"simple","explode":true,"example":null}""",
+            """{"schema":{},"examples":{"e":{"value":[1,false]}},"x-private":{"name":"opaque","in":false}}""",
+            """{"content":{"text/plain; note=\"[]\"":{"example":{"any":false}}}}""",
+            """{"$ref":"#/H","schema":null,"in":"ignored"}"""
+        };
+        if (format == "OpenAPI/3.0") { declarations.Add("""{"$ref":"#/H","description":false,"summary":null}"""); }
+        else { declarations.Add("""{"schema":false}"""); declarations.Add("""{"schema":true}"""); }
+        foreach (var json in declarations)
+        {
+            foreach (var valid in new[] { true, false, true })
+            {
+                var operation = new JsonObject { ["operationId"] = "Target", ["responses"] = new JsonObject
+                    { ["200"] = new JsonObject { ["description"] = "", ["headers"] = new JsonObject
+                    { ["X-Test"] = valid ? JsonNode.Parse(json) : new JsonObject(), ["cOnTeNt-TyPe"] = null } } } };
+                var document = new JsonObject { ["openapi"] = version, ["H"] = JsonNode.Parse("""{"schema":{}}"""),
+                    ["paths"] = new JsonObject { ["/items"] = new JsonObject { ["get"] = operation.DeepClone() } },
+                    ["components"] = new JsonObject { ["headers"] = new JsonObject { ["H"] = JsonNode.Parse(json) } } };
+                var calls = 0;
+                var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+                    resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+                await Assert.That(result.Status).IsEqualTo(valid
+                    ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+                await Assert.That(calls).IsEqualTo(0);
+                if (valid)
+                {
+                    await Assert.That(JsonNode.DeepEquals(operation, JsonNode.Parse(result.Operation.GetRawText()))).IsTrue();
+                }
+                else
+                {
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.header");
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo("$/paths/~1items/get/responses/200/headers/X-Test/schema");
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
     public async Task OpenApiLinkReferencesResolveContainingBasesCacheAndRestoredTargets(string format, string version)
     {
         foreach (var valid in new[] { true, false, true })
