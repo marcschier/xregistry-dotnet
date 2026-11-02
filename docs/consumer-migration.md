@@ -638,9 +638,19 @@ Present `examples` and `encoding` values must be objects; `example` accepts any
 JSON value but cannot coexist with `examples`, even when its value is null.
 These checks apply to inline responses, unused reusable responses and resolved
 response targets. Selection preserves authored declarations without retrieving
-schema or example addresses. Format-specific response-presence requirements,
-content-key syntax, nested header/example/encoding/link validation and response
-schema evaluation remain unverified.
+schema or example addresses.
+Response-media examples and root reusable examples require Example or Reference
+Objects. Inline Example Objects permit optional string `summary` and
+`description`, an arbitrary JSON `value`, or a string URI reference in
+`externalValue`. The two value fields are mutually exclusive, including when
+`value` is null. Reference Objects require a string URI reference in `$ref`;
+OpenAPI 3.1 checks optional string summary and description, while OpenAPI 3.0
+ignores these siblings. Other reference siblings and extension contents remain
+opaque. Selection retains authored declarations without retrieving external
+example values or resolving example references. These checks do not compare
+example values with schemas. Parameter examples, example-reference targets,
+format-specific response-presence requirements, content-key syntax, nested
+header/encoding/link validation and response schema evaluation remain unverified.
 Root and reached HTTP operation `externalDocs` values must be objects with a
 string `url` and, when present, a string `description`. An External
 Documentation Object is not a Reference Object: a `$ref` alone cannot replace

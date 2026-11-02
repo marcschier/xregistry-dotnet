@@ -13,6 +13,129 @@ public class ApiOperationReferenceTests
     [Test]
     [Arguments("OpenAPI/3.0", "3.0.4")]
     [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiExampleDeclarationsRejectMalformedFieldsAcrossResponseAndComponentLocations(string format, string version)
+    {
+        var invalid = new List<(string Json, string Suffix)>
+        {
+            ("null", ""), ("false", ""), ("[]", ""),
+            ("""{"summary":null}""", "/summary"), ("""{"description":false}""", "/description"),
+            ("""{"externalValue":42}""", "/externalValue"),
+            ("""{"externalValue":"bad%escape"}""", "/externalValue"),
+            ("""{"value":null,"externalValue":""}""", "/externalValue"),
+            ("""{"$ref":null}""", "/$ref"), ("""{"$ref":"bad%escape"}""", "/$ref")
+        };
+        if (format == "OpenAPI/3.1")
+        {
+            invalid.Add(("""{"$ref":"#/unused","summary":false}""", "/summary"));
+            invalid.Add(("""{"$ref":"#/unused","description":null}""", "/description"));
+        }
+        foreach (var location in new[] { "inline", "unused-response", "remote-response", "component" })
+        {
+            foreach (var (json, suffix) in invalid)
+            {
+                foreach (var selector in new[] { "operations/Target", "operations/Missing", "/paths/~1items/get" })
+                {
+                    var example = JsonNode.Parse(json);
+                    var response = new JsonObject { ["description"] = "", ["content"] = new JsonObject
+                        { ["application/json"] = new JsonObject { ["examples"] = new JsonObject
+                        { ["e/~"] = example?.DeepClone() } } } };
+                    var document = new JsonObject { ["openapi"] = version,
+                        ["paths"] = JsonNode.Parse("""{"/items":{"get":{"operationId":"Target"}}}""") };
+                    var path = "$/paths/~1items/get/responses/200";
+                    if (location == "component")
+                    {
+                        document["components"] = new JsonObject { ["examples"] = new JsonObject { ["E"] = example?.DeepClone() } };
+                        path = "$/components/examples/E";
+                    }
+                    else
+                    {
+                        if (location == "unused-response")
+                        {
+                            document["components"] = new JsonObject { ["responses"] = new JsonObject { ["Unused"] = response.DeepClone() } };
+                            path = "$/components/responses/Unused";
+                        }
+                        else
+                        {
+                            document["paths"]!["/items"]!["get"]!["responses"] = new JsonObject
+                            { ["200"] = location == "inline" ? response.DeepClone()
+                                : JsonNode.Parse("""{"$ref":"https://allowed.test/response#/Ok"}""") };
+                            if (location == "remote-response") { path = "$/Ok"; }
+                        }
+                        path += "/content/application~1json/examples/e~1~0";
+                    }
+                    var calls = 0;
+                    var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                        System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                        ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                        resolveReference: (uri, _) =>
+                        {
+                            calls++;
+                            if (uri != "https://allowed.test/response") { throw new UnauthorizedAccessException(); }
+                            return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(
+                                new JsonObject { ["Ok"] = response.DeepClone() }.ToJsonString()));
+                        });
+                    await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+                    var genericComponentFailure = location == "component" && example is not JsonObject;
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo(
+                        genericComponentFailure ? "document.component_value" : "document.example");
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo(path + suffix);
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                    await Assert.That(calls).IsEqualTo(location == "remote-response" ? 1 : 0);
+                }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiExampleDeclarationsPreserveLiteralValuesReferencesAndRestoration(string format, string version)
+    {
+        var declarations = new List<string>
+        {
+            "{}", """{"value":null}""", """{"value":[1,false,{"externalValue":false}]}""",
+            """{"summary":"","description":"","externalValue":"../samples/value.json#part"}""",
+            """{"externalValue":""}""", """{"x-private":{"value":null,"externalValue":false}}""",
+            """{"$ref":"https://not-acquired.test/example","value":null,"externalValue":false}"""
+        };
+        if (format == "OpenAPI/3.0") { declarations.Add("""{"$ref":"#/unused","summary":false,"description":null}"""); }
+        foreach (var json in declarations)
+        {
+            foreach (var valid in new[] { true, false, true })
+            {
+                var example = valid ? JsonNode.Parse(json) : JsonNode.Parse("""{"value":null,"externalValue":""}""");
+                var operation = new JsonObject { ["operationId"] = "Target", ["responses"] = new JsonObject
+                    { ["200"] = new JsonObject { ["description"] = "", ["content"] = new JsonObject
+                    { ["application/json"] = new JsonObject { ["examples"] = new JsonObject { ["e"] = example } } } } } };
+                var document = new JsonObject { ["openapi"] = version,
+                    ["paths"] = new JsonObject { ["/items"] = new JsonObject { ["get"] = operation.DeepClone() } },
+                    ["components"] = new JsonObject { ["examples"] = new JsonObject { ["E"] = JsonNode.Parse(json) } } };
+                var calls = 0;
+                var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+                    resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+                await Assert.That(result.Status).IsEqualTo(valid
+                    ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+                await Assert.That(calls).IsEqualTo(0);
+                if (valid)
+                {
+                    await Assert.That(JsonNode.DeepEquals(operation, JsonNode.Parse(result.Operation.GetRawText()))).IsTrue();
+                }
+                else
+                {
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.example");
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo(
+                        "$/paths/~1items/get/responses/200/content/application~1json/examples/e/externalValue");
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
     public async Task OpenApiResponseMediaDeclarationsRejectMalformedFieldsAndConflictingExamples(string format, string version)
     {
         var invalid = new List<(string Json, string Suffix)>

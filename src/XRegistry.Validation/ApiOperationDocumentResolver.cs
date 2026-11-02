@@ -669,6 +669,11 @@ public static partial class ApiOperationDocumentResolver
                         allowReference: !swagger, cancellationToken);
                     if (responseFailure is not null) { return responseFailure; }
                 }
+                if (!swagger && collection.Name == "examples")
+                {
+                    var exampleFailure = ValidateOpenApiExampleDeclaration(entry.Value, entryPath, format, cancellationToken);
+                    if (exampleFailure is not null) { return exampleFailure; }
+                }
             }
         }
         return null;

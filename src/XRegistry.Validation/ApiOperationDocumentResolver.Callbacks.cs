@@ -423,6 +423,16 @@ public static partial class ApiOperationDocumentResolver
                 {
                     return InvalidMedia("Media example and examples are mutually exclusive.", path + "/examples");
                 }
+                if (declaration.TryGetProperty("examples", out var examples))
+                {
+                    foreach (var example in examples.EnumerateObject())
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        var failure = ValidateOpenApiExampleDeclaration(example.Value,
+                            path + "/examples/" + Escape(example.Name), format, cancellationToken);
+                        if (failure is not null) { return failure; }
+                    }
+                }
             }
         }
         return null;
@@ -433,6 +443,48 @@ public static partial class ApiOperationDocumentResolver
 
     private static ApiOperationResolutionResult InvalidHttpResponse(string message, string pointer) =>
         Failure(ApiOperationResolutionStatus.Invalid, "document.responses", message, pointer);
+
+    private static ApiOperationResolutionResult? ValidateOpenApiExampleDeclaration(
+        JsonElement example, string pointer, string format, CancellationToken cancellationToken)
+    {
+        if (example.ValueKind != JsonValueKind.Object)
+        {
+            return InvalidExample("An example declaration must be an Example or Reference Object.", pointer);
+        }
+        var isReference = example.TryGetProperty("$ref", out var reference);
+        if (isReference)
+        {
+            if (reference.ValueKind != JsonValueKind.String || !IsHttpMetadataUriReference(reference.GetString()!))
+            {
+                return InvalidExample("An example reference requires a string URI reference.", pointer + "/$ref");
+            }
+            if (format != "OpenAPI/3.1") { return null; }
+        }
+        foreach (var field in new[] { "summary", "description" })
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (example.TryGetProperty(field, out var value) && value.ValueKind != JsonValueKind.String)
+            {
+                return InvalidExample("Example metadata must be strings.", pointer + "/" + field);
+            }
+        }
+        if (isReference) { return null; }
+        if (example.TryGetProperty("externalValue", out var external))
+        {
+            if (external.ValueKind != JsonValueKind.String || !IsHttpMetadataUriReference(external.GetString()!))
+            {
+                return InvalidExample("An external example requires a string URI reference.", pointer + "/externalValue");
+            }
+            if (example.TryGetProperty("value", out _))
+            {
+                return InvalidExample("Example value and externalValue are mutually exclusive.", pointer + "/externalValue");
+            }
+        }
+        return null;
+
+        static ApiOperationResolutionResult InvalidExample(string message, string path) =>
+            Failure(ApiOperationResolutionStatus.Invalid, "document.example", message, path);
+    }
 
     private static async ValueTask<ApiOperationResolutionResult?> ValidateEffectiveHttpResponsesAsync(
         JsonElement operation, ReferencedDocument source, string pointer, ReferenceContext references,
