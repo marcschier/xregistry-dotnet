@@ -11,6 +11,112 @@ namespace XRegistry.Validation.Tests;
 public class ApiOperationReferenceTests
 {
     [Test]
+    public async Task SwaggerHeaderNamesRequireHttpTokensAcrossParametersAndResponses()
+    {
+        foreach (var name in new[] { "", "bad name", "bad:name", "bad/~name", "bad\tname", "bad\r\nname", "caf\u00e9", "bad(name)", "bad@name" })
+        {
+            foreach (var location in new[] { "parameter", "path-parameter", "reusable-parameter", "response", "reusable-response", "remote-parameter", "remote-response" })
+            {
+                var parameter = new JsonObject { ["name"] = name, ["in"] = "header", ["type"] = "string" };
+                var response = new JsonObject { ["description"] = "",
+                    ["headers"] = new JsonObject { [name] = new JsonObject { ["type"] = "string" } } };
+                var operation = JsonNode.Parse("""{"operationId":"Target"}""")!;
+                var document = new JsonObject { ["swagger"] = "2.0",
+                    ["paths"] = new JsonObject { ["/source"] = new JsonObject { ["get"] = operation } } };
+                var headerPath = "/headers/" + name.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal);
+                var expectedPath = "$/paths/~1source/get/parameters/0/name";
+                switch (location)
+                {
+                    case "parameter": operation["parameters"] = new JsonArray(parameter.DeepClone()); break;
+                    case "path-parameter":
+                        document["paths"]!["/source"]!["parameters"] = new JsonArray(parameter.DeepClone());
+                        expectedPath = "$/paths/~1source/parameters/0/name"; break;
+                    case "reusable-parameter":
+                        document["parameters"] = new JsonObject { ["Unused"] = parameter.DeepClone() };
+                        expectedPath = "$/parameters/Unused/name"; break;
+                    case "response":
+                        operation["responses"] = new JsonObject { ["200"] = response.DeepClone() };
+                        expectedPath = "$/paths/~1source/get/responses/200" + headerPath; break;
+                    case "reusable-response":
+                        document["responses"] = new JsonObject { ["Unused"] = response.DeepClone() };
+                        expectedPath = "$/responses/Unused" + headerPath; break;
+                    case "remote-parameter":
+                        operation["parameters"] = JsonNode.Parse("""[{"$ref":"https://allowed.test/dependency#/P"}]""");
+                        expectedPath = "$/P/name"; break;
+                    case "remote-response":
+                        operation["responses"] = JsonNode.Parse("""{"200":{"$ref":"https://allowed.test/dependency#/R"}}""");
+                        expectedPath = "$/R" + headerPath; break;
+                }
+                foreach (var selector in new[] { "operations/Target", "/paths/~1source/get" })
+                {
+                    var calls = 0;
+                    var result = await ApiOperationDocumentResolver.ResolveAsync("Swagger/2.0", "application/json",
+                        System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                        ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                        resolveReference: (uri, _) =>
+                        {
+                            calls++;
+                            if (uri != "https://allowed.test/dependency") { throw new UnauthorizedAccessException(); }
+                            var target = new JsonObject { ["P"] = parameter.DeepClone(), ["R"] = response.DeepClone() };
+                            return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(target.ToJsonString()));
+                        });
+                    await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.header_name");
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo(expectedPath);
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                    await Assert.That(calls).IsEqualTo(location.StartsWith("remote-", StringComparison.Ordinal) ? 1 : 0);
+                }
+            }
+        }
+    }
+
+    [Test]
+    public async Task SwaggerHeaderTokenChecksPreserveNativeMetadataWithoutOpenApiIgnoreRules()
+    {
+        var operation = JsonNode.Parse("""
+            {"operationId":"Target","consumes":["multipart/form-data"],"parameters":[
+            {"name":"!#$%&'*+-.^_`|~012AZaz","in":"header","type":"string"},
+            {"name":"Accept","in":"header","type":"string"},
+            {"name":"Authorization","in":"header","type":"string"},
+            {"name":"Content-Type","in":"header","type":"string"},
+            {"name":"bad name","in":"query","type":"string"},
+            {"name":"bad/name","in":"formData","type":"string"}],
+            "responses":{"200":{"description":"","headers":{
+            "!#$%&'*+-.^_`|~012AZaz":{"type":"string"},"Content-Type":{"type":"string"}}}}}
+            """)!;
+        foreach (var invalidLocation in new[] { "", "parameter", "response" })
+        {
+            var selected = operation.DeepClone();
+            if (invalidLocation == "parameter") { selected["parameters"]![3]!["type"] = "object"; }
+            if (invalidLocation == "response") { selected["responses"]!["200"]!["headers"]!["Content-Type"]!["type"] = "object"; }
+            var document = new JsonObject { ["swagger"] = "2.0",
+                ["paths"] = new JsonObject { ["/source"] = new JsonObject { ["post"] = selected } } };
+            foreach (var selector in new[] { "operations/Target", "/paths/~1source/post" })
+            {
+                var result = await ApiOperationDocumentResolver.ResolveAsync("Swagger/2.0", "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                    resolveReference: (_, _) => throw new InvalidOperationException("No metadata retrieval is permitted."));
+                await Assert.That(result.Status).IsEqualTo(invalidLocation.Length == 0
+                    ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+                if (invalidLocation.Length == 0)
+                {
+                    await Assert.That(JsonNode.DeepEquals(operation, JsonNode.Parse(result.Operation.GetRawText()))).IsTrue();
+                }
+                else
+                {
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo(invalidLocation == "parameter"
+                        ? "document.parameter" : "document.header");
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo(invalidLocation == "parameter"
+                        ? "$/paths/~1source/post/parameters/3/type"
+                        : "$/paths/~1source/post/responses/200/headers/Content-Type/type");
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                }
+            }
+        }
+    }
+
+    [Test]
     [Arguments("OpenAPI/3.0", "3.0.4")]
     [Arguments("OpenAPI/3.1", "3.1.1")]
     public async Task OpenApiHeaderParameterNamesRejectNonTokensAcrossDeclarationAndReferenceLocations(string format, string version)
@@ -2362,8 +2468,8 @@ public class ApiOperationReferenceTests
                     if (header)
                     {
                         document["responses"] = new JsonObject { ["Unused"] = new JsonObject { ["description"] = "",
-                            ["headers"] = new JsonObject { ["X/~"] = scalar } } };
-                        pointer = "$/responses/Unused/headers/X~1~0/enum";
+                            ["headers"] = new JsonObject { ["X~"] = scalar } } };
+                        pointer = "$/responses/Unused/headers/X~0/enum";
                     }
                     else
                     {

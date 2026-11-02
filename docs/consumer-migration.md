@@ -989,6 +989,14 @@ report `Invalid document.header_name` at the declaration's `name` field. The
 specified ignored `Accept`, `Content-Type` and `Authorization` header parameters
 remain ignored before other declaration checks, without fetching their examples.
 Query, cookie and path parameter names do not acquire header-name restrictions.
+Swagger 2.0 response header map keys and header parameter names also require
+HTTP tokens, including reusable declarations and acquired reference targets.
+Invalid names report `Invalid document.header_name` at the map entry or
+parameter's `name` field. Swagger does not inherit OpenAPI's ignored-header
+rules: `Content-Type` response headers and `Accept`, `Content-Type` and
+`Authorization` header parameters retain their native declaration checks.
+Form and query parameter names remain unaffected; selection preserves authored
+names and metadata.
 For OpenAPI 3.1, an authored root `jsonSchemaDialect` must be a string
 containing a URI, not a relative URI reference. Invalid JSON types, relative
 values and malformed URI syntax report `Invalid document.schema_dialect` at

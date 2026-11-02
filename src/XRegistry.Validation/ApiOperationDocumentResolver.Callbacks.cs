@@ -444,7 +444,7 @@ public static partial class ApiOperationDocumentResolver
                 cancellationToken.ThrowIfCancellationRequested();
                 if (format != "Swagger/2.0" && header.Name.Equals("Content-Type", StringComparison.OrdinalIgnoreCase)) { continue; }
                 var headerPath = pointer + "/headers/" + Escape(header.Name);
-                if (format != "Swagger/2.0" && !IsHttpToken(header.Name.AsSpan()))
+                if (!IsHttpToken(header.Name.AsSpan()))
                 {
                     return InvalidHttpHeaderName(headerPath);
                 }
@@ -1074,6 +1074,10 @@ public static partial class ApiOperationDocumentResolver
             }
         }
         var nativeLocation = location.GetString()!;
+        if (nativeLocation == "header" && !IsHttpToken(name.GetString()!.AsSpan()))
+        {
+            return InvalidHttpHeaderName(pointer + "/name");
+        }
         if (nativeLocation == "path" && (!parameter.TryGetProperty("required", out var required) ||
             required.ValueKind != JsonValueKind.True))
         {
