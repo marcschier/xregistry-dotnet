@@ -92,11 +92,6 @@ public static partial class ApiOperationDocumentResolver
         }
         if (includeCallbacks && location.Operation.TryGetProperty("callbacks", out var callbacks))
         {
-            if (callbacks.ValueKind != JsonValueKind.Object)
-            {
-                return Failure(ApiOperationResolutionStatus.Invalid, "document.callbacks",
-                    "Operation callbacks must be an object.", location.Pointer + "/callbacks");
-            }
             foreach (var callback in callbacks.EnumerateObject())
             {
                 budget.Work(path: location.Pointer);
@@ -325,6 +320,12 @@ public static partial class ApiOperationDocumentResolver
     private static ApiOperationResolutionResult? ValidateHttpOperationMetadata(
         JsonElement operation, string pointer, string format, string? httpMethod, CancellationToken cancellationToken)
     {
+        if (format != "Swagger/2.0" && operation.TryGetProperty("callbacks", out var callbacks) &&
+            callbacks.ValueKind != JsonValueKind.Object)
+        {
+            return Failure(ApiOperationResolutionStatus.Invalid, "document.callbacks",
+                "Operation callbacks must be an object.", pointer + "/callbacks");
+        }
         foreach (var field in new[] { "operationId", "summary", "description", "deprecated", "tags" })
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -1470,10 +1471,7 @@ public static partial class ApiOperationDocumentResolver
         {
             return InvalidTarget("An OpenAPI 3.0 linked Operation Object requires responses.", target.Pointer + "/responses");
         }
-        if (target.Value.TryGetProperty("callbacks", out var callbacks) && callbacks.ValueKind != JsonValueKind.Object)
-        {
-            return InvalidTarget("Linked operation callbacks must be an object.", target.Pointer + "/callbacks");
-        }
+        target.Value.TryGetProperty("callbacks", out var callbacks);
         string? httpMethod = null;
         references.Work(target.Pointer);
         var tokens = target.Pointer == "$" ? [] : target.Pointer[2..].Split('/')

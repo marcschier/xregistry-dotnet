@@ -13,6 +13,84 @@ public class ApiOperationReferenceTests
     [Test]
     [Arguments("OpenAPI/3.0", "3.0.4")]
     [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiCallbackMapTypeIsCheckedForNamedPointerAndLinkedOperations(string format, string version)
+    {
+        foreach (var declaration in new[] { "null", "false", "1", "\"callback\"", "[]", "{}" })
+        {
+            foreach (var selector in new[] { "operations/Target", "/paths/~1source/get", "linked" })
+            {
+                var operation = JsonNode.Parse("""
+                    {"operationId":"Target","responses":{"200":{"description":""}}}
+                    """)!;
+                operation["callbacks"] = JsonNode.Parse(declaration);
+                var document = new JsonObject
+                {
+                    ["openapi"] = version,
+                    ["paths"] = new JsonObject { ["/source"] = new JsonObject { ["get"] = operation } }
+                };
+                if (selector == "linked")
+                {
+                    document["paths"]!["/source"]!["get"] = JsonNode.Parse("""
+                        {"responses":{"200":{"description":"","links":{"next":{
+                        "operationRef":"https://allowed.test/api#/O"}}}}}
+                        """);
+                }
+                var calls = 0;
+                var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" +
+                        (selector == "linked" ? "/paths/~1source/get" : selector)),
+                    resolveReference: (uri, _) =>
+                    {
+                        if (uri != "https://allowed.test/api") { throw new UnauthorizedAccessException(); }
+                        calls++;
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(
+                            new JsonObject { ["O"] = operation.DeepClone() }.ToJsonString()));
+                    });
+                await Assert.That(calls).IsEqualTo(selector == "linked" ? 1 : 0);
+                await Assert.That(result.Status).IsEqualTo(declaration == "{}"
+                    ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+                if (declaration != "{}")
+                {
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.callbacks");
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo(selector == "linked"
+                        ? "$/O/callbacks" : "$/paths/~1source/get/callbacks");
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                }
+                else
+                {
+                    await Assert.That(JsonNode.DeepEquals(document["paths"]!["/source"]!["get"],
+                        JsonNode.Parse(result.Operation.GetRawText()))).IsTrue();
+                }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiPointerCallbackContainerChecksDoNotAcquireUnselectedCallbacks(string format, string version)
+    {
+        var document = new JsonObject
+        {
+            ["openapi"] = version,
+            ["paths"] = JsonNode.Parse("""
+                {"/source":{"get":{"responses":{"200":{"description":""}},"callbacks":{
+                "unused":{"$ref":"https://must-not-load.test/callback"}}}}}
+                """)
+        };
+        var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#/paths/~1source/get"),
+            resolveReference: (_, _) => throw new InvalidOperationException("Unselected callbacks stay inactive."));
+        await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+        await Assert.That(JsonNode.DeepEquals(document["paths"]!["/source"]!["get"],
+            JsonNode.Parse(result.Operation.GetRawText()))).IsTrue();
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
     public async Task OpenApiLinkedSupportedParentsRejectArrayMapsInsteadOfTreatingIndexesAsNames(string format, string version)
     {
         var targets = new List<(string Pointer, string Json, string Path)>
@@ -1162,7 +1240,7 @@ public class ApiOperationReferenceTests
             ("""{"responses":{"200":{"description":""}},"deprecated":""}""", "document.operation_metadata", "/deprecated"),
             ("""{"responses":false}""", "document.responses", "/responses"),
             ("""{"responses":{"200":{"description":""}},"servers":[{"url":false}]}""", "document.servers", "/servers/0/url"),
-            ("""{"responses":{"200":{"description":""}},"callbacks":false}""", "document.link_operation_ref", "/callbacks")
+            ("""{"responses":{"200":{"description":""}},"callbacks":false}""", "document.callbacks", "/callbacks")
         };
         foreach (var invalid in invalidTargets)
         {

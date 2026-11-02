@@ -892,6 +892,11 @@ authored links and response references.
 Target admission does not recursively follow the target's response links,
 establish an invocation URL for multiply mounted Path Items,
 evaluate schemas or runtime expressions, or invoke the operation.
+An authored operation `callbacks` value must be an object for both OpenAPI
+versions. Named selection, direct pointers and linked-target admission report
+`Invalid document.callbacks` at the operation's `callbacks` member for other
+JSON types. Empty maps remain valid. This container check does not make direct
+pointers traverse unselected callback references or evaluate callback URLs.
 For OpenAPI 3.0 targets with `requestBody`, admission derives the HTTP method
 only from a supported Paths or Callback operation location. POST, PUT and PATCH
 bodies receive Request Body Object checks; bodies on other methods remain
