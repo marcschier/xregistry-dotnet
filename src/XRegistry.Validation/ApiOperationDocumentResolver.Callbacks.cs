@@ -1385,6 +1385,14 @@ public static partial class ApiOperationDocumentResolver
         var bodyFailure = await ValidateEffectiveOpenApiRequestBodyAsync(
             new ReferenceTarget(source, operation, pointer), httpMethod, references, cancellationToken).ConfigureAwait(false);
         if (bodyFailure is not null) { return bodyFailure; }
+        return await ValidateEffectiveHttpResponsesAsync(operation, source, pointer, references, true,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async ValueTask<ApiOperationResolutionResult?> ValidateEffectiveHttpResponsesAsync(
+        JsonElement operation, ReferencedDocument source, string pointer, ReferenceContext references,
+        bool followLinks, CancellationToken cancellationToken)
+    {
         if (!operation.TryGetProperty("responses", out var responses)) { return null; }
         foreach (var entry in responses.EnumerateObject())
         {
@@ -1407,7 +1415,7 @@ public static partial class ApiOperationDocumentResolver
             var response = resolution.Target!;
             var headerFailure = await ValidateEffectiveOpenApiHeadersAsync(response, references, cancellationToken).ConfigureAwait(false);
             if (headerFailure is not null) { return headerFailure; }
-            if (response.Value.TryGetProperty("links", out var links))
+            if (followLinks && response.Value.TryGetProperty("links", out var links))
             {
                 foreach (var link in links.EnumerateObject())
                 {
@@ -1485,8 +1493,14 @@ public static partial class ApiOperationDocumentResolver
             cancellationToken);
         if (metadataFailure is not null) { return metadataFailure; }
         var serverFailure = ValidateOpenApiServers(target.Value, target.Pointer, references.Format, cancellationToken);
-        return serverFailure ?? await ValidateEffectiveOpenApiRequestBodyAsync(target, httpMethod, references,
+        if (serverFailure is not null) { return serverFailure; }
+        var parameterFailure = await ValidateEffectiveOpenApiParametersAsync(target.Value, target.Document, target.Pointer,
+            references, cancellationToken).ConfigureAwait(false);
+        if (parameterFailure is not null) { return parameterFailure; }
+        var bodyFailure = await ValidateEffectiveOpenApiRequestBodyAsync(target, httpMethod, references,
             cancellationToken).ConfigureAwait(false);
+        return bodyFailure ?? await ValidateEffectiveHttpResponsesAsync(target.Value, target.Document, target.Pointer,
+            references, false, cancellationToken).ConfigureAwait(false);
 
         static ApiOperationResolutionResult InvalidTarget(string message, string path) =>
             Failure(ApiOperationResolutionStatus.Invalid, "document.link_operation_ref", message, path);
