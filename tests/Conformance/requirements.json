@@ -139274,7 +139274,7 @@
       "text": "The companion model declares the concrete events available from `RegistryType`, `GroupType` and `ResourceType` through `GeneratesEvent` References. For each supported mutation, servers MUST preserve those declarations on domain subtypes. Clients discover event capability by browsing the notifier hierarchy, reading `EventNotifier`, following `GeneratesEvent` and resolving concrete EventType NodeIds from the companion model.",
       "review": {
         "status": "reviewed",
-        "note": "Client discovery checks EventNotifier and traverses HasNotifier, GeneratesEvent and ObjectType supertypes, retaining concrete native deprecation types. Server preservation of all applicable declarations on domain subtypes remains pending, so the compound clause is not fully implemented.",
+        "note": "Client discovery checks EventNotifier and traverses HasNotifier, GeneratesEvent and ObjectType supertypes, retaining concrete native deprecation types. Malformed declarations are now rejected instead of being silently filtered: exactly one ObjectType definition, at most one ObjectType supertype, Object notifier children, ObjectType recognized event declarations and in-range Session namespace identities. Direct cases cover non-ObjectType/mixed/duplicate definitions and parents plus unmappable references in every role and selected notifier rejection before any Read. Exact budgets accept 31 type or 63 notifier edges and reject the next edge without changing NamespaceTable. Server preservation of all applicable declarations on domain subtypes remains pending, so the compound clause is not fully implemented.",
         "roles": [
           "client",
           "server"
@@ -139285,7 +139285,10 @@
         "testIds": [
           "DiscoveryReadsGeneratedTypesFromNotifierTypeAndItsSupertypes",
           "DiscoveryReadsGeneratedTypesFromDescendantNotifiers",
-          "DiscoveryAndDecodingRetainBothNativeDeprecationTransitions"
+          "DiscoveryAndDecodingRetainBothNativeDeprecationTransitions",
+          "DiscoveryRejectsMalformedTypeAndNotifierDeclarations",
+          "DiscoveryRejectsUnmappedSelectedNotifierBeforeReadingIt",
+          "DiscoveryEnforcesExactTypeAndNotifierDepthBudgets"
         ],
         "nativeEvidence": []
       }

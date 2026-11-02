@@ -166,6 +166,13 @@ reads and Browse pages. A failed page does not become an empty declaration
 set. If a failed response returns a continuation point, discovery attempts to
 release it as well as any outstanding previous point and retains each cleanup
 failure on the original error.
+Discovery also requires one ObjectType definition for each event-capable
+notifier, at most one ObjectType supertype, Object targets for `HasNotifier`
+and ObjectType targets for recognized `GeneratesEvent` declarations. Invalid
+declarations are reported rather than filtered out. Returned identities and
+the selected notifier must map within the supplied Session namespace table;
+discovery does not extend that table. The traversal budgets permit 31 type
+edges and 63 notifier edges, with the next edge rejected.
 
 The reader, writer and read source have fake-Session coverage. An in-process
 OPC UA Stack server also verifies Session establishment, SpecVersion gating,

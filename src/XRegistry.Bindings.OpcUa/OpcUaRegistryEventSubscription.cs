@@ -82,6 +82,7 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
         {
             throw new ArgumentException("A notifier NodeId is required.", nameof(notifier));
         }
+        _ = ToLocalNodeId(namespaceUris, new ExpandedNodeId(notifier));
 
         var rootSupportsEvents =
             await SupportsEventSubscriptionsAsync(session, notifier, cancellationToken).ConfigureAwait(false);
@@ -114,24 +115,25 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
             {
                 var typeDefinitions = await BrowseAllAsync(session, pending.Node, BrowseDirection.Forward,
                     ReferenceTypeIds.HasTypeDefinition, cancellationToken).ConfigureAwait(false);
-                var typeDefinitionNodes = typeDefinitions
-                    .Where(static reference => reference.NodeClass == NodeClass.ObjectType)
-                    .Select(reference => ToLocalNodeId(namespaceUris, reference.NodeId))
-                    .Distinct()
-                    .ToArray();
-                if (typeDefinitionNodes.Length != 1)
+                if (typeDefinitions.Count != 1 || typeDefinitions[0].NodeClass != NodeClass.ObjectType)
                 {
                     throw new FederationException(FederationErrorCode.InvalidPackage,
                         "An event notifier must have exactly one ObjectType definition.");
                 }
-                await AddEventTypesForTypeHierarchyAsync(session, namespaceUris, typeDefinitionNodes[0], discovered,
+                await AddEventTypesForTypeHierarchyAsync(session, namespaceUris,
+                    ToLocalNodeId(namespaceUris, typeDefinitions[0].NodeId), discovered,
                     cancellationToken).ConfigureAwait(false);
             }
 
             var children = await BrowseAllAsync(session, pending.Node, BrowseDirection.Forward,
                 ReferenceTypeIds.HasNotifier, cancellationToken).ConfigureAwait(false);
-            foreach (var child in children.Where(static reference => reference.NodeClass == NodeClass.Object))
+            foreach (var child in children)
             {
+                if (child.NodeClass != NodeClass.Object)
+                {
+                    throw new FederationException(FederationErrorCode.InvalidPackage,
+                        "A HasNotifier reference must identify an Object.");
+                }
                 pendingNotifiers.Enqueue((ToLocalNodeId(namespaceUris, child.NodeId), pending.Depth + 1));
             }
         }
@@ -170,6 +172,11 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
                 if (reference.BrowseName.Name is { } browseName &&
                     s_canonicalTypes.TryGetValue(browseName, out var canonicalType))
                 {
+                    if (reference.NodeClass != NodeClass.ObjectType)
+                    {
+                        throw new FederationException(FederationErrorCode.InvalidPackage,
+                            "A recognized GeneratesEvent declaration must identify an ObjectType.");
+                    }
                     var eventTypeNode = ToLocalNodeId(namespaceUris, reference.NodeId);
                     if (discovered.TryGetValue(eventTypeNode, out var existing) &&
                         !string.Equals(existing, canonicalType, StringComparison.Ordinal))
@@ -183,17 +190,17 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
 
             var parents = await BrowseAllAsync(session, current, BrowseDirection.Inverse,
                 ReferenceTypeIds.HasSubtype, cancellationToken).ConfigureAwait(false);
-            var parentNodes = parents
-                .Where(static reference => reference.NodeClass == NodeClass.ObjectType)
-                .Select(reference => ToLocalNodeId(namespaceUris, reference.NodeId))
-                .Distinct()
-                .ToArray();
-            if (parentNodes.Length > 1)
+            if (parents.Count > 1)
             {
                 throw new FederationException(FederationErrorCode.InvalidPackage,
                     "The notifier ObjectType has competing supertypes.");
             }
-            current = parentNodes.Length == 0 ? NodeId.Null : parentNodes[0];
+            if (parents.Count == 1 && parents[0].NodeClass != NodeClass.ObjectType)
+            {
+                throw new FederationException(FederationErrorCode.InvalidPackage,
+                    "The notifier ObjectType hierarchy contains a non-ObjectType supertype.");
+            }
+            current = parents.Count == 0 ? NodeId.Null : ToLocalNodeId(namespaceUris, parents[0].NodeId);
         }
     }
 
@@ -437,7 +444,8 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
     private static NodeId ToLocalNodeId(NamespaceTable namespaceUris, ExpandedNodeId expandedNodeId)
     {
         var node = ExpandedNodeId.ToNodeId(expandedNodeId, namespaceUris, updateNamespaceTable: false);
-        return node is { IsNull: false } && expandedNodeId.ServerIndex == 0
+        return node is { IsNull: false } && node.NamespaceIndex < namespaceUris.Count &&
+            expandedNodeId.ServerIndex == 0
             ? node
             : throw new FederationException(FederationErrorCode.InvalidPackage,
                 "The event declaration refers to a NodeId outside the connected Server AddressSpace.");

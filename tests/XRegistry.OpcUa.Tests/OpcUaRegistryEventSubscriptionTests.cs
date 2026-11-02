@@ -404,6 +404,144 @@ public class OpcUaRegistryEventSubscriptionTests
         await Assert.That(eventTypes[s_registryCreated]).IsEqualTo("io.xregistry.registry.created");
     }
 
+    [Test]
+    [Arguments("definition-class")]
+    [Arguments("definition-mixed")]
+    [Arguments("definition-duplicate")]
+    [Arguments("parent-class")]
+    [Arguments("parent-mixed")]
+    [Arguments("parent-duplicate")]
+    [Arguments("event-class")]
+    [Arguments("child-class")]
+    [Arguments("definition-namespace")]
+    [Arguments("parent-namespace")]
+    [Arguments("event-namespace")]
+    [Arguments("child-namespace")]
+    public async Task DiscoveryRejectsMalformedTypeAndNotifierDeclarations(string shape)
+    {
+        var session = CreateSession();
+        var proxy = (SessionProxy)(object)session;
+        proxy.TypeDefinition = s_registryType;
+        proxy.GeneratedEvents[s_registryType] = [new(s_registryCreated, "RegistryCreatedEventType")];
+        proxy.ReferenceOverride = request =>
+        {
+            var relation = shape.Split('-')[0];
+            var expected = relation switch
+            {
+                "definition" => ReferenceTypeIds.HasTypeDefinition,
+                "parent" => ReferenceTypeIds.HasSubtype,
+                "event" => ReferenceTypeIds.GeneratesEvent,
+                "child" => ReferenceTypeIds.HasNotifier,
+                _ => throw new InvalidOperationException("Unknown test relation.")
+            };
+            if (request.ReferenceTypeId != expected ||
+                request.NodeId != (relation is "definition" or "child" ? s_notifier : s_registryType))
+            {
+                return null;
+            }
+            var type = relation switch
+            {
+                "definition" => s_registryType,
+                "parent" => s_baseType,
+                "event" => s_registryCreated,
+                _ => s_groupNotifier
+            };
+            var valid = Declaration(type, relation == "child" ? NodeClass.Object : NodeClass.ObjectType);
+            return shape.Split('-')[1] switch
+            {
+                "class" => [Declaration(type, NodeClass.Variable)],
+                "mixed" => [valid, Declaration(s_otherBaseType, NodeClass.Variable)],
+                "duplicate" => [valid, valid],
+                "namespace" => [Declaration(new NodeId(42u, 9),
+                    relation == "child" ? NodeClass.Object : NodeClass.ObjectType)],
+                _ => throw new InvalidOperationException("Unknown malformed shape.")
+            };
+        };
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await OpcUaRegistryEventSubscription.DiscoverEventTypesAsync(session, s_namespaceUris, s_notifier));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        if (shape.EndsWith("-namespace", StringComparison.Ordinal))
+        {
+            await Assert.That(error.Message).IsEqualTo(
+                "The event declaration refers to a NodeId outside the connected Server AddressSpace.");
+        }
+        await Assert.That(s_namespaceUris.Count).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task DiscoveryRejectsUnmappedSelectedNotifierBeforeReadingIt()
+    {
+        var session = CreateSession();
+        var proxy = (SessionProxy)(object)session;
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await OpcUaRegistryEventSubscription.DiscoverEventTypesAsync(
+                session, s_namespaceUris, new NodeId(42u, 9)));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(proxy.ReadCount).IsEqualTo(0);
+        await Assert.That(proxy.BrowseRequests.Count).IsEqualTo(0);
+        await Assert.That(s_namespaceUris.Count).IsEqualTo(3);
+    }
+
+    [Test]
+    [Arguments(true, false)]
+    [Arguments(true, true)]
+    [Arguments(false, false)]
+    [Arguments(false, true)]
+    public async Task DiscoveryEnforcesExactTypeAndNotifierDepthBudgets(bool typeHierarchy, bool exceedsBudget)
+    {
+        var session = CreateSession();
+        var proxy = (SessionProxy)(object)session;
+        proxy.TypeDefinition = s_registryType;
+        proxy.GeneratedEvents[s_registryType] = [new(s_registryCreated, "RegistryCreatedEventType")];
+        var maxEdges = typeHierarchy ? 31 : 63;
+        var edges = maxEdges + (exceedsBudget ? 1 : 0);
+        var parent = typeHierarchy ? s_registryType : s_notifier;
+        for (var index = 0; index < edges; index++)
+        {
+            var next = new NodeId((uint)(1000 + index), 2);
+            if (typeHierarchy)
+            {
+                proxy.ParentTypes[parent] = [next];
+            }
+            else
+            {
+                proxy.NotifierChildren[parent] = [next];
+                proxy.NotifierTypes[next] = s_registryType;
+            }
+            parent = next;
+        }
+
+        if (exceedsBudget)
+        {
+            var error = await Assert.ThrowsAsync<FederationException>(async () =>
+                await OpcUaRegistryEventSubscription.DiscoverEventTypesAsync(session, s_namespaceUris, s_notifier));
+            await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+            await Assert.That(error.Message).IsEqualTo(typeHierarchy
+                ? "The notifier ObjectType hierarchy exceeds the event discovery depth limit."
+                : "The notifier hierarchy exceeds the event discovery depth limit.");
+        }
+        else
+        {
+            var events = await OpcUaRegistryEventSubscription.DiscoverEventTypesAsync(
+                session, s_namespaceUris, s_notifier);
+            await Assert.That(events.Count).IsEqualTo(1);
+            await Assert.That(events[s_registryCreated]).IsEqualTo("io.xregistry.registry.created");
+        }
+        await Assert.That(proxy.ReadCount).IsEqualTo(typeHierarchy ? 1 : 64);
+        await Assert.That(s_namespaceUris.Count).IsEqualTo(3);
+    }
+
+    private static ReferenceDescription Declaration(NodeId node, NodeClass nodeClass) => new()
+    {
+        NodeId = new ExpandedNodeId(node),
+        BrowseName = new QualifiedName("RegistryCreatedEventType", 2),
+        NodeClass = nodeClass
+    };
+
     private static ISessionClient CreateSession() => DispatchProxy.Create<ISessionClient, SessionProxy>();
 
     public class SessionProxy : DispatchProxy
@@ -431,6 +569,8 @@ public class OpcUaRegistryEventSubscriptionTests
         public ServiceResultException ServiceFailure { get; } = new(StatusCodes.BadUserAccessDenied);
         public ResponseHeader Header { get; } = new();
         public ArrayOf<DiagnosticInfo> Diagnostics { get; } = [new DiagnosticInfo { AdditionalInfo = "native diagnostic" }];
+        public Func<BrowseDescription, ReferenceDescription[]?>? ReferenceOverride { get; set; }
+        public int ReadCount { get; private set; }
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
@@ -463,6 +603,7 @@ public class OpcUaRegistryEventSubscriptionTests
 
         private ValueTask<ReadResponse> Read(ArrayOf<ReadValueId> nodes)
         {
+            ReadCount++;
             var value = nodes[0].AttributeId == Attributes.EventNotifier
                 ? new Variant(EventNotifier)
                 : default;
@@ -531,7 +672,7 @@ public class OpcUaRegistryEventSubscriptionTests
                 DiagnosticInfos = Diagnostics,
                 Results = [new BrowseResult
                 {
-                    References = new ArrayOf<ReferenceDescription>(references),
+                    References = new ArrayOf<ReferenceDescription>(ReferenceOverride?.Invoke(request) ?? references),
                     StatusCode = BrowseStatus
                 }]
             });
