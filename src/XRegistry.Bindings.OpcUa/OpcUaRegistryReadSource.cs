@@ -898,9 +898,10 @@ public sealed class OpcUaRegistryReadSource : IFederationReadSource
                 RegistryJson.Parse(descriptor.ToJsonString()).RootElement);
         }
 
-        var document = await _reader.ReadResourceDocumentAsync(groupNode, XidOf(parts[..2]),
+        var file = await _reader.ResolveResourceDocumentAsync(groupNode, XidOf(parts[..2]),
             parts[2], parts[3], binding.ResourceType, versionId,
             binding.ResourceVersionsType, cancellationToken).ConfigureAwait(false);
+        var document = await _reader.ReadFileAsync(file, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         var afterVersion = await _reader.ReadResourcePropertiesAsync(groupNode, XidOf(parts[..2]),
             parts[2], parts[3], binding.ResourceType, versionId,

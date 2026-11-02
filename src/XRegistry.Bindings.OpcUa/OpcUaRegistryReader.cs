@@ -672,9 +672,37 @@ public sealed class OpcUaRegistryReader
         string resourceCollection, string resourceId, NodeId resourceType, string? versionId = null,
         NodeId? resourceVersionsType = null, CancellationToken cancellationToken = default)
     {
-        var file = await ResolveResourceDocumentAsync(groupNode, groupXid, resourceCollection, resourceId,
-            resourceType, versionId, resourceVersionsType, cancellationToken).ConfigureAwait(false);
-        return await ReadFileAsync(file, cancellationToken).ConfigureAwait(false);
+        ValidateResourceDocumentRequest(groupXid, resourceCollection, resourceId, versionId);
+        var resource = await FindSelectedResourceAsync(groupNode, resourceId, resourceType, resourceVersionsType,
+            versionId, cancellationToken).ConfigureAwait(false);
+        var before = await ReadResourceEntityAsync(resource, groupXid, resourceCollection, resourceId, versionId,
+            cancellationToken).ConfigureAwait(false);
+        JsonElement? meta = versionId is null
+            ? await ReadResourceMetaPropertiesAsync(groupNode, groupXid, resourceCollection, resourceId,
+                resourceType, cancellationToken).ConfigureAwait(false)
+            : null;
+        cancellationToken.ThrowIfCancellationRequested();
+        var document = await ReadFileAsync(resource.Target, cancellationToken).ConfigureAwait(false);
+        var after = await ReadResourceEntityAsync(resource, groupXid, resourceCollection, resourceId, versionId,
+            cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!JsonNode.DeepEquals(JsonNode.Parse(before.GetRawText()), JsonNode.Parse(after.GetRawText())))
+        {
+            throw new FederationException(FederationErrorCode.InconsistentSnapshot,
+                "The selected Resource or Version changed while reading its document.");
+        }
+        if (meta is { } beforeMeta)
+        {
+            var afterMeta = await ReadResourceMetaPropertiesAsync(groupNode, groupXid, resourceCollection,
+                resourceId, resourceType, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!JsonNode.DeepEquals(JsonNode.Parse(beforeMeta.GetRawText()), JsonNode.Parse(afterMeta.GetRawText())))
+            {
+                throw new FederationException(FederationErrorCode.InconsistentSnapshot,
+                    "Resource Meta changed while selecting and reading the default Version document.");
+            }
+        }
+        return document;
     }
 
     internal IOpcUaRegistrySession Session => session;

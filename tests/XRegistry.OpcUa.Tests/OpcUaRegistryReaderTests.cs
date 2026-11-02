@@ -3007,14 +3007,32 @@ public class OpcUaRegistryReaderTests
             }
         };
         var reader = await ModelReader(session);
-        QueueDocumentSelection(session, explicitVersion: false);
+        session.BrowsePages[GroupNode] = new([new([
+            TypedObjectRef("schema-a", LogicalResourceNode, ResourceType)
+        ])]);
+        session.BrowsePages[LogicalResourceNode] = new([new([
+            VariableRef("ResourceId", "logical"), VariableRef("VersionId", "logical"),
+            VariableRef("Xid", "logical"), VariableRef("Epoch", "logical"),
+            VariableRef("Name", "logical"), VariableRef("CreatedAt", "logical"),
+            VariableRef("ModifiedAt", "logical"),
+            TypedObjectRef("Versions", VersionsNode, ResourceVersionsType)
+        ])]);
+        session.BrowsePages[VersionsNode] = new([new([
+            TypedObjectRef("v1", DefaultVersionNode, ResourceType),
+            TypedObjectRef("v2", VersionTwoNode, ResourceType)
+        ])]);
+        session.BrowsePages[VersionTwoNode] = new([new([
+            VariableRef("ResourceId", "v2"), VariableRef("VersionId", "v2"),
+            VariableRef("Xid", "v2"), VariableRef("Epoch", "v2"),
+            VariableRef("Name", "v2"), VariableRef("CreatedAt", "v2"),
+            VariableRef("ModifiedAt", "v2")
+        ])]);
 
         var defaultBytes = await reader.ReadResourceDocumentAsync(
             GroupNode, "/teams/team-a", "schemas", "schema-a", ResourceType);
         await Assert.That(defaultBytes).IsEquivalentTo(new byte[] { 1, 2 });
         await Assert.That(NodeIdTrace(session.OpenedFiles)).IsEqualTo("Model|logical-schema-a");
         await Assert.That(NodeIdTrace(session.ClosedFiles)).IsEqualTo("Model|logical-schema-a");
-        QueueDocumentSelection(session, explicitVersion: true);
         var explicitBytes = await reader.ReadResourceDocumentAsync(
             GroupNode, "/teams/team-a", "schemas", "schema-a", ResourceType, "v2", ResourceVersionsType);
 
@@ -3025,6 +3043,176 @@ public class OpcUaRegistryReaderTests
         await Assert.That(session.BrowsedNodes.Contains(DefaultVersionNode)).IsFalse();
         await Assert.That(session.BrowsedNodes.Contains(VersionsNode)).IsTrue();
         await Assert.That(session.BrowsedNodes.Contains(VersionTwoNode)).IsTrue();
+    }
+
+    [Test]
+    [Arguments(false, "Epoch")]
+    [Arguments(true, "Epoch")]
+    [Arguments(false, "Name")]
+    [Arguments(true, "Name")]
+    [Arguments(false, "ContentType")]
+    [Arguments(true, "ContentType")]
+    [Arguments(false, "Format")]
+    [Arguments(true, "Format")]
+    [Arguments(false, "ModifiedAt")]
+    [Arguments(true, "ModifiedAt")]
+    public async Task DirectDocumentReadRejectsChangedSelectedPropertiesAfterCleanup(bool exact, string property)
+    {
+        foreach (var phase in new[] { "chunk", "eof", "close" })
+        {
+            var (session, reader) = await DirectDocumentReader();
+            session.Chunks.AddRange([new byte[] { 0x80, 0xff }, Array.Empty<byte>()]);
+            var changed = property switch
+            {
+                "Epoch" => Value("5", BuiltInType.UInt32),
+                "ModifiedAt" => Value("\"2026-02-01T00:00:00Z\"", BuiltInType.DateTime),
+                _ => Value("\"changed\"", BuiltInType.String)
+            };
+            var reads = 0;
+            Action change = () => session.JsonValues[(exact ? "version:" : "logical:") + property] = changed;
+            session.AfterRead = () =>
+            {
+                reads++;
+                if (phase == "chunk" && reads == 1 || phase == "eof" && reads == 2) change();
+            };
+            session.AfterClose = () => { if (phase == "close") change(); };
+
+            var error = await Assert.ThrowsAsync<FederationException>(async () =>
+                await reader.ReadResourceDocumentAsync(GroupNode, "/teams/team-a", "schemas", "schema-a",
+                    ResourceType, exact ? "v1" : null, ResourceVersionsType));
+
+            await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.InconsistentSnapshot);
+            await Assert.That(reads).IsEqualTo(2);
+            await Assert.That(session.ClosedFiles[^1]).IsEqualTo(exact ? DefaultVersionNode : LogicalResourceNode);
+            await Assert.That(session.Closed).IsEqualTo(2);
+            await Assert.That(session.CloseToken.CanBeCanceled).IsFalse();
+        }
+    }
+
+    [Test]
+    [Arguments(false, "MetaEpoch")]
+    [Arguments(true, "MetaEpoch")]
+    [Arguments(false, "VersionId")]
+    [Arguments(true, "VersionId")]
+    [Arguments(false, "MetaName")]
+    [Arguments(true, "MetaName")]
+    public async Task DirectDocumentReadRechecksDefaultMetaWithoutCouplingExactVersions(bool exact, string property)
+    {
+        var (session, reader) = await DirectDocumentReader();
+        session.Chunks.AddRange([new byte[] { 0x80, 0xff }, Array.Empty<byte>()]);
+        session.AfterClose = () => session.JsonValues["logical:" + property] = property == "MetaEpoch"
+            ? Value("4", BuiltInType.UInt32) : Value("\"v2\"", BuiltInType.String);
+        if (exact)
+        {
+            var bytes = await reader.ReadResourceDocumentAsync(GroupNode, "/teams/team-a", "schemas", "schema-a",
+                ResourceType, "v1", ResourceVersionsType);
+            await Assert.That(Convert.ToHexString(bytes)).IsEqualTo("80FF");
+        }
+        else
+        {
+            var error = await Assert.ThrowsAsync<FederationException>(async () =>
+                await reader.ReadResourceDocumentAsync(GroupNode, "/teams/team-a", "schemas", "schema-a",
+                    ResourceType, resourceVersionsType: ResourceVersionsType));
+            await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.InconsistentSnapshot);
+        }
+        await Assert.That(session.JsonValueReads.Count(node => node.IdentifierAsString == "logical:MetaEpoch"))
+            .IsEqualTo(exact ? 0 : property == "VersionId" ? 1 : 2);
+        await Assert.That(session.Closed).IsEqualTo(2);
+    }
+
+    [Test]
+    [Arguments(false, false, false)]
+    [Arguments(true, false, false)]
+    [Arguments(false, true, false)]
+    [Arguments(true, true, false)]
+    [Arguments(false, false, true)]
+    [Arguments(false, true, true)]
+    public async Task DirectDocumentReadPreservesRecheckErrorAndCancellation(bool meta, bool cancelled, bool exact)
+    {
+        var (session, reader) = await DirectDocumentReader();
+        session.Chunks.AddRange([new byte[] { 1 }, Array.Empty<byte>()]);
+        using var cancellation = new CancellationTokenSource();
+        var original = new FederationException(FederationErrorCode.PolicyDenied, "Recheck denied.");
+        session.AfterClose = () => session.BeforeJsonRead = node =>
+        {
+            if (node.IdentifierAsString != (meta ? "logical:MetaEpoch" : exact ? "version:Epoch" : "logical:Epoch")) return;
+            if (cancelled) cancellation.Cancel();
+            else throw original;
+        };
+        if (cancelled)
+        {
+            var error = await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+                await reader.ReadResourceDocumentAsync(GroupNode, "/teams/team-a", "schemas", "schema-a",
+                    ResourceType, exact ? "v1" : null, ResourceVersionsType, cancellation.Token));
+            await Assert.That(error!.CancellationToken).IsEqualTo(cancellation.Token);
+        }
+        else
+        {
+            var error = await Assert.ThrowsAsync<FederationException>(async () =>
+                await reader.ReadResourceDocumentAsync(GroupNode, "/teams/team-a", "schemas", "schema-a",
+                    ResourceType, exact ? "v1" : null, ResourceVersionsType, cancellation.Token));
+            await Assert.That(ReferenceEquals(error, original)).IsTrue();
+        }
+        await Assert.That(session.Closed).IsEqualTo(2);
+        await Assert.That(session.CloseToken.CanBeCanceled).IsFalse();
+    }
+
+    [Test]
+    [Arguments(false, false)]
+    [Arguments(true, false)]
+    [Arguments(false, true)]
+    [Arguments(true, true)]
+    public async Task DirectDocumentReadDoesNotRecheckAfterFileOrCloseFailure(bool closing, bool exact)
+    {
+        var (session, reader) = await DirectDocumentReader();
+        session.Chunks.AddRange([new byte[] { 1 }, Array.Empty<byte>()]);
+        var original = new FederationException(FederationErrorCode.Unavailable, "File access failed.");
+        if (closing) session.CloseFailure = original;
+        else session.ReadFailure = original;
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await reader.ReadResourceDocumentAsync(GroupNode, "/teams/team-a", "schemas", "schema-a",
+                ResourceType, exact ? "v1" : null, ResourceVersionsType));
+
+        await Assert.That(ReferenceEquals(error, original)).IsTrue();
+        await Assert.That(session.JsonValueReads.Count(node =>
+                node.IdentifierAsString == (exact ? "version:Epoch" : "logical:Epoch")))
+            .IsEqualTo(1);
+        await Assert.That(session.JsonValueReads.Count(node => node.IdentifierAsString == "logical:MetaEpoch"))
+            .IsEqualTo(exact ? 0 : 1);
+        await Assert.That(session.Closed).IsEqualTo(2);
+        await Assert.That(session.CloseToken.CanBeCanceled).IsFalse();
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task DirectDocumentReadObservesCancellationDuringInitialMetadataBeforeOpen(bool meta)
+    {
+        var (session, reader) = await DirectDocumentReader();
+        using var cancellation = new CancellationTokenSource();
+        session.BeforeJsonRead = node =>
+        {
+            if (node.IdentifierAsString == (meta ? "logical:MetaEpoch" : "logical:Epoch")) cancellation.Cancel();
+        };
+
+        var error = await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+            await reader.ReadResourceDocumentAsync(GroupNode, "/teams/team-a", "schemas", "schema-a",
+                ResourceType, cancellationToken: cancellation.Token));
+
+        await Assert.That(error!.CancellationToken).IsEqualTo(cancellation.Token);
+        await Assert.That(session.Opened).IsEqualTo(1);
+        await Assert.That(session.Closed).IsEqualTo(1);
+        await Assert.That(session.LastOpenedFile).IsEqualTo(File);
+    }
+
+    private static async ValueTask<(FakeSession Session, OpcUaRegistryReader Reader)> DirectDocumentReader()
+    {
+        var session = new FakeSession();
+        var reader = await ModelReader(session);
+        ConfigureResourceAddressSpace(session);
+        session.BrowsePages[GroupNode] = new([ResourceReferencePage()]);
+        return (session, reader);
     }
 
     [Test]

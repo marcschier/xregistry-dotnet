@@ -135,6 +135,17 @@ that disagrees with the captured length, reports `inconsistent_snapshot`.
 Unknown Size still requires EOF, and a known zero retains the complete
 Open/Read/Close sequence. Size failures after Open attempt uncancelled Close
 and preserve any cleanup error.
+Direct `ReadResourceDocumentAsync` captures validated Properties from the
+selected logical Resource or exact Version before reading, then compares them
+after Read and Close. Logical/default reads also compare Resource Meta; exact
+Version reads do not depend on later default changes. Changed observations
+report `inconsistent_snapshot`. Native read, Close and recheck failures retain
+their original outcomes, and cancellation prevents returned bytes. The
+federation source retains its wider guard around the metadata used to construct
+the returned document without repeating the direct reader's observations.
+Raw `ReadFileAsync` remains a byte reader with Size checks, not a Version
+snapshot; neither path establishes a Registry-wide transaction or an immutable
+incarnation identity.
 Before acquiring a handle, shared reads and replacement writes obtain the
 optional namespace-zero UInt32 `MaxByteStringLength` Property on the selected
 FileType Object. A file declaration overrides the ServerCapabilities
