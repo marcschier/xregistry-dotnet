@@ -161,6 +161,12 @@ multiple cleanup failures are aggregated rather than replacing an earlier one.
 The public message does not copy native diagnostic text. Cancellation remains
 cancellation rather than becoming a native error.
 
+Event discovery uses the same Service and operation validation for notifier
+reads and Browse pages. A failed page does not become an empty declaration
+set. If a failed response returns a continuation point, discovery attempts to
+release it as well as any outstanding previous point and retains each cleanup
+failure on the original error.
+
 The reader, writer and read source have fake-Session coverage. An in-process
 OPC UA Stack server also verifies Session establishment, SpecVersion gating,
 event Subscription creation and removal, publishing enablement and native

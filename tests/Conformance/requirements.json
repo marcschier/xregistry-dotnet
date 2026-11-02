@@ -140568,7 +140568,10 @@
           "InternalBrowseRetainsBothContinuationReleaseFailuresWithoutReplacingOperationFailure",
           "ExplicitContinuationReleaseRejectsNonGoodStatus",
           "SdkServiceFailureMapsOutcomeAndRetainsOriginalException",
-          "SdkCancellationRemainsCancellationInsteadOfNativeFailure"
+          "SdkCancellationRemainsCancellationInsteadOfNativeFailure",
+          "DiscoveryMapsServiceFailureAndRetainsOriginalException",
+          "DiscoveryRetainsFailedBrowseAndEveryContinuationCleanupDiagnostic",
+          "DiscoveryRejectsNonGoodServiceDespiteGoodOperation"
         ],
         "nativeEvidence": []
       }
@@ -140607,6 +140610,8 @@
           "ReadStringRejectsNonGoodStatusAndRetainsTheOriginalStatus",
           "NonReadOperationsRejectUncertainStatus",
           "GoodStatusWithInformationBitsRetainsTheValue",
+          "DiscoveryRejectsUncertainResultsAndRetainsNativeDiagnostics",
+          "DiscoveryAcceptsGoodStatusSubcodes",
           "ExplicitContinuationReleaseRejectsNonGoodStatus"
         ],
         "nativeEvidence": []

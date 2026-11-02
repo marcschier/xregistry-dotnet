@@ -330,15 +330,12 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
     private static async ValueTask<Variant> ReadValueAsync(ISessionClient session, NodeId node,
         uint attributeId, CancellationToken cancellationToken)
     {
-        var response = await session.ReadAsync(new RequestHeader(), 0, TimestampsToReturn.Neither,
-            [new ReadValueId { NodeId = node, AttributeId = attributeId }], cancellationToken)
+        var response = await OpcUaSessionAdapter.InvokeAsync(() => session.ReadAsync(
+            new RequestHeader(), 0, TimestampsToReturn.Neither,
+            [new ReadValueId { NodeId = node, AttributeId = attributeId }], cancellationToken))
             .ConfigureAwait(false);
-        if (response.Results.Count != 1 || StatusCode.IsBad(response.Results[0].StatusCode))
-        {
-            throw new FederationException(FederationErrorCode.Unavailable,
-                "The OPC UA Server could not read the notifier's EventNotifier Attribute.");
-        }
-        return response.Results[0].WrappedValue;
+        return OpcUaSessionAdapter.Single(response.Results, static result => result.StatusCode,
+            response.DiagnosticInfos, response.ResponseHeader).WrappedValue;
     }
 
     private static async ValueTask<bool> SupportsEventSubscriptionsAsync(ISessionClient session, NodeId notifier,
@@ -358,7 +355,8 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
         NodeId node, BrowseDirection direction, NodeId referenceType, CancellationToken cancellationToken)
     {
         var references = new List<ReferenceDescription>();
-        var response = await session.BrowseAsync(new RequestHeader(), new ViewDescription(), MaxReferencesPerBrowse,
+        var response = await OpcUaSessionAdapter.InvokeAsync(() => session.BrowseAsync(
+            new RequestHeader(), new ViewDescription(), MaxReferencesPerBrowse,
             [new BrowseDescription
             {
                 NodeId = node,
@@ -367,44 +365,67 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
                 IncludeSubtypes = true,
                 NodeClassMask = (uint)NodeClass.ObjectType | (uint)NodeClass.Object,
                 ResultMask = (uint)BrowseResultMask.All,
-            }], cancellationToken).ConfigureAwait(false);
-        var result = GetBrowseResult(response.Results);
-        var continuation = result.ContinuationPoint.ToArray();
+            }], cancellationToken)).ConfigureAwait(false);
+        var outstanding = new List<byte[]>();
+        TrackContinuation(response.Results, outstanding);
         try
         {
+            var result = OpcUaSessionAdapter.Single(response.Results, static result => result.StatusCode,
+                response.DiagnosticInfos, response.ResponseHeader);
+            var continuation = result.ContinuationPoint.ToArray();
             references.AddRange(result.References.ToArray() ?? []);
             while (continuation.Length > 0)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var next = await session.BrowseNextAsync(new RequestHeader(), false, [new ByteString(continuation)],
-                    cancellationToken).ConfigureAwait(false);
-                result = GetBrowseResult(next.Results);
+                var next = await OpcUaSessionAdapter.InvokeAsync(() => session.BrowseNextAsync(
+                    new RequestHeader(), false, [new ByteString(continuation)], cancellationToken)).ConfigureAwait(false);
+                TrackContinuation(next.Results, outstanding);
+                result = OpcUaSessionAdapter.Single(next.Results, static result => result.StatusCode,
+                    next.DiagnosticInfos, next.ResponseHeader);
                 continuation = result.ContinuationPoint.ToArray();
+                outstanding.Clear();
+                TrackContinuation(next.Results, outstanding);
                 references.AddRange(result.References.ToArray() ?? []);
             }
         }
-        catch (Exception failure) when (continuation.Length > 0)
+        catch (Exception failure) when (outstanding.Count > 0)
         {
-            try
+            foreach (var continuation in outstanding)
             {
-                var release = await session.BrowseNextAsync(new RequestHeader(), true,
-                    [new ByteString(continuation)], CancellationToken.None).ConfigureAwait(false);
-                _ = GetBrowseResult(release.Results);
-            }
-            catch (Exception releaseFailure)
-            {
-                failure.Data["OpcUa.ContinuationReleaseFailure"] = releaseFailure;
+                try
+                {
+                    var release = await OpcUaSessionAdapter.InvokeAsync(() => session.BrowseNextAsync(
+                        new RequestHeader(), true, [new ByteString(continuation)], CancellationToken.None))
+                        .ConfigureAwait(false);
+                    _ = OpcUaSessionAdapter.Single(release.Results, static result => result.StatusCode,
+                        release.DiagnosticInfos, release.ResponseHeader);
+                }
+                catch (Exception releaseFailure)
+                {
+                    failure.Data["OpcUa.ContinuationReleaseFailure"] =
+                        failure.Data["OpcUa.ContinuationReleaseFailure"] is Exception previousFailure
+                            ? new AggregateException("Multiple OPC UA continuation releases failed.",
+                                previousFailure, releaseFailure)
+                            : releaseFailure;
+                }
             }
             throw;
         }
         return references;
     }
 
-    private static BrowseResult GetBrowseResult(ArrayOf<BrowseResult> results) =>
-        results.Count == 1 && !StatusCode.IsBad(results[0].StatusCode)
-            ? results[0]
-            : throw new FederationException(FederationErrorCode.Unavailable,
-                "The OPC UA Server returned an invalid Browse result.");
+    private static void TrackContinuation(ArrayOf<BrowseResult> results, List<byte[]> outstanding)
+    {
+        foreach (var result in results)
+        {
+            var continuation = result.ContinuationPoint.ToArray();
+            if (continuation.Length > 0 &&
+                !outstanding.Any(previous => previous.AsSpan().SequenceEqual(continuation)))
+            {
+                outstanding.Add(continuation);
+            }
+        }
+    }
 
     private static NodeId ToLocalNodeId(NamespaceTable namespaceUris, ExpandedNodeId expandedNodeId)
     {

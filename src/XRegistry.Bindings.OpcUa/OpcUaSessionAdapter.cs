@@ -508,7 +508,7 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
         }
     }
 
-    private static T Single<T>(ArrayOf<T> results, Func<T, StatusCode> getStatus,
+    internal static T Single<T>(ArrayOf<T> results, Func<T, StatusCode> getStatus,
         ArrayOf<DiagnosticInfo> diagnostics, ResponseHeader? responseHeader)
     {
         if (responseHeader is not null && !StatusCode.IsGood(responseHeader.ServiceResult))
@@ -578,7 +578,7 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
         return failure;
     }
 
-    private static async ValueTask<T> InvokeAsync<T>(Func<ValueTask<T>> operation)
+    internal static async ValueTask<T> InvokeAsync<T>(Func<ValueTask<T>> operation)
     {
         try
         {
