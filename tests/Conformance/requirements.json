@@ -38022,7 +38022,7 @@
           "GenericCoreUriMapNameEnumAndFullUriTemplateRulesRemainUnchanged",
           "InvalidAuthoredGrammarUsesTheExistingServerAttributeFailure",
           "InvalidAuthoredShapeRollsBackRegistryAndOutbox",
-          "KafkaBootstrapAddressesSupportTheDraftsHostAndListenerForms",
+          "KafkaBootstrapAddressesPreserveSchemeFreeClientHostPortForms",
           "MalformedKafkaBootstrapAddressesAreNotSilentlyIgnored",
           "PackagedEndpointRoundTripsUnresolvedUriMapKeyAndEnumWithoutAcquisition",
           "PermittedEndpointAddressFormsRemainInAuthoredPreferenceOrder",
@@ -39825,18 +39825,18 @@
       "text": "The [endpoint URIs](#protocoloptionsendpoints) for \"Kafka\" endpoints MUST be valid Kafka bootstrap server addresses. The scheme follows Kafka configuration usage as described in [Apache Kafka], e.g. `SSL://<HOST>:<PORT>` or `PLAINTEXT://<HOST>:<PORT>`.",
       "review": {
         "status": "reviewed",
-        "note": "Kafka validates nonempty bootstrap arrays and separate host/port values, including IPv6 and the source's listener-style forms. Malformed lists, paths/queries, absent/out-of-range ports fail. Custom listener names carry an explicit security-mapping obligation rather than an invented security protocol. Implementation scope: resolved-kafka-bootstrap-address. Current bounded Models/Server regression evidence; no broker/runtime-message execution or unexecuted native-platform qualification is inferred.",
+        "note": "This historical source allowed listener-style schemes. The selected upstream-d290b1ec successor instead requires scheme-free client bootstrap addresses; materialization follows that successor and rejects listener prefixes. This historical behavior is no longer implemented, and its earlier evidence is not qualification of the selected source.",
         "roles": [
           "client",
           "producer"
         ]
       },
       "implementation": {
-        "status": "implemented",
+        "status": "pending",
         "testIds": [
           "DeclaredProtocolOptionTypesPreserveTheirExactJson",
           "EachAddressEntryRequiresItsProtocolSpecificShape",
-          "KafkaBootstrapAddressesSupportTheDraftsHostAndListenerForms",
+          "KafkaBootstrapAddressesPreserveSchemeFreeClientHostPortForms",
           "MalformedKafkaBootstrapAddressesAreNotSilentlyIgnored",
           "StringEnumsAreCheckedAfterExpansionButBooleansAndNumbersAreNotCoerced",
           "WrongTypesRequiredMembersAndEnumsFailAtTheirResolvedPaths"
@@ -98426,7 +98426,7 @@
           "EachAddressEntryRequiresItsProtocolSpecificShape",
           "PermittedEndpointAddressFormsRemainInAuthoredPreferenceOrder",
           "UnsafeOrWrongProtocolAddressesAreErrorsAfterRendering",
-          "KafkaBootstrapAddressesSupportTheDraftsHostAndListenerForms",
+          "KafkaBootstrapAddressesPreserveSchemeFreeClientHostPortForms",
           "MalformedKafkaBootstrapAddressesAreNotSilentlyIgnored",
           "AbstractAndExtensionProtocolsExposeDeferredChecksInsteadOfPretendingToBeConnectable"
         ],
@@ -100012,13 +100012,22 @@
       ],
       "text": "For `KAFKA` endpoints, the [endpoint addresses](#protocoloptionsendpoints) MUST be carried in `bootstrap.servers` as an array of client bootstrap addresses. Each entry MUST use the `host:port` format without a scheme. The listener-style `uri` format is not an alternative addressing field for a `KAFKA` endpoint.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Resolved Kafka bootstrap values accept only scheme-free host:port entries, including bracketed IPv6 and inclusive port boundaries. Listener prefixes reject rather than being stripped or converted into a security-mapping deferral; uri is not an alternative field. Authored templates remain storable and are checked after explicit expansion. This replaces the incompatible historical listener interpretation without changing pinned source text.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "KafkaClientBootstrapRejectsListenerSchemesBeforeReturningConfiguration",
+          "KafkaBootstrapAddressesPreserveSchemeFreeClientHostPortForms",
+          "KafkaBootstrapTemplateChecksRunAfterExpansionWithoutChangingAuthoredMetadata",
+          "EachAddressEntryRequiresItsProtocolSpecificShape",
+          "MalformedKafkaBootstrapAddressesAreNotSilentlyIgnored"
+        ],
         "nativeEvidence": []
       }
     },

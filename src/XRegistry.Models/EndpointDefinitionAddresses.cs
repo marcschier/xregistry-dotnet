@@ -141,21 +141,9 @@ internal static partial class EndpointDefinitionSemantics
                 continue;
             }
             var text = server.GetString()!;
-            var separator = text.IndexOf("://", StringComparison.Ordinal);
-            if (separator >= 0)
+            if (text.Contains("://", StringComparison.Ordinal))
             {
-                var listener = text[..separator];
-                if (listener.Length == 0 || !char.IsAsciiLetter(listener[0]) ||
-                    listener.Any(static character => !char.IsAsciiLetterOrDigit(character) && character is not ('_' or '-')))
-                {
-                    throw AddressError(itemPath, "The Kafka listener prefix is malformed.");
-                }
-                if (listener.ToUpperInvariant() is not ("SSL" or "PLAINTEXT" or "SASL_SSL" or "SASL_PLAINTEXT"))
-                {
-                    evaluation.Defer("kafka_listener_security", itemPath,
-                        "An extension listener name needs an explicit listener-to-security-protocol mapping.");
-                }
-                text = text[(separator + 3)..];
+                throw AddressError(itemPath, "Kafka client bootstrap addresses must use host:port without a scheme.");
             }
             var address = ParseNetworkAddress("tcp://" + text, itemPath, evaluation.CancellationToken);
             if (address.Port is null || address.Path.Length != 0 || address.Query.Length != 0 || text.Contains(','))

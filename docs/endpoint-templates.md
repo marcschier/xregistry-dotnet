@@ -148,7 +148,7 @@ contract; a descriptive `-` role-table cell is not turned into a prohibition.
 | HTTP | HTTP/HTTPS network URIs, method/header tokens, duplicate header retention, field-value controls, carrier enums, and declared CloudEvents format versus HTTP Content-Type. |
 | AMQP[/1.0] | AMQP/AMQPS URIs, option enums, native strings/booleans/maps/arrays, and unsigned timeout. `node` is a string, not an invented URI-only field. Container-specific node/terminus resolution remains deferred; explicit `node` overrides the URI path without bypassing URI checks. |
 | MQTT[/5.0], MQTT/3.1.1 | MQTT/MQTTS paths must be concrete topics after one URI percent decoding. TCP/SSL/WSS forms must have **no path**, including no trailing `/`. Topic/filter exclusion, wildcard placement, Will references, shared-group dependencies, and the 65,535-byte MQTT string limit are checked. |
-| KAFKA | Nonempty `bootstrap.servers`, one host and explicit port per value, supported listener forms, required consumer group for `consumer`, forbidden group for `subscriber`, and consumer-only offset/autocommit settings. Custom listener names require an explicit security mapping. |
+| KAFKA | Nonempty `bootstrap.servers`, one scheme-free `host:port` per value, required consumer group for `consumer`, forbidden group for `subscriber`, and consumer-only offset/autocommit settings. Listener-style schemes and the alternative `uri` field are rejected. |
 | NATS | NATS/TLS/WS URIs with an explicit port; concrete subjects, legal filter tokens, subject/filter exclusion, and queue-group dependency. |
 
 URI-valued network addresses use strict lexical URI checks without rewriting
@@ -158,6 +158,13 @@ and explicit ports outside `1..65535`. Network-address parsing also requires a
 host supported by `System.Uri`; it is not a universal parser for every future URI
 address form. Relative nonempty authorization URI references remain permitted.
 These are consumer checks, not newly imposed storage rules.
+
+Kafka bootstrap values now follow the selected successor specification's client
+address format. Replace listener addresses such as `SSL://broker:9093` with
+`broker:9093` in `bootstrap.servers` and supply transport security separately.
+Authored templates are still stored without resolving their values; consumer
+materialization rejects schemes after expansion. It no longer strips a listener
+prefix or returns a `kafka_listener_security` deferral.
 
 Authorization alternatives remain configuration metadata. `type` and `mechanism`
 are not invented as universally required fields; a supplied mechanism requires

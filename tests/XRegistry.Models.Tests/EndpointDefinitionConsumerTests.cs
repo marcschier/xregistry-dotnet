@@ -69,22 +69,58 @@ public class EndpointDefinitionConsumerTests
     [Arguments("MQTT", """{"endpoints":{}}""", "/protocoloptions/endpoints")]
     [Arguments("NATS", """{"endpoints":[1]}""", "/protocoloptions/endpoints/0")]
     [Arguments("KAFKA", """{"endpoints":[{}]}""", "/protocoloptions/endpoints/0/bootstrap.servers")]
+    [Arguments("KAFKA", """{"endpoints":[{"uri":"SSL://broker:9093"}]}""", "/protocoloptions/endpoints/0/bootstrap.servers")]
+    [Arguments("KAFKA", """{"endpoints":[{"bootstrap.servers":["broker:9092"],"uri":"SSL://broker:9093"}]}""", "/protocoloptions/endpoints/0/uri")]
     [Arguments("KAFKA", """{"endpoints":[{"bootstrap.servers":[]}]}""", "/protocoloptions/endpoints/0/bootstrap.servers")]
     [Arguments("KAFKA", """{"endpoints":[{"bootstrap.servers":["broker:9092",false]}]}""", "/protocoloptions/endpoints/0/bootstrap.servers/1")]
     public Task EachAddressEntryRequiresItsProtocolSpecificShape(string protocol, string options, string path) =>
         Rejects(Input(protocol, options), path);
 
     [Test]
-    [Arguments("broker.example:9092")]
     [Arguments("SSL://broker.example:9093")]
+    [Arguments("ssl://broker.example:9093")]
     [Arguments("PLAINTEXT://broker.example:9092")]
     [Arguments("SASL_SSL://broker.example:9093")]
+    [Arguments("SASL_PLAINTEXT://broker.example:9092")]
+    [Arguments("CUSTOM://broker.example:9093")]
+    [Arguments("https://broker.example:9093")]
+    public Task KafkaClientBootstrapRejectsListenerSchemesBeforeReturningConfiguration(string address) =>
+        Rejects(Input("KAFKA", $$$"""{"endpoints":[{"bootstrap.servers":["{{{address}}}"]}]}"""),
+            "/protocoloptions/endpoints/0/bootstrap.servers/0", "invalid_endpoint_address");
+
+    [Test]
+    [Arguments("broker.example:9092")]
     [Arguments("[::1]:9092")]
-    public async Task KafkaBootstrapAddressesSupportTheDraftsHostAndListenerForms(string address)
+    [Arguments("broker.example:1")]
+    [Arguments("broker.example:65535")]
+    public async Task KafkaBootstrapAddressesPreserveSchemeFreeClientHostPortForms(string address)
     {
         var result = EndpointDefinition.Materialize(Input("KAFKA",
             $$$"""{"endpoints":[{"bootstrap.servers":["{{{address}}}"]}]}"""));
         await Assert.That(result.GetProtocolOption("endpoints")[0].GetProperty("bootstrap.servers")[0].GetString()).IsEqualTo(address);
+    }
+
+    [Test]
+    public async Task KafkaBootstrapTemplateChecksRunAfterExpansionWithoutChangingAuthoredMetadata()
+    {
+        var input = Input("KAFKA", """{"endpoints":[{"bootstrap.servers":["{host}:9092"]}]}""");
+        var before = input.RootElement.GetRawText();
+        await Assert.That(() => EndpointDefinition.ValidateAuthored(input)).ThrowsNothing();
+        var resolved = EndpointDefinition.Materialize(input, RegistryJson.Parse("""{"host":"broker.example"}"""));
+        await Assert.That(resolved.GetProtocolOption("endpoints")[0].GetProperty("bootstrap.servers")[0].GetString())
+            .IsEqualTo("broker.example:9092");
+        await Assert.That(resolved.DeferredChecks.Any(check => check.Code == "kafka_listener_security")).IsFalse();
+
+        var listener = Input("KAFKA", """{"endpoints":[{"bootstrap.servers":["SSL://{host}:9093"]}]}""");
+        var listenerBefore = listener.RootElement.GetRawText();
+        await Assert.That(() => EndpointDefinition.ValidateAuthored(listener)).ThrowsNothing();
+        var failure = await Assert.That(() => EndpointDefinition.Materialize(listener,
+            RegistryJson.Parse("""{"host":"broker.example"}"""))).Throws<RegistryException>()
+            ?? throw new InvalidOperationException("Expected a resolved client bootstrap address diagnostic.");
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo("invalid_endpoint_address");
+        await Assert.That(failure.Diagnostic.Path).IsEqualTo("/protocoloptions/endpoints/0/bootstrap.servers/0");
+        await Assert.That(input.RootElement.GetRawText()).IsEqualTo(before);
+        await Assert.That(listener.RootElement.GetRawText()).IsEqualTo(listenerBefore);
     }
 
     [Test]
