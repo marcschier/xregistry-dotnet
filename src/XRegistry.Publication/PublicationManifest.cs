@@ -316,6 +316,36 @@ internal static class PublicationJson
             }
         }
         RequirePinnedAccess(registry);
+        if (registry.Binding == "opcua")
+        {
+            if (!Uri.TryCreate(registry.Endpoint, UriKind.Absolute, out var endpoint) ||
+                endpoint.Host.Length == 0 || registry.Endpoint.Contains('?', StringComparison.Ordinal) ||
+                registry.Endpoint.Contains('#', StringComparison.Ordinal))
+            {
+                throw Error("invalid_binding", "/reference/registry/endpoint",
+                    "The OPC UA binding requires a native endpoint URL without query or fragment.");
+            }
+
+            if (!registry.Parameters.TryGetValue("registryroot", out var root) ||
+                string.IsNullOrEmpty(root))
+            {
+                throw Error("invalid_binding", "/reference/registry/parameters/registryroot",
+                    "The OPC UA binding requires a portable Registry-root NodeId.");
+            }
+
+            foreach (var name in new[] { "applicationuri", "transportprofileuri" })
+            {
+                if (registry.Parameters.TryGetValue(name, out var value) &&
+                    (string.IsNullOrWhiteSpace(value) ||
+                     !Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
+                     !uri.IsWellFormedOriginalString()))
+                {
+                    throw Error("invalid_binding", "/reference/registry/parameters/" + name,
+                        "The OPC UA binding parameter must be an absolute URI.");
+                }
+            }
+        }
+
         if (registry.Binding is not ("http" or "git" or "oci" or "file"))
         {
             return;

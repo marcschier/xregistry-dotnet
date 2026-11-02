@@ -124,6 +124,10 @@ public class PublicationReadClientTests
     [Arguments(false, "file", "https://publisher.example.test/captured", "layout", "oci-layout", "/endpoint")]
     [Arguments(true, "file", "file:///D:/captured", "layout", "unknown", "/parameters/layout")]
     [Arguments(false, "file", "file:///D:/captured", "layout", "document-tree", "/parameters/reference")]
+    [Arguments(false, "opcua", "opc.tcp://ua.example.test:4840", "registryroot", "", "/parameters/registryroot")]
+    [Arguments(true, "opcua", "opc.tcp://ua.example.test:4840", "applicationuri", "not a URI", "/parameters/applicationuri")]
+    [Arguments(false, "opcua", "opc.tcp://ua.example.test:4840?state=1", "", "", "/endpoint")]
+    [Arguments(true, "opcua", "opc.tcp:registry.example.test", "", "", "/endpoint")]
     public async Task SelectedBindingSyntaxRejectsBeforeResolverInvocation(
         bool channelHead, string kind, string endpoint, string parameter, string value, string errorPath)
     {
@@ -136,6 +140,10 @@ public class PublicationReadClientTests
         else if (kind is "oci" or "file")
         {
             parameters["reference"] = "sha256:" + new string('a', 64);
+        }
+        else if (kind == "opcua")
+        {
+            parameters["registryroot"] = "i=85";
         }
         if (parameter.Length != 0)
         {
@@ -168,6 +176,44 @@ public class PublicationReadClientTests
         await Assert.That(error.Path).IsEqualTo("/reference/registry" + errorPath);
         await Assert.That(calls).IsEqualTo(channelHead ? 1 : 0);
         await Assert.That(binding.OpenedVersions.Count).IsZero();
+    }
+
+    [Test]
+    public async Task SelectedOpcUaAccessRetainsItsPortableIdentityAndOptionalUris()
+    {
+        var fixture = Fixture.Create();
+        var access = new PublicationRegistryAccess("opcua", "opc.tcp://ua.example.test:4840",
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["registryroot"] = "nsu=urn%3Axregistry;s=Registry",
+                ["applicationuri"] = "urn:example:ua:registry",
+                ["transportprofileuri"] = "http://opcfoundation.org/UA-Profile/Transport/uatcp-uasc-uabinary"
+            });
+        fixture.ChannelMetadata = fixture.ChannelMetadata with
+        {
+            Head = fixture.ManifestDescriptor with
+            {
+                Reference = fixture.ManifestDescriptor.Reference with { Registry = access }
+            }
+        };
+        var calls = new List<PublicationRegistryAccess>();
+        var client = new PublicationReadClient((selected, _) =>
+        {
+            calls.Add(selected);
+            return ValueTask.FromResult<IPublicationReadBinding>(fixture.Binding(selected));
+        });
+
+        var snapshot = await client.OpenChannelAsync(Access, ChannelResource);
+
+        await Assert.That(calls.Count).IsEqualTo(3);
+        await Assert.That(calls[1].Endpoint).IsEqualTo(access.Endpoint);
+        await Assert.That(calls[1].Parameters["registryroot"]).IsEqualTo(access.Parameters["registryroot"]);
+        await Assert.That(calls[1].Parameters["applicationuri"]).IsEqualTo(access.Parameters["applicationuri"]);
+        await Assert.That(calls[1].Parameters["transportprofileuri"])
+            .IsEqualTo(access.Parameters["transportprofileuri"]);
+        await Assert.That(snapshot.OpenRecord.Snapshot.Reference.Registry.Parameters["registryroot"])
+            .IsEqualTo(access.Parameters["registryroot"]);
+        await Assert.That(snapshot.GetExactManifestBytes().SequenceEqual(fixture.ManifestBytes)).IsTrue();
     }
 
     [Test]

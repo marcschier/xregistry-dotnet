@@ -204,8 +204,10 @@ HTTP roots, Git repositories and paths, OCI repository locators, and File layout
 A rejected value produces `invalid_binding` with its reference-relative pointer;
 the resolver is not invoked for that access context. Parsed descriptors and
 offline contexts also reject unknown built-in parameters without acquiring the
-referenced object. OPC UA-specific value validation remains the selected
-adapter's responsibility.
+referenced object. OPC UA access requires a host-bearing endpoint without a
+query or fragment and a non-empty `registryroot`; optional `applicationuri`
+and `transportprofileuri` values must be absolute URIs. The adapter still
+validates the selected transport and portable NodeId grammar.
 
 A `source-snapshot` manifest must declare at least one included mandatory
 extension. Missing or empty `requiredExtensions` rejects before a channel

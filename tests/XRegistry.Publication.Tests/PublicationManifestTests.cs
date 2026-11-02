@@ -318,6 +318,10 @@ public class PublicationManifestTests
             json["reference"]!["registry"]!["parameters"] = new JsonObject();
             json["reference"]!["registry"]!["endpoint"] = binding == "http"
                 ? "https://publisher.example.test" : "opc.tcp://ua.example.test:4840";
+            if (binding == "opcua")
+            {
+                json["reference"]!["registry"]!["parameters"]!["registryroot"] = "i=85";
+            }
         }
         json["reference"]!["registry"]!["parameters"]!["unexpected"] = "value";
         using var document = JsonDocument.Parse(json.ToJsonString());
@@ -338,6 +342,8 @@ public class PublicationManifestTests
     [Arguments("file", "https://publisher.example.test/captured", "layout", "oci-layout", "/endpoint")]
     [Arguments("file", "file:///D:/captured", "layout", "unknown", "/parameters/layout")]
     [Arguments("file", "file:///D:/captured", "layout", "document-tree", "/parameters/reference")]
+    [Arguments("opcua", "opc.tcp://ua.example.test:4840?state=1", "", "", "/endpoint")]
+    [Arguments("opcua", "opc.tcp:registry.example.test", "", "", "/endpoint")]
     public async Task ParsedSelectedBindingsApplyTheSameEndpointAndValueRulesAsAcquisition(
         string binding, string endpoint, string parameter, string value, string errorPath)
     {
@@ -348,6 +354,11 @@ public class PublicationManifestTests
         {
             access["parameters"] = new JsonObject();
         }
+        else if (binding == "opcua")
+        {
+            access["parameters"] = new JsonObject { ["registryroot"] = "i=85" };
+        }
+
         if (parameter.Length != 0)
         {
             access["parameters"]![parameter] = value;
@@ -359,6 +370,48 @@ public class PublicationManifestTests
 
         await Assert.That(error.Code).IsEqualTo("invalid_binding");
         await Assert.That(error.Path).IsEqualTo("/reference/registry" + errorPath);
+    }
+
+    [Test]
+    public async Task ParsedOpcUaReferenceRequiresRegistryRoot()
+    {
+        var json = CaptureDescriptor("git", new string('a', 40));
+        var access = json["reference"]!["registry"]!;
+        access["binding"] = "opcua";
+        access["endpoint"] = "opc.tcp://ua.example.test:4840";
+        access["parameters"] = new JsonObject();
+        using var document = JsonDocument.Parse(json.ToJsonString());
+
+        var error = await Assert.That(() => PublicationByteDescriptor.Parse(document.RootElement))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected missing OPC UA root rejection.");
+
+        await Assert.That(error.Code).IsEqualTo("invalid_binding");
+        await Assert.That(error.Path).IsEqualTo("/reference/registry/parameters/registryroot");
+    }
+
+    [Test]
+    [Arguments("registryroot", "")]
+    [Arguments("applicationuri", "not a URI")]
+    [Arguments("transportprofileuri", "not a URI")]
+    public async Task ParsedOpcUaReferencesValidateRequiredRootAndOptionalUriParameters(
+        string parameter, string value)
+    {
+        var json = CaptureDescriptor("git", new string('a', 40));
+        var access = json["reference"]!["registry"]!;
+        access["binding"] = "opcua";
+        access["endpoint"] = "opc.tcp://ua.example.test:4840";
+        access["parameters"] = new JsonObject
+        {
+            ["registryroot"] = "i=85"
+        };
+        access["parameters"]![parameter] = value;
+        using var document = JsonDocument.Parse(json.ToJsonString());
+
+        var error = await Assert.That(() => PublicationByteDescriptor.Parse(document.RootElement))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected OPC UA parameter rejection.");
+
+        await Assert.That(error.Code).IsEqualTo("invalid_binding");
+        await Assert.That(error.Path).IsEqualTo("/reference/registry/parameters/" + parameter);
     }
 
     private static JsonNode CaptureDescriptor(string binding, string? selector)
