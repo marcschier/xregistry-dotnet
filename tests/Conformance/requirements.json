@@ -139756,7 +139756,7 @@
       "text": "For a logical proxy or mirror claiming `XREG-Federation`, the resolver first reads the logical Resource's read-only `OriginRegistry`. Its `RegistryOriginDataType` has three scalar fields in order: `OriginUri` (`UriString`), `ServerUri` (`UriString`) and `RegistryNodeId` (`ExpandedNodeId`). Exactly one form MUST be authoritative:",
       "review": {
         "status": "reviewed",
-        "note": "The complete selected section 10.2, including both exclusive origin forms and all five resolution steps, was read against the reader, adapter, portable target identity and trusted-provider lease. ReadOriginRegistryAsync selects the logical Resource's unique OriginRegistry Variable without visiting its default Version and rejects mixed or incomplete origin forms. Typed decoding validates both declared and encoding DataTypes, retains exact fields and all identifier kinds, and rejects malformed/trailing data or bodies beyond 64 KiB. CaptureAsync resolves the source table context without manufacturing a root for stable origins; ResolveOriginTargetAsync compares the result with independent provider configuration before acquisition. Automatic source-record composition and read-only server exposure remain unproved. A caller-owned NativeRegistryContext does not establish those remaining obligations. Keep this compound requirement pending.",
+        "note": "The complete selected section 10.2, including both exclusive origin forms and all five resolution steps, was read against the reader, adapter, portable target identity and trusted-provider lease. ReadOriginRegistryAsync selects the logical Resource's unique OriginRegistry Variable without visiting its default Version and rejects mixed or incomplete origin forms. Typed decoding validates both declared and encoding DataTypes, retains exact fields and all identifier kinds, and rejects malformed/trailing data or bodies beyond 64 KiB. CaptureAsync resolves the source table context without manufacturing a stable-origin root; ResolveOriginTargetAsync compares independent provider configuration before acquisition. ResolveExternalResourceAsync now composes the logical origin read and capture before selecting the source-declared Resource or exact Version reference; rejected origins never read that reference or acquire a provider. Read-only server exposure and complete persisted source records remain unproved. Keep this compound requirement pending.",
         "roles": [
           "client",
           "server"
@@ -139777,7 +139777,11 @@
           "RegistryOriginDecodingRejectsMalformedScalarStructure",
           "RegistryOriginDecodingEnforcesExactStructureByteBudget",
           "RegistryOriginDecodingRetainsNativeReadStatusAndDiagnostics",
-          "RegistryOriginDecodingPreservesCancellationWithoutFurtherReads"
+          "RegistryOriginDecodingPreservesCancellationWithoutFurtherReads",
+          "SourceDirectedFederationReadsLogicalOriginAndSelectedReferenceBeforeProvider",
+          "SourceDirectedFederationRejectsOriginBeforeReferenceReadOrProviderSelection",
+          "SourceDirectedFederationDoesNotSubstituteAnotherRoleWhenSelectedReferenceIsAbsent",
+          "SourceDirectedFederationRejectsCancelledOrInvalidRequestsBeforeSourceReads"
         ],
         "nativeEvidence": []
       }
@@ -139805,7 +139809,7 @@
       "text": "The root MUST identify a `RegistryType` Object or subtype, not a Resource or endpoint. Unresolved Session-local namespace or server indexes are insufficient. A non-OPC-UA provider MUST use the stable `OriginUri` form; it MUST NOT manufacture an application/root pair from a URL. The resolver MUST validate the claim against its configured or verified provider binding before selecting a locator. The claim does not establish its own trust. URI comparison is exact, with no case folding, trimming, percent decoding or other URI normalization.",
       "review": {
         "status": "reviewed",
-        "note": "Selected section 10.2 and adjacent origin forms were read in full. CaptureAsync resolves the origin root through source tables, rejects contradictory ServerUri and retains portable application/namespace/identifier identity. Stable origins do not read native tables or acquire a manufactured native root. ResolveOriginTargetAsync requires exact agreement with a separately supplied configured or verified origin before provider selection; origin-form, URI case/escape/whitespace, application, namespace, root and identifier-kind substitutions reject without acquisition. Application/root admission also checks the target application and maps the bound root to the selected lease root before Registry document reads. Failed transferred leases retain disposal outcomes. Real source/target Session cases cover stable and application/root admission for logical Resources and exact Versions. Server read-only exposure, automatic source-record composition, non-OPC-UA target routing and persisted source keys are not established; keep this compound client/server requirement pending.",
+        "note": "Selected section 10.2 and adjacent origin forms were read in full. CaptureAsync resolves the origin root through source tables, rejects contradictory ServerUri and retains portable application/namespace/identifier identity. Stable origins do not read native tables or acquire a manufactured native root. ResolveOriginTargetAsync requires exact agreement with a separately supplied configured or verified origin before provider selection; form, URI case/escape/whitespace, application, namespace, root and identifier-kind substitutions reject without acquisition. Application/root admission also maps the bound root to the selected lease root before Registry document reads; transferred leases retain disposal outcomes. Real source/target Session cases cover both origin forms for logical Resources and exact Versions. ResolveExternalResourceAsync composes logical source-origin admission before reading the selected reference, without default-Version or cross-role substitution. Server read-only exposure, non-OPC-UA target routing and persisted source keys remain unproved; keep this compound client/server requirement pending.",
         "roles": [
           "client",
           "server"
@@ -139855,7 +139859,7 @@
       "text": "For an `ExpandedNodeId` received from a source Server, a resolver MUST:",
       "review": {
         "status": "reviewed",
-        "note": "This extracted lead-in owns the complete five-step list at source lines 2263-2287, not merely its one extracted line. Adapter mapping resolves source application/namespace context and preserves all identifier kinds. The target resolver checks application, root/version/model and selected typed structural XID; mismatched application/namespace rejects before Registry Browse or document opens. Explicit source-retained logical/exact roles reject contradictory XIDs before Group traversal. Typed logical Resource origin decoding, portable capture and independent-binding admission are now available; application/root admission also compares the bound root to the acquired lease before document reads. Two-server cases cover both origin forms and both target roles. Automatic source-record composition, persisted pins and complete authenticated destination/certificate policy interaction evidence remain pending. Keep the compound list pending.",
+        "note": "This extracted lead-in owns the complete five-step list at source lines 2263-2287, not merely its one extracted line. Adapter mapping resolves source application/namespace context and preserves all identifier kinds. The target resolver checks application, root/version/model and selected typed structural XID; mismatched application/namespace rejects before Registry Browse or document opens. Explicit logical/exact roles reject contradictory XIDs before Group traversal. Typed source-origin decoding, portable capture and independent-binding admission include bound-root agreement before target document reads. ResolveExternalResourceAsync composes the logical Resource's origin with the selected source reference and passes only the independently admitted identity to the provider. A missing selected reference does not substitute the other role. Two-server cases cover both origin forms and both target roles. Persisted pins and complete authenticated destination/certificate policy interaction evidence remain pending. Keep the compound list pending.",
         "roles": [
           "client"
         ]
@@ -139870,7 +139874,9 @@
           "ExternalReferenceServerIndexZeroUsesSourceApplicationWithoutEndpointSubstitution",
           "ResolveExternalTargetAsyncRejectsIdentityMismatchBeforeReadingRegistryDocuments",
           "ResolveExternalTargetAsyncRejectsTargetThatContradictsDeclaredRole",
-          "TrustedProviderResolverReadsAnExternalVersionFromAnAlternateTargetModel"
+          "TrustedProviderResolverReadsAnExternalVersionFromAnAlternateTargetModel",
+          "SourceDirectedFederationReadsLogicalOriginAndSelectedReferenceBeforeProvider",
+          "SourceDirectedFederationDoesNotSubstituteAnotherRoleWhenSelectedReferenceIsAbsent"
         ],
         "nativeEvidence": []
       }

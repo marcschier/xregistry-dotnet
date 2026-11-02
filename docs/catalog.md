@@ -271,10 +271,17 @@ to the lease's selected Registry root before any Registry documents are opened.
 Failures after lease transfer dispose the lease and retain disposal failures.
 Successful results retain the admitted origin alongside the checked XID and role.
 The low-level `ResolveExternalTargetAsync` remains available without origin
-admission; its result has no origin. Neither API yet persists origin/XID/role
-source keys or composes the logical Resource's origin and reference reads into
-one source-record operation. These APIs do not complete the
-`XREG-Federation` proxy workflow.
+admission; its result has no origin.
+`ResolveExternalResourceAsync` composes those operations for a concrete source
+XID and explicit role. It reads the logical Resource's origin for either role,
+resolves it in the source Session and compares it with the independent binding
+before reading the selected Resource or exact Version reference. A missing
+selected reference reports `not_found`; the operation does not substitute the
+other role or select a default Version. Invalid source-role combinations and
+pre-cancelled requests reject before source reads. This is a source-directed
+read sequence, not a new atomic snapshot guarantee.
+These APIs do not yet persist origin/XID/role source keys or remote identity
+pins, and do not complete the `XREG-Federation` proxy workflow.
 Cancellation already requested at resolver entry prevents provider acquisition.
 If acquisition returns a lease after cancellation, the resolver disposes that
 lease before propagating cancellation. A disposal failure is retained under

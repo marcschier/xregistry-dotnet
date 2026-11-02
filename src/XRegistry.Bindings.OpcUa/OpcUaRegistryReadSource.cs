@@ -195,6 +195,54 @@ public sealed class OpcUaRegistryReadSource : IFederationReadSource
         ResolveExternalTargetCoreAsync(identity, trustedProviderResolver, isSupportedSpecVersion, role, null,
             cancellationToken);
 
+    /// <summary>Reads a source Resource's origin and reference, then acquires only its independently approved provider.</summary>
+    public async ValueTask<OpcUaResolvedExternalResource> ResolveExternalResourceAsync(
+        string sourceXid, NodeId originDataType, OpcUaRegistryOrigin trustedOrigin,
+        OpcUaOriginProviderResolver trustedProviderResolver, Func<string, bool> isSupportedSpecVersion,
+        OpcUaExternalTargetRole role, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(trustedOrigin);
+        ArgumentNullException.ThrowIfNull(trustedProviderResolver);
+        ArgumentNullException.ThrowIfNull(isSupportedSpecVersion);
+        if (originDataType.IsNull)
+        {
+            throw new ArgumentException("The expected RegistryOriginDataType is required.", nameof(originDataType));
+        }
+        if (role is not (OpcUaExternalTargetRole.LogicalResource or OpcUaExternalTargetRole.ExactVersion))
+        {
+            throw new ArgumentOutOfRangeException(nameof(role));
+        }
+        var request = new FederationReadRequest(FederationOperation.Entity, sourceXid);
+        var parts = ParseParts(request.Target);
+        if (parts.Length is not (4 or 6) || parts.Length == 6 && parts[4] != "versions" ||
+            (role == OpcUaExternalTargetRole.LogicalResource) != (parts.Length == 4))
+        {
+            throw new FederationException(FederationErrorCode.InvalidPackage,
+                "The source XID does not identify the declared logical Resource or exact Version role.");
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        var (groupNode, binding) = await ResolveResourceParentAsync(parts, cancellationToken).ConfigureAwait(false);
+        var value = await _reader.ReadOriginRegistryAsync(groupNode, XidOf(parts[..2]), parts[2], parts[3],
+            binding.ResourceType, originDataType, cancellationToken).ConfigureAwait(false);
+        var origin = await OpcUaRegistryOrigin.CaptureAsync(value, _reader.Session, cancellationToken)
+            .ConfigureAwait(false);
+        if (!origin.Equals(trustedOrigin))
+        {
+            throw new FederationException(FederationErrorCode.PolicyDenied,
+                "The source Resource origin does not match the independent provider binding.");
+        }
+        var identity = await _reader.ReadExternalNodeIdAsync(groupNode, XidOf(parts[..2]), parts[2], parts[3],
+            binding.ResourceType, parts.Length == 6 ? parts[5] : null, binding.ResourceVersionsType,
+            cancellationToken).ConfigureAwait(false);
+        if (identity is null)
+        {
+            throw new FederationException(FederationErrorCode.NotFound,
+                "The selected source Resource or Version has no ExternalReference.");
+        }
+        return await ResolveOriginTargetAsync(origin, trustedOrigin, identity, trustedProviderResolver,
+            isSupportedSpecVersion, role, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Admits a captured origin against independent configuration before acquiring its target provider.</summary>
     public static ValueTask<OpcUaResolvedExternalResource> ResolveOriginTargetAsync(
         OpcUaRegistryOrigin origin, OpcUaRegistryOrigin trustedOrigin, OpcUaExternalNodeId identity,

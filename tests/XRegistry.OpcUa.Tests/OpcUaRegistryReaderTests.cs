@@ -1588,6 +1588,172 @@ public class OpcUaRegistryReaderTests
     }
 
     [Test]
+    [Arguments(false, false)]
+    [Arguments(false, true)]
+    [Arguments(true, false)]
+    [Arguments(true, true)]
+    public async Task SourceDirectedFederationReadsLogicalOriginAndSelectedReferenceBeforeProvider(
+        bool exactVersion, bool stableOrigin)
+    {
+        var (session, source) = await OpenExternalReferenceSource();
+        var expected = session.ExternalNodeIdMappings[session.ExpandedNodeIds[
+            exactVersion ? "version:ExternalReference" : "logical:ExternalReference"]];
+        var root = new ExpandedNodeId(new NodeId("RemoteRegistry", 2), null, 2u);
+        var trustedOrigin = stableOrigin ? OpcUaRegistryOrigin.Stable("urn:approved-origin") :
+            OpcUaRegistryOrigin.Application(new(expected.ServerApplicationUri, "urn:origin:root",
+                IdType.String, "RemoteRegistry"));
+        AddSourceOrigin(session, stableOrigin
+            ? new("urn:approved-origin", "", ExpandedNodeId.Null)
+            : new("", expected.ServerApplicationUri, root));
+        session.ExternalNodeIdMappings[root] = trustedOrigin.RegistryRoot ??
+            new(expected.ServerApplicationUri, "urn:origin:root", IdType.String, "RemoteRegistry");
+        var failure = new FederationException(FederationErrorCode.Unavailable, "Provider intentionally unavailable.");
+        OpcUaRegistryOrigin? receivedOrigin = null;
+        OpcUaExternalNodeId? receivedTarget = null;
+        var calls = 0;
+        var xid = "/teams/team-a/schemas/schema-a" + (exactVersion ? "/versions/v1" : "");
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await source.ResolveExternalResourceAsync(xid, new NodeId("RegistryOriginDataType", 1),
+                trustedOrigin, (origin, target, _) =>
+                {
+                    calls++;
+                    receivedOrigin = origin;
+                    receivedTarget = target;
+                    return ValueTask.FromException<IOpcUaTrustedProviderLease>(failure);
+                }, _ => true, exactVersion ? OpcUaExternalTargetRole.ExactVersion :
+                    OpcUaExternalTargetRole.LogicalResource));
+
+        await Assert.That(ReferenceEquals(error, failure)).IsTrue();
+        await Assert.That(calls).IsEqualTo(1);
+        await Assert.That(ReferenceEquals(receivedOrigin, trustedOrigin)).IsTrue();
+        await Assert.That(ReferenceEquals(receivedTarget, expected)).IsTrue();
+        await Assert.That(session.OriginReads.Single().Variable).IsEqualTo(new NodeId("logical:OriginRegistry", 1));
+        await Assert.That(session.ExpandedNodeIdReads.Single()).IsEqualTo(
+            new NodeId(exactVersion ? "version:ExternalReference" : "logical:ExternalReference", 1));
+        if (!exactVersion)
+        {
+            await Assert.That(session.BrowsedNodes.Contains(VersionsNode)).IsFalse();
+            await Assert.That(session.BrowsedNodes.Contains(DefaultVersionNode)).IsFalse();
+        }
+    }
+
+    [Test]
+    [Arguments("absent")]
+    [Arguments("mixed")]
+    [Arguments("unapproved")]
+    public async Task SourceDirectedFederationRejectsOriginBeforeReferenceReadOrProviderSelection(string state)
+    {
+        var (session, source) = await OpenExternalReferenceSource();
+        if (state != "absent")
+        {
+            AddSourceOrigin(session, new("urn:source-origin", state == "mixed" ? "urn:server" : "",
+                ExpandedNodeId.Null));
+        }
+        var calls = 0;
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await source.ResolveExternalResourceAsync("/teams/team-a/schemas/schema-a",
+                new NodeId("RegistryOriginDataType", 1), OpcUaRegistryOrigin.Stable("urn:approved-origin"),
+                (_, _, _) =>
+                {
+                    calls++;
+                    throw new InvalidOperationException("The rejected source origin acquired a provider.");
+                }, _ => true, OpcUaExternalTargetRole.LogicalResource));
+
+        await Assert.That(error!.Code).IsEqualTo(state == "unapproved" ? FederationErrorCode.PolicyDenied :
+            FederationErrorCode.InvalidPackage);
+        await Assert.That(calls).IsEqualTo(0);
+        await Assert.That(session.ExpandedNodeIdReads.Count).IsEqualTo(0);
+        await Assert.That(session.BrowsedNodes.Contains(DefaultVersionNode)).IsFalse();
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task SourceDirectedFederationDoesNotSubstituteAnotherRoleWhenSelectedReferenceIsAbsent(
+        bool exactVersion)
+    {
+        var (session, source) = await OpenExternalReferenceSource();
+        AddSourceOrigin(session, new("urn:approved-origin", "", ExpandedNodeId.Null));
+        var selected = exactVersion ? DefaultVersionNode : LogicalResourceNode;
+        session.BrowsePages[selected] = new([new(session.BrowsePages[selected].Peek().References
+            .Where(reference => reference.BrowseName.Name != "ExternalReference").ToArray())]);
+        var calls = 0;
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await source.ResolveExternalResourceAsync(
+                "/teams/team-a/schemas/schema-a" + (exactVersion ? "/versions/v1" : ""),
+                new NodeId("RegistryOriginDataType", 1), OpcUaRegistryOrigin.Stable("urn:approved-origin"),
+                (_, _, _) =>
+                {
+                    calls++;
+                    throw new InvalidOperationException("The absent reference selected a provider.");
+                }, _ => true, exactVersion ? OpcUaExternalTargetRole.ExactVersion :
+                    OpcUaExternalTargetRole.LogicalResource));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.NotFound);
+        await Assert.That(session.ExpandedNodeIdReads.Count).IsEqualTo(0);
+        await Assert.That(calls).IsEqualTo(0);
+        if (!exactVersion)
+        {
+            await Assert.That(session.BrowsedNodes.Contains(DefaultVersionNode)).IsFalse();
+        }
+    }
+
+    [Test]
+    [Arguments("cancelled")]
+    [Arguments("role")]
+    [Arguments("source-role")]
+    public async Task SourceDirectedFederationRejectsCancelledOrInvalidRequestsBeforeSourceReads(string state)
+    {
+        var (session, source) = await OpenExternalReferenceSource();
+        var before = session.BrowsedNodes.Count;
+        var calls = 0;
+        using var cancellation = new CancellationTokenSource();
+        if (state == "cancelled")
+        {
+            cancellation.Cancel();
+        }
+        ValueTask<OpcUaResolvedExternalResource> Resolve() => source.ResolveExternalResourceAsync(
+            "/teams/team-a/schemas/schema-a", new NodeId("RegistryOriginDataType", 1),
+            OpcUaRegistryOrigin.Stable("urn:approved"), (_, _, _) =>
+            {
+                calls++;
+                throw new InvalidOperationException("The rejected source request acquired a provider.");
+            }, _ => true, state == "role" ? (OpcUaExternalTargetRole)99 :
+                state == "source-role" ? OpcUaExternalTargetRole.ExactVersion : OpcUaExternalTargetRole.LogicalResource,
+            cancellation.Token);
+
+        if (state == "cancelled")
+        {
+            var error = await Assert.ThrowsAsync<OperationCanceledException>(async () => await Resolve());
+            await Assert.That(error!.CancellationToken).IsEqualTo(cancellation.Token);
+        }
+        else if (state == "role")
+        {
+            await Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () => await Resolve());
+        }
+        else
+        {
+            var error = await Assert.ThrowsAsync<FederationException>(async () => await Resolve());
+            await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        }
+        await Assert.That(session.BrowsedNodes.Count).IsEqualTo(before);
+        await Assert.That(session.OriginReads.Count).IsEqualTo(0);
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    private static void AddSourceOrigin(FakeSession session, OpcUaRegistryOriginValue value)
+    {
+        session.OriginValue = value;
+        session.BrowsePages[LogicalResourceNode] = new([new([
+            .. session.BrowsePages[LogicalResourceNode].Peek().References,
+            VariableRef("OriginRegistry", "logical")
+        ])]);
+    }
+
+    [Test]
     [Arguments(false)]
     [Arguments(true)]
     public async Task OriginRegistryIsReadFromLogicalResourceWithoutSelectingItsDefaultVersion(bool stable)
@@ -2960,8 +3126,12 @@ public class OpcUaRegistryReaderTests
             return new(OriginValue ?? throw new InvalidOperationException("No origin fixture supplied."));
         }
 
-        public ValueTask<ExpandedNodeId> ReadExpandedNodeIdAsync(NodeId variable, CancellationToken cancellationToken) =>
-            new(ExpandedNodeIds[variable.IdentifierAsString]);
+        public List<NodeId> ExpandedNodeIdReads { get; } = [];
+        public ValueTask<ExpandedNodeId> ReadExpandedNodeIdAsync(NodeId variable, CancellationToken cancellationToken)
+        {
+            ExpandedNodeIdReads.Add(variable);
+            return new(ExpandedNodeIds[variable.IdentifierAsString]);
+        }
 
         public ValueTask<OpcUaExternalNodeId> MapExternalNodeIdAsync(ExpandedNodeId nodeId,
             CancellationToken cancellationToken) => new(ExternalNodeIdMappings[nodeId]);
