@@ -688,6 +688,11 @@ public static partial class ApiOperationDocumentResolver
                     var bodyFailure = ValidateOpenApiRequestBodyDeclaration(entry.Value, entryPath, format, cancellationToken);
                     if (bodyFailure is not null) { return bodyFailure; }
                 }
+                if (!swagger && collection.Name == "parameters")
+                {
+                    var parameterFailure = ValidateOpenApiParameterDeclaration(entry.Value, entryPath, format, cancellationToken);
+                    if (parameterFailure is not null) { return parameterFailure; }
+                }
             }
         }
         return null;
@@ -895,6 +900,11 @@ public static partial class ApiOperationDocumentResolver
 
         var serverFailure = ValidateOpenApiServers(pathItem, sourcePointer, references.Format, cancellationToken);
         if (serverFailure is not null) { return PathItemResolution.Failed(serverFailure); }
+        var parameterFailure = ValidateOpenApiParameters(pathItem, sourcePointer, references.Format, cancellationToken);
+        if (parameterFailure is not null) { return PathItemResolution.Failed(parameterFailure); }
+        parameterFailure = await ValidateEffectiveOpenApiParametersAsync(pathItem, source, sourcePointer,
+            references, cancellationToken).ConfigureAwait(false);
+        if (parameterFailure is not null) { return PathItemResolution.Failed(parameterFailure); }
         var operations = new Dictionary<string, OperationLocation>(StringComparer.Ordinal);
         if (pathItem.TryGetProperty("$ref", out var referenceValue))
         {
@@ -1112,6 +1122,11 @@ public static partial class ApiOperationDocumentResolver
                     "The selected inline HTTP operation does not exist; pointers do not traverse references.",
                     pathPointer);
             }
+            var pathParameterFailure = ValidateOpenApiParameters(pathItem, pathPointer, format, cancellationToken);
+            if (pathParameterFailure is not null) { return pathParameterFailure; }
+            pathParameterFailure = await ValidateEffectiveOpenApiParametersAsync(pathItem, references.Root, pathPointer,
+                references, cancellationToken).ConfigureAwait(false);
+            if (pathParameterFailure is not null) { return pathParameterFailure; }
             pathPointer += "/" + tokens[methodIndex];
             if (operation.ValueKind != JsonValueKind.Object || operation.TryGetProperty("$ref", out _))
             {

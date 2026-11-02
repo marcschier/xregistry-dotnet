@@ -628,6 +628,26 @@ request bodies on every supported method; Swagger's non-native `requestBody`
 field remains uninterpreted. Selection preserves authored declarations without
 injecting defaults or replacing references. These checks do not validate nested
 encodings, evaluate body schemas or send requests.
+OpenAPI operation and Path Item `parameters` must be arrays of Parameter or
+Reference Objects. Root reusable parameters receive the same declaration
+checks. Inline parameters require string names and native locations; path
+parameters require `required: true`. Metadata types and location-specific
+styles are checked, and `allowEmptyValue` is valid only for query parameters.
+Schema/content exclusivity, a single concrete content media type and examples
+use the shared Header Object serialization checks, including OpenAPI 3.1
+boolean schemas. Defaults are not injected.
+Reached parameter references and nested examples resolve through bounded
+chains with containing-document bases and shared acquisition caches. Denied
+or unavailable dependencies, malformed targets, cycles and depth exhaustion
+prevent partial selection. Duplicate name/location pairs are rejected within
+each list, including resolved targets; names remain case-sensitive and an
+operation may redefine a Path Item parameter. Header parameters named
+`Accept`, `Content-Type` or `Authorization` are ignored case-insensitively,
+without acquiring nested examples. Unused reusable references remain inactive,
+and operation pointers do not traverse referenced Path Items. Selection retains
+authored parameter declarations. Complete path-template correspondence,
+effective cross-level parameter merging, schema evaluation and serialization
+compatibility remain unverified; Swagger parameter semantics are unchanged.
 Present operation `responses` declarations must be nonempty response maps.
 Keys are `default`, HTTP status codes from 100 through 599, or, for OpenAPI,
 the uppercase ranges `1XX` through `5XX`. Specification extensions remain
@@ -682,8 +702,8 @@ or unavailable dependencies and malformed targets prevent partial selection.
 Callback ancestors and unrelated operations retain the named-versus-pointer
 traversal rules above. Unused reusable example references remain inactive;
 selection retains authored references and does not retrieve `externalValue`
-addresses. Parameter examples, format-specific response-presence requirements,
-nested encoding validation and schema evaluation remain unverified.
+addresses. Format-specific response-presence requirements, nested encoding
+validation and schema evaluation remain unverified.
 OpenAPI response headers and root reusable headers require Header or Reference
 Objects. Inline headers require exactly one `schema` or `content`; a content
 map contains one concrete media type and receives the shared Media Type Object

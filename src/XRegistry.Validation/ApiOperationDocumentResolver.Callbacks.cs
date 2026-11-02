@@ -330,6 +330,8 @@ public static partial class ApiOperationDocumentResolver
             var failure = ValidateOpenApiRequestBodyDeclaration(body, pointer + "/requestBody", format, cancellationToken);
             if (failure is not null) { return failure; }
         }
+        var parameterFailure = ValidateOpenApiParameters(operation, pointer, format, cancellationToken);
+        if (parameterFailure is not null) { return parameterFailure; }
         var responseFailure = ValidateHttpResponses(operation, pointer, format, cancellationToken);
         if (responseFailure is not null) { return responseFailure; }
         var securityFailure = ValidateHttpSecurityShapes(operation, pointer, cancellationToken);
@@ -580,23 +582,32 @@ public static partial class ApiOperationDocumentResolver
             };
             if (!valid) { return InvalidHeader("Header metadata must have its declared type and header serialization style.", pointer + "/" + field); }
         }
-        var hasSchema = header.TryGetProperty("schema", out var schema);
-        var hasContent = header.TryGetProperty("content", out var content);
+        return ValidateOpenApiParameterSerialization(header, pointer, format, "Header", cancellationToken);
+
+        static ApiOperationResolutionResult InvalidHeader(string message, string path) =>
+            Failure(ApiOperationResolutionStatus.Invalid, "document.header", message, path);
+    }
+
+    private static ApiOperationResolutionResult? ValidateOpenApiParameterSerialization(
+        JsonElement declaration, string pointer, string format, string kind, CancellationToken cancellationToken)
+    {
+        var hasSchema = declaration.TryGetProperty("schema", out var schema);
+        var hasContent = declaration.TryGetProperty("content", out var content);
         if (!hasSchema && !hasContent)
         {
-            return InvalidHeader("A Header Object requires schema or content.", pointer + "/schema");
+            return InvalidSerialization($"A {kind} Object requires schema or content.", pointer + "/schema");
         }
         if (hasContent)
         {
             if (hasSchema || content.ValueKind != JsonValueKind.Object || content.EnumerateObject().Count() != 1)
             {
-                return InvalidHeader("Header content must contain one media type and is exclusive of schema.", pointer + "/content");
+                return InvalidSerialization($"{kind} content must contain one media type and is exclusive of schema.", pointer + "/content");
             }
             foreach (var media in content.EnumerateObject())
             {
                 if (!IsResponseMediaRange(media.Name, allowWildcards: false))
                 {
-                    return InvalidHeader("A header content key must be a concrete media type.", pointer + "/content/" + Escape(media.Name));
+                    return InvalidSerialization($"A {kind} content key must be a concrete media type.", pointer + "/content/" + Escape(media.Name));
                 }
             }
             var failure = ValidateOpenApiMediaDeclarations(content, pointer + "/content", format, cancellationToken);
@@ -605,13 +616,13 @@ public static partial class ApiOperationDocumentResolver
         else if (schema.ValueKind != JsonValueKind.Object &&
             !(format == "OpenAPI/3.1" && schema.ValueKind is JsonValueKind.True or JsonValueKind.False))
         {
-            return InvalidHeader("A header schema must be a Schema Object or, in OpenAPI 3.1, a boolean.", pointer + "/schema");
+            return InvalidSerialization($"A {kind} schema must be a Schema Object or, in OpenAPI 3.1, a boolean.", pointer + "/schema");
         }
-        if (header.TryGetProperty("examples", out var examples))
+        if (declaration.TryGetProperty("examples", out var examples))
         {
-            if (examples.ValueKind != JsonValueKind.Object || header.TryGetProperty("example", out _))
+            if (examples.ValueKind != JsonValueKind.Object || declaration.TryGetProperty("example", out _))
             {
-                return InvalidHeader("Header examples must be an object and are exclusive of example.", pointer + "/examples");
+                return InvalidSerialization($"{kind} examples must be an object and are exclusive of example.", pointer + "/examples");
             }
             foreach (var example in examples.EnumerateObject())
             {
@@ -623,8 +634,143 @@ public static partial class ApiOperationDocumentResolver
         }
         return null;
 
-        static ApiOperationResolutionResult InvalidHeader(string message, string path) =>
-            Failure(ApiOperationResolutionStatus.Invalid, "document.header", message, path);
+        ApiOperationResolutionResult InvalidSerialization(string message, string path) =>
+            Failure(ApiOperationResolutionStatus.Invalid, kind == "Header" ? "document.header" : "document.parameter", message, path);
+    }
+
+    private static bool IsIgnoredOpenApiHeaderParameter(JsonElement parameter) =>
+        parameter.TryGetProperty("in", out var location) && location.ValueKind == JsonValueKind.String &&
+        location.GetString() == "header" && parameter.TryGetProperty("name", out var name) &&
+        name.ValueKind == JsonValueKind.String &&
+        (string.Equals(name.GetString(), "Accept", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(name.GetString(), "Content-Type", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(name.GetString(), "Authorization", StringComparison.OrdinalIgnoreCase));
+
+    private static ApiOperationResolutionResult? ValidateOpenApiParameterDeclaration(
+        JsonElement parameter, string pointer, string format, CancellationToken cancellationToken)
+    {
+        if (parameter.ValueKind != JsonValueKind.Object)
+        {
+            return InvalidParameter("A parameter declaration must be a Parameter or Reference Object.", pointer);
+        }
+        if (parameter.TryGetProperty("$ref", out var reference))
+        {
+            if (reference.ValueKind != JsonValueKind.String || !IsHttpMetadataUriReference(reference.GetString()!))
+            {
+                return InvalidParameter("A parameter reference requires a string URI reference.", pointer + "/$ref");
+            }
+            if (format != "OpenAPI/3.1") { return null; }
+            foreach (var field in new[] { "summary", "description" })
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (parameter.TryGetProperty(field, out var value) && value.ValueKind != JsonValueKind.String)
+                {
+                    return InvalidParameter("Reference Object metadata must be strings.", pointer + "/" + field);
+                }
+            }
+            return null;
+        }
+        if (!parameter.TryGetProperty("name", out var name) || name.ValueKind != JsonValueKind.String)
+        {
+            return InvalidParameter("A Parameter Object requires a string name.", pointer + "/name");
+        }
+        if (!parameter.TryGetProperty("in", out var location) || location.ValueKind != JsonValueKind.String ||
+            location.GetString() is not ("query" or "path" or "header" or "cookie"))
+        {
+            return InvalidParameter("A Parameter Object requires a native parameter location.", pointer + "/in");
+        }
+        if (IsIgnoredOpenApiHeaderParameter(parameter)) { return null; }
+        var nativeLocation = location.GetString()!;
+        foreach (var field in new[] { "description", "required", "deprecated", "explode", "allowEmptyValue", "allowReserved", "style" })
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!parameter.TryGetProperty(field, out var value)) { continue; }
+            var valid = field switch
+            {
+                "description" => value.ValueKind == JsonValueKind.String,
+                "style" => value.ValueKind == JsonValueKind.String && nativeLocation switch
+                {
+                    "path" => value.GetString() is "matrix" or "label" or "simple",
+                    "query" => value.GetString() is "form" or "spaceDelimited" or "pipeDelimited" or "deepObject",
+                    "header" => value.GetString() == "simple",
+                    _ => value.GetString() == "form"
+                },
+                _ => value.ValueKind is JsonValueKind.True or JsonValueKind.False
+            };
+            if (!valid || field == "allowEmptyValue" && nativeLocation != "query")
+            {
+                return InvalidParameter("Parameter metadata must have its declared native type and applicable serialization style.", pointer + "/" + field);
+            }
+        }
+        if (nativeLocation == "path" && (!parameter.TryGetProperty("required", out var required) ||
+            required.ValueKind != JsonValueKind.True))
+        {
+            return InvalidParameter("A path parameter requires required to be true.", pointer + "/required");
+        }
+        return ValidateOpenApiParameterSerialization(parameter, pointer, format, "Parameter", cancellationToken);
+
+        static ApiOperationResolutionResult InvalidParameter(string message, string path) =>
+            Failure(ApiOperationResolutionStatus.Invalid, "document.parameter", message, path);
+    }
+
+    private static ApiOperationResolutionResult? ValidateOpenApiParameters(
+        JsonElement owner, string pointer, string format, CancellationToken cancellationToken)
+    {
+        if (format == "Swagger/2.0" || !owner.TryGetProperty("parameters", out var parameters)) { return null; }
+        if (parameters.ValueKind != JsonValueKind.Array)
+        {
+            return Failure(ApiOperationResolutionStatus.Invalid, "document.parameters",
+                "Parameter declarations must be an array.", pointer + "/parameters");
+        }
+        var names = new HashSet<(string, string)>();
+        var index = 0;
+        foreach (var parameter in parameters.EnumerateArray())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var path = pointer + "/parameters/" + index;
+            var failure = ValidateOpenApiParameterDeclaration(parameter, path, format, cancellationToken);
+            if (failure is not null) { return failure; }
+            if (!parameter.TryGetProperty("$ref", out _) && !IsIgnoredOpenApiHeaderParameter(parameter) &&
+                !names.Add((parameter.GetProperty("in").GetString()!, parameter.GetProperty("name").GetString()!)))
+            {
+                return DuplicateParameter(path);
+            }
+            index++;
+        }
+        return null;
+    }
+
+    private static ApiOperationResolutionResult DuplicateParameter(string path) =>
+        Failure(ApiOperationResolutionStatus.Invalid, "document.parameters",
+            "A parameter list cannot repeat the same name and location.", path);
+
+    private static async ValueTask<ApiOperationResolutionResult?> ValidateEffectiveOpenApiParametersAsync(
+        JsonElement owner, ReferencedDocument source, string pointer, ReferenceContext references, CancellationToken cancellationToken)
+    {
+        if (references.Format == "Swagger/2.0" || !owner.TryGetProperty("parameters", out var parameters)) { return null; }
+        var names = new HashSet<(string, string)>();
+        var index = 0;
+        foreach (var parameter in parameters.EnumerateArray())
+        {
+            var path = pointer + "/parameters/" + index;
+            var resolution = await ResolveHttpDeclarationAsync(new ReferenceTarget(source, parameter, path), references,
+                ValidateOpenApiParameterDeclaration, "parameter", cancellationToken).ConfigureAwait(false);
+            if (resolution.Failure is not null) { return resolution.Failure; }
+            var target = resolution.Target!;
+            if (!IsIgnoredOpenApiHeaderParameter(target.Value))
+            {
+                if (!names.Add((target.Value.GetProperty("in").GetString()!, target.Value.GetProperty("name").GetString()!)))
+                {
+                    return DuplicateParameter(path);
+                }
+                var failure = await ValidateEffectiveOpenApiExamplesAsync(target, references, cancellationToken).ConfigureAwait(false);
+                if (failure is not null) { return failure; }
+                failure = await ValidateEffectiveOpenApiContentAsync(target, references, cancellationToken).ConfigureAwait(false);
+                if (failure is not null) { return failure; }
+            }
+            index++;
+        }
+        return null;
     }
 
     private static ApiOperationResolutionResult? ValidateOpenApiLinkDeclaration(
@@ -749,6 +895,9 @@ public static partial class ApiOperationDocumentResolver
         JsonElement operation, ReferencedDocument source, string pointer, string? httpMethod, ReferenceContext references,
         CancellationToken cancellationToken)
     {
+        var parameterFailure = await ValidateEffectiveOpenApiParametersAsync(operation, source, pointer,
+            references, cancellationToken).ConfigureAwait(false);
+        if (parameterFailure is not null) { return parameterFailure; }
         if (SupportsOpenApiRequestBody(references.Format, httpMethod) && operation.TryGetProperty("requestBody", out var body))
         {
             var resolution = await ResolveHttpDeclarationAsync(
