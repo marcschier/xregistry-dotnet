@@ -271,6 +271,7 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
         }
         catch
         {
+            monitoredItem.Notification += OnNotification;
             Volatile.Write(ref stopped, 0);
             throw;
         }

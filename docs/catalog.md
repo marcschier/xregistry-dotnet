@@ -176,6 +176,11 @@ Both native deprecation transitions map to Core's
 `io.xregistry.<entity>.deprecated` action. Decoded events retain the concrete
 `EventType` NodeId, so a consumer can distinguish setting or changing deprecation
 from removing it without inventing a Core `undeprecated` action.
+If Subscription removal throws, the wrapper restores its notification handler
+and permits another stop attempt. The real-server test verifies that repeated
+pre-cancelled attempts retain live delivery, that a later stop removes the
+Subscription, and that repeated stop/disposal does not recreate it. This does
+not establish recovery from an interrupted server deletion or connection loss.
 
 A two-server test resolves a caller-authorized metadata-only Resource to an
 exact target Version, reads its FileType bytes, and verifies the selected XID,

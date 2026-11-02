@@ -20,7 +20,9 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
     private static readonly byte[] ExpectedVersionDocument = [0x00, 0x7f, 0x80, 0xff];
 
     [Test]
-    public async Task SubscriptionCreatesAndRemovesAnEventMonitoredItemOnARealServer()
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task SubscriptionCreatesAndRemovesAnEventMonitoredItemOnARealServer(bool cancelStop)
     {
         await using var server = await InProcessRegistryServer.StartAsync();
         var telemetry = DefaultTelemetry.Create(static _ => { });
@@ -80,18 +82,34 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
 
         await Assert.That(connection.SpecVersion).IsEqualTo("1.0");
         await Assert.That(connection.Session.SubscriptionCount).IsEqualTo(1);
+        if (cancelStop)
+        {
+            using var cancelled = new CancellationTokenSource();
+            await cancelled.CancelAsync();
+            for (var attempt = 0; attempt < 2; attempt++)
+            {
+                await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+                    await subscription.StopAsync(cancelled.Token));
+                await Assert.That(connection.Session.SubscriptionCount).IsEqualTo(1);
+            }
+        }
         var nativeSubscription = connection.Session.Subscriptions.Single();
         await Assert.That(nativeSubscription.Created).IsTrue();
         await Assert.That(nativeSubscription.CurrentPublishingEnabled).IsTrue();
         var nativeMonitoredItem = nativeSubscription.MonitoredItems.Single();
         await Assert.That(nativeMonitoredItem.Status.Created).IsTrue();
         var received = new TaskCompletionSource<OpcUaRegistryEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
-        subscription.EventReceived += (_, args) => received.TrySetResult(args.Value);
+        var delivered = 0;
+        subscription.EventReceived += (_, args) =>
+        {
+            Interlocked.Increment(ref delivered);
+            received.TrySetResult(args.Value);
+        };
         subscription.NotificationFailed += (_, error) => received.TrySetException(error);
         var time = new DateTimeOffset(2026, 9, 15, 12, 30, 45, TimeSpan.Zero);
         server.ReportRegistryCreatedEvent(time);
 
-        var notification = await received.Task.WaitAsync(cancellation.Token);
+        var notification = await received.Task.WaitAsync(TimeSpan.FromSeconds(5), cancellation.Token);
 
         await Assert.That(notification.Type).IsEqualTo("io.xregistry.registry.created");
         await Assert.That(notification.EventType)
@@ -108,6 +126,11 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
         await Assert.That(notification.CorrelationId).IsNull();
         await subscription.StopAsync(cancellation.Token);
         await Assert.That(connection.Session.SubscriptionCount).IsEqualTo(0);
+        await Assert.That(nativeSubscription.Created).IsFalse();
+        await subscription.StopAsync(cancellation.Token);
+        await subscription.DisposeAsync();
+        await Assert.That(connection.Session.SubscriptionCount).IsEqualTo(0);
+        await Assert.That(Volatile.Read(ref delivered)).IsEqualTo(1);
     }
 
     [Test]

@@ -139347,7 +139347,7 @@
       "text": "When finished, the client SHOULD call `DeleteMonitoredItems` and `DeleteSubscriptions`. Closing the Session performs standard OPC UA cleanup.",
       "review": {
         "status": "reviewed",
-        "note": "The real-server happy path removes the owned Subscription through the SDK. Cancellation, removal failure and repeat-stop lifetime behavior still need direct evidence before the complete recommended cleanup workflow is marked implemented.",
+        "note": "The real-server workflow now proves that two pre-cancelled stop attempts preserve publishing and exactly one decoded notification, then a later stop deletes the server Subscription and repeated stop/disposal leaves it removed. Failed removal restores the notification handler before reopening stop admission. Cancellation after SDK deletion starts, transport/service failure and concurrent stop lifetime behavior still need direct evidence; complete cleanup remains pending.",
         "roles": [
           "client"
         ]
