@@ -11,6 +11,68 @@ namespace XRegistry.Validation.Tests;
 public class ApiOperationReferenceTests
 {
     [Test]
+    public async Task OpenApi31DialectDeclarationRequiresAnAbsoluteUriBeforeSelectionOrAcquisition()
+    {
+        foreach (var declaration in new[]
+        {
+            "null", "false", "42", "[]", "{}", "\"\"", "\"relative/dialect\"", "\"/dialect\"",
+            "\"//schemas.test/dialect\"", "\"#dialect\"", "\"https://schemas.test/bad space\"",
+            "\"https://schemas.test/%zz\"", "\"https://schemas.test/dialect#bad%\"",
+            "\"https://schemas.test/dialect\\n\"", "\"https://schemas.test/dialect#one#two\""
+        })
+        {
+            foreach (var selector in new[] { "operations/Target", "/paths/~1source/get" })
+            {
+                var document = JsonNode.Parse("""
+                    {"openapi":"3.1.1","paths":{"/source":{"get":{"operationId":"Target"}}},
+                    "components":{"securitySchemes":{"Unused":{"$ref":"https://must-not-load.test/security"}}}}
+                    """)!;
+                document["jsonSchemaDialect"] = JsonNode.Parse(declaration);
+                var result = await ApiOperationDocumentResolver.ResolveAsync("OpenAPI/3.1", "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                    documentUri: new Uri("https://allowed.test/api"),
+                    resolveReference: (_, _) => throw new InvalidOperationException("Dialect validation precedes acquisition."));
+                await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.schema_dialect");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo("$/jsonSchemaDialect");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+        }
+    }
+
+    [Test]
+    public async Task OpenApi31DialectDeclarationsRemainMetadataWithoutRetrievalOrSchemaEvaluation()
+    {
+        foreach (var dialect in new string?[]
+        {
+            null, "https://spec.openapis.org/oas/3.1/dialect/base",
+            "https://json-schema.org/draft/2020-12/schema",
+            "urn:vendor:dialect", "https://schemas.test/dialect?revision=2#meta",
+            "https://schemas.test/%E2%82%AC"
+        })
+        {
+            foreach (var selector in new[] { "operations/Target", "/paths/~1source/get" })
+            {
+                var document = JsonNode.Parse("""
+                    {"openapi":"3.1.1","paths":{"/source":{"get":{"operationId":"Target",
+                    "responses":{"200":{"description":"","content":{"application/json":{"schema":{
+                    "$schema":"urn:override:dialect","x-custom":{"$ref":"opaque-data"}}}}}}}}}}
+                    """)!;
+                if (dialect is not null) { document["jsonSchemaDialect"] = dialect; }
+                var result = await ApiOperationDocumentResolver.ResolveAsync("OpenAPI/3.1", "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                    resolveReference: (_, _) => throw new InvalidOperationException("Dialect URIs are not acquisitions."));
+                await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+                await Assert.That(JsonNode.DeepEquals(document["paths"]!["/source"]!["get"],
+                    JsonNode.Parse(result.Operation.GetRawText()))).IsTrue();
+                await Assert.That(ApiOperationDocumentResolver.Capabilities.SupportsApiDocumentValidation).IsFalse();
+            }
+        }
+    }
+
+    [Test]
     [Arguments("OpenAPI/3.0", "3.0.4")]
     [Arguments("OpenAPI/3.1", "3.1.1")]
     public async Task OpenApiCallbackMapTypeIsCheckedForNamedPointerAndLinkedOperations(string format, string version)

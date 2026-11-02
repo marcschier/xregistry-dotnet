@@ -975,6 +975,14 @@ description's operation-ID lookup. Admission neither evaluates callback
 expressions nor sends callback requests.
 Unused reusable Link references remain inactive. These checks do not qualify
 the complete linked description.
+For OpenAPI 3.1, an authored root `jsonSchemaDialect` must be a string
+containing a URI, not a relative URI reference. Invalid JSON types, relative
+values and malformed URI syntax report `Invalid document.schema_dialect` at
+`$/jsonSchemaDialect` before selection or dependency acquisition. Valid custom
+dialect URIs remain metadata and are not retrieved. An absent declaration does
+not add fields to the selected operation. This check neither evaluates schemas
+under that dialect nor changes a Schema Object's authored `$schema` override;
+complete API document validation remains unsupported.
 Root and reached HTTP operation `externalDocs` values must be objects with a
 string `url` and, when present, a string `description`. An External
 Documentation Object is not a Reference Object: a `$ref` alone cannot replace

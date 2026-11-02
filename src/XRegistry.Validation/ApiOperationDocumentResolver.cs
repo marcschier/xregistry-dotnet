@@ -523,6 +523,14 @@ public static partial class ApiOperationDocumentResolver
                 "The root swagger value must be '2.0'.", "$/swagger");
         }
 
+        if (format == "OpenAPI/3.1" && root.TryGetProperty("jsonSchemaDialect", out var dialect) &&
+            (dialect.ValueKind != JsonValueKind.String ||
+                !IsHttpMetadataUriReference(dialect.GetString()!) ||
+                !Uri.IsWellFormedUriString(dialect.GetString(), UriKind.Absolute)))
+        {
+            return Failure(ApiOperationResolutionStatus.Invalid, "document.schema_dialect",
+                "OpenAPI jsonSchemaDialect must be a string URI.", "$/jsonSchemaDialect");
+        }
         var infoFailure = ValidateHttpInfoDeclaration(root, format, cancellationToken);
         if (infoFailure is not null) { return infoFailure; }
         var documentationFailure = ValidateHttpDocumentationShapes(root, "$");
