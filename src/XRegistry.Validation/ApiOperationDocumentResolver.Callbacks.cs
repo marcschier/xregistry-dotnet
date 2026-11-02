@@ -207,6 +207,82 @@ public static partial class ApiOperationDocumentResolver
     private static ApiOperationResolutionResult InvalidOpenApiServer(string message, string pointer) =>
         Failure(ApiOperationResolutionStatus.Invalid, "document.servers", message, pointer);
 
+    private static ApiOperationResolutionResult? ValidateHttpInfoDeclaration(
+        JsonElement root, string format, CancellationToken cancellationToken)
+    {
+        if (!root.TryGetProperty("info", out var info)) { return null; }
+        if (info.ValueKind != JsonValueKind.Object)
+        {
+            return InvalidInfo("HTTP info must be an Info Object.", "$/info");
+        }
+        foreach (var field in new[] { "title", "version", "description", "termsOfService", "summary" })
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (field == "summary" && format != "OpenAPI/3.1") { continue; }
+            if (!info.TryGetProperty(field, out var value))
+            {
+                if (field is "title" or "version")
+                {
+                    return InvalidInfo("An Info Object requires string title and version fields.", "$/info/" + field);
+                }
+                continue;
+            }
+            if (value.ValueKind != JsonValueKind.String)
+            {
+                return InvalidInfo("An Info Object metadata field must be a string.", "$/info/" + field);
+            }
+            if (field == "termsOfService" && format != "Swagger/2.0" &&
+                !IsHttpMetadataUriReference(value.GetString()!))
+            {
+                return InvalidInfo("OpenAPI termsOfService must be a valid URI reference.", "$/info/" + field);
+            }
+        }
+        foreach (var name in new[] { "contact", "license" })
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!info.TryGetProperty(name, out var declaration)) { continue; }
+            var path = "$/info/" + name;
+            if (declaration.ValueKind != JsonValueKind.Object)
+            {
+                return InvalidInfo("Info contact and license declarations must be objects.", path);
+            }
+            foreach (var field in new[] { "name", "url", "email", "identifier" })
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (field == "email" && name != "contact" ||
+                    field == "identifier" && (name != "license" || format != "OpenAPI/3.1"))
+                {
+                    continue;
+                }
+                if (!declaration.TryGetProperty(field, out var value))
+                {
+                    if (name == "license" && field == "name")
+                    {
+                        return InvalidInfo("A License Object requires a string name.", path + "/name");
+                    }
+                    continue;
+                }
+                if (value.ValueKind != JsonValueKind.String)
+                {
+                    return InvalidInfo("A Contact or License Object metadata field must be a string.", path + "/" + field);
+                }
+                if (field == "url" && !IsHttpMetadataUriReference(value.GetString()!))
+                {
+                    return InvalidInfo("A Contact or License Object url must be a valid URI reference.", path + "/url");
+                }
+            }
+            if (name == "license" && format == "OpenAPI/3.1" &&
+                declaration.TryGetProperty("identifier", out _) && declaration.TryGetProperty("url", out _))
+            {
+                return InvalidInfo("OpenAPI 3.1 license identifier and url are mutually exclusive.", path + "/identifier");
+            }
+        }
+        return null;
+
+        static ApiOperationResolutionResult InvalidInfo(string message, string path) =>
+            Failure(ApiOperationResolutionStatus.Invalid, "document.info", message, path);
+    }
+
     private static ApiOperationResolutionResult? ValidateHttpOperationMetadata(
         JsonElement operation, string pointer, CancellationToken cancellationToken)
     {

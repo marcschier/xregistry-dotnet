@@ -11,6 +11,153 @@ namespace XRegistry.Validation.Tests;
 public class ApiOperationReferenceTests
 {
     [Test]
+    [Arguments("Swagger/2.0", "2.0")]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task HttpInfoDeclarationsRejectMalformedFieldsBeforeSelectionOrAcquisition(string format, string version)
+    {
+        var invalid = new List<(string Json, string Path)>
+        {
+            ("null", "$/info"), ("[]", "$/info"), ("{}", "$/info/title"),
+            ("""{"version":"1"}""", "$/info/title"),
+            ("""{"title":"API"}""", "$/info/version"),
+            ("""{"title":null,"version":"1"}""", "$/info/title"),
+            ("""{"title":"API","version":1}""", "$/info/version"),
+            ("""{"title":"API","version":"1","description":false}""", "$/info/description"),
+            ("""{"title":"API","version":"1","termsOfService":{}}""", "$/info/termsOfService"),
+            ("""{"title":"API","version":"1","contact":null}""", "$/info/contact"),
+            ("""{"title":"API","version":"1","contact":{"name":1}}""", "$/info/contact/name"),
+            ("""{"title":"API","version":"1","contact":{"url":false}}""", "$/info/contact/url"),
+            ("""{"title":"API","version":"1","contact":{"email":[]}}""", "$/info/contact/email"),
+            ("""{"title":"API","version":"1","license":[]}""", "$/info/license"),
+            ("""{"title":"API","version":"1","license":{}}""", "$/info/license/name"),
+            ("""{"title":"API","version":"1","license":{"name":null}}""", "$/info/license/name"),
+            ("""{"title":"API","version":"1","license":{"name":"L","url":0}}""", "$/info/license/url"),
+            ("""{"title":"API","version":"1","contact":{"url":"bad path"}}""", "$/info/contact/url"),
+            ("""{"title":"API","version":"1","license":{"name":"L","url":"/bad%XY"}}""", "$/info/license/url"),
+            ("""{"$ref":"https://not-acquired.test/info"}""", "$/info/title")
+        };
+        if (format != "Swagger/2.0")
+        {
+            invalid.Add(("""{"title":"API","version":"1","termsOfService":"bad path"}""", "$/info/termsOfService"));
+        }
+        if (format == "OpenAPI/3.1")
+        {
+            invalid.Add(("""{"title":"API","version":"1","summary":false}""", "$/info/summary"));
+            invalid.Add(("""{"title":"API","version":"1","license":{"name":"L","identifier":1}}""", "$/info/license/identifier"));
+            invalid.Add(("""{"title":"API","version":"1","license":{"name":"L","identifier":"MIT","url":"/license"}}""",
+                "$/info/license/identifier"));
+        }
+        foreach (var (json, diagnosticPath) in invalid)
+        {
+            foreach (var selector in new[] { "operations/Target", "operations/Missing", "/paths/~1items/get" })
+            {
+                var document = new JsonObject
+                {
+                    [format == "Swagger/2.0" ? "swagger" : "openapi"] = version,
+                    ["info"] = JsonNode.Parse(json),
+                    ["paths"] = JsonNode.Parse("""{"/items":{"get":{"operationId":"Target"}},"/remote":{"$ref":"https://allowed.test/path"}}""")
+                };
+                var calls = 0;
+                var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                    resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+                await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.info");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo(diagnosticPath);
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                await Assert.That(calls).IsEqualTo(0);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("Swagger/2.0", "2.0")]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task HttpInfoDeclarationsPreserveNativeVersionsExtensionsAndRelativeMetadata(string format, string version)
+    {
+        var infos = new List<string>
+        {
+            """{"title":"","version":""}""",
+            """{"title":"API","version":"not a semantic version","description":"","termsOfService":"","contact":{},"license":{"name":""}}""",
+            """{"title":"API","version":"2026/preview","contact":{"name":"","email":"support@example.test","url":"../support#contact"},"license":{"name":"L","url":"/licenses/%C3%A9"},"x-private":{"$ref":"https://not-acquired.test"}}""",
+            """{"title":"API","version":"1","contact":{"x-private":{"url":false}},"license":{"name":"L","x-private":{"identifier":false}}}"""
+        };
+        if (format == "OpenAPI/3.1")
+        {
+            infos.Add("""{"title":"API","version":"1","summary":"","license":{"name":"L","identifier":"MIT OR Apache-2.0"}}""");
+        }
+        else
+        {
+            infos.Add("""{"title":"API","version":"1","summary":false,"license":{"name":"L","identifier":false,"url":"/license"}}""");
+        }
+        if (format == "Swagger/2.0")
+        {
+            infos.Add("""{"title":"API","version":"1","termsOfService":"Plain prose rather than a URL."}""");
+        }
+        foreach (var info in infos)
+        {
+            var operation = JsonNode.Parse("""{"operationId":"Target","description":"authored"}""")!;
+            var document = new JsonObject
+            {
+                [format == "Swagger/2.0" ? "swagger" : "openapi"] = version,
+                ["info"] = JsonNode.Parse(info),
+                ["paths"] = new JsonObject { ["/items"] = new JsonObject { ["get"] = operation.DeepClone() } }
+            };
+            foreach (var selector in new[] { "operations/Target", "/paths/~1items/get" })
+            {
+                var calls = 0;
+                var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                    resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+                await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+                await Assert.That(JsonNode.DeepEquals(operation, JsonNode.Parse(result.Operation.GetRawText()))).IsTrue();
+                await Assert.That(calls).IsEqualTo(0);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("Swagger/2.0", "2.0")]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task HttpInfoAdmissionTracksEntryChangesWithoutValidatingReferenceFragmentsAsDocuments(string format, string version)
+    {
+        foreach (var valid in new[] { true, false, true })
+        {
+            var document = new JsonObject
+            {
+                [format == "Swagger/2.0" ? "swagger" : "openapi"] = version,
+                ["info"] = new JsonObject { ["title"] = "API", ["version"] = valid ? JsonValue.Create("1") : JsonValue.Create(1) },
+                ["paths"] = JsonNode.Parse("""{"/items":{"$ref":"https://allowed.test/path#/item"}}""")
+            };
+            var calls = 0;
+            var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+                resolveReference: (_, _) =>
+                {
+                    calls++;
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(
+                        """{"info":false,"item":{"get":{"operationId":"Target"}}}"""));
+                });
+            await Assert.That(result.Status).IsEqualTo(valid
+                ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+            await Assert.That(calls).IsEqualTo(valid ? 1 : 0);
+            if (valid) { await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("Target"); }
+            else
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.info");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo("$/info/version");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+        }
+    }
+
+    [Test]
     [Arguments("OpenAPI/3.0", "3.0.4")]
     [Arguments("OpenAPI/3.1", "3.1.1")]
     public async Task OpenApiServerTemplateChecksFollowReferencedCallbacksAndDefaultChanges(string format, string version)

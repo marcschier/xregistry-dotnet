@@ -519,6 +519,21 @@ to the releases known by this library. A nonempty hyphen suffix is accepted as
 in the publisher's document schemas; this check does not impose SemVer rules
 on `info.version`. Malformed root versions fail before dependency acquisition,
 including when selection uses a JSON Pointer.
+Present HTTP `info` declarations must be objects with string `title` and
+`version` fields. Optional descriptions and Terms of Service are strings;
+OpenAPI 3.1 also checks `summary`. Contact declarations are objects with string
+`name`, `url` and `email` fields when present. License declarations require a
+string `name`, accept an optional string `url`, and in OpenAPI 3.1 accept a
+string `identifier` mutually exclusive with `url`. Older formats do not inherit
+these 3.1 fields. Contact and license addresses, and OpenAPI Terms of Service,
+receive URI-reference syntax checks; Swagger Terms of Service may remain prose.
+These checks precede selection and dependency acquisition. Empty strings,
+non-SemVer document versions and extension contents remain authored data.
+Metadata addresses are not fetched or copied into the selected operation, and
+retrieved Path Item fragments do not become complete API documents subject to
+root Info admission. This is declaration admission, not complete document
+validation: required root `info` presence, email-address syntax and SPDX
+expression semantics remain unverified.
 OpenAPI and Swagger `paths` entries must start with `/`; `x-` entries are
 specification extensions. Operation-ID selection ignores extension payloads,
 including apparent operations or references inside them. Under `paths`, a JSON

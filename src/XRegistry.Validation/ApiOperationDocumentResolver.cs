@@ -515,6 +515,8 @@ public static partial class ApiOperationDocumentResolver
                 "The root swagger value must be '2.0'.", "$/swagger");
         }
 
+        var infoFailure = ValidateHttpInfoDeclaration(root, format, cancellationToken);
+        if (infoFailure is not null) { return infoFailure; }
         var documentationFailure = ValidateHttpDocumentationShapes(root, "$");
         if (documentationFailure is not null) { return documentationFailure; }
         var serverFailure = ValidateOpenApiServers(root, "$", format, cancellationToken);
