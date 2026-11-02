@@ -166,6 +166,17 @@ Resource documents through FileTransfer. It supports both entity `Labels` and
 Resource Meta `MetaLabels`. Document writes are bounded, start at position
 zero, erase the prior contents and always attempt to close an opened handle.
 
+The production adapter requires `SignAndEncrypt` before Property Writes,
+named registry/domain Calls, writable file Opens, file Writes and committing
+Closes. A denied operation reports `policy_denied` before its native request.
+Only handles opened read-only by this adapter can be repositioned or closed
+without that mutation check; the exemption is scoped to the Session, file and
+handle, and is removed after a successful Close or a writable reopen. Unknown
+handles, including handles returned by creation Methods, require encryption.
+A changed channel mode is checked again for each mutation. This does not grant
+Roles or Permissions or authenticate an unsecured read; those remain separate
+caller and Server responsibilities.
+
 The adapter rejects non-Good Service, operation and Method argument statuses;
 a plausible value cannot override a bad or uncertain status. Good subcodes
 remain accepted. Known native failures map to the draft's resolver outcomes.
@@ -205,7 +216,11 @@ event Subscription creation and removal, publishing enablement and native
 notification fields, Property writes, Group and Resource Methods, attribute
 Methods, expected-Epoch `Delete`, model-resolved Resource
 document replacement, created-Resource completion, and FileType byte
-readback. Callers still supply OPC UA type NodeIds for Groups and Resources,
+readback. The writer workflow uses a `SignAndEncrypt` channel; a separate
+`None` case verifies rejection of every public writer operation while reads
+remain available. This is client-side admission evidence, not proof that an
+arbitrary Server enforces mutation security.
+Callers still supply OPC UA type NodeIds for Groups and Resources,
 and the `ResourceVersionsType` NodeId for version operations. The binding draft permits
 several ways to represent collection names but does not define a deterministic
 collection-name-to-ObjectType lookup. `OpcUaRegistryReadSource.OpenAsync` verifies

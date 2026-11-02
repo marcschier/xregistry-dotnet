@@ -19,6 +19,175 @@ public class OpcUaSessionAdapterTests
         ["http://opcfoundation.org/UA/", "urn:example:namespace-one", "urn:Exact:Namespace%2fTwo"];
 
     [Test]
+    [Arguments(MessageSecurityMode.None)]
+    [Arguments(MessageSecurityMode.Sign)]
+    [Arguments(MessageSecurityMode.Invalid)]
+    public async Task MutationsRejectUnencryptedChannelsBeforeNativeOperations(MessageSecurityMode mode)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        proxy.Endpoint = new EndpointDescription { SecurityMode = mode };
+        var node = new NodeId("Target", 1);
+        Func<ValueTask>[] mutations =
+        [
+            async () => { _ = await adapter.OpenAsync(node, 2, CancellationToken.None); },
+            async () => { _ = await adapter.OpenAsync(node, 6, CancellationToken.None); },
+            async () => { _ = await adapter.OpenAsync(node, 10, CancellationToken.None); },
+            () => adapter.WriteAsync(node, 7, [1], CancellationToken.None),
+            () => adapter.WriteValueAsync(node, new Variant("value"), CancellationToken.None),
+            async () => { _ = await adapter.CallMethodAsync(node, "GetOrCreateResource", [], CancellationToken.None); },
+            () => adapter.SetPositionAsync(node, 7, 0, CancellationToken.None),
+            () => adapter.CloseAsync(node, 7, CancellationToken.None)
+        ];
+        foreach (var mutation in mutations)
+        {
+            var failure = await Assert.ThrowsAsync<FederationException>(async () => await mutation());
+            await Assert.That(failure!.Code).IsEqualTo(FederationErrorCode.PolicyDenied);
+        }
+        await Assert.That(proxy.NativeOperationCount).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(MessageSecurityMode.None)]
+    [Arguments(MessageSecurityMode.Sign)]
+    public async Task NamedMutationRechecksChannelAfterMethodDiscovery(MessageSecurityMode changedMode)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        proxy.BrowseResultFactory = _ =>
+        {
+            proxy.Endpoint = new EndpointDescription { SecurityMode = changedMode };
+            return new BrowseResult
+            {
+                References = [new ReferenceDescription
+                {
+                    NodeClass = NodeClass.Method,
+                    BrowseName = new QualifiedName("Delete"),
+                    NodeId = new ExpandedNodeId(55u)
+                }]
+            };
+        };
+
+        var failure = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.CallMethodAsync(new NodeId("Target", 1), "Delete", [], CancellationToken.None));
+
+        await Assert.That(failure!.Code).IsEqualTo(FederationErrorCode.PolicyDenied);
+        await Assert.That(proxy.NativeOperationCount).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task MutationsRejectMissingChannelSecurityBeforeNativeOperations()
+    {
+        var (adapter, proxy) = CreateAdapter();
+        proxy.Endpoint = null;
+
+        var failure = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.WriteValueAsync(new NodeId("Target", 1), new Variant("value"), CancellationToken.None));
+
+        await Assert.That(failure!.Code).IsEqualTo(FederationErrorCode.PolicyDenied);
+        await Assert.That(proxy.NativeOperationCount).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task MutationPreCancellationAvoidsChannelAccessAndNativeOperations()
+    {
+        var (adapter, proxy) = CreateAdapter();
+        proxy.Endpoint = null;
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        var failure = await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+            await adapter.WriteValueAsync(new NodeId("Target", 1), new Variant("value"), cancellation.Token));
+
+        await Assert.That(failure!.CancellationToken).IsEqualTo(cancellation.Token);
+        await Assert.That(proxy.EndpointReads).IsEqualTo(0);
+        await Assert.That(proxy.NativeOperationCount).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("file")]
+    [Arguments("session")]
+    [Arguments("handle")]
+    [Arguments("closed")]
+    public async Task ReadHandleExemptionDoesNotAuthorizeAnotherFileSessionOrHandle(string changed)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        proxy.Endpoint = new EndpointDescription { SecurityMode = MessageSecurityMode.None };
+        var file = new NodeId("File", 1);
+        var handle = await adapter.OpenAsync(file, 1, CancellationToken.None);
+        if (changed == "session")
+        {
+            proxy.SessionId = new NodeId("AnotherSession", 0);
+        }
+        if (changed == "closed")
+        {
+            await adapter.CloseAsync(file, handle, CancellationToken.None);
+        }
+        var before = proxy.NativeOperationCount;
+
+        var failure = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.CloseAsync(changed == "file" ? new NodeId("AnotherFile", 1) : file,
+                changed == "handle" ? handle + 1 : handle, CancellationToken.None));
+
+        await Assert.That(failure!.Code).IsEqualTo(FederationErrorCode.PolicyDenied);
+        await Assert.That(proxy.NativeOperationCount).IsEqualTo(before);
+    }
+
+    [Test]
+    public async Task ReadHandleCanCloseOnAnUnsecuredChannelAndRetryNativeCloseFailure()
+    {
+        var (adapter, proxy) = CreateAdapter();
+        proxy.Endpoint = new EndpointDescription { SecurityMode = MessageSecurityMode.None };
+        var file = new NodeId("File", 1);
+        var handle = await adapter.OpenAsync(file, 1, CancellationToken.None);
+        proxy.CallStatus = StatusCodes.BadResourceUnavailable;
+        var failure = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.CloseAsync(file, handle, CancellationToken.None));
+        await Assert.That(failure!.Code).IsEqualTo(FederationErrorCode.Unavailable);
+        proxy.CallStatus = StatusCodes.Good;
+
+        await adapter.SetPositionAsync(file, handle, 0, CancellationToken.None);
+        await adapter.CloseAsync(file, handle, CancellationToken.None);
+
+        await Assert.That(proxy.NativeOperationCount).IsEqualTo(4);
+    }
+
+    [Test]
+    public async Task ReusedReadHandleDoesNotAuthorizeCommittingAWritableOpen()
+    {
+        var (adapter, proxy) = CreateAdapter();
+        var file = new NodeId("File", 1);
+        var readHandle = await adapter.OpenAsync(file, 1, CancellationToken.None);
+        var writeHandle = await adapter.OpenAsync(file, 6, CancellationToken.None);
+        await Assert.That(writeHandle).IsEqualTo(readHandle);
+        proxy.Endpoint = new EndpointDescription { SecurityMode = MessageSecurityMode.None };
+        var before = proxy.NativeOperationCount;
+
+        var failure = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.CloseAsync(file, writeHandle, CancellationToken.None));
+
+        await Assert.That(failure!.Code).IsEqualTo(FederationErrorCode.PolicyDenied);
+        await Assert.That(proxy.NativeOperationCount).IsEqualTo(before);
+    }
+
+    [Test]
+    public async Task WritableHandleCloseRejectsAChannelDowngradeAndCanRetrySecurely()
+    {
+        var (adapter, proxy) = CreateAdapter();
+        var file = new NodeId("File", 1);
+        var handle = await adapter.OpenAsync(file, 6, CancellationToken.None);
+        proxy.Endpoint = new EndpointDescription { SecurityMode = MessageSecurityMode.Sign };
+        var before = proxy.NativeOperationCount;
+
+        var failure = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.CloseAsync(file, handle, CancellationToken.None));
+
+        await Assert.That(failure!.Code).IsEqualTo(FederationErrorCode.PolicyDenied);
+        await Assert.That(proxy.NativeOperationCount).IsEqualTo(before);
+        proxy.Endpoint = new EndpointDescription { SecurityMode = MessageSecurityMode.SignAndEncrypt };
+        await adapter.CloseAsync(file, handle, CancellationToken.None);
+        await Assert.That(proxy.NativeOperationCount).IsEqualTo(before + 1);
+    }
+
+    [Test]
     [Arguments(false)]
     [Arguments(true)]
     public async Task RegistryOriginCaptureResolvesSourceContextAndSurvivesTableReordering(bool opaque)
@@ -1231,6 +1400,11 @@ public class OpcUaSessionAdapterTests
 
     public class SessionProxy : DispatchProxy
     {
+        public EndpointDescription? Endpoint { get; set; } =
+            new() { SecurityMode = MessageSecurityMode.SignAndEncrypt };
+        public NodeId SessionId { get; set; } = new("Session", 0);
+        public int EndpointReads { get; private set; }
+        public int NativeOperationCount { get; private set; }
         public ExtensionObject Extension { get; set; }
         public string DataTypeBrowseName { get; set; } = "BuildInfo";
         public string[] ServerArray { get; set; } = [];
@@ -1259,6 +1433,16 @@ public class OpcUaSessionAdapterTests
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
+            if (targetMethod?.Name == "get_Endpoint")
+            {
+                EndpointReads++;
+                return Endpoint;
+            }
+            if (targetMethod?.Name == "get_SessionId")
+            {
+                return SessionId;
+            }
+            NativeOperationCount++;
             if (ServiceFailure is not null)
             {
                 if (FailAsynchronously)

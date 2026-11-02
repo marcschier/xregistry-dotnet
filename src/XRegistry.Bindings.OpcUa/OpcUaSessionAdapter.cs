@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using Opc.Ua;
+using System.Collections.Concurrent;
 using System.Buffers;
 using System.Globalization;
 using System.Collections.Immutable;
@@ -21,6 +22,7 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
     private readonly NodeId registryType;
     private readonly uint maxReferencesPerNode;
     private readonly int maxBrowsePages;
+    private readonly ConcurrentDictionary<(NodeId Session, NodeId File, uint Handle), byte> readHandles = new();
     private NamespaceTable? namespaceUris;
 
     /// <summary>Creates an adapter; <paramref name="registryType"/> is the server's RegistryType NodeId.</summary>
@@ -209,11 +211,27 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
     /// <inheritdoc />
     public async ValueTask<uint> OpenAsync(NodeId file, byte mode, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (mode != 1)
+        {
+            RequireMutationSecurity(cancellationToken);
+        }
+        var sourceSession = session.SessionId;
         var output = await CallAsync(file, MethodIds.FileType_Open, [new Variant(mode)], cancellationToken)
             .ConfigureAwait(false);
-        return output.Count == 1 && output[0].TryGetValue(out uint handle)
-            ? handle
-            : throw new FederationException(FederationErrorCode.InvalidPackage, "FileType Open returned no handle.");
+        if (output.Count != 1 || !output[0].TryGetValue(out uint handle))
+        {
+            throw new FederationException(FederationErrorCode.InvalidPackage, "FileType Open returned no handle.");
+        }
+        if (mode == 1)
+        {
+            readHandles[(sourceSession, file, handle)] = 0;
+        }
+        else
+        {
+            readHandles.TryRemove((sourceSession, file, handle), out _);
+        }
+        return handle;
     }
 
     /// <inheritdoc />
@@ -228,14 +246,22 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
 
     /// <inheritdoc />
     public async ValueTask SetPositionAsync(NodeId file, uint handle, ulong position,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!readHandles.ContainsKey((session.SessionId, file, handle)))
+        {
+            RequireMutationSecurity(cancellationToken);
+        }
         await CallAsync(file, MethodIds.FileType_SetPosition, [new Variant(handle), new Variant(position)],
             cancellationToken).ConfigureAwait(false);
+    }
 
     /// <inheritdoc />
     public async ValueTask WriteAsync(NodeId file, uint handle, byte[] data, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(data);
+        RequireMutationSecurity(cancellationToken);
         _ = await CallAsync(file, MethodIds.FileType_Write,
             [new Variant(handle), new Variant(new ByteString(data))], cancellationToken).ConfigureAwait(false);
     }
@@ -243,6 +269,7 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
     /// <inheritdoc />
     public async ValueTask WriteValueAsync(NodeId variable, Variant value, CancellationToken cancellationToken)
     {
+        RequireMutationSecurity(cancellationToken);
         var response = await InvokeAsync(() => session.WriteAsync(new RequestHeader(),
             [new WriteValue
             {
@@ -260,6 +287,7 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
     {
         ArgumentException.ThrowIfNullOrEmpty(methodBrowseName);
         ArgumentNullException.ThrowIfNull(inputArguments);
+        RequireMutationSecurity(cancellationToken);
         var methods = await BrowseOnce(target, BrowseDirection.Forward, ReferenceTypeIds.HierarchicalReferences,
             cancellationToken).ConfigureAwait(false);
         var matches = methods.Where(reference => reference.NodeClass == NodeClass.Method &&
@@ -269,6 +297,7 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
             throw new FederationException(matches.Length == 0 ? FederationErrorCode.NotFound :
                 FederationErrorCode.Ambiguous, $"The OPC UA Object does not have one {methodBrowseName} Method.");
         }
+        RequireMutationSecurity(cancellationToken);
         return await CallAsync(target, Local(matches[0].NodeId), inputArguments.ToArray(), cancellationToken)
             .ConfigureAwait(false);
     }
@@ -502,8 +531,27 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
         return new(document.RootElement.Clone(), builtInType);
     }
     /// <inheritdoc />
-    public async ValueTask CloseAsync(NodeId file, uint handle, CancellationToken cancellationToken) =>
+    public async ValueTask CloseAsync(NodeId file, uint handle, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var key = (session.SessionId, file, handle);
+        if (!readHandles.ContainsKey(key))
+        {
+            RequireMutationSecurity(cancellationToken);
+        }
         await CallAsync(file, MethodIds.FileType_Close, [new Variant(handle)], cancellationToken).ConfigureAwait(false);
+        readHandles.TryRemove(key, out _);
+    }
+
+    private void RequireMutationSecurity(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (session.Endpoint?.SecurityMode != MessageSecurityMode.SignAndEncrypt)
+        {
+            throw new FederationException(FederationErrorCode.PolicyDenied,
+                "Registry mutations require a SignAndEncrypt SecureChannel.");
+        }
+    }
 
     private async ValueTask<IReadOnlyList<ReferenceDescription>> BrowseOnce(NodeId node, BrowseDirection direction,
         NodeId referenceType, CancellationToken cancellationToken)

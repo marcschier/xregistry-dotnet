@@ -441,7 +441,9 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
     }
 
     [Test]
-    public async Task WriterWritesPropertiesDeleteAndFileDocumentsOnARealServer()
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task WriterWritesPropertiesDeleteAndFileDocumentsOnARealServer(bool secured)
     {
         await using var server = await InProcessRegistryServer.StartAsync();
         var telemetry = DefaultTelemetry.Create(static _ => { });
@@ -488,8 +490,11 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
             telemetry,
             new UserIdentity(),
             server.RegistryType,
-            static endpoint => endpoint.SecurityMode == MessageSecurityMode.None &&
-                endpoint.SecurityPolicyUri == SecurityPolicies.None,
+            endpoint => secured
+                ? endpoint.SecurityMode == MessageSecurityMode.SignAndEncrypt &&
+                    endpoint.SecurityPolicyUri == SecurityPolicies.Basic256Sha256
+                : endpoint.SecurityMode == MessageSecurityMode.None &&
+                    endpoint.SecurityPolicyUri == SecurityPolicies.None,
             static profile => profile == Profiles.UaTcpTransport,
             static version => version == "1.0",
             cancellation.Token);
@@ -503,6 +508,41 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
         await Assert.That(initial.Value.GetString()).IsEqualTo("before");
         using var value = JsonDocument.Parse("\"after\"");
         var writer = new OpcUaRegistryWriter(connection.Reader);
+        if (!secured)
+        {
+            Func<ValueTask>[] mutations =
+            [
+                () => writer.WritePropertyAsync(server.WriteProbe,
+                    new OpcUaJsonValue(value.RootElement.Clone(), BuiltInType.String), cancellation.Token),
+                async () => { _ = await writer.CreateGroupAsync(connection.RegistryRoot, "new", cancellation.Token); },
+                async () => { _ = await writer.GetOrCreateGroupAsync(connection.RegistryRoot, "team-a", cancellation.Token); },
+                async () => { _ = await writer.CreateResourceAsync(server.GroupNode, "new",
+                    cancellationToken: cancellation.Token); },
+                async () => { _ = await writer.GetOrCreateResourceAsync(server.GroupNode, "existing",
+                    cancellationToken: cancellation.Token); },
+                () => writer.DeleteAsync(connection.RegistryRoot, 5, cancellation.Token),
+                () => writer.AddAttributeAsync(server.LabelsNode, "label", "value", 1, cancellation.Token),
+                () => writer.RemoveAttributeAsync(server.LabelsNode, "label", 1, cancellation.Token),
+                () => writer.AddMetaAttributeAsync(server.MetaLabelsNode, "label", "value", 1, cancellation.Token),
+                () => writer.RemoveMetaAttributeAsync(server.MetaLabelsNode, "label", 1, cancellation.Token),
+                () => writer.ReplaceFileDocumentAsync(server.DocumentFile, new byte[] { 1 }, cancellation.Token),
+                () => writer.ReplaceResourceDocumentAsync(server.GroupNode, "/teams/team-a", "schemas", "schema-a",
+                    ObjectTypeIds.FileType, new byte[] { 1 }, cancellationToken: cancellation.Token),
+                () => writer.CompleteCreatedResourceDocumentAsync(server.DocumentFile, 7,
+                    new byte[] { 1 }, cancellation.Token)
+            ];
+            foreach (var mutation in mutations)
+            {
+                var failure = await Assert.ThrowsAsync<FederationException>(async () => await mutation());
+                await Assert.That(failure!.Code).IsEqualTo(FederationErrorCode.PolicyDenied);
+            }
+            await Assert.That(server.DeleteInvocations).IsEqualTo(0);
+            await Assert.That(server.AttributeMethodInvocations).IsEqualTo(0);
+            var unchanged = await connection.Adapter.ReadJsonValueAsync(server.WriteProbe, cancellation.Token);
+            await Assert.That(unchanged.Value.GetString()).IsEqualTo("before");
+            _ = await connection.Reader.ReadFileAsync(server.DocumentFile, cancellation.Token);
+            return;
+        }
         await writer.WritePropertyAsync(
             server.WriteProbe,
             new OpcUaJsonValue(value.RootElement.Clone(), BuiltInType.String),
@@ -679,6 +719,7 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
                 .Build(applicationUri, "uri:xregistry.org:opcua:integration:server")
                 .AsServer([endpoint])
                 .AddUnsecurePolicyNone()
+                .AddSignAndEncryptPolicies()
                 .SetShutdownDelay(0)
                 .AddSecurityConfiguration(certificates, pkiRoot)
                 .SetAutoAcceptUntrustedCertificates(true)
