@@ -436,14 +436,16 @@ public static partial class ApiOperationDocumentResolver
                 return InvalidHttpResponse("A Response Object structured field must be an object.", pointer + "/" + field);
             }
         }
-        if (format != "Swagger/2.0" && response.TryGetProperty("headers", out var headers))
+        if (response.TryGetProperty("headers", out var headers))
         {
             foreach (var header in headers.EnumerateObject())
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (header.Name.Equals("Content-Type", StringComparison.OrdinalIgnoreCase)) { continue; }
-                var failure = ValidateOpenApiHeaderDeclaration(header.Value,
-                    pointer + "/headers/" + Escape(header.Name), format, cancellationToken);
+                if (format != "Swagger/2.0" && header.Name.Equals("Content-Type", StringComparison.OrdinalIgnoreCase)) { continue; }
+                var headerPath = pointer + "/headers/" + Escape(header.Name);
+                var failure = format == "Swagger/2.0"
+                    ? ValidateSwaggerHeaderDeclaration(header.Value, headerPath, cancellationToken)
+                    : ValidateOpenApiHeaderDeclaration(header.Value, headerPath, format, cancellationToken);
                 if (failure is not null) { return failure; }
             }
         }
@@ -467,6 +469,50 @@ public static partial class ApiOperationDocumentResolver
             return ValidateOpenApiMediaDeclarations(content, pointer + "/content", format, cancellationToken);
         }
         return null;
+    }
+
+    private static ApiOperationResolutionResult? ValidateSwaggerHeaderDeclaration(
+        JsonElement header, string pointer, CancellationToken cancellationToken)
+    {
+        var declaration = header;
+        var path = pointer;
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (declaration.ValueKind != JsonValueKind.Object)
+            {
+                return InvalidHeader("Swagger headers and their items must be objects.", path);
+            }
+            if (!declaration.TryGetProperty("type", out var type) || type.ValueKind != JsonValueKind.String ||
+                type.GetString() is not ("string" or "number" or "integer" or "boolean" or "array"))
+            {
+                return InvalidHeader("Swagger headers and items require a primitive or array type.", path + "/type");
+            }
+            if (path == pointer && declaration.TryGetProperty("description", out var description) &&
+                description.ValueKind != JsonValueKind.String)
+            {
+                return InvalidHeader("A Swagger header description must be a string.", path + "/description");
+            }
+            if (declaration.TryGetProperty("format", out var format) && format.ValueKind != JsonValueKind.String)
+            {
+                return InvalidHeader("A Swagger header or item format must be a string.", path + "/format");
+            }
+            if (declaration.TryGetProperty("collectionFormat", out var collection) &&
+                (collection.ValueKind != JsonValueKind.String || collection.GetString() is not ("csv" or "ssv" or "tsv" or "pipes")))
+            {
+                return InvalidHeader("Swagger header and item collectionFormat must be csv, ssv, tsv or pipes.", path + "/collectionFormat");
+            }
+            if (!declaration.TryGetProperty("items", out var items))
+            {
+                return type.GetString() == "array"
+                    ? InvalidHeader("A Swagger array header or item requires an Items Object.", path + "/items") : null;
+            }
+            declaration = items;
+            path += "/items";
+        }
+
+        static ApiOperationResolutionResult InvalidHeader(string message, string path) =>
+            Failure(ApiOperationResolutionStatus.Invalid, "document.header", message, path);
     }
 
     private static ApiOperationResolutionResult? ValidateOpenApiMediaDeclarations(

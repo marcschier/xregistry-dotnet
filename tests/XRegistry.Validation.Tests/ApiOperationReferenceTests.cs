@@ -11,6 +11,158 @@ namespace XRegistry.Validation.Tests;
 public class ApiOperationReferenceTests
 {
     [Test]
+    public async Task SwaggerHeaderDeclarationsRequireNativeTypesItemsAndMetadataAcrossResponseLocations()
+    {
+        foreach (var (json, suffix) in new (string, string)[]
+        {
+            ("null", ""), ("[]", ""), ("{}", "/type"),
+            ("""{"type":null}""", "/type"), ("""{"type":["string"]}""", "/type"),
+            ("""{"type":""}""", "/type"), ("""{"type":"object"}""", "/type"),
+            ("""{"type":"file"}""", "/type"), ("""{"type":"String"}""", "/type"),
+            ("""{"type":"string","description":false}""", "/description"),
+            ("""{"type":"integer","format":3}""", "/format"),
+            ("""{"type":"array"}""", "/items"),
+            ("""{"type":"array","items":[]}""", "/items"),
+            ("""{"type":"string","items":null}""", "/items"),
+            ("""{"type":"array","items":{}}""", "/items/type"),
+            ("""{"type":"array","items":{"type":"null"}}""", "/items/type"),
+            ("""{"type":"array","items":{"type":"file"}}""", "/items/type"),
+            ("""{"type":"array","items":{"type":"array"}}""", "/items/items"),
+            ("""{"type":"array","items":{"type":"string","format":false}}""", "/items/format"),
+            ("""{"type":"array","items":{"type":"array","items":{"type":"boolean","collectionFormat":"multi"}}}""", "/items/items/collectionFormat"),
+            ("""{"type":"array","items":{"type":"string"},"collectionFormat":"multi"}""", "/collectionFormat"),
+            ("""{"type":"array","items":{"type":"string"},"collectionFormat":"CSV"}""", "/collectionFormat"),
+            ("""{"type":"string","collectionFormat":false}""", "/collectionFormat"),
+            ("""{"$ref":"https://must-not-load.test/h"}""", "/type")
+        })
+        {
+            foreach (var location in new[] { "inline", "unused-response", "remote-response", "remote-path" })
+            {
+                var header = JsonNode.Parse(json);
+                var response = new JsonObject { ["description"] = "", ["headers"] = new JsonObject { ["Content-Type"] = header } };
+                var operation = new JsonObject { ["operationId"] = "Target",
+                    ["responses"] = new JsonObject { ["200"] = response.DeepClone() } };
+                var pathItem = new JsonObject { ["get"] = operation.DeepClone() };
+                var document = new JsonObject { ["swagger"] = "2.0",
+                    ["paths"] = new JsonObject { ["/items"] = pathItem.DeepClone() } };
+                var expectedPath = "$/paths/~1items/get/responses/200/headers/Content-Type" + suffix;
+                if (location == "unused-response")
+                {
+                    document["paths"]!["/items"]!["get"]!.AsObject().Remove("responses");
+                    document["responses"] = new JsonObject { ["Unused"] = response.DeepClone() };
+                    expectedPath = "$/responses/Unused/headers/Content-Type" + suffix;
+                }
+                else if (location == "remote-response")
+                {
+                    document["paths"]!["/items"]!["get"]!["responses"]!["200"] =
+                        new JsonObject { ["$ref"] = "https://allowed.test/response#/R" };
+                    expectedPath = "$/R/headers/Content-Type" + suffix;
+                }
+                else if (location == "remote-path")
+                {
+                    document["paths"]!["/items"] = new JsonObject { ["$ref"] = "https://allowed.test/path#/P" };
+                    expectedPath = "$/P/get/responses/200/headers/Content-Type" + suffix;
+                }
+                var calls = new List<string>();
+                var result = await ApiOperationDocumentResolver.ResolveAsync("Swagger/2.0", "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+                    resolveReference: (uri, _) =>
+                    {
+                        calls.Add(uri);
+                        var target = uri switch
+                        {
+                            "https://allowed.test/response" => new JsonObject { ["R"] = response.DeepClone() },
+                            "https://allowed.test/path" => new JsonObject { ["P"] = pathItem.DeepClone() },
+                            _ => throw new UnauthorizedAccessException()
+                        };
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(target.ToJsonString()));
+                    });
+                await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.header");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo(expectedPath);
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                await Assert.That(string.Join("|", calls)).IsEqualTo(location switch
+                {
+                    "remote-response" => "https://allowed.test/response",
+                    "remote-path" => "https://allowed.test/path",
+                    _ => ""
+                });
+            }
+        }
+    }
+
+    [Test]
+    public async Task SwaggerHeaderDeclarationsPreserveNativeScalarAndNestedArrayFormsWithoutAcquisition()
+    {
+        foreach (var type in new[] { "string", "number", "integer", "boolean", "array" })
+        {
+            foreach (var collection in new[] { "csv", "ssv", "tsv", "pipes" })
+            {
+                var header = new JsonObject { ["type"] = type, ["description"] = "",
+                    ["format"] = "vendor-format", ["collectionFormat"] = collection,
+                    ["x-private"] = new JsonObject { ["$ref"] = "https://must-not-load.test/private" } };
+                if (type == "array")
+                {
+                    header["items"] = new JsonObject { ["type"] = "array", ["collectionFormat"] = collection,
+                        ["items"] = new JsonObject { ["type"] = "integer", ["format"] = "",
+                            ["x-private"] = new JsonObject { ["$ref"] = "https://must-not-load.test/item" } } };
+                }
+                var operation = new JsonObject { ["operationId"] = "Target",
+                    ["responses"] = new JsonObject { ["200"] = new JsonObject { ["description"] = "",
+                        ["headers"] = new JsonObject { ["Content-Type"] = header } } } };
+                var document = new JsonObject { ["swagger"] = "2.0",
+                    ["paths"] = new JsonObject { ["/items"] = new JsonObject { ["get"] = operation.DeepClone() } } };
+                foreach (var selector in new[] { "operations/Target", "/paths/~1items/get" })
+                {
+                    var calls = 0;
+                    var result = await ApiOperationDocumentResolver.ResolveAsync("Swagger/2.0", "application/json",
+                        System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                        ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                        resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+                    await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+                    await Assert.That(JsonNode.DeepEquals(operation, JsonNode.Parse(result.Operation.GetRawText()))).IsTrue();
+                    await Assert.That(calls).IsEqualTo(0);
+                }
+            }
+        }
+    }
+
+    [Test]
+    public async Task SwaggerHeaderDeclarationsPreservePointerLocalityAndRestoredSelection()
+    {
+        foreach (var valid in new[] { true, false, true })
+        {
+            var document = new JsonObject { ["swagger"] = "2.0", ["paths"] = JsonNode.Parse("""
+                {"/target":{"get":{"operationId":"Target"}},"/other":{"get":{"operationId":"Other",
+                "responses":{"200":{"description":"","headers":{"X":{"type":"array","items":{}}}}}}}}
+                """) };
+            if (valid) { document["paths"]!["/other"]!["get"]!["responses"]!["200"]!["headers"]!["X"]!["items"]!["type"] = "string"; }
+            foreach (var selector in new[] { "operations/Target", "operations/Missing", "/paths/~1target/get", "/paths/~1other/get" })
+            {
+                var local = selector == "/paths/~1target/get";
+                var result = ApiOperationDocumentResolver.Resolve("Swagger/2.0", "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector));
+                await Assert.That(result.Status).IsEqualTo(!valid && !local
+                    ? ApiOperationResolutionStatus.Invalid : selector == "operations/Missing"
+                        ? ApiOperationResolutionStatus.NotFound : ApiOperationResolutionStatus.Selected);
+                if (!valid && !local)
+                {
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.header");
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo("$/paths/~1other/get/responses/200/headers/X/items/type");
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                }
+                else if (selector != "operations/Missing")
+                {
+                    await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo(
+                        selector == "/paths/~1other/get" ? "Other" : "Target");
+                }
+            }
+        }
+    }
+
+    [Test]
     [Arguments("OpenAPI/3.0", "3.0.4")]
     [Arguments("OpenAPI/3.1", "3.1.1")]
     public async Task OpenApiRequestEncodingControlsRetainQueryStylesQuotedListsAndExplicitContentTypeSuppression(string format, string version)

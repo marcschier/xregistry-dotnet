@@ -714,6 +714,17 @@ cycles, denied or unavailable dependencies, malformed targets and reference-dept
 limits prevent partial selection. Unused reusable response references remain
 inactive. Selection retains authored reference strings and does not copy resolved
 responses into operations.
+Swagger response headers use native Header Objects rather than OpenAPI's
+`schema`/`content` representation. Each header requires a `type` of `string`,
+`number`, `integer`, `boolean` or `array`; arrays require an Items Object,
+including nested arrays. Present `description` and `format` fields must be
+strings, and `collectionFormat` is limited to `csv`, `ssv`, `tsv` or `pipes`.
+Items receive the same type, format and collection checks. Unlike OpenAPI,
+Swagger does not exempt a header named `Content-Type` from these checks.
+Inline headers, unused reusable responses and retrieved response or Path Item
+targets receive declaration checks. Selection preserves authored declarations
+without inserting defaults or acquiring extension values. Constraint keywords,
+default-value compatibility and runtime header serialization remain unverified.
 OpenAPI response `content` entries must be Media Type Objects. Present `schema`
 values must be objects, with boolean schemas also permitted in OpenAPI 3.1.
 Present `examples` and `encoding` values must be objects; `example` accepts any
