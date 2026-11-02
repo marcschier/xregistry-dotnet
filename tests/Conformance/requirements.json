@@ -139347,7 +139347,7 @@
       "text": "When finished, the client SHOULD call `DeleteMonitoredItems` and `DeleteSubscriptions`. Closing the Session performs standard OPC UA cleanup.",
       "review": {
         "status": "reviewed",
-        "note": "The real-server workflow now proves that two pre-cancelled stop attempts preserve publishing and exactly one decoded notification, then a later stop deletes the server Subscription and repeated stop/disposal leaves it removed. Failed removal restores the notification handler before reopening stop admission. Cancellation after SDK deletion starts, transport/service failure and concurrent stop lifetime behavior still need direct evidence; complete cleanup remains pending.",
+        "note": "The real-server workflow proves that two pre-cancelled stop attempts preserve publishing and exactly one decoded notification, then a later stop deletes the server Subscription and repeated stop/disposal leaves it removed. Failed removal restores the notification handler before reopening stop admission. A server-side DeleteSubscriptions gate reproduced concurrent Stop/Dispose returning before deletion completed. Calls now await one shared task; a waiting caller can cancel independently, other callers remain pending until the server gate opens, and exactly one delete request occurs. The first caller's token controls deletion. Cancellation after SDK deletion starts and transport/service failure still need complete server/local-state evidence; complete cleanup remains pending.",
         "roles": [
           "client"
         ]

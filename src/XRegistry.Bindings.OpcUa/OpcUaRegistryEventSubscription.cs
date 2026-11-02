@@ -52,7 +52,8 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
     private readonly Subscription subscription;
     private readonly MonitoredItem monitoredItem;
     private readonly OpcUaRegistryEventDecoder decoder;
-    private int stopped;
+    private readonly object stopGate = new();
+    private Task? stopTask;
 
     private OpcUaRegistryEventSubscription(ManagedSession session, Subscription subscription,
         MonitoredItem monitoredItem, OpcUaRegistryEventDecoder decoder)
@@ -257,13 +258,20 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
     }
 
     /// <summary>Deletes the monitored item and Subscription from the Server.</summary>
-    public async ValueTask StopAsync(CancellationToken cancellationToken = default)
+    public ValueTask StopAsync(CancellationToken cancellationToken = default)
     {
-        if (Interlocked.Exchange(ref stopped, 1) != 0)
+        lock (stopGate)
         {
-            return;
+            if (stopTask is null || stopTask.IsFaulted || stopTask.IsCanceled)
+            {
+                stopTask = StopCoreAsync(cancellationToken);
+            }
+            return new ValueTask(stopTask.WaitAsync(cancellationToken));
         }
+    }
 
+    private async Task StopCoreAsync(CancellationToken cancellationToken)
+    {
         monitoredItem.Notification -= OnNotification;
         try
         {
@@ -272,7 +280,6 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
         catch
         {
             monitoredItem.Notification += OnNotification;
-            Volatile.Write(ref stopped, 0);
             throw;
         }
         subscription.Dispose();

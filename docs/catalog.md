@@ -205,6 +205,12 @@ and permits another stop attempt. The real-server test verifies that repeated
 pre-cancelled attempts retain live delivery, that a later stop removes the
 Subscription, and that repeated stop/disposal does not recreate it. This does
 not establish recovery from an interrupted server deletion or connection loss.
+Concurrent Stop and Dispose calls await the same deletion task rather than
+returning while deletion is still in progress. The initiating caller's token
+controls deletion; a later caller can cancel its own wait without cancelling
+that deletion. A failed deletion permits a later retry; a completed deletion
+remains completed. A real-server test pauses `DeleteSubscriptions` to verify
+these waiting and cancellation boundaries and exactly one deletion request.
 
 A two-server test resolves a caller-authorized metadata-only Resource to an
 exact target Version, reads its FileType bytes, and verifies the selected XID,

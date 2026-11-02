@@ -20,9 +20,11 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
     private static readonly byte[] ExpectedVersionDocument = [0x00, 0x7f, 0x80, 0xff];
 
     [Test]
-    [Arguments(false)]
-    [Arguments(true)]
-    public async Task SubscriptionCreatesAndRemovesAnEventMonitoredItemOnARealServer(bool cancelStop)
+    [Arguments(false, false)]
+    [Arguments(true, false)]
+    [Arguments(false, true)]
+    [Arguments(true, true)]
+    public async Task SubscriptionCreatesAndRemovesAnEventMonitoredItemOnARealServer(bool cancelStop, bool concurrentStop)
     {
         await using var server = await InProcessRegistryServer.StartAsync();
         var telemetry = DefaultTelemetry.Create(static _ => { });
@@ -124,7 +126,44 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
         await Assert.That(notification.MetaEpoch).IsNull();
         await Assert.That(notification.Changed).IsNull();
         await Assert.That(notification.CorrelationId).IsNull();
-        await subscription.StopAsync(cancellation.Token);
+        if (concurrentStop)
+        {
+            server.BlockSubscriptionDeletion();
+            var firstStop = subscription.StopAsync(cancellation.Token).AsTask();
+            try
+            {
+                await server.SubscriptionDeletionEntered.WaitAsync(TimeSpan.FromSeconds(5), cancellation.Token);
+                var secondStop = subscription.StopAsync(cancellation.Token).AsTask();
+                var disposal = subscription.DisposeAsync().AsTask();
+                try
+                {
+                    await Assert.That(firstStop.IsCompleted).IsFalse();
+                    await Assert.That(secondStop.IsCompleted).IsFalse();
+                    await Assert.That(disposal.IsCompleted).IsFalse();
+                    using var waiting = new CancellationTokenSource();
+                    var cancelledStop = subscription.StopAsync(waiting.Token).AsTask();
+                    await waiting.CancelAsync();
+                    await Assert.ThrowsAsync<OperationCanceledException>(async () => await cancelledStop);
+                    await Assert.That(firstStop.IsCompleted).IsFalse();
+                    await Assert.That(connection.Session.SubscriptionCount).IsEqualTo(1);
+                }
+                finally
+                {
+                    server.ReleaseSubscriptionDeletion();
+                    await Task.WhenAll(firstStop, secondStop, disposal).WaitAsync(cancellation.Token);
+                }
+            }
+            finally
+            {
+                server.ReleaseSubscriptionDeletion();
+                await firstStop.WaitAsync(cancellation.Token);
+            }
+            await Assert.That(server.SubscriptionDeletionRequests).IsEqualTo(1);
+        }
+        else
+        {
+            await subscription.StopAsync(cancellation.Token);
+        }
         await Assert.That(connection.Session.SubscriptionCount).IsEqualTo(0);
         await Assert.That(nativeSubscription.Created).IsFalse();
         await subscription.StopAsync(cancellation.Token);
@@ -474,6 +513,10 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
         public int AttributeMethodInvocations => server.AttributeMethodInvocations;
 
         public void ReportRegistryCreatedEvent(DateTimeOffset time) => server.ReportRegistryCreatedEvent(time);
+        public Task SubscriptionDeletionEntered => server.SubscriptionDeletionEntered.Task;
+        public int SubscriptionDeletionRequests => server.SubscriptionDeletionRequests;
+        public void BlockSubscriptionDeletion() => server.BlockSubscriptionDeletion = true;
+        public void ReleaseSubscriptionDeletion() => server.ContinueSubscriptionDeletion.TrySetResult();
 
         public static async ValueTask<InProcessRegistryServer> StartAsync(
             string? externalServerApplicationUri = null,
@@ -568,6 +611,26 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
         public int DeleteInvocations => nodeManager?.DeleteInvocations ?? 0;
         public uint? DeleteExpectedEpoch => nodeManager?.DeleteExpectedEpoch;
         public int AttributeMethodInvocations => nodeManager?.AttributeMethodInvocations ?? 0;
+        public bool BlockSubscriptionDeletion { get; set; }
+        public TaskCompletionSource SubscriptionDeletionEntered { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource ContinueSubscriptionDeletion { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public int SubscriptionDeletionRequests { get; private set; }
+
+        protected override async ValueTask OnRequestValidatedAsync(OperationContext context)
+        {
+            await base.OnRequestValidatedAsync(context);
+            if (context.RequestType == RequestType.DeleteSubscriptions)
+            {
+                SubscriptionDeletionRequests++;
+                if (BlockSubscriptionDeletion)
+                {
+                    SubscriptionDeletionEntered.TrySetResult();
+                    await ContinueSubscriptionDeletion.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                }
+            }
+        }
 
         public void ReportRegistryCreatedEvent(DateTimeOffset time) =>
             (nodeManager ?? throw new InvalidOperationException("The node manager was not initialized."))
