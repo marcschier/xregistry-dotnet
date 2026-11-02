@@ -176,6 +176,25 @@ attempts an uncancelled Close without writing, retaining any cleanup failure
 on the output error. This validates the Method result, not the target's complete
 Version metadata or server-side creation semantics.
 
+`CreateOrReplaceResourceDocumentAsync` composes Resource acquisition and
+document replacement. It checks the accepted Core version, compiled
+document-bearing collection, request path, required type mappings and byte
+budget before calling `GetOrCreateResource` without a creation-time handle.
+An omitted or empty Version identifier selects the existing default or lets
+the Server assign the first Version; an explicit identifier selects or creates
+that exact Version. The writer resolves the returned assigned identifier
+through the selected logical Resource's typed `Versions` hierarchy, validates
+its `ResourceId`, `VersionId` and other read metadata, and requires the resolved
+NodeId to equal the Method result before opening mode 6. It returns the exact
+Version identity and `Created` outcome after writing and closing.
+The existing `ReplaceResourceDocumentAsync` only resolves an existing Resource
+or Version; use the composed operation when creation is allowed. A failed
+validation or cancellation after creation can leave the created Resource and
+Version in place; the writer does not delete them or retry with another
+creation Method. Default selection, validation and document commit are
+separate interactions, not one transaction. Other Version metadata changes
+remain explicit Property or attribute operations.
+
 Pre-cancelled replacements do not resolve or Open a file. After Open, the
 writer checks cancellation before positioning and after positioning or each
 Write, including the final chunk and empty replacements. It attempts Close

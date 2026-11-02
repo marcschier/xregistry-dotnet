@@ -137433,7 +137433,7 @@
       "text": "Resource document replacement creates the Resource if needed, then replaces the selected default Version's complete document. For an absent logical Resource, the client preferably calls `GetOrCreateResource` on the parent Group. Strict `CreateResource` rejects an existing exact `(ResourceId, VersionId)` pair; it does not reject every existing logical Resource, because a new Version can be added to one. It then opens the logical Resource or returned exact Version for writing, uses Write plus EraseExisting to stage a complete replacement, writes the complete new byte stream and closes the handle. It writes or validates exact Version metadata Properties. Complete replacement MUST truncate any previous content: `Open(mode = 6)` combines Write and EraseExisting. Merely setting the file position to zero does not remove a longer previous suffix. For replacement, the client can request no creation-time handle and then Open with mode 6. If it already holds a creation-time write handle without documented truncation semantics, it closes that handle without changes and reopens with mode 6.",
       "review": {
         "status": "reviewed",
-        "note": "The selected replacement procedure was read with staged commit semantics and the creation Method contracts. ReplaceResourceDocumentAsync selects the model-declared logical or exact file and opens mode 6. CompleteCreatedResourceDocumentAsync previously positioned and wrote the creation-time handle directly, without establishing truncation. It now closes that handle unchanged, then reopens the same Object with mode 6 before writing complete bounded chunks. Entry cancellation or an oversized document closes the transferred handle without positioning, writing or reopening; initial Close failure prevents replacement. Empty, below-limit and exact-limit completion cases assert original and replacement handle ownership. The real encrypted writer workflow replaces a longer existing document with shorter bytes. Create/get-or-create calls and metadata writes remain separate public interactions; automatic absent-Resource orchestration, exact metadata validation and complete server commit behavior remain pending.",
+        "note": "The selected replacement procedure was read with staged commit semantics and creation contracts. CreateOrReplaceResourceDocumentAsync now validates the modeled document request and byte budget before GetOrCreateResource without a creation-time handle. It resolves the assigned exact Version through the logical Resource's typed Versions hierarchy, validates its metadata and compares its NodeId with the Method result before mode-6 replacement. Direct cases cover assigned/default and explicit selection, Created outcomes, empty/below/exact/over-budget content, contradictory identity, missing/duplicate/wrong-type targets, early rejection, cancellation and original operation/cleanup failures without retry. A real encrypted Session creates an absent Resource, reads back its exact document, replaces it with shorter content and preserves a separate Resource's bytes. CompleteCreatedResourceDocumentAsync still closes an existing creation handle unchanged before truncating reopen. Whole workflow atomicity, complete server commit/epoch/event behavior, concurrent recreation and metadata mutation semantics remain pending.",
         "roles": [
           "client",
           "server"
@@ -137451,6 +137451,12 @@
           "ResourceDocumentWriteErasesThenWritesBoundedChunksAndCloses",
           "ResourceDocumentWriteClosesEmptyReplacementWithoutWritingChunks",
           "WriterCreateAndGetOrCreatePreserveOutputsAndValidateTypes",
+          "CreateOrReplaceDocumentValidatesExactVersionAndWritesCompleteReplacement",
+          "CreateOrReplaceDocumentRejectsUnverifiedTargetsBeforeOpen",
+          "CreateOrReplaceDocumentRejectsBeforeCreation",
+          "CreateOrReplaceDocumentRequiresAcceptedSpecVersionAndCompiledModel",
+          "CreateOrReplaceDocumentObservesCancellationAfterCreationBeforeBrowse",
+          "CreateOrReplaceDocumentRetainsNativeFailureWithoutRetry",
           "WriterWritesPropertiesDeleteAndFileDocumentsOnARealServer"
         ],
         "nativeEvidence": []
@@ -137570,13 +137576,25 @@
       ],
       "text": "To create or update a Version, the client resolves its exact `ResourceType` under the logical Resource's `Versions` component. If absent and creation is allowed, the client calls `GetOrCreateResource` on the Group with the Resource and Version identifiers, or `CreateResource` for strict creation. The returned `ResourceNodeId` identifies the exact Version; `AssignedVersionId` supplies its assigned identifier. That Version's BrowseName MUST be its `versionid`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The selected exact-Version creation procedure was read with document replacement and the following ResourceId/VersionId validation paragraph. Existing exact reads resolve the typed Versions component and child by ordinal BrowseName. The new composed writer calls GetOrCreateResource, then resolves the assigned identifier in that selected hierarchy and validates ResourceId, VersionId, optional Xid and other read metadata before comparing the returned exact NodeId and opening it for truncating replacement. It never writes the logical default or an unrelated Method-returned node instead. Null/empty default selection, explicit selection and server assignment have direct evidence; encrypted real-Session calls create an absent Resource and repeat replacement without changing another Resource. Strict CreateResource remains separately exposed. Complete server declaration/creation semantics, concurrent deletion/recreation and full metadata mutation workflows remain pending.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "CreateOrReplaceDocumentValidatesExactVersionAndWritesCompleteReplacement",
+          "CreateOrReplaceDocumentRejectsUnverifiedTargetsBeforeOpen",
+          "CreateOrReplaceDocumentRejectsBeforeCreation",
+          "CreateOrReplaceDocumentRequiresAcceptedSpecVersionAndCompiledModel",
+          "CreateOrReplaceDocumentObservesCancellationAfterCreationBeforeBrowse",
+          "CreateOrReplaceDocumentRetainsNativeFailureWithoutRetry",
+          "WriterCreateAndGetOrCreatePreserveOutputsAndValidateTypes",
+          "WriterWritesPropertiesDeleteAndFileDocumentsOnARealServer"
+        ],
         "nativeEvidence": []
       }
     },

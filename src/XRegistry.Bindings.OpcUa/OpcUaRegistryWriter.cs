@@ -180,6 +180,39 @@ public sealed class OpcUaRegistryWriter
         await ReplaceFileDocumentAsync(file, contents, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Gets or creates an exact Version, validates its selected hierarchy and metadata, then replaces its document.</summary>
+    public async ValueTask<OpcUaResourceResolution> CreateOrReplaceResourceDocumentAsync(
+        NodeId groupNode, string groupXid, string resourceCollection, string resourceId,
+        NodeId resourceType, NodeId resourceVersionsType, ReadOnlyMemory<byte> contents,
+        string? versionId = null, CancellationToken cancellationToken = default)
+    {
+        reader.EnsureSpecVersionValidatedForWrite();
+        cancellationToken.ThrowIfCancellationRequested();
+        if (groupNode.IsNull || resourceType.IsNull || resourceVersionsType.IsNull)
+        {
+            throw new ArgumentException("The selected Group, ResourceType and ResourceVersionsType are required.");
+        }
+        reader.ValidateResourceDocumentRequest(groupXid, resourceCollection, resourceId,
+            string.IsNullOrEmpty(versionId) ? null : versionId);
+        if (contents.Length > reader.MaxBytes)
+        {
+            throw new FederationException(FederationErrorCode.LimitExceeded, "The document exceeds the byte budget.");
+        }
+
+        var result = await GetOrCreateResourceAsync(groupNode, resourceId, versionId,
+            requestFileOpen: false, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        var exactVersion = await reader.ResolveResourceDocumentAsync(groupNode, groupXid, resourceCollection,
+            resourceId, resourceType, result.VersionId, resourceVersionsType, cancellationToken).ConfigureAwait(false);
+        if (exactVersion != result.ResourceNode)
+        {
+            throw new FederationException(FederationErrorCode.InvalidPackage,
+                "GetOrCreateResource returned a NodeId outside the selected exact Version.");
+        }
+        await ReplaceFileDocumentAsync(exactVersion, contents, cancellationToken).ConfigureAwait(false);
+        return result;
+    }
+
     /// <summary>Replaces the complete byte stream of a supplied FileType node.</summary>
     public async ValueTask ReplaceFileDocumentAsync(NodeId file, ReadOnlyMemory<byte> contents,
         CancellationToken cancellationToken = default)

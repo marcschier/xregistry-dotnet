@@ -528,6 +528,9 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
                 () => writer.ReplaceFileDocumentAsync(server.DocumentFile, new byte[] { 1 }, cancellation.Token),
                 () => writer.ReplaceResourceDocumentAsync(server.GroupNode, "/teams/team-a", "schemas", "schema-a",
                     ObjectTypeIds.FileType, new byte[] { 1 }, cancellationToken: cancellation.Token),
+                async () => { _ = await writer.CreateOrReplaceResourceDocumentAsync(
+                    server.GroupNode, "/teams/team-a", "schemas", "schema-a", ObjectTypeIds.FileType,
+                    server.ResourceVersionsType, new byte[] { 1 }, cancellationToken: cancellation.Token); },
                 () => writer.CompleteCreatedResourceDocumentAsync(server.DocumentFile, 7,
                     new byte[] { 1 }, cancellation.Token)
             ];
@@ -564,7 +567,7 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
 
         var createdResource = await writer.CreateResourceAsync(group, "schema-a", "v1", true,
             cancellation.Token);
-        await Assert.That(createdResource.ResourceNode).IsEqualTo(server.DocumentFile);
+        await Assert.That(createdResource.ResourceNode).IsEqualTo(server.DocumentVersionFile);
         await Assert.That(createdResource.VersionId).IsEqualTo("v1");
         await Assert.That(createdResource.FileHandle).IsGreaterThan(0u);
         byte[] createdDocument = "created resource document"u8.ToArray();
@@ -575,7 +578,7 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
 
         var resolvedResource = await writer.GetOrCreateResourceAsync(group, "schema-a", "v1", true,
             cancellation.Token);
-        await Assert.That(resolvedResource.ResourceNode).IsEqualTo(server.DocumentFile);
+        await Assert.That(resolvedResource.ResourceNode).IsEqualTo(server.DocumentVersionFile);
         await Assert.That(resolvedResource.VersionId).IsEqualTo("v1");
         await Assert.That(resolvedResource.Created).IsFalse();
         byte[] resolvedDocument = "short"u8.ToArray();
@@ -583,6 +586,47 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
             resolvedResource.ResourceNode, resolvedResource.FileHandle, resolvedDocument, cancellation.Token);
         var resolvedReadback = await connection.Reader.ReadFileAsync(server.DocumentFile, cancellation.Token);
         await Assert.That(Convert.ToHexString(resolvedReadback)).IsEqualTo(Convert.ToHexString(resolvedDocument));
+
+        foreach (var requestedVersion in new string?[] { null, "v1" })
+        {
+            byte[] replacement = requestedVersion is null ? "composed replacement"u8.ToArray() : "exact"u8.ToArray();
+            var replaced = await writer.CreateOrReplaceResourceDocumentAsync(
+                group, "/teams/team-a", "schemas", "schema-a", ObjectTypeIds.FileType,
+                server.ResourceVersionsType, replacement, requestedVersion, cancellation.Token);
+            await Assert.That(replaced.ResourceNode).IsEqualTo(server.DocumentVersionFile);
+            await Assert.That(replaced.VersionId).IsEqualTo("v1");
+            await Assert.That(replaced.Created).IsFalse();
+            await Assert.That(replaced.FileHandle).IsEqualTo(0u);
+            var replacementReadback = await connection.Reader.ReadFileAsync(
+                server.DocumentVersionFile, cancellation.Token);
+            await Assert.That(Convert.ToHexString(replacementReadback))
+                .IsEqualTo(Convert.ToHexString(replacement));
+        }
+
+        var absent = await Assert.ThrowsAsync<FederationException>(async () =>
+            await connection.Reader.ResolveResourceNodeAsync(group, "/teams/team-a", "schemas", "new-schema",
+                ObjectTypeIds.FileType, cancellationToken: cancellation.Token));
+        await Assert.That(absent!.Code).IsEqualTo(FederationErrorCode.NotFound);
+        foreach (var firstCreation in new[] { true, false })
+        {
+            byte[] replacement = firstCreation ? "new resource document"u8.ToArray() : "new"u8.ToArray();
+            var replaced = await writer.CreateOrReplaceResourceDocumentAsync(
+                group, "/teams/team-a", "schemas", "new-schema", ObjectTypeIds.FileType,
+                server.ResourceVersionsType, replacement, cancellationToken: cancellation.Token);
+            await Assert.That(replaced.Created).IsEqualTo(firstCreation);
+            await Assert.That(replaced.VersionId).IsEqualTo("v1");
+            await Assert.That(replaced.FileHandle).IsEqualTo(0u);
+            var selected = await connection.Reader.ResolveResourceNodeAsync(
+                group, "/teams/team-a", "schemas", "new-schema", ObjectTypeIds.FileType, "v1",
+                server.ResourceVersionsType, cancellation.Token);
+            await Assert.That(replaced.ResourceNode).IsEqualTo(selected);
+            var replacementReadback = await connection.Reader.ReadFileAsync(selected, cancellation.Token);
+            await Assert.That(Convert.ToHexString(replacementReadback))
+                .IsEqualTo(Convert.ToHexString(replacement));
+            var unchangedOriginal = await connection.Reader.ReadFileAsync(server.DocumentFile, cancellation.Token);
+            await Assert.That(Convert.ToHexString(unchangedOriginal))
+                .IsEqualTo(Convert.ToHexString("exact"u8.ToArray()));
+        }
 
         await writer.AddAttributeAsync(server.LabelsNode, "team", "alpha", 1, cancellation.Token);
         await writer.RemoveAttributeAsync(server.LabelsNode, "team", 2, cancellation.Token);
@@ -678,6 +722,7 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
         public NodeId VersionNode => server.VersionNode;
         public NodeId WriteProbe => server.WriteProbe;
         public NodeId DocumentFile => server.DocumentFile;
+        public NodeId DocumentVersionFile => server.DocumentVersionFile;
         public NodeId GroupNode => server.GroupNode;
         public NodeId LabelsNode => server.LabelsNode;
         public NodeId MetaLabelsNode => server.MetaLabelsNode;
@@ -780,6 +825,8 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
             : writeProbe;
         public NodeId DocumentFile => nodeManager?.DocumentFile ??
             throw new InvalidOperationException("The DocumentFile was not initialized.");
+        public NodeId DocumentVersionFile => nodeManager?.DocumentVersionFile ??
+            throw new InvalidOperationException("The DocumentVersionFile was not initialized.");
         public NodeId GroupNode => nodeManager?.GroupNode ??
             throw new InvalidOperationException("The GroupNode was not initialized.");
         public NodeId LabelsNode => nodeManager?.LabelsNode ??
@@ -848,7 +895,8 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
         private readonly string? externalServerApplicationUri;
         private readonly bool alternateModelLayout;
         private BaseObjectState? registryRoot;
-        private byte[] documentContents = [];
+        private readonly Dictionary<string, byte[]> documentContents = new(StringComparer.Ordinal);
+        private FileState? createdDocumentResource;
         private uint nextFileHandle;
         public int DeleteInvocations { get; private set; }
         public uint? DeleteExpectedEpoch { get; private set; }
@@ -880,6 +928,7 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
         public NodeId VersionNode => new("Registry.VersionedResource.Versions.v1", NamespaceIndex);
         public NodeId WriteProbe => new("Registry.WriteProbe", NamespaceIndex);
         public NodeId DocumentFile => new("Registry.Document", NamespaceIndex);
+        public NodeId DocumentVersionFile => new("Registry.Document.Versions.v1", NamespaceIndex);
         public NodeId GroupNode => new("Registry.Group", NamespaceIndex);
         public NodeId LabelsNode => new("Registry.Group.Labels", NamespaceIndex);
         public NodeId MetaLabelsNode => new("Registry.Group.MetaLabels", NamespaceIndex);
@@ -1128,9 +1177,10 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
                         return new ServiceResult(StatusCodes.BadInvalidArgument);
                     }
 
-                    outputs[0] = new Variant(DocumentFile);
-                    outputs[1] = inputs[1];
-                    outputs[2] = new Variant(OpenDocumentForWrite());
+                    outputs[0] = new Variant(DocumentVersionFile);
+                    outputs[1] = new Variant("v1");
+                    outputs[2] = new Variant(inputs[2].TryGetValue(out bool requestOpen) && requestOpen
+                        ? OpenDocumentForWrite() : 0u);
                     return ServiceResult.Good;
                 });
             AddMethod(group, "GetOrCreateResource",
@@ -1147,14 +1197,34 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
                 ],
                 (_, _, inputs, outputs) =>
                 {
+                    if (inputs.Count == 3 &&
+                        inputs[0].TryGetValue(out string? resourceId) && resourceId == "new-schema" &&
+                        inputs[1].TryGetValue(out string? versionId) && versionId is "" or "v1" &&
+                        inputs[2].TryGetValue(out bool requestNewOpen))
+                    {
+                        var created = createdDocumentResource is null;
+                        if (createdDocumentResource is null)
+                        {
+                            createdDocumentResource = AddDocumentResource(
+                                group, new NodeId("Registry.CreatedDocument", NamespaceIndex), resourceId, groupXid);
+                            AddPredefinedNode(SystemContext, createdDocumentResource);
+                        }
+                        outputs[0] = new Variant(
+                            new NodeId(createdDocumentResource.NodeId.IdentifierAsString + ".Versions.v1", NamespaceIndex));
+                        outputs[1] = new Variant("v1");
+                        outputs[2] = new Variant(requestNewOpen ? OpenDocumentForWrite(resourceId) : 0u);
+                        outputs[3] = new Variant(created);
+                        return ServiceResult.Good;
+                    }
                     if (!IsExpectedResourceCall(inputs))
                     {
                         return new ServiceResult(StatusCodes.BadInvalidArgument);
                     }
 
-                    outputs[0] = new Variant(DocumentFile);
-                    outputs[1] = inputs[1];
-                    outputs[2] = new Variant(OpenDocumentForWrite());
+                    outputs[0] = new Variant(DocumentVersionFile);
+                    outputs[1] = new Variant("v1");
+                    outputs[2] = new Variant(inputs[2].TryGetValue(out bool requestOpen) && requestOpen
+                        ? OpenDocumentForWrite() : 0u);
                     outputs[3] = new Variant(false);
                     return ServiceResult.Good;
                 });
@@ -1180,7 +1250,7 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
                 System.Text.Encoding.UTF8.GetBytes(alternateModelLayout ? AlternateModelJson : ModelJson));
             AddReadOnlyFile(root, new NodeId("Registry.Capabilities", NamespaceIndex), "Capabilities",
                 """{"flags":["doc"]}"""u8.ToArray());
-            AddDocumentFile(group);
+            _ = AddDocumentResource(group, DocumentFile, "schema-a", groupXid);
 
             AddPredefinedNode(SystemContext, registryType);
             AddPredefinedNode(SystemContext, groupType);
@@ -1222,16 +1292,36 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
             root.ReportEvent(SystemContext, notification);
         }
 
-        private void AddDocumentFile(BaseObjectState parent)
+        private FileState AddDocumentResource(BaseObjectState group, NodeId node, string resourceId, string groupXid)
+        {
+            documentContents.Add(resourceId, []);
+            var document = AddDocumentFile(group, node, resourceId, resourceId);
+            var versions = new BaseObjectState(document)
+            {
+                NodeId = new NodeId(node.IdentifierAsString + ".Versions", NamespaceIndex),
+                BrowseName = new QualifiedName("Versions", NamespaceIndex),
+                DisplayName = new LocalizedText("Versions"),
+                ReferenceTypeId = ReferenceTypeIds.HasComponent,
+                TypeDefinitionId = ResourceVersionsType,
+            };
+            versions.AddReference(ReferenceTypeIds.HasTypeDefinition, false, ResourceVersionsType);
+            document.AddChild(versions);
+            var exact = AddDocumentFile(versions,
+                new NodeId(node.IdentifierAsString + ".Versions.v1", NamespaceIndex), "v1", resourceId);
+            AddResourceProperty(exact, "Xid", $"{groupXid}/schemas/{resourceId}/versions/v1");
+            return document;
+        }
+
+        private FileState AddDocumentFile(BaseObjectState parent, NodeId node, string browseName, string resourceId)
         {
             var file = new FileState(parent)
             {
-                NodeId = DocumentFile,
-                BrowseName = new QualifiedName("schema-a", NamespaceIndex),
-                DisplayName = new LocalizedText("schema-a"),
+                NodeId = node,
+                BrowseName = new QualifiedName(browseName, NamespaceIndex),
+                DisplayName = new LocalizedText(browseName),
                 TypeDefinitionId = ObjectTypeIds.FileType,
             };
-            AddResourceProperty(file, "ResourceId", "schema-a");
+            AddResourceProperty(file, "ResourceId", resourceId);
             AddResourceProperty(file, "VersionId", "v1");
             AddResourceProperty(file, "Name", "Schema A");
             file.Open = new OpenMethodState(file)
@@ -1242,12 +1332,12 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
                 {
                     handle = ++nextFileHandle;
                     openFiles.Add(handle, mode == 1
-                        ? new MemoryStream(documentContents.ToArray(), writable: false)
+                        ? new MemoryStream(documentContents[resourceId].ToArray(), writable: false)
                         : new MemoryStream());
                     return ServiceResult.Good;
                 },
             };
-            file.Open.Create(SystemContext, new NodeId("Registry.Document.Open", NamespaceIndex),
+            file.Open.Create(SystemContext, new NodeId(node.IdentifierAsString + ".Open", NamespaceIndex),
                 new QualifiedName(BrowseNames.Open), new LocalizedText(BrowseNames.Open), false);
             file.Open.MethodDeclarationId = MethodIds.FileType_Open;
 
@@ -1267,7 +1357,7 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
                     return ServiceResult.Good;
                 },
             };
-            file.Write.Create(SystemContext, new NodeId("Registry.Document.Write", NamespaceIndex),
+            file.Write.Create(SystemContext, new NodeId(node.IdentifierAsString + ".Write", NamespaceIndex),
                 new QualifiedName(BrowseNames.Write), new LocalizedText(BrowseNames.Write), false);
             file.Write.MethodDeclarationId = MethodIds.FileType_Write;
 
@@ -1289,7 +1379,7 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
                     return ServiceResult.Good;
                 },
             };
-            file.Read.Create(SystemContext, new NodeId("Registry.Document.Read", NamespaceIndex),
+            file.Read.Create(SystemContext, new NodeId(node.IdentifierAsString + ".Read", NamespaceIndex),
                 new QualifiedName(BrowseNames.Read), new LocalizedText(BrowseNames.Read), false);
             file.Read.MethodDeclarationId = MethodIds.FileType_Read;
 
@@ -1306,14 +1396,14 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
 
                     if (stream.CanWrite)
                     {
-                        documentContents = stream.ToArray();
+                        documentContents[resourceId] = stream.ToArray();
                     }
 
                     stream.Dispose();
                     return ServiceResult.Good;
                 },
             };
-            file.Close.Create(SystemContext, new NodeId("Registry.Document.Close", NamespaceIndex),
+            file.Close.Create(SystemContext, new NodeId(node.IdentifierAsString + ".Close", NamespaceIndex),
                 new QualifiedName(BrowseNames.Close), new LocalizedText(BrowseNames.Close), false);
             file.Close.MethodDeclarationId = MethodIds.FileType_Close;
 
@@ -1332,17 +1422,18 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
                     return ServiceResult.Good;
                 },
             };
-            file.SetPosition.Create(SystemContext, new NodeId("Registry.Document.SetPosition", NamespaceIndex),
+            file.SetPosition.Create(SystemContext, new NodeId(node.IdentifierAsString + ".SetPosition", NamespaceIndex),
                 new QualifiedName(BrowseNames.SetPosition), new LocalizedText(BrowseNames.SetPosition), false);
             file.SetPosition.MethodDeclarationId = MethodIds.FileType_SetPosition;
 
             parent.AddChild(file);
+            return file;
         }
 
         private void AddResourceProperty(FileState resource, string name, string value)
         {
             var property = PropertyState<string>.With<VariantBuilder>(resource, value);
-            property.NodeId = new NodeId($"Registry.Document.{name}", NamespaceIndex);
+            property.NodeId = new NodeId($"{resource.NodeId.IdentifierAsString}.{name}", NamespaceIndex);
             property.BrowseName = new QualifiedName(name, NamespaceIndex);
             property.DisplayName = new LocalizedText(name);
             property.ReferenceTypeId = ReferenceTypeIds.HasProperty;
@@ -1474,10 +1565,13 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
             return file;
         }
 
-        private uint OpenDocumentForWrite()
+        private uint OpenDocumentForWrite(string resourceId = "schema-a")
         {
             uint handle = ++nextFileHandle;
-            openFiles.Add(handle, new MemoryStream());
+            var stream = new MemoryStream();
+            stream.Write(documentContents[resourceId]);
+            stream.Position = 0;
+            openFiles.Add(handle, stream);
             return handle;
         }
 
@@ -1521,8 +1615,8 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
         private static bool IsExpectedResourceCall(ArrayOf<Variant> inputs) =>
             inputs.Count == 3 &&
             inputs[0].TryGetValue(out string? resourceId) && resourceId == "schema-a" &&
-            inputs[1].TryGetValue(out string? versionId) && versionId == "v1" &&
-            inputs[2].TryGetValue(out bool requestFileOpen) && requestFileOpen;
+            inputs[1].TryGetValue(out string? versionId) && versionId is "" or "v1" &&
+            inputs[2].TryGetValue(out bool _);
 
         private bool IsExpectedAttributeCall(BaseObjectState target, string method, ArrayOf<Variant> inputs)
         {

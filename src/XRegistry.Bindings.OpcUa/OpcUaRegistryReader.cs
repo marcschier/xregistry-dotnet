@@ -649,18 +649,26 @@ public sealed class OpcUaRegistryReader
         string resourceCollection, string resourceId, NodeId resourceType, string? versionId,
         NodeId? resourceVersionsType, CancellationToken cancellationToken)
     {
-        EnsureSpecVersionValidated();
-        if (!RequireResourceDefinition(groupXid, resourceCollection).HasDocument)
-        {
-            throw new FederationException(FederationErrorCode.UnsupportedOperation,
-                "The resource model declares hasdocument=false.");
-        }
-        _ = new FederationReadRequest(FederationOperation.Entity, groupXid);
+        ValidateResourceDocumentRequest(groupXid, resourceCollection, resourceId, versionId);
         var resource = await FindSelectedResourceAsync(groupNode, resourceId, resourceType, resourceVersionsType,
             versionId, cancellationToken).ConfigureAwait(false);
         _ = await ReadResourceEntityAsync(resource, groupXid, resourceCollection, resourceId, versionId,
             cancellationToken).ConfigureAwait(false);
         return resource.Target;
+    }
+
+    internal void ValidateResourceDocumentRequest(string groupXid, string resourceCollection,
+        string resourceId, string? versionId)
+    {
+        EnsureSpecVersionValidated();
+        ArgumentException.ThrowIfNullOrEmpty(resourceId);
+        if (!RequireResourceDefinition(groupXid, resourceCollection).HasDocument)
+        {
+            throw new FederationException(FederationErrorCode.UnsupportedOperation,
+                "The resource model declares hasdocument=false.");
+        }
+        _ = new FederationReadRequest(FederationOperation.Entity,
+            GroupXidFromParent(groupXid, resourceCollection, resourceId, versionId));
     }
 
     /// <summary>Reads default resources identified by matching ResourceId and BrowseName values.</summary>

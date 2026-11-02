@@ -2307,6 +2307,257 @@ public class OpcUaRegistryReaderTests
     }
 
     [Test]
+    [Arguments(true, null, 0)]
+    [Arguments(true, null, 99)]
+    [Arguments(true, null, 100)]
+    [Arguments(true, "", 3)]
+    [Arguments(true, "v2", 3)]
+    [Arguments(false, null, 0)]
+    [Arguments(false, null, 99)]
+    [Arguments(false, null, 100)]
+    [Arguments(false, "", 3)]
+    [Arguments(false, "v2", 3)]
+    public async Task CreateOrReplaceDocumentValidatesExactVersionAndWritesCompleteReplacement(
+        bool created, string? versionId, int length)
+    {
+        var (session, writer) = await WriterForResource(maxBytes: 100, chunkSize: 64);
+        session.Pages.Clear();
+        session.MethodOutputs["GetOrCreateResource"] =
+            [new Variant(VersionTwoNode), new Variant("v2"), new Variant(0u), new Variant(created)];
+        session.AfterMethod = () => QueueDocumentSelection(session, explicitVersion: true);
+        var browseStart = session.BrowsedNodes.Count;
+        var operationStart = session.FileOperations.Count;
+        var contents = Enumerable.Range(0, length).Select(value => (byte)value).ToArray();
+
+        var result = await writer.CreateOrReplaceResourceDocumentAsync(GroupNode, "/teams/team-a",
+            "schemas", "schema-a", ResourceType, ResourceVersionsType, contents, versionId);
+
+        await Assert.That(result.ResourceNode).IsEqualTo(VersionTwoNode);
+        await Assert.That(result.VersionId).IsEqualTo("v2");
+        await Assert.That(result.Created).IsEqualTo(created);
+        await Assert.That(result.FileHandle).IsEqualTo(0u);
+        var call = session.MethodCalls.Single();
+        await Assert.That(call.Target).IsEqualTo(GroupNode);
+        await Assert.That(call.Method).IsEqualTo("GetOrCreateResource");
+        await Assert.That(call.Arguments[0].TryGetValue(out string? resource) && resource == "schema-a").IsTrue();
+        await Assert.That(call.Arguments[1].TryGetValue(out string? version) &&
+            version == (versionId ?? string.Empty)).IsTrue();
+        await Assert.That(call.Arguments[2].TryGetValue(out bool requestOpen) && !requestOpen).IsTrue();
+        await Assert.That(NodeIdTrace(session.BrowsedNodes.Skip(browseStart)))
+            .IsEqualTo("group-team-a|logical-schema-a|schema-a-versions|schema-a-v2");
+        await Assert.That(session.Opened).IsEqualTo(2);
+        await Assert.That(session.LastOpenedFile).IsEqualTo(VersionTwoNode);
+        await Assert.That(session.OpenMode).IsEqualTo((byte)6);
+        await Assert.That(session.WrittenChunks.SelectMany(chunk => chunk).ToArray()).IsEquivalentTo(contents);
+        await Assert.That(session.WrittenChunks.Count).IsEqualTo((length + 63) / 64);
+        await Assert.That(session.WrittenFiles.All(file => file == VersionTwoNode)).IsTrue();
+        await Assert.That(session.Closed).IsEqualTo(2);
+        await Assert.That(session.ClosedFiles.Last()).IsEqualTo(VersionTwoNode);
+        await Assert.That(session.CloseToken.CanBeCanceled).IsFalse();
+        await Assert.That(string.Join("|", session.FileOperations.Skip(operationStart)))
+            .IsEqualTo("Open:6|Position:7|" + string.Concat(Enumerable.Repeat("Write:7|", (length + 63) / 64)) +
+                "Close:7");
+    }
+
+    [Test]
+    [Arguments("node", FederationErrorCode.InvalidPackage)]
+    [Arguments("resource-id", FederationErrorCode.InvalidPackage)]
+    [Arguments("version-id", FederationErrorCode.InvalidPackage)]
+    [Arguments("xid", FederationErrorCode.InvalidPackage)]
+    [Arguments("missing-resource", FederationErrorCode.NotFound)]
+    [Arguments("missing-versions", FederationErrorCode.NotFound)]
+    [Arguments("missing-version", FederationErrorCode.NotFound)]
+    [Arguments("wrong-type", FederationErrorCode.NotFound)]
+    [Arguments("duplicate-version", FederationErrorCode.Ambiguous)]
+    public async Task CreateOrReplaceDocumentRejectsUnverifiedTargetsBeforeOpen(
+        string malformed, FederationErrorCode code)
+    {
+        var (session, writer) = await WriterForResource();
+        session.Pages.Clear();
+        session.MethodOutputs["GetOrCreateResource"] =
+        [
+            new Variant(malformed == "node" ? DefaultVersionNode : VersionTwoNode),
+            new Variant("v2"), new Variant(0u), new Variant(false)
+        ];
+        session.AfterMethod = () =>
+        {
+            QueueDocumentSelection(session, explicitVersion: true);
+            if (malformed == "missing-resource")
+            {
+                session.BrowsePages[GroupNode] = new([new([])]);
+            }
+            if (malformed == "missing-versions")
+            {
+                session.BrowsePages[LogicalResourceNode] = new([new([])]);
+            }
+            if (malformed is "missing-version" or "wrong-type" or "duplicate-version")
+            {
+                var candidates = new List<OpcUaReference>();
+                if (malformed != "missing-version")
+                {
+                    candidates.Add(TypedObjectRef("v2", VersionTwoNode,
+                        malformed == "wrong-type" ? ObjectTypeIds.BaseObjectType : ResourceType));
+                }
+                if (malformed == "duplicate-version")
+                {
+                    candidates.Add(TypedObjectRef("v2", DefaultVersionNode, ResourceType));
+                }
+                session.BrowsePages[VersionsNode] = new([new(candidates)]);
+            }
+        };
+        if (malformed is "resource-id" or "version-id" or "xid")
+        {
+            var property = malformed == "resource-id" ? "ResourceId" :
+                malformed == "version-id" ? "VersionId" : "Xid";
+            session.JsonValues["v2:" + property] = Value("\"different\"", BuiltInType.String);
+        }
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await writer.CreateOrReplaceResourceDocumentAsync(GroupNode, "/teams/team-a", "schemas", "schema-a",
+                ResourceType, ResourceVersionsType, new byte[] { 1 }, "v2"));
+
+        await Assert.That(error!.Code).IsEqualTo(code);
+        await Assert.That(session.MethodCalls.Single().Method).IsEqualTo("GetOrCreateResource");
+        await Assert.That(session.Opened).IsEqualTo(1);
+        await Assert.That(session.Closed).IsEqualTo(1);
+        await Assert.That(session.WrittenChunks.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("cancel")]
+    [Arguments("limit")]
+    [Arguments("metadata")]
+    [Arguments("collection")]
+    [Arguments("group")]
+    [Arguments("resource-type")]
+    [Arguments("versions-type")]
+    [Arguments("resource-id")]
+    public async Task CreateOrReplaceDocumentRejectsBeforeCreation(string invalid)
+    {
+        var (session, writer) = await WriterForResource(
+            invalid == "metadata"
+                ? """{"groups":{"teams":{"singular":"team","resources":{"schemas":{"singular":"schema","hasdocument":false}}}}}"""
+                : TestModel,
+            maxBytes: 256);
+        var browsed = session.BrowsedNodes.Count;
+        using var cancellation = new CancellationTokenSource();
+        if (invalid == "cancel")
+        {
+            cancellation.Cancel();
+        }
+
+        async Task Invoke() => _ = await writer.CreateOrReplaceResourceDocumentAsync(
+            invalid == "group" ? NodeId.Null : GroupNode, "/teams/team-a",
+            invalid == "collection" ? "unknown" : "schemas", invalid == "resource-id" ? "" : "schema-a",
+            invalid == "resource-type" ? NodeId.Null : ResourceType,
+            invalid == "versions-type" ? NodeId.Null : ResourceVersionsType,
+            new byte[invalid == "limit" ? 257 : 1], cancellationToken: cancellation.Token);
+
+        if (invalid == "cancel")
+        {
+            var error = await Assert.ThrowsAsync<OperationCanceledException>(Invoke);
+            await Assert.That(error!.CancellationToken).IsEqualTo(cancellation.Token);
+        }
+        else if (invalid is "group" or "resource-type" or "versions-type" or "resource-id")
+        {
+            _ = await Assert.ThrowsAsync<ArgumentException>(Invoke);
+        }
+        else
+        {
+            var error = await Assert.ThrowsAsync<FederationException>(Invoke);
+            await Assert.That(error!.Code).IsEqualTo(invalid == "metadata" ? FederationErrorCode.UnsupportedOperation :
+                invalid == "limit" ? FederationErrorCode.LimitExceeded : FederationErrorCode.NotFound);
+        }
+        await Assert.That(session.BrowsedNodes.Count).IsEqualTo(browsed);
+        await Assert.That(session.MethodCalls.Count).IsEqualTo(0);
+        await Assert.That(session.Opened).IsEqualTo(1);
+        await Assert.That(session.Closed).IsEqualTo(1);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task CreateOrReplaceDocumentRequiresAcceptedSpecVersionAndCompiledModel(bool specAccepted)
+    {
+        var session = new FakeSession();
+        var reader = specAccepted ? await ValidatedReader(session) : new OpcUaRegistryReader(session);
+        var writer = new OpcUaRegistryWriter(reader);
+        var browsed = session.BrowsedNodes.Count;
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await writer.CreateOrReplaceResourceDocumentAsync(GroupNode, "/teams/team-a", "schemas", "schema-a",
+                ResourceType, ResourceVersionsType, new byte[] { 1 }));
+
+        await Assert.That(error!.Code).IsEqualTo(specAccepted
+            ? FederationErrorCode.UnsupportedOperation : FederationErrorCode.UnsupportedVersion);
+        await Assert.That(session.BrowsedNodes.Count).IsEqualTo(browsed);
+        await Assert.That(session.MethodCalls.Count).IsEqualTo(0);
+        await Assert.That(session.Opened).IsEqualTo(0);
+        await Assert.That(session.Closed).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("method")]
+    [Arguments("position")]
+    [Arguments("write")]
+    [Arguments("close")]
+    public async Task CreateOrReplaceDocumentRetainsNativeFailureWithoutRetry(string stage)
+    {
+        var failure = new FederationException(FederationErrorCode.PolicyDenied, "Denied.",
+            "Retained diagnostic.", new ServiceResultException(StatusCodes.BadUserAccessDenied));
+        var cleanup = new InvalidOperationException("close");
+        var (session, writer) = await WriterForResource(session: new FakeSession
+        {
+            MethodFailure = stage == "method" ? failure : null,
+            PositionFailure = stage == "position" ? failure : null,
+            WriteFailure = stage == "write" ? failure : null,
+            CloseFailure = stage == "close" ? failure : stage is "position" or "write" ? cleanup : null
+        });
+        session.Pages.Clear();
+        session.MethodOutputs["GetOrCreateResource"] =
+            [new Variant(VersionTwoNode), new Variant("v2"), new Variant(0u), new Variant(true)];
+        session.AfterMethod = () => QueueDocumentSelection(session, explicitVersion: true);
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await writer.CreateOrReplaceResourceDocumentAsync(GroupNode, "/teams/team-a", "schemas", "schema-a",
+                ResourceType, ResourceVersionsType, new byte[] { 1 }));
+
+        await Assert.That(ReferenceEquals(error, failure)).IsTrue();
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.PolicyDenied);
+        await Assert.That(error.Diagnostic).IsEqualTo("Retained diagnostic.");
+        await Assert.That(session.MethodCalls.Single().Method).IsEqualTo("GetOrCreateResource");
+        await Assert.That(session.Opened).IsEqualTo(stage == "method" ? 1 : 2);
+        await Assert.That(session.Closed).IsEqualTo(stage == "method" ? 1 : 2);
+        await Assert.That(session.WrittenChunks.Count).IsEqualTo(stage == "close" ? 1 : 0);
+        if (stage is "position" or "write")
+        {
+            await Assert.That(ReferenceEquals(error.Data["OpcUa.FileCloseFailure"], cleanup)).IsTrue();
+        }
+    }
+
+    [Test]
+    public async Task CreateOrReplaceDocumentObservesCancellationAfterCreationBeforeBrowse()
+    {
+        var (session, writer) = await WriterForResource();
+        using var cancellation = new CancellationTokenSource();
+        session.MethodOutputs["GetOrCreateResource"] =
+            [new Variant(VersionTwoNode), new Variant("v2"), new Variant(0u), new Variant(true)];
+        session.AfterMethod = cancellation.Cancel;
+        var browsed = session.BrowsedNodes.Count;
+
+        var error = await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+            await writer.CreateOrReplaceResourceDocumentAsync(GroupNode, "/teams/team-a", "schemas", "schema-a",
+                ResourceType, ResourceVersionsType, new byte[] { 1 }, cancellationToken: cancellation.Token));
+
+        await Assert.That(error!.CancellationToken).IsEqualTo(cancellation.Token);
+        await Assert.That(session.MethodCalls.Count).IsEqualTo(1);
+        await Assert.That(session.BrowsedNodes.Count).IsEqualTo(browsed);
+        await Assert.That(session.Opened).IsEqualTo(1);
+        await Assert.That(session.Closed).IsEqualTo(1);
+        await Assert.That(session.WrittenChunks.Count).IsEqualTo(0);
+    }
+
+    [Test]
     [Arguments(false)]
     [Arguments(true)]
     public async Task DocumentWritePreCancellationAvoidsResolutionAndOpen(bool resource)
@@ -3368,6 +3619,7 @@ public class OpcUaRegistryReaderTests
         public Action? AfterPosition { get; set; }
         public Action? AfterWrite { get; set; }
         public Action? AfterClose { get; set; }
+        public Action? AfterMethod { get; set; }
         public CancellationToken CloseToken { get; private set; }
         public int Closed { get; private set; }
         public int Opened { get; private set; }
@@ -3512,11 +3764,12 @@ public class OpcUaRegistryReaderTests
         public ValueTask<IReadOnlyList<Variant>> CallMethodAsync(NodeId target, string methodBrowseName,
             IReadOnlyList<Variant> inputArguments, CancellationToken cancellationToken)
         {
+            MethodCalls.Add((target, methodBrowseName, inputArguments.ToArray()));
             if (MethodFailure is not null)
             {
                 throw MethodFailure;
             }
-            MethodCalls.Add((target, methodBrowseName, inputArguments.ToArray()));
+            AfterMethod?.Invoke();
             return new(MethodOutputs.TryGetValue(methodBrowseName, out var outputs) ? outputs : []);
         }
 
