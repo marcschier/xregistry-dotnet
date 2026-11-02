@@ -111,6 +111,9 @@ occurs while Open or Read returns, the reader stops before another read or
 accepting the returned bytes, even when the Session ignores its token. An
 acquired handle is closed with an uncancelled token, and a Close failure remains
 attached to the original cancellation under `OpcUa.FileCloseFailure`.
+Cancellation during a successful Close also prevents the shared reader from
+returning bytes. An existing read or Close failure retains precedence over a
+later cancellation; cleanup still uses an uncancelled token.
 When a completed read is followed by a failed Close, an already classified
 federation error retains its original code, diagnostic and cause. An
 unclassified Close exception reports `unavailable`.

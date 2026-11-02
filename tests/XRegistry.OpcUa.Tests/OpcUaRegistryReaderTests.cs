@@ -193,6 +193,80 @@ public class OpcUaRegistryReaderTests
     }
 
     [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task FileReadCancellationDuringSuccessfulClosePreventsReturningBytes(bool empty)
+    {
+        using var cancellation = new CancellationTokenSource();
+        var session = new FakeSession { AfterClose = cancellation.Cancel };
+        if (!empty)
+        {
+            session.Chunks.Add([1, 2]);
+        }
+        session.Chunks.Add([]);
+        var reader = await ValidatedReader(session);
+
+        var error = await Assert.ThrowsAsync<OperationCanceledException>(
+            async () => await reader.ReadFileAsync(File, cancellation.Token));
+
+        await Assert.That(error!.CancellationToken).IsEqualTo(cancellation.Token);
+        await Assert.That(session.Opened).IsEqualTo(1);
+        await Assert.That(session.FileReads).IsEqualTo(empty ? 1 : 2);
+        await Assert.That(session.Closed).IsEqualTo(1);
+        await Assert.That(session.CloseToken.CanBeCanceled).IsFalse();
+        await Assert.That(error.Data.Contains("OpcUa.FileCloseFailure")).IsFalse();
+    }
+
+    [Test]
+    [Arguments(false, false)]
+    [Arguments(true, false)]
+    [Arguments(false, true)]
+    [Arguments(true, true)]
+    public async Task FileReadCancellationDuringCleanupDoesNotReplaceExistingFailure(
+        bool readFails, bool closeFails)
+    {
+        using var cancellation = new CancellationTokenSource();
+        var readFailure = new IOException("Synthetic read failure.");
+        var closeFailure = new FederationException(FederationErrorCode.PolicyDenied, "Synthetic Close failure.");
+        var session = new FakeSession
+        {
+            Chunks = { Array.Empty<byte>() },
+            ReadFailure = readFails ? readFailure : null,
+            CloseFailure = closeFails ? closeFailure : null,
+            AfterClose = cancellation.Cancel,
+            BeforeClose = cancellation.Cancel
+        };
+        var reader = await ValidatedReader(session);
+
+        if (readFails)
+        {
+            var error = await Assert.ThrowsAsync<IOException>(
+                async () => await reader.ReadFileAsync(File, cancellation.Token));
+            await Assert.That(ReferenceEquals(error, readFailure)).IsTrue();
+            await Assert.That(error!.Data.Contains("OpcUa.FileCloseFailure")).IsEqualTo(closeFails);
+            if (closeFails)
+            {
+                await Assert.That(ReferenceEquals(error.Data["OpcUa.FileCloseFailure"], closeFailure)).IsTrue();
+            }
+        }
+        else if (closeFails)
+        {
+            var error = await Assert.ThrowsAsync<FederationException>(
+                async () => await reader.ReadFileAsync(File, cancellation.Token));
+            await Assert.That(ReferenceEquals(error, closeFailure)).IsTrue();
+        }
+        else
+        {
+            var error = await Assert.ThrowsAsync<OperationCanceledException>(
+                async () => await reader.ReadFileAsync(File, cancellation.Token));
+            await Assert.That(error!.CancellationToken).IsEqualTo(cancellation.Token);
+        }
+        await Assert.That(cancellation.IsCancellationRequested).IsTrue();
+        await Assert.That(session.Closed).IsEqualTo(1);
+        await Assert.That(session.CloseToken.CanBeCanceled).IsFalse();
+    }
+
+    [Test]
     public async Task ReadFailureIsRetainedWhenCloseAlsoFails()
     {
         var session = new FakeSession { ReadFailure = new InvalidOperationException("read"), CloseFailure = new InvalidOperationException("close") };
@@ -4016,6 +4090,7 @@ public class OpcUaRegistryReaderTests
         public Action? AfterPosition { get; set; }
         public Action? AfterWrite { get; set; }
         public Action? AfterClose { get; set; }
+        public Action? BeforeClose { get; set; }
         public Action? AfterMethod { get; set; }
         public CancellationToken CloseToken { get; private set; }
         public int Closed { get; private set; }
@@ -4220,6 +4295,7 @@ public class OpcUaRegistryReaderTests
             ClosedFiles.Add(file);
             FileClosedHandles.Add((file, handle));
             LastClosedHandle = handle;
+            BeforeClose?.Invoke();
             if (file.IdentifierAsString == "Metadata")
             {
                 metadataPropertySnapshot = null;

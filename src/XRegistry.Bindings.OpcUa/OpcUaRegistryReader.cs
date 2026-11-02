@@ -263,6 +263,7 @@ public sealed class OpcUaRegistryReader
         {
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
         }
+        cancellationToken.ThrowIfCancellationRequested();
         return buffer.ToArray();
     }
 

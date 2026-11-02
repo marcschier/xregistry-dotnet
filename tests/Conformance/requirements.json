@@ -137215,6 +137215,8 @@
           "FileReadContinuesPastShortReadsUntilAnEmptyChunkThenCloses",
           "CancelledFileReadDoesNotOpenHandle",
           "FileReadCancellationStopsIgnoredTokenAndClosesTransferredHandle",
+          "FileReadCancellationDuringSuccessfulClosePreventsReturningBytes",
+          "FileReadCancellationDuringCleanupDoesNotReplaceExistingFailure",
           "ReadFailureIsRetainedWhenCloseAlsoFails",
           "CloseFailureAfterCompleteReadIsReported",
           "FileReadPreservesClassifiedCloseFailureAndOriginalOperationError",
