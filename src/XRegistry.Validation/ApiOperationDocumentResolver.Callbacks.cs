@@ -1494,6 +1494,12 @@ public static partial class ApiOperationDocumentResolver
         if (metadataFailure is not null) { return metadataFailure; }
         var serverFailure = ValidateOpenApiServers(target.Value, target.Pointer, references.Format, cancellationToken);
         if (serverFailure is not null) { return serverFailure; }
+        var securityNameFailure = ValidateHttpSecurityNames(target.Value, target.Pointer, references.Root.Root, false,
+            cancellationToken);
+        if (securityNameFailure is not null) { return securityNameFailure; }
+        var securityFailure = await ValidateEffectiveHttpSecurityAsync(target.Value, target.Pointer, references,
+            cancellationToken).ConfigureAwait(false);
+        if (securityFailure is not null) { return securityFailure; }
         var parameterFailure = await ValidateEffectiveOpenApiParametersAsync(target.Value, target.Document, target.Pointer,
             references, cancellationToken).ConfigureAwait(false);
         if (parameterFailure is not null) { return parameterFailure; }

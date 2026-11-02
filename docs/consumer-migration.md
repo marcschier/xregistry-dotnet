@@ -923,6 +923,18 @@ recurse through the linked-operation graph. Detached path parameters receive
 native declaration checks without inventing a URL path or a Path Item
 parameter inheritance context. Source operations and opaque example payloads
 remain authored data.
+Linked targets also use the selected entry-document security policy. Explicit
+Security Requirement names must identify schemes in the selected API root,
+not substitute declarations in the document holding the target operation.
+Referenced scheme declarations resolve through the existing bounded chain
+validator, sharing acquisition caches across repeated links. Non-OAuth scope
+arrays retain the selected version's rules. Empty requirements and explicit
+empty security arrays remain unchanged and do not acquire unused scheme
+references. Missing, denied or malformed scheme dependencies and cycles
+prevent selection with the existing security or dependency diagnostics.
+Admission does not retrieve discovery, token or authorization addresses,
+authenticate a caller or evaluate whether the caller can invoke the target.
+The source operation's security declaration remains absent when unauthored.
 Unused reusable Link references remain inactive. These checks do not qualify
 the complete linked description.
 Root and reached HTTP operation `externalDocs` values must be objects with a
