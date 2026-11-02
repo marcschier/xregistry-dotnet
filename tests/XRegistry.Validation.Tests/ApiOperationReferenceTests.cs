@@ -11,6 +11,156 @@ namespace XRegistry.Validation.Tests;
 public class ApiOperationReferenceTests
 {
     [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiLinkedRequestBodyReferencesRespectVersionSpecificIgnoredMethodLocality(string format, string version)
+    {
+        var document = new JsonObject { ["openapi"] = version, ["paths"] = JsonNode.Parse("""
+            {"/target":{"get":{"operationId":"Target","responses":{"200":{"description":"",
+            "links":{"next":{"operationRef":"https://allowed.test/operation#/paths/~1remote/get"}}}}}}}
+            """) };
+        var calls = new List<string>();
+        var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#/paths/~1target/get"),
+            resolveReference: (uri, _) =>
+            {
+                calls.Add(uri);
+                var json = uri switch
+                {
+                    "https://allowed.test/operation" => """
+                        {"paths":{"/remote":{"get":{"responses":{"200":{"description":""}},
+                        "requestBody":{"$ref":"body#/B"}}}}}
+                        """,
+                    "https://allowed.test/body" => """{"B":{"content":false}}""",
+                    _ => throw new UnauthorizedAccessException()
+                };
+                return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(json));
+            });
+        var ignored = format == "OpenAPI/3.0";
+        await Assert.That(string.Join("|", calls)).IsEqualTo(ignored ? "https://allowed.test/operation"
+            : "https://allowed.test/operation|https://allowed.test/body");
+        await Assert.That(result.Status).IsEqualTo(ignored
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+        if (!ignored)
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.request_body");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/B/content");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiLinkedRequestBodyReferencesShareTheTargetDocumentBaseCacheAndNativeAdmission(string format, string version)
+    {
+        foreach (var selector in new[] { "operations/Target", "/paths/~1target/get" })
+        {
+            var document = new JsonObject { ["openapi"] = version, ["paths"] = JsonNode.Parse("""
+                {"/target":{"get":{"operationId":"Target","responses":{"200":{"description":"","links":{
+                "first":{"operationRef":"https://allowed.test/operations/doc#/paths/~1remote/post"},
+                "second":{"operationRef":"https://allowed.test/operations/doc#/paths/~1remote/post"}}}}}}}
+                """) };
+            var authored = document["paths"]!["/target"]!["get"]!.DeepClone();
+            var calls = new List<string>();
+            var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                resolveReference: (uri, _) =>
+                {
+                    calls.Add(uri);
+                    var json = uri switch
+                    {
+                        "https://allowed.test/operations/doc" => """
+                            {"paths":{"/remote":{"post":{"requestBody":{"$ref":"../bodies/doc#/B"},
+                            "responses":{"200":{"description":"","links":{"inactive":{"operationRef":"https://must-not-load.test/operation"}}}}}}}}
+                            """,
+                        "https://allowed.test/bodies/doc" => """
+                            {"B":{"content":{"multipart/form-data":{"schema":{},
+                            "examples":{"sample":{"$ref":"../examples/doc#/E"}},
+                            "encoding":{"part":{"headers":{"X-Part":{"$ref":"../headers/doc#/H"}}}}}}}}
+                            """,
+                        "https://allowed.test/examples/doc" => """{"E":{"value":{"$ref":"https://must-not-load.test/example-data"}}}""",
+                        "https://allowed.test/headers/doc" => """{"H":{"schema":{},"examples":{"sample":{"$ref":"../examples/doc#/E"}}}}""",
+                        _ => throw new UnauthorizedAccessException()
+                    };
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(json));
+                });
+            await Assert.That(string.Join("|", calls)).IsEqualTo(
+                "https://allowed.test/operations/doc|https://allowed.test/bodies/doc|https://allowed.test/examples/doc|https://allowed.test/headers/doc");
+            await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+            await Assert.That(JsonNode.DeepEquals(authored, JsonNode.Parse(result.Operation.GetRawText()))).IsTrue();
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiLinkedRequestBodyReferenceFailuresPreventSelectionWithResolvedTargetPaths(string format, string version)
+    {
+        foreach (var outcome in new[] { "missing", "denied", "json", "pointer", "shape", "cycle", "valid" })
+        {
+            var document = new JsonObject { ["openapi"] = version, ["paths"] = JsonNode.Parse("""
+                {"/target":{"get":{"operationId":"Target","responses":{"200":{"description":"",
+                "links":{"next":{"operationRef":"https://allowed.test/operation#/paths/~1remote/post"}}}}}}}
+                """) };
+            var calls = new List<string>();
+            var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#/paths/~1target/get"),
+                resolveReference: (uri, _) =>
+                {
+                    calls.Add(uri);
+                    if (uri == "https://allowed.test/operation")
+                    {
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes("""
+                            {"paths":{"/remote":{"post":{"responses":{"200":{"description":""}},
+                            "requestBody":{"$ref":"body#/B"}}}}}
+                            """));
+                    }
+                    if (uri != "https://allowed.test/body") { throw new UnauthorizedAccessException(); }
+                    if (outcome == "denied") { throw new UnauthorizedAccessException("policy"); }
+                    if (outcome == "missing") { return ValueTask.FromResult<ReadOnlyMemory<byte>?>(null); }
+                    var json = outcome switch
+                    {
+                        "json" => "{",
+                        "pointer" => "{}",
+                        "shape" => """{"B":{"content":false}}""",
+                        "cycle" => """{"B":{"$ref":"#/B"}}""",
+                        _ => """{"B":{"content":{}}}"""
+                    };
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(json));
+                });
+            await Assert.That(string.Join("|", calls)).IsEqualTo("https://allowed.test/operation|https://allowed.test/body");
+            var expected = outcome switch
+            {
+                "valid" => ApiOperationResolutionStatus.Selected,
+                "denied" => ApiOperationResolutionStatus.Denied,
+                "missing" or "cycle" => ApiOperationResolutionStatus.Indeterminate,
+                _ => ApiOperationResolutionStatus.Invalid
+            };
+            await Assert.That(result.Status).IsEqualTo(expected);
+            if (outcome != "valid")
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo(outcome switch
+                {
+                    "shape" => "document.request_body",
+                    "missing" => "dependency.unresolved",
+                    _ => "dependency." + outcome
+                });
+                await Assert.That(result.Diagnostic.Path).IsEqualTo(outcome switch
+                {
+                    "shape" => "$/B/content",
+                    "cycle" => "$/B/$ref",
+                    _ => "$/paths/~1remote/post/requestBody/$ref"
+                });
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+        }
+    }
+
+    [Test]
     public async Task OpenApi30LinkedRequestBodiesUseOnlyRecognizedOperationMethodLocations()
     {
         var callback = "{$request.body#/url}";

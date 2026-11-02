@@ -1382,17 +1382,9 @@ public static partial class ApiOperationDocumentResolver
         var parameterFailure = await ValidateEffectiveOpenApiParametersAsync(operation, source, pointer,
             references, cancellationToken).ConfigureAwait(false);
         if (parameterFailure is not null) { return parameterFailure; }
-        if (SupportsOpenApiRequestBody(references.Format, httpMethod) && operation.TryGetProperty("requestBody", out var body))
-        {
-            var resolution = await ResolveHttpDeclarationAsync(
-                new ReferenceTarget(source, body, pointer + "/requestBody"), references,
-                ValidateOpenApiRequestBodyDeclaration, "request body", cancellationToken).ConfigureAwait(false);
-            if (resolution.Failure is not null) { return resolution.Failure; }
-            var failure = await ValidateEffectiveOpenApiContentAsync(resolution.Target!, references, cancellationToken).ConfigureAwait(false);
-            if (failure is not null) { return failure; }
-            failure = await ValidateEffectiveOpenApiRequestEncodingsAsync(resolution.Target!, references, cancellationToken).ConfigureAwait(false);
-            if (failure is not null) { return failure; }
-        }
+        var bodyFailure = await ValidateEffectiveOpenApiRequestBodyAsync(
+            new ReferenceTarget(source, operation, pointer), httpMethod, references, cancellationToken).ConfigureAwait(false);
+        if (bodyFailure is not null) { return bodyFailure; }
         if (!operation.TryGetProperty("responses", out var responses)) { return null; }
         foreach (var entry in responses.EnumerateObject())
         {
@@ -1491,10 +1483,27 @@ public static partial class ApiOperationDocumentResolver
         }
         var metadataFailure = ValidateHttpOperationMetadata(target.Value, target.Pointer, references.Format, httpMethod,
             cancellationToken);
-        return metadataFailure ?? ValidateOpenApiServers(target.Value, target.Pointer, references.Format, cancellationToken);
+        if (metadataFailure is not null) { return metadataFailure; }
+        var serverFailure = ValidateOpenApiServers(target.Value, target.Pointer, references.Format, cancellationToken);
+        return serverFailure ?? await ValidateEffectiveOpenApiRequestBodyAsync(target, httpMethod, references,
+            cancellationToken).ConfigureAwait(false);
 
         static ApiOperationResolutionResult InvalidTarget(string message, string path) =>
             Failure(ApiOperationResolutionStatus.Invalid, "document.link_operation_ref", message, path);
+    }
+
+    private static async ValueTask<ApiOperationResolutionResult?> ValidateEffectiveOpenApiRequestBodyAsync(
+        ReferenceTarget operation, string? httpMethod, ReferenceContext references, CancellationToken cancellationToken)
+    {
+        if (!SupportsOpenApiRequestBody(references.Format, httpMethod) ||
+            !operation.Value.TryGetProperty("requestBody", out var body)) { return null; }
+        var resolution = await ResolveHttpDeclarationAsync(
+            new ReferenceTarget(operation.Document, body, operation.Pointer + "/requestBody"), references,
+            ValidateOpenApiRequestBodyDeclaration, "request body", cancellationToken).ConfigureAwait(false);
+        if (resolution.Failure is not null) { return resolution.Failure; }
+        var failure = await ValidateEffectiveOpenApiContentAsync(resolution.Target!, references, cancellationToken).ConfigureAwait(false);
+        return failure ?? await ValidateEffectiveOpenApiRequestEncodingsAsync(resolution.Target!, references,
+            cancellationToken).ConfigureAwait(false);
     }
 
     private static ApiOperationResolutionResult? ValidateSwaggerResponseExampleProduces(

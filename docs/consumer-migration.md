@@ -890,8 +890,9 @@ Acquisition failures report the authored link's `operationRef`; malformed
 targets report the resolved target's path. Selected operations retain their
 authored links and response references.
 Target admission does not recursively follow the target's response links or
-other declaration references, establish an invocation URL for multiply mounted
-Path Items, evaluate schemas or runtime expressions, or invoke the operation.
+response and parameter references, establish an invocation URL for multiply
+mounted Path Items, evaluate schemas or runtime expressions, or invoke the
+operation.
 For OpenAPI 3.0 targets with `requestBody`, admission derives the HTTP method
 only from a supported Paths or Callback operation location. POST, PUT and PATCH
 bodies receive Request Body Object checks; bodies on other methods remain
@@ -900,6 +901,17 @@ named `post` does not establish a method. When the method cannot be established,
 admission returns indeterminate at the target's `requestBody` instead of
 claiming a completed check. Targets without request bodies do not need this
 context; OpenAPI 3.1 checks request-body shape independently of method.
+Applicable linked request bodies use the same bounded reference-chain,
+content, example and encoding-header validators as directly reached operation
+bodies. References resolve from the target operation and then each containing
+declaration document, sharing acquisition caches and cumulative budgets with
+the source operation. Missing or denied body dependencies, malformed targets
+and reference cycles prevent selection; diagnostics retain the failing
+reference or resolved declaration path. Multiple links to one target reuse
+the acquired body, example and header documents. Example payload data remains
+opaque. OpenAPI 3.0 bodies ignored for their method are not acquired; OpenAPI
+3.1 acquires and checks them. The selected source operation retains its
+authored response and link declarations.
 Unused reusable Link references remain inactive. These checks do not qualify
 the complete linked description.
 Root and reached HTTP operation `externalDocs` values must be objects with a
