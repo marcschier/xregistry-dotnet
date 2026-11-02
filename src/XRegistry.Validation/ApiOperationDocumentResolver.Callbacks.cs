@@ -615,6 +615,46 @@ public static partial class ApiOperationDocumentResolver
         return null;
     }
 
+    private static ApiOperationResolutionResult? ValidateSwaggerResponseEnums(
+        JsonElement response, string pointer, ValidationContext budget)
+    {
+        if (!response.TryGetProperty("headers", out var headers)) { return null; }
+        foreach (var header in headers.EnumerateObject())
+        {
+            var failure = ValidateSwaggerScalarEnums(header.Value, pointer + "/headers/" + Escape(header.Name), "Header", budget);
+            if (failure is not null) { return failure; }
+        }
+        return null;
+    }
+
+    private static ApiOperationResolutionResult? ValidateSwaggerScalarEnums(
+        JsonElement declaration, string pointer, string kind, ValidationContext budget)
+    {
+        if (kind == "Parameter" && declaration.GetProperty("in").GetString() == "body") { return null; }
+        while (true)
+        {
+            budget.CancellationToken.ThrowIfCancellationRequested();
+            if (declaration.TryGetProperty("enum", out var values))
+            {
+                var path = pointer + "/enum";
+                try
+                {
+                    SchemaJson.UniqueValues(values, budget, path);
+                }
+                catch (ValidationFailure failure)
+                {
+                    return Failure(failure.Status == DocumentValidationStatus.Indeterminate
+                            ? ApiOperationResolutionStatus.Indeterminate : ApiOperationResolutionStatus.Invalid,
+                        failure.Status == DocumentValidationStatus.Indeterminate ? failure.Diagnostic.Code
+                            : kind == "Header" ? "document.header" : "document.parameter",
+                        failure.Diagnostic.Detail, path);
+                }
+            }
+            if (!declaration.TryGetProperty("items", out declaration)) { return null; }
+            pointer += "/items";
+        }
+    }
+
     private static ApiOperationResolutionResult? ValidateOpenApiMediaDeclarations(
         JsonElement content, string pointer, string format, CancellationToken cancellationToken)
     {
@@ -1088,6 +1128,8 @@ public static partial class ApiOperationDocumentResolver
                 var target = resolution.Target!;
                 if (effective is not null)
                 {
+                    var enumFailure = ValidateSwaggerScalarEnums(target.Value, target.Pointer, "Parameter", references.Budget);
+                    if (enumFailure is not null) { return enumFailure; }
                     effective[(target.Value.GetProperty("in").GetString()!, target.Value.GetProperty("name").GetString()!)] = target;
                 }
                 if (target.Value.GetProperty("in").GetString() == "path")
@@ -1179,6 +1221,8 @@ public static partial class ApiOperationDocumentResolver
                 }
                 if (references.Format == "Swagger/2.0")
                 {
+                    var enumFailure = ValidateSwaggerScalarEnums(target.Value, target.Pointer, "Parameter", references.Budget);
+                    if (enumFailure is not null) { return enumFailure; }
                     var location = target.Value.GetProperty("in").GetString();
                     if (location == "body") { bodies++; }
                     if (location == "formData") { hasForm = true; }
@@ -1346,7 +1390,12 @@ public static partial class ApiOperationDocumentResolver
                     ValidateHttpResponseDeclaration(value, path, format, allowReference: true, token),
                 "response", cancellationToken).ConfigureAwait(false);
             if (resolution.Failure is not null) { return resolution.Failure; }
-            if (references.Format == "Swagger/2.0") { continue; }
+            if (references.Format == "Swagger/2.0")
+            {
+                var enumFailure = ValidateSwaggerResponseEnums(resolution.Target!.Value, resolution.Target.Pointer, references.Budget);
+                if (enumFailure is not null) { return enumFailure; }
+                continue;
+            }
             var response = resolution.Target!;
             var headerFailure = await ValidateEffectiveOpenApiHeadersAsync(response, references, cancellationToken).ConfigureAwait(false);
             if (headerFailure is not null) { return headerFailure; }

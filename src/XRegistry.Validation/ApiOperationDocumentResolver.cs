@@ -377,7 +377,7 @@ public static partial class ApiOperationDocumentResolver
             {
                 return ResolveSmithyOperation(root, reference.Selector.Tokens[^1], documentUri, budget);
             }
-            var version = ValidateRoot(format, root, cancellationToken);
+            var version = ValidateRoot(format, root, budget, cancellationToken);
             if (version is not null)
             {
                 return version;
@@ -452,7 +452,7 @@ public static partial class ApiOperationDocumentResolver
         }
     }
 
-    private static ApiOperationResolutionResult? ValidateRoot(string format, JsonElement root,
+    private static ApiOperationResolutionResult? ValidateRoot(string format, JsonElement root, ValidationContext budget,
         CancellationToken cancellationToken)
     {
         if (root.ValueKind != JsonValueKind.Object)
@@ -530,7 +530,7 @@ public static partial class ApiOperationDocumentResolver
             var transportFailure = ValidateSwaggerTransportDeclarations(root, "$", cancellationToken);
             if (transportFailure is not null) { return transportFailure; }
         }
-        var componentFailure = ValidateApiReusableShapes(format, root, cancellationToken);
+        var componentFailure = ValidateApiReusableShapes(format, root, budget, cancellationToken);
         if (componentFailure is not null)
         {
             return componentFailure;
@@ -608,7 +608,7 @@ public static partial class ApiOperationDocumentResolver
         return null;
     }
 
-    private static ApiOperationResolutionResult? ValidateApiReusableShapes(string format, JsonElement root,
+    private static ApiOperationResolutionResult? ValidateApiReusableShapes(string format, JsonElement root, ValidationContext budget,
         CancellationToken cancellationToken)
     {
         var swagger = format == "Swagger/2.0";
@@ -667,6 +667,11 @@ public static partial class ApiOperationDocumentResolver
                     var responseFailure = ValidateHttpResponseDeclaration(entry.Value, entryPath, format,
                         allowReference: !swagger, cancellationToken);
                     if (responseFailure is not null) { return responseFailure; }
+                    if (swagger)
+                    {
+                        responseFailure = ValidateSwaggerResponseEnums(entry.Value, entryPath, budget);
+                        if (responseFailure is not null) { return responseFailure; }
+                    }
                 }
                 if (!swagger && collection.Name == "examples")
                 {
@@ -694,6 +699,11 @@ public static partial class ApiOperationDocumentResolver
                         ? ValidateSwaggerParameterDeclaration(entry.Value, entryPath, cancellationToken)
                         : ValidateOpenApiParameterDeclaration(entry.Value, entryPath, format, cancellationToken);
                     if (parameterFailure is not null) { return parameterFailure; }
+                    if (swagger)
+                    {
+                        parameterFailure = ValidateSwaggerScalarEnums(entry.Value, entryPath, "Parameter", budget);
+                        if (parameterFailure is not null) { return parameterFailure; }
+                    }
                 }
                 if (!swagger && collection.Name == "pathItems")
                 {
@@ -1321,6 +1331,7 @@ public static partial class ApiOperationDocumentResolver
 
         internal ReferencedDocument Root { get; }
         internal string Format { get; }
+        internal ValidationContext Budget => _budget;
         internal void Work(string path) => _budget.Work(path: path);
 
         internal async ValueTask<ReferenceTargetResolution> ResolveAsync(ReferencedDocument source,
