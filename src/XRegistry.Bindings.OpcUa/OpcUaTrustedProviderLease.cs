@@ -6,6 +6,15 @@ using XRegistry.Federation;
 
 namespace XRegistry.Bindings.OpcUa;
 
+/// <summary>The structural role declared by an external reference before target resolution.</summary>
+public enum OpcUaExternalTargetRole
+{
+    /// <summary>A logical Resource, not one of its Versions.</summary>
+    LogicalResource,
+    /// <summary>An explicitly selected exact Version.</summary>
+    ExactVersion
+}
+
 /// <summary>A caller-approved lease for an already authenticated target Registry Session.</summary>
 public interface IOpcUaTrustedProviderLease : IAsyncDisposable
 {
@@ -76,13 +85,15 @@ public sealed class OpcUaResolvedExternalResource : IAsyncDisposable
     private int disposed;
 
     internal OpcUaResolvedExternalResource(IOpcUaTrustedProviderLease lease,
-        OpcUaRegistryReadSource readSource, NodeId node, string xid, string specVersion)
+        OpcUaRegistryReadSource readSource, NodeId node, string xid, string specVersion,
+        OpcUaExternalTargetRole role)
     {
         this.lease = lease;
         ReadSource = readSource;
         Node = node;
         Xid = xid;
         SpecVersion = specVersion;
+        Role = role;
     }
 
     /// <summary>The target Registry read source; use it only while this result is alive.</summary>
@@ -93,6 +104,8 @@ public sealed class OpcUaResolvedExternalResource : IAsyncDisposable
     public string Xid { get; }
     /// <summary>The target Registry's accepted Core SpecVersion.</summary>
     public string SpecVersion { get; }
+    /// <summary>The source-declared role checked against the resolved target.</summary>
+    public OpcUaExternalTargetRole Role { get; }
 
     /// <inheritdoc />
     public ValueTask DisposeAsync() =>

@@ -139811,7 +139811,7 @@
       "text": "For an `ExpandedNodeId` received from a source Server, a resolver MUST:",
       "review": {
         "status": "reviewed",
-        "note": "This extracted lead-in owns the complete five-step list at source lines 2263-2287, not merely its one extracted line. Adapter mapping reads source ServerArray and source namespace context, preserves all identifier kinds and uses a separate caller-supplied trusted provider; the target resolver checks application identity, root/version/model and selected typed structural XID. Direct table-reordering and source-index-zero cases supplement existing four-kind and mismatch tests. A regression first showed Model and Capabilities files opened before application/namespace mismatch rejection; admission now precedes any selected Registry Browse or file open. Complete source OriginRegistry/binding admission, authenticated destination/certificate policy integration and logical versus explicitly exact reference-role enforcement still need an origin-scoped public workflow. Keep the compound list pending.",
+        "note": "This extracted lead-in owns the complete five-step list at source lines 2263-2287, not merely its one extracted line. Adapter mapping reads source ServerArray and source namespace context, preserves all identifier kinds and uses a separate caller-supplied trusted provider; the target resolver checks application identity, root/version/model and selected typed structural XID. Direct table-reordering and source-index-zero cases supplement existing four-kind and mismatch tests. A regression first showed Model and Capabilities files opened before application/namespace mismatch rejection; admission now precedes any selected Registry Browse or file open. The resolver now requires an explicit caller-retained logical/exact role and rejects contradictory XIDs before Group traversal. Complete source OriginRegistry/binding admission and authenticated destination/certificate policy integration still need an origin-scoped public workflow. Keep the compound list pending.",
         "roles": [
           "client"
         ]
@@ -139825,6 +139825,7 @@
           "CapturedExternalIdentitySurvivesSourceAndTargetTableReordering",
           "ExternalReferenceServerIndexZeroUsesSourceApplicationWithoutEndpointSubstitution",
           "ResolveExternalTargetAsyncRejectsIdentityMismatchBeforeReadingRegistryDocuments",
+          "ResolveExternalTargetAsyncRejectsTargetThatContradictsDeclaredRole",
           "TrustedProviderResolverReadsAnExternalVersionFromAnAlternateTargetModel"
         ],
         "nativeEvidence": []
@@ -139852,7 +139853,7 @@
       "text": "5. Before reading the target as a Registry entity, verify its Registry root, model, Core version, NodeClass, TypeDefinition ancestry, structural role and origin-relative XID. A logical `ExternalReference` MUST identify the remote logical Resource Object of FileType or a subtype, not a folder, exact Version or content-digest Variable. Exact Version selection uses that Resource's verified `Versions` hierarchy or an explicitly exact-Version reference. A same-application target still needs the correct Registry-root check. Read file bytes with a new target-local handle under \u00a75.13.1 only after these checks succeed.",
       "review": {
         "status": "reviewed",
-        "note": "The low-level ResolveExternalTargetAsync verifies the selected target root, Session application identity, accepted Core version, compiled model and Capabilities, typed Group/Resource/Versions structure and equality of resolved NodeId to the requested identity. Direct mismatch tests and a two-server FileType read prove bounded target admission. The API accepts either logical or exact XID discovered from the target without retaining a source-declared logical/exact role or source OriginRegistry record. Therefore it cannot yet enforce that a logical ExternalReference never substitutes an exact Version, nor provide the complete same-application/different-root origin workflow. Keep the full obligation pending.",
+        "note": "The low-level ResolveExternalTargetAsync verifies the selected target root, Session application identity, accepted Core version, compiled model and Capabilities, typed Group/Resource/Versions structure and equality of resolved NodeId to the requested identity. Direct mismatch tests and a two-server FileType read prove bounded target admission. The API requires an explicit caller-retained LogicalResource or ExactVersion role; contradictory target XIDs reject before Group traversal, invalid roles reject before acquisition and successful results retain the checked role. Both substitution cases first succeeded without the guard. Existing exact-Version and metadata-only target paths retain direct evidence. Source OriginRegistry decoding/binding validation and the complete same-application/different-root origin workflow remain absent; keep the compound obligation pending.",
         "roles": [
           "client"
         ]
@@ -139864,6 +139865,8 @@
           "ResolveExternalTargetAsyncRejectsInvalidSpecVersionAndDisposesLease",
           "ResolveExternalTargetAsyncRejectsSpecVersionChangeBeforeReadingModel",
           "ResolveExternalTargetAsyncRejectsIdentityMismatchBeforeReadingRegistryDocuments",
+          "ResolveExternalTargetAsyncRejectsTargetThatContradictsDeclaredRole",
+          "ResolveExternalTargetAsyncRejectsUnknownRoleBeforeAcquiringProvider",
           "ResolveExternalTargetAsyncResolvesVersionIdentityToExactTargetNodeId",
           "ResolveExternalTargetAsyncRejectsWrongRegistryRootAndDisposesLease",
           "TrustedProviderResolverReadsAnExternalVersionFromAnAlternateTargetModel"

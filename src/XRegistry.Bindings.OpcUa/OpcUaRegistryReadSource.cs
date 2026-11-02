@@ -157,15 +157,21 @@ public sealed class OpcUaRegistryReadSource : IFederationReadSource
 
     /// <summary>
     /// Resolves an external NodeId only through a caller-supplied trusted-provider lease.
+    /// The caller must retain the logical or explicitly exact-Version role from the source reference.
     /// The returned result owns the lease and must remain alive while its read source is used.
     /// </summary>
     public static async ValueTask<OpcUaResolvedExternalResource> ResolveExternalTargetAsync(
         OpcUaExternalNodeId identity, OpcUaTrustedProviderResolver trustedProviderResolver,
-        Func<string, bool> isSupportedSpecVersion, CancellationToken cancellationToken = default)
+        Func<string, bool> isSupportedSpecVersion, OpcUaExternalTargetRole role,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(identity);
         ArgumentNullException.ThrowIfNull(trustedProviderResolver);
         ArgumentNullException.ThrowIfNull(isSupportedSpecVersion);
+        if (role is not (OpcUaExternalTargetRole.LogicalResource or OpcUaExternalTargetRole.ExactVersion))
+        {
+            throw new ArgumentOutOfRangeException(nameof(role));
+        }
 
         var lease = await trustedProviderResolver(identity, cancellationToken).ConfigureAwait(false);
         if (lease is null)
@@ -228,6 +234,11 @@ public sealed class OpcUaRegistryReadSource : IFederationReadSource
                 throw new FederationException(FederationErrorCode.InvalidPackage,
                     "The external NodeId does not identify a Resource or Version XID.");
             }
+            if ((role == OpcUaExternalTargetRole.LogicalResource) != (parts.Length == 4))
+            {
+                throw new FederationException(FederationErrorCode.InvalidPackage,
+                    "The external target XID does not match the declared reference role.");
+            }
 
             var groupNode = await reader.ResolveGroupNodeAsync(root, parts[0], parts[1],
                 targetSource.GroupType(parts[0]), cancellationToken).ConfigureAwait(false);
@@ -250,7 +261,7 @@ public sealed class OpcUaRegistryReadSource : IFederationReadSource
             }
 
             return new OpcUaResolvedExternalResource(lease, targetSource, resolvedNode, target.Target,
-                acceptedVersion);
+                acceptedVersion, role);
         }
         catch (Exception failure)
         {

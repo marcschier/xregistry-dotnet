@@ -275,6 +275,7 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
             identity,
             resolver,
             static version => version == "1.0",
+            OpcUaExternalTargetRole.LogicalResource,
             cancellation.Token);
 
         await Assert.That(resolved.Node).IsEqualTo(targetServer.MetadataResourceNode);
@@ -285,6 +286,7 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
             versionIdentity,
             resolver,
             static version => version == "1.0",
+            OpcUaExternalTargetRole.ExactVersion,
             cancellation.Token);
 
         await Assert.That(resolvedVersion.Node).IsEqualTo(targetServer.VersionNode);

@@ -53,7 +53,8 @@ public class OpcUaTrustedProviderLeaseTests
         };
 
         await using (var result = await OpcUaRegistryReadSource.ResolveExternalTargetAsync(
-            identity, resolver, version => version == Version, cancellation.Token))
+            identity, resolver, version => version == Version,
+            OpcUaExternalTargetRole.LogicalResource, cancellation.Token))
         {
             await Assert.That(ReferenceEquals(receivedIdentity, identity)).IsTrue();
             await Assert.That(receivedToken).IsEqualTo(cancellation.Token);
@@ -79,7 +80,7 @@ public class OpcUaTrustedProviderLeaseTests
         var result = await OpcUaRegistryReadSource.ResolveExternalTargetAsync(
             new OpcUaExternalNodeId(ServerUri, NamespaceUri, IdType.String, "schema-a"),
             (_, _) => new ValueTask<IOpcUaTrustedProviderLease>(lease),
-            version => version == Version);
+            version => version == Version, OpcUaExternalTargetRole.LogicalResource);
         var failure = new InvalidOperationException("lease disposal failed");
 
         await Assert.That(lease.DisposeCalls).IsEqualTo(0);

@@ -205,9 +205,13 @@ returning a target node. Application identity and namespace mapping are checked
 before browsing the selected Registry or opening its Model and Capabilities
 files. Captured external identities retain URI and identifier values, not table
 indexes; each target mapping uses that Session's current namespace table.
-The low-level resolver does not read or validate a Resource's `OriginRegistry`,
-pin an authoritative origin form or enforce a source-declared logical/exact
-reference role. It is not the complete `XREG-Federation` proxy workflow.
+`ResolveExternalTargetAsync` requires the caller to retain and supply the
+reference's logical Resource or explicitly exact-Version role. A target XID
+that contradicts that role is rejected before resolving its Group hierarchy;
+the successful result retains the checked role. An unknown role rejects before
+provider acquisition. The low-level resolver does not read or validate a
+Resource's `OriginRegistry` or pin an authoritative origin form. It is not the
+complete `XREG-Federation` proxy workflow.
 Event type discovery, notification decoding and
 Subscription management provide client-side support for native xRegistry Events.
 Both native deprecation transitions map to Core's

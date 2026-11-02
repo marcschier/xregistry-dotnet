@@ -3781,7 +3781,8 @@ public class OpcUaRegistryReaderTests
         };
 
         var result = await OpcUaRegistryReadSource.ResolveExternalTargetAsync(
-            fixture.Identity, resolver, version => version == "1.0-rc4");
+            fixture.Identity, resolver, version => version == "1.0-rc4",
+            OpcUaExternalTargetRole.LogicalResource);
 
         await Assert.That(receivedIdentity).IsNotNull();
         await Assert.That(receivedIdentity!.ServerApplicationUri).IsEqualTo(TargetServerApplicationUri);
@@ -3792,6 +3793,7 @@ public class OpcUaRegistryReaderTests
         await Assert.That(result.SpecVersion).IsEqualTo("1.0-rc4");
         await Assert.That(result.Xid).IsEqualTo("/teams/team-a/schemas/schema-a");
         await Assert.That(result.Node).IsEqualTo(LogicalResourceNode);
+        await Assert.That(result.Role).IsEqualTo(OpcUaExternalTargetRole.LogicalResource);
         await Assert.That(fixture.Lease.DisposeCount).IsEqualTo(0);
 
         await result.DisposeAsync();
@@ -3818,14 +3820,57 @@ public class OpcUaRegistryReaderTests
             "/teams/team-a/schemas/schema-a/versions/v1");
 
         var result = await OpcUaRegistryReadSource.ResolveExternalTargetAsync(
-            fixture.Identity, ReturnLease(fixture.Lease), _ => true);
+            fixture.Identity, ReturnLease(fixture.Lease), _ => true, OpcUaExternalTargetRole.ExactVersion);
 
         await Assert.That(result.Node).IsEqualTo(DefaultVersionNode);
         await Assert.That(result.Xid).IsEqualTo("/teams/team-a/schemas/schema-a/versions/v1");
+        await Assert.That(result.Role).IsEqualTo(OpcUaExternalTargetRole.ExactVersion);
         await Assert.That(result.ReadSource.SpecVersion).IsEqualTo("1.0-rc4");
         await Assert.That(fixture.Lease.DisposeCount).IsEqualTo(0);
         await result.DisposeAsync();
         await Assert.That(fixture.Lease.DisposeCount).IsEqualTo(1);
+    }
+
+    [Test]
+    [Arguments(OpcUaExternalTargetRole.LogicalResource)]
+    [Arguments(OpcUaExternalTargetRole.ExactVersion)]
+    public async Task ResolveExternalTargetAsyncRejectsTargetThatContradictsDeclaredRole(
+        OpcUaExternalTargetRole role)
+    {
+        var fixture = CreateResolverFixture(role == OpcUaExternalTargetRole.LogicalResource
+            ? "/teams/team-a/schemas/schema-a/versions/v1"
+            : "/teams/team-a/schemas/schema-a");
+
+        var error = await ResolveFailureAsync(fixture, role: role);
+
+        await Assert.That(error.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(error.Message).IsEqualTo(
+            "The external target XID does not match the declared reference role.");
+        await Assert.That(fixture.Session.BrowsedNodes.Contains(GroupNode)).IsFalse();
+        await Assert.That(fixture.Lease.DisposeCount).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task ResolveExternalTargetAsyncRejectsUnknownRoleBeforeAcquiringProvider()
+    {
+        var fixture = CreateResolverFixture();
+        var calls = 0;
+        OpcUaTrustedProviderResolver resolver = (_, _) =>
+        {
+            calls++;
+            return ValueTask.FromResult<IOpcUaTrustedProviderLease>(fixture.Lease);
+        };
+
+        var error = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () =>
+        {
+            await using var result = await OpcUaRegistryReadSource.ResolveExternalTargetAsync(
+                fixture.Identity, resolver, _ => true, (OpcUaExternalTargetRole)42);
+        });
+
+        await Assert.That(error!.ParamName).IsEqualTo("role");
+        await Assert.That(calls).IsEqualTo(0);
+        await Assert.That(fixture.Lease.DisposeCount).IsEqualTo(0);
+        await Assert.That(fixture.Session.BrowsedNodes).IsEquivalentTo(Array.Empty<NodeId>());
     }
 
     [Test]
@@ -3954,7 +3999,9 @@ public class OpcUaRegistryReaderTests
             "wrong-type" => CreateResolverFixture(useWrongResourceType: true),
             _ => throw new ArgumentOutOfRangeException(nameof(mismatch))
         };
-        var error = await ResolveFailureAsync(fixture);
+        var error = await ResolveFailureAsync(fixture, role: mismatch == "wrong-kind"
+            ? OpcUaExternalTargetRole.ExactVersion
+            : OpcUaExternalTargetRole.LogicalResource);
 
         await Assert.That(error.Code).IsEqualTo(
             mismatch == "wrong-type" ? FederationErrorCode.NotFound : FederationErrorCode.InvalidPackage);
@@ -3967,7 +4014,7 @@ public class OpcUaRegistryReaderTests
         var fixture = CreateResolverFixture(metadataOnly: true);
 
         var result = await OpcUaRegistryReadSource.ResolveExternalTargetAsync(
-            fixture.Identity, ReturnLease(fixture.Lease), _ => true);
+            fixture.Identity, ReturnLease(fixture.Lease), _ => true, OpcUaExternalTargetRole.LogicalResource);
 
         await Assert.That(result.Node).IsEqualTo(MetadataResourceNode);
         await Assert.That(result.Xid).IsEqualTo("/teams/team-a/schemas/metadata-a");
@@ -3987,9 +4034,10 @@ public class OpcUaRegistryReaderTests
         var fixture = CreateResolverFixture(
             "/teams/team-a/schemas/metadata-a/versions/v1", metadataOnly: true);
 
-        var error = await ResolveFailureAsync(fixture);
+        var error = await ResolveFailureAsync(fixture, role: OpcUaExternalTargetRole.ExactVersion);
 
         await Assert.That(error.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(error.Message).IsEqualTo("A metadata-only Resource cannot contain a Version.");
         await Assert.That(fixture.Lease.DisposeCount).IsEqualTo(1);
     }
 
@@ -4001,7 +4049,7 @@ public class OpcUaRegistryReaderTests
 
         var error = await Assert.ThrowsAsync<IOException>(async () =>
             await OpcUaRegistryReadSource.ResolveExternalTargetAsync(
-                fixture.Identity, ReturnLease(fixture.Lease), _ => true));
+                fixture.Identity, ReturnLease(fixture.Lease), _ => true, OpcUaExternalTargetRole.LogicalResource));
 
         await Assert.That(ReferenceEquals(error, failure)).IsTrue();
         await Assert.That(fixture.Lease.DisposeCount).IsEqualTo(1);
@@ -4184,11 +4232,12 @@ public class OpcUaRegistryReaderTests
         (_, _) => ValueTask.FromResult<IOpcUaTrustedProviderLease>(lease);
 
     private static async Task<FederationException> ResolveFailureAsync(
-        ResolverFixture fixture, Func<string, bool>? isSupportedSpecVersion = null)
+        ResolverFixture fixture, Func<string, bool>? isSupportedSpecVersion = null,
+        OpcUaExternalTargetRole role = OpcUaExternalTargetRole.LogicalResource)
     {
         var error = await Assert.ThrowsAsync<FederationException>(async () =>
             await OpcUaRegistryReadSource.ResolveExternalTargetAsync(
-                fixture.Identity, ReturnLease(fixture.Lease), isSupportedSpecVersion ?? (_ => true)));
+                fixture.Identity, ReturnLease(fixture.Lease), isSupportedSpecVersion ?? (_ => true), role));
         await Assert.That(fixture.Lease.DisposeCount).IsEqualTo(1);
         return error!;
     }
