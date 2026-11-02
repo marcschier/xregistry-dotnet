@@ -243,7 +243,7 @@ public static class WotVersionResolver
 
             if (document.ModelVersion is not null)
             {
-                var implicitFloor = ParseFloor(document.ModelVersion, authored: true);
+                var implicitFloor = ParseFloor(document.ModelVersion);
                 var explicitFloor = floor is null ? null : ParseFloor(floor);
                 if (explicitFloor is null || implicitFloor > explicitFloor)
                 {
@@ -260,9 +260,9 @@ public static class WotVersionResolver
     private static bool IsInRange(WotSemanticVersion candidate, WotSemanticVersion? floor, bool capped) =>
         floor is null || candidate >= floor && (!capped || candidate.HasSameMajor(floor));
 
-    private static WotSemanticVersion ParseFloor(string text, bool authored = false)
+    private static WotSemanticVersion ParseFloor(string text)
     {
-        if (!WotSemanticVersion.TryParse(text, enforceLength: authored, out var parsed) || IsGeneratedId(text))
+        if (!WotSemanticVersion.TryParse(text, enforceLength: false, out var parsed) || IsGeneratedId(text))
         {
             throw new WotVersionException("invalid-version");
         }

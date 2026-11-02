@@ -248,15 +248,33 @@ public class WotResolutionVectorTests
     }
 
     [Test]
-    public async Task ImplicitAuthoredFloorStillObeysVersionIdLimit()
+    [Arguments(122)]
+    [Arguments(123)]
+    [Arguments(5000)]
+    public async Task ImplicitModelDependencyFloorHasNoCoreIdentifierLengthLimit(int suffixLength)
     {
-        var overlong = "1.0.0-" + new string('a', 123);
+        var floor = "1.0.0-" + new string('a', suffixLength);
         WotResourceSnapshot[] resources = [new("model", false, "1.0.0", [new("1.0.0", "authored", "bytes")])];
         var reference = new WotReferenceRequest("type", "model");
-        var context = new WotDocumentVersionContext(overlong, [new("model")]);
+        var context = new WotDocumentVersionContext(floor, [new("model")]);
+        await Assert.That(WotVersionResolver.Resolve(resources, reference, Origin, context))
+            .IsEqualTo(new WotResolutionResult("model", "1.0.0", "bytes", Origin));
+        await Assert.That(WotVersionResolver.Resolve(resources, reference, Origin, context, new(VersionId: "1.0.0")))
+            .IsEqualTo(new WotResolutionResult("model", "1.0.0", "bytes", Origin));
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task LargeImplicitFloorIsUnsatisfiedWithOrWithoutAnExplicitFloor(bool explicitFloor)
+    {
+        var floor = new string('9', 125) + ".0.0";
+        WotResourceSnapshot[] resources = [new("model", false, "1.0.0", [new("1.0.0", "authored", "bytes")])];
+        var reference = new WotReferenceRequest("type", "model", explicitFloor ? "1.0.0" : null);
+        var context = new WotDocumentVersionContext(floor, [new("model", reference.MinimumVersion)]);
         var failure = await Assert.That(() => WotVersionResolver.Resolve(resources, reference, Origin, context))
             .Throws<WotVersionException>();
-        await Assert.That(failure!.Code).IsEqualTo("invalid-version");
+        await Assert.That(failure!.Code).IsEqualTo("unsatisfied");
         await Assert.That(WotVersionResolver.Resolve(resources, reference, Origin, context, new(VersionId: "1.0.0")))
             .IsEqualTo(new WotResolutionResult("model", "1.0.0", "bytes", Origin));
     }
