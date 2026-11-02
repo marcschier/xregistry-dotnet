@@ -257,7 +257,10 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
     }
 
     [Test]
-    public async Task TrustedProviderResolverReadsAnExternalVersionFromAnAlternateTargetModel()
+    [Arguments("target-only")]
+    [Arguments("stable")]
+    [Arguments("application")]
+    public async Task TrustedProviderResolverReadsAnExternalVersionFromAnAlternateTargetModel(string originForm)
     {
         await using var targetServer = await InProcessRegistryServer.StartAsync(alternateModelLayout: true);
         await using var sourceServer = await InProcessRegistryServer.StartAsync(targetServer.ApplicationUri);
@@ -355,23 +358,32 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
                 new NativeRegistryContext("opcua", "urn:xregistry:opcua:trusted-provider"),
                 typeMap);
         };
-        await using var resolved = await OpcUaRegistryReadSource.ResolveExternalTargetAsync(
-            identity,
-            resolver,
-            static version => version == "1.0",
-            OpcUaExternalTargetRole.LogicalResource,
-            cancellation.Token);
+        var trustedOrigin = originForm == "application"
+            ? OpcUaRegistryOrigin.Application(new(targetServer.ApplicationUri,
+                InProcessRegistryServer.NamespaceUri, IdType.String, "Registry"))
+            : OpcUaRegistryOrigin.Stable("urn:xregistry:integration:stable-origin");
+        var sourceServers = await sourceConnection.Adapter.ReadServerArrayAsync(cancellation.Token);
+        var targetServerIndex = sourceServers.ToList().IndexOf(targetServer.ApplicationUri);
+        var capturedOrigin = await OpcUaRegistryOrigin.CaptureAsync(originForm == "application"
+            ? new("", targetServer.ApplicationUri, new ExpandedNodeId(new NodeId("Registry", 0),
+                InProcessRegistryServer.NamespaceUri, checked((uint)targetServerIndex)))
+            : new("urn:xregistry:integration:stable-origin", "", ExpandedNodeId.Null),
+            sourceConnection.Adapter, cancellation.Token);
+        ValueTask<OpcUaResolvedExternalResource> Resolve(OpcUaExternalNodeId requested, OpcUaExternalTargetRole role) =>
+            originForm == "target-only"
+                ? OpcUaRegistryReadSource.ResolveExternalTargetAsync(requested, resolver,
+                    static version => version == "1.0", role, cancellation.Token)
+                : OpcUaRegistryReadSource.ResolveOriginTargetAsync(capturedOrigin, trustedOrigin, requested,
+                    (_, node, token) => resolver(node, token), static version => version == "1.0", role,
+                    cancellation.Token);
+        await using var resolved = await Resolve(identity, OpcUaExternalTargetRole.LogicalResource);
 
         await Assert.That(resolved.Node).IsEqualTo(targetServer.MetadataResourceNode);
         await Assert.That(resolved.Xid).IsEqualTo("/departments/team-a/metadata/metadata-a");
         await Assert.That(resolved.SpecVersion).IsEqualTo("1.0");
+        await Assert.That(resolved.Origin?.Equals(trustedOrigin) ?? false).IsEqualTo(originForm != "target-only");
 
-        await using var resolvedVersion = await OpcUaRegistryReadSource.ResolveExternalTargetAsync(
-            versionIdentity,
-            resolver,
-            static version => version == "1.0",
-            OpcUaExternalTargetRole.ExactVersion,
-            cancellation.Token);
+        await using var resolvedVersion = await Resolve(versionIdentity, OpcUaExternalTargetRole.ExactVersion);
 
         await Assert.That(resolvedVersion.Node).IsEqualTo(targetServer.VersionNode);
         await Assert.That(resolvedVersion.Xid)

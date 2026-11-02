@@ -936,14 +936,7 @@ public sealed class OpcUaRegistryReader
         }
         var origin = await session.ReadRegistryOriginAsync(properties[0].Target, originDataType, cancellationToken)
             .ConfigureAwait(false);
-        var stable = !string.IsNullOrEmpty(origin.OriginUri);
-        if (stable
-            ? !string.IsNullOrEmpty(origin.ServerUri) || !origin.RegistryNodeId.IsNull
-            : string.IsNullOrEmpty(origin.ServerUri) || origin.RegistryNodeId.IsNull)
-        {
-            throw new FederationException(FederationErrorCode.InvalidPackage,
-                "OriginRegistry must use exactly one authoritative origin form.");
-        }
+        _ = origin.ValidateForm();
         return origin;
     }
 

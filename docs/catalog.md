@@ -256,11 +256,25 @@ trailing data and limits the encoded body to 64 KiB. URI spelling, identifier
 kind and source table indexes remain unchanged. The reader rejects missing,
 duplicate or non-Variable properties and mixed or incomplete origin forms.
 The returned `OpcUaRegistryOriginValue` is an untrusted source value, not a
-provider binding or portable stored identity. The caller must still resolve
-its table context and validate it against an independently trusted provider.
-The external-target resolver does not yet compose this origin read with
-provider selection, origin-root agreement or persisted source keys; it is not
-the complete `XREG-Federation` proxy workflow.
+provider binding or portable stored identity.
+`OpcUaRegistryOrigin.CaptureAsync` resolves the application/root form through
+the source Session's tables and rejects disagreement between `ServerUri` and
+the root's resolved application. The stable-URI form needs no native tables
+and acquires no manufactured root. Origin equality compares exact URI text,
+identifier kind and value; opaque identifiers compare their bytes.
+`ResolveOriginTargetAsync` compares that captured origin with a separately
+configured or verified origin before invoking the provider resolver. The
+resolver receives the approved origin and external target identity, not an
+endpoint inferred from an Application URI. For an application/root origin,
+the target application must agree and the independently bound root must map
+to the lease's selected Registry root before any Registry documents are opened.
+Failures after lease transfer dispose the lease and retain disposal failures.
+Successful results retain the admitted origin alongside the checked XID and role.
+The low-level `ResolveExternalTargetAsync` remains available without origin
+admission; its result has no origin. Neither API yet persists origin/XID/role
+source keys or composes the logical Resource's origin and reference reads into
+one source-record operation. These APIs do not complete the
+`XREG-Federation` proxy workflow.
 Cancellation already requested at resolver entry prevents provider acquisition.
 If acquisition returns a lease after cancellation, the resolver disposes that
 lease before propagating cancellation. A disposal failure is retained under

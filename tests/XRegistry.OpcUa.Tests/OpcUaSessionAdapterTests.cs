@@ -21,6 +21,98 @@ public class OpcUaSessionAdapterTests
     [Test]
     [Arguments(false)]
     [Arguments(true)]
+    public async Task RegistryOriginCaptureResolvesSourceContextAndSurvivesTableReordering(bool opaque)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        object identifier = opaque ? new byte[] { 0, 128, 255 } : "Registry";
+        var expected = OpcUaRegistryOrigin.Application(new(
+            s_serverUris[2], s_externalNamespaceUris[2], opaque ? IdType.Opaque : IdType.String, identifier));
+        var node = opaque ? new NodeId(ByteString.From((byte[])identifier), 2) : new NodeId((string)identifier, 2);
+        var captured = await OpcUaRegistryOrigin.CaptureAsync(
+            new("", s_serverUris[2], new ExpandedNodeId(node, null, 2u)), adapter);
+        proxy.ServerArray = [s_serverUris[0], s_serverUris[2], s_serverUris[1]];
+        proxy.NamespaceArray = [s_externalNamespaceUris[0], s_externalNamespaceUris[2], s_externalNamespaceUris[1]];
+        var reorderedNode = opaque ? new NodeId(ByteString.From((byte[])identifier), 1) :
+            new NodeId((string)identifier, 1);
+        var recaptured = await OpcUaRegistryOrigin.CaptureAsync(
+            new("", s_serverUris[2], new ExpandedNodeId(reorderedNode, null, 1u)), adapter);
+
+        await Assert.That(captured.Equals(expected)).IsTrue();
+        await Assert.That(captured.Equals(recaptured)).IsTrue();
+        await Assert.That(captured.GetHashCode()).IsEqualTo(recaptured.GetHashCode());
+        await Assert.That(captured.RegistryRoot!.NamespaceUri).IsEqualTo(s_externalNamespaceUris[2]);
+        await Assert.That(captured.RegistryRoot.MapToLocalNodeId(s_serverUris[2],
+            new NamespaceTable(proxy.NamespaceArray))).IsEqualTo(reorderedNode);
+    }
+
+    [Test]
+    public async Task RegistryOriginCaptureRejectsServerUriThatContradictsSourceTableIdentity()
+    {
+        var (adapter, _) = CreateAdapter();
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await OpcUaRegistryOrigin.CaptureAsync(
+                new("", s_serverUris[1], new ExpandedNodeId(new NodeId("Registry", 2), null, 2u)), adapter));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    [Arguments("server")]
+    [Arguments("namespace")]
+    public async Task RegistryOriginCaptureRejectsMissingSourceTableContext(string state)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        if (state == "server")
+        {
+            proxy.ServerArray = [];
+        }
+        else
+        {
+            proxy.NamespaceArray = [];
+        }
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await OpcUaRegistryOrigin.CaptureAsync(
+                new("", s_serverUris[2], new ExpandedNodeId(new NodeId("Registry", 2), null, 2u)), adapter));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    public async Task RegistryOriginCaptureStableFormNeedsNoNativeTableOrManufacturedRoot()
+    {
+        var (adapter, proxy) = CreateAdapter();
+        proxy.ServiceFailure = new InvalidOperationException("Stable origin must not read native tables.");
+        var captured = await OpcUaRegistryOrigin.CaptureAsync(new("urn:Origin:Exact%2f", null, ExpandedNodeId.Null),
+            adapter);
+
+        await Assert.That(captured.Equals(OpcUaRegistryOrigin.Stable("urn:Origin:Exact%2f"))).IsTrue();
+        await Assert.That(captured.RegistryRoot).IsNull();
+        await Assert.That(proxy.ReadCount).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task RegistryOriginCapturePreCancellationAvoidsSourceTableReads(bool stable)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var value = stable ? new OpcUaRegistryOriginValue("urn:origin", "", ExpandedNodeId.Null) :
+            new("", s_serverUris[2], new ExpandedNodeId(new NodeId("Registry", 2), null, 2u));
+
+        var error = await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+            await OpcUaRegistryOrigin.CaptureAsync(value, adapter, cancellation.Token));
+
+        await Assert.That(error!.CancellationToken).IsEqualTo(cancellation.Token);
+        await Assert.That(proxy.ReadCount).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
     public async Task RegistryOriginDecodingRetainsScalarFieldsAndExpandedNodeContext(bool stableOrigin)
     {
         var (adapter, proxy) = CreateAdapter();

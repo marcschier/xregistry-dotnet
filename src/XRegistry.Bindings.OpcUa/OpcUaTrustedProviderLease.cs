@@ -37,6 +37,11 @@ public interface IOpcUaTrustedProviderLease : IAsyncDisposable
 public delegate ValueTask<IOpcUaTrustedProviderLease> OpcUaTrustedProviderResolver(
     OpcUaExternalNodeId identity, CancellationToken cancellationToken);
 
+/// <summary>Acquires a provider for an independently approved origin and its referenced native target.</summary>
+/// <remarks>Ownership of the returned lease transfers to the resolver operation.</remarks>
+public delegate ValueTask<IOpcUaTrustedProviderLease> OpcUaOriginProviderResolver(
+    OpcUaRegistryOrigin origin, OpcUaExternalNodeId identity, CancellationToken cancellationToken);
+
 /// <summary>Owns a trusted target connection and its model-specific type mappings.</summary>
 public sealed class OpcUaTrustedProviderLease : IOpcUaTrustedProviderLease
 {
@@ -86,7 +91,7 @@ public sealed class OpcUaResolvedExternalResource : IAsyncDisposable
 
     internal OpcUaResolvedExternalResource(IOpcUaTrustedProviderLease lease,
         OpcUaRegistryReadSource readSource, NodeId node, string xid, string specVersion,
-        OpcUaExternalTargetRole role)
+        OpcUaExternalTargetRole role, OpcUaRegistryOrigin? origin = null)
     {
         this.lease = lease;
         ReadSource = readSource;
@@ -94,6 +99,7 @@ public sealed class OpcUaResolvedExternalResource : IAsyncDisposable
         Xid = xid;
         SpecVersion = specVersion;
         Role = role;
+        Origin = origin;
     }
 
     /// <summary>The target Registry read source; use it only while this result is alive.</summary>
@@ -106,6 +112,8 @@ public sealed class OpcUaResolvedExternalResource : IAsyncDisposable
     public string SpecVersion { get; }
     /// <summary>The source-declared role checked against the resolved target.</summary>
     public OpcUaExternalTargetRole Role { get; }
+    /// <summary>The independently admitted origin, or null when only the low-level target resolver was used.</summary>
+    public OpcUaRegistryOrigin? Origin { get; }
 
     /// <inheritdoc />
     public ValueTask DisposeAsync() =>

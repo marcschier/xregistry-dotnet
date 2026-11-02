@@ -188,9 +188,39 @@ public sealed class OpcUaRegistryReadSource : IFederationReadSource
     /// The caller must retain the logical or explicitly exact-Version role from the source reference.
     /// The returned result owns the lease and must remain alive while its read source is used.
     /// </summary>
-    public static async ValueTask<OpcUaResolvedExternalResource> ResolveExternalTargetAsync(
+    public static ValueTask<OpcUaResolvedExternalResource> ResolveExternalTargetAsync(
         OpcUaExternalNodeId identity, OpcUaTrustedProviderResolver trustedProviderResolver,
         Func<string, bool> isSupportedSpecVersion, OpcUaExternalTargetRole role,
+        CancellationToken cancellationToken = default) =>
+        ResolveExternalTargetCoreAsync(identity, trustedProviderResolver, isSupportedSpecVersion, role, null,
+            cancellationToken);
+
+    /// <summary>Admits a captured origin against independent configuration before acquiring its target provider.</summary>
+    public static ValueTask<OpcUaResolvedExternalResource> ResolveOriginTargetAsync(
+        OpcUaRegistryOrigin origin, OpcUaRegistryOrigin trustedOrigin, OpcUaExternalNodeId identity,
+        OpcUaOriginProviderResolver trustedProviderResolver, Func<string, bool> isSupportedSpecVersion,
+        OpcUaExternalTargetRole role, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(origin);
+        ArgumentNullException.ThrowIfNull(trustedOrigin);
+        ArgumentNullException.ThrowIfNull(identity);
+        ArgumentNullException.ThrowIfNull(trustedProviderResolver);
+        ArgumentNullException.ThrowIfNull(isSupportedSpecVersion);
+        if (!origin.Equals(trustedOrigin) ||
+            origin.RegistryRoot is { } root &&
+            !string.Equals(root.ServerApplicationUri, identity.ServerApplicationUri, StringComparison.Ordinal))
+        {
+            throw new FederationException(FederationErrorCode.PolicyDenied,
+                "The source origin or target application does not match the independent provider binding.");
+        }
+        return ResolveExternalTargetCoreAsync(identity,
+            (requested, token) => trustedProviderResolver(trustedOrigin, requested, token),
+            isSupportedSpecVersion, role, trustedOrigin, cancellationToken);
+    }
+
+    private static async ValueTask<OpcUaResolvedExternalResource> ResolveExternalTargetCoreAsync(
+        OpcUaExternalNodeId identity, OpcUaTrustedProviderResolver trustedProviderResolver,
+        Func<string, bool> isSupportedSpecVersion, OpcUaExternalTargetRole role, OpcUaRegistryOrigin? origin,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(identity);
@@ -237,6 +267,12 @@ public sealed class OpcUaRegistryReadSource : IFederationReadSource
                 .ConfigureAwait(false);
             OpcUaRegistryReader.ValidateServerNamespaceIdentity(serverArray, namespaces);
             var targetNode = identity.MapToLocalNodeId(serverApplicationUri, namespaces);
+            if (origin?.RegistryRoot is { } expectedRoot &&
+                expectedRoot.MapToLocalNodeId(serverApplicationUri, namespaces) != registryRoot)
+            {
+                throw new FederationException(FederationErrorCode.PolicyDenied,
+                    "The selected provider Registry root does not match the independently bound origin root.");
+            }
             var root = await reader.VerifyRegistryRootAsync(registryRoot, cancellationToken)
                 .ConfigureAwait(false);
             var acceptedVersion = await reader.ReadSpecVersionAsync(registryRoot,
@@ -290,7 +326,7 @@ public sealed class OpcUaRegistryReadSource : IFederationReadSource
             }
 
             return new OpcUaResolvedExternalResource(lease, targetSource, resolvedNode, target.Target,
-                acceptedVersion, role);
+                acceptedVersion, role, origin);
         }
         catch (Exception failure)
         {

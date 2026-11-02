@@ -24,6 +24,160 @@ public class OpcUaTrustedProviderLeaseTests
     private static readonly NodeId ResourceType = new("ResourceType", 1);
 
     [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task OriginAdmissionPassesIndependentBindingToProviderAndRetainsOrigin(bool stable)
+    {
+        var lease = new TrackingLease();
+        var identity = new OpcUaExternalNodeId(ServerUri, NamespaceUri, IdType.String, "schema-a");
+        var captured = stable ? OpcUaRegistryOrigin.Stable("urn:Origin:Exact%2f") :
+            OpcUaRegistryOrigin.Application(new(ServerUri, NamespaceUri, IdType.String, "Registry"));
+        var trusted = stable ? OpcUaRegistryOrigin.Stable("urn:Origin:Exact%2f") :
+            OpcUaRegistryOrigin.Application(new(ServerUri, NamespaceUri, IdType.String, "Registry"));
+        OpcUaRegistryOrigin? received = null;
+        var calls = 0;
+
+        await using (var result = await OpcUaRegistryReadSource.ResolveOriginTargetAsync(
+            captured, trusted, identity, (origin, target, _) =>
+            {
+                calls++;
+                received = origin;
+                if (!ReferenceEquals(target, identity))
+                {
+                    throw new InvalidOperationException("The selected target changed.");
+                }
+                return ValueTask.FromResult<IOpcUaTrustedProviderLease>(lease);
+            }, version => version == Version, OpcUaExternalTargetRole.LogicalResource))
+        {
+            await Assert.That(calls).IsEqualTo(1);
+            await Assert.That(ReferenceEquals(received, trusted)).IsTrue();
+            await Assert.That(ReferenceEquals(result.Origin, trusted)).IsTrue();
+            await Assert.That(result.Xid).IsEqualTo(ResourceXid);
+            await Assert.That(result.Role).IsEqualTo(OpcUaExternalTargetRole.LogicalResource);
+        }
+        await Assert.That(lease.DisposeCalls).IsEqualTo(1);
+    }
+
+    [Test]
+    [Arguments("uri-case")]
+    [Arguments("uri-escape")]
+    [Arguments("uri-space")]
+    [Arguments("form")]
+    [Arguments("server")]
+    [Arguments("namespace")]
+    [Arguments("root")]
+    [Arguments("kind")]
+    public async Task OriginAdmissionRejectsDifferentAuthoritativeIdentityBeforeProviderSelection(string difference)
+    {
+        var native = difference is "server" or "namespace" or "root" or "kind";
+        var captured = native
+            ? OpcUaRegistryOrigin.Application(new(ServerUri, NamespaceUri, IdType.String, "Registry"))
+            : OpcUaRegistryOrigin.Stable("urn:Origin:Exact%2f");
+        var trusted = difference switch
+        {
+            "uri-case" => OpcUaRegistryOrigin.Stable("urn:origin:Exact%2f"),
+            "uri-escape" => OpcUaRegistryOrigin.Stable("urn:Origin:Exact%2F"),
+            "uri-space" => OpcUaRegistryOrigin.Stable("urn:Origin:Exact%2f "),
+            "form" => OpcUaRegistryOrigin.Application(new(ServerUri, NamespaceUri, IdType.String, "Registry")),
+            _ => OpcUaRegistryOrigin.Application(new(
+                difference == "server" ? "urn:other" : ServerUri,
+                difference == "namespace" ? "urn:other" : NamespaceUri,
+                difference == "kind" ? IdType.Numeric : IdType.String,
+                difference == "kind" ? 42u : difference == "root" ? "OtherRegistry" : "Registry"))
+        };
+        var calls = 0;
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await OpcUaRegistryReadSource.ResolveOriginTargetAsync(captured, trusted,
+                new(ServerUri, NamespaceUri, IdType.String, "schema-a"), (_, _, _) =>
+                {
+                    calls++;
+                    throw new InvalidOperationException("An unapproved origin selected a provider.");
+                }, _ => true, OpcUaExternalTargetRole.LogicalResource));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.PolicyDenied);
+        await Assert.That(calls).IsEqualTo(0);
+        await Assert.That(captured.Equals(trusted)).IsFalse();
+    }
+
+    [Test]
+    public async Task OriginAdmissionRejectsDifferentTargetApplicationBeforeProviderSelection()
+    {
+        var origin = OpcUaRegistryOrigin.Application(new(ServerUri, NamespaceUri, IdType.String, "Registry"));
+        var calls = 0;
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await OpcUaRegistryReadSource.ResolveOriginTargetAsync(origin, origin,
+                new("urn:other", NamespaceUri, IdType.String, "schema-a"), (_, _, _) =>
+                {
+                    calls++;
+                    throw new InvalidOperationException("A different target application selected a provider.");
+                }, _ => true, OpcUaExternalTargetRole.LogicalResource));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.PolicyDenied);
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task OriginAdmissionRejectsWrongSelectedRegistryBeforeOpeningDocumentsAndDisposesLease(
+        bool disposalFails)
+    {
+        var cleanupFailure = new IOException("Synthetic origin provider disposal failure.");
+        var lease = new TrackingLease(disposalFails ? Task.FromException(cleanupFailure) : null);
+        var origin = OpcUaRegistryOrigin.Application(new(ServerUri, NamespaceUri, IdType.String, "OtherRegistry"));
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await OpcUaRegistryReadSource.ResolveOriginTargetAsync(origin, origin,
+                new(ServerUri, NamespaceUri, IdType.String, "schema-a"),
+                (_, _, _) => ValueTask.FromResult<IOpcUaTrustedProviderLease>(lease),
+                _ => true, OpcUaExternalTargetRole.LogicalResource));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.PolicyDenied);
+        await Assert.That(lease.Session.OpenCount).IsEqualTo(0);
+        await Assert.That(lease.DisposeCalls).IsEqualTo(1);
+        await Assert.That(error.Data.Contains("OpcUa.TrustedProviderDisposeFailure")).IsEqualTo(disposalFails);
+        if (disposalFails)
+        {
+            await Assert.That(ReferenceEquals(error.Data["OpcUa.TrustedProviderDisposeFailure"], cleanupFailure))
+                .IsTrue();
+        }
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task OriginAdmissionCancellationAndInvalidRoleDoNotAcquireProvider(bool cancelled)
+    {
+        var origin = OpcUaRegistryOrigin.Stable("urn:origin");
+        using var cancellation = new CancellationTokenSource();
+        if (cancelled)
+        {
+            cancellation.Cancel();
+        }
+        var calls = 0;
+        ValueTask<OpcUaResolvedExternalResource> Resolve() => OpcUaRegistryReadSource.ResolveOriginTargetAsync(
+            origin, origin, new(ServerUri, NamespaceUri, IdType.String, "schema-a"), (_, _, _) =>
+            {
+                calls++;
+                throw new InvalidOperationException("The rejected operation acquired a provider.");
+            }, _ => true, cancelled ? OpcUaExternalTargetRole.LogicalResource : (OpcUaExternalTargetRole)99,
+            cancellation.Token);
+
+        if (cancelled)
+        {
+            var error = await Assert.ThrowsAsync<OperationCanceledException>(async () => await Resolve());
+            await Assert.That(error!.CancellationToken).IsEqualTo(cancellation.Token);
+        }
+        else
+        {
+            await Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () => await Resolve());
+        }
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
     public async Task ConstructorNullConnectionRejectsBeforeTakingOwnership()
     {
         var context = new NativeRegistryContext("opcua", "urn:lease-tests:context");
@@ -190,10 +344,17 @@ public class OpcUaTrustedProviderLeaseTests
         },
         new NodeId("AttributesType", 1));
 
-    private sealed class TrackingLease(Task? disposal = null) : IOpcUaTrustedProviderLease
+    private sealed class TrackingLease : IOpcUaTrustedProviderLease
     {
+        private readonly Task? disposal;
+        public TrackingLease(Task? disposal = null)
+        {
+            this.disposal = disposal;
+            Reader = new(Session);
+        }
+        public OwnershipSession Session { get; } = new();
         public string ServerApplicationUri => ServerUri;
-        public OpcUaRegistryReader Reader { get; } = new(new OwnershipSession());
+        public OpcUaRegistryReader Reader { get; }
         public NodeId RegistryRoot => Root;
         public string SpecVersion => Version;
         public NativeRegistryContext Context { get; } = new("opcua", "urn:lease-tests:context");
@@ -274,7 +435,12 @@ public class OpcUaTrustedProviderLeaseTests
             new(values[variable].Value.GetString()!);
         public ValueTask<OpcUaJsonValue> ReadJsonValueAsync(NodeId variable, CancellationToken cancellationToken) =>
             new(values[variable]);
-        public ValueTask<uint> OpenAsync(NodeId file, byte mode, CancellationToken cancellationToken) => new(7u);
+        public int OpenCount { get; private set; }
+        public ValueTask<uint> OpenAsync(NodeId file, byte mode, CancellationToken cancellationToken)
+        {
+            OpenCount++;
+            return new(7u);
+        }
         public ValueTask<byte[]> ReadAsync(NodeId file, uint handle, int length, CancellationToken cancellationToken) =>
             new(files[file].Dequeue());
         public ValueTask CloseAsync(NodeId file, uint handle, CancellationToken cancellationToken) =>
