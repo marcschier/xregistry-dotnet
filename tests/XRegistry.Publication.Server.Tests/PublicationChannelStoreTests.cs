@@ -224,6 +224,24 @@ public class PublicationChannelStoreTests
     }
 
     [Test]
+    public async Task ADocumentVersionCannotBeReboundToDifferentBytes()
+    {
+        var fixture = CreateFixture(includeDocument: true);
+        var changed = CreateFixture(includeDocument: true, documentBytes: "changed document bytes"u8.ToArray());
+        var store = new PublicationChannelStore(new InMemoryRegistryPersistence(), StoreRegistry);
+        var first = await store.PublishAsync(Channel, fixture.ManifestBytes, fixture.Objects, 0);
+
+        var error = await Assert.That(async () =>
+                await store.PublishAsync(Channel, changed.ManifestBytes, changed.Objects, first.Channel!.Epoch))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected immutable document rejection.");
+
+        await Assert.That(error.Code).IsEqualTo("immutable_object_conflict");
+        var opened = await store.OpenChannelAsync(Channel);
+        await Assert.That(opened.Channel!.Epoch).IsEqualTo(first.Channel!.Epoch);
+        await Assert.That(opened.Snapshot.Digest).IsEqualTo(first.Snapshot.Digest);
+    }
+
+    [Test]
     public async Task PublishAllowsReusingAnExistingVersionWhenItsBytesMatch()
     {
         var fixture = CreateFixture();
@@ -409,7 +427,7 @@ public class PublicationChannelStoreTests
 
     private static Fixture CreateFixture(string scope = "urn:example:release",
         string completeness = "offline-complete", bool includeDocument = false, byte[]? registryBytes = null,
-        bool includeParent = false)
+        bool includeParent = false, byte[]? documentBytes = null)
     {
         registryBytes ??= "{\"registry\":true}"u8.ToArray();
         var registryDescriptor = Descriptor("/publications/team/objects/registry/versions/content", registryBytes,
@@ -447,7 +465,7 @@ public class PublicationChannelStoreTests
 
         if (includeDocument)
         {
-            var documentBytes = "captured document bytes"u8.ToArray();
+            documentBytes ??= "captured document bytes"u8.ToArray();
             var documentDescriptor = Descriptor("/publications/team/objects/documents/versions/intro",
                 documentBytes, StoreRegistry);
             objects.Add(new(documentDescriptor, documentBytes));

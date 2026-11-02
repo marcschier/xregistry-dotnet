@@ -135934,13 +135934,22 @@
       ],
       "text": "A publication HTTP projection MUST serve a snapshot-specific Registry root through Core HTTP. The root response MUST contain an HTTP `Link` with an absolute `rel` URI of `https://xregistry.io/workingdrafts/publication/context`, targeting the associated open-record JSON. The root's metadata response and its open record MUST describe the same snapshot. The link target is subject to the same credential and redirect policy as any other destination.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "MapPublicationSnapshot maps the read-only Core projection, serves the exact open record, and attaches its absolute context relation to the root Link header. HTTP tests assert the emitted relation, exact context bytes, read authorization, HEAD behavior, method rejection, and the response budget.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "PublicationProjectionRequiresReadOnlyBackendAndEnforcesItsResponseBudget",
+          "PublicationContextGetReturnsExactOpenedRecordBytes",
+          "PublicationContextHeadRetainsContentLengthAndHasNoBody",
+          "PublicationContextRejectsUnsupportedMethodsWith405",
+          "PublicationContextRouteRequiresReadAuthorization",
+          "PublicationSnapshotRootLinkRelationTargetsTheContextUrl"
+        ],
         "nativeEvidence": []
       }
     },
@@ -136091,13 +136100,20 @@
       ],
       "text": "A byte-preserving offline export MUST include the manifest and all objects needed by its completeness claim. Captured bytes MUST NOT be rewritten when a package moves to another location. Publication readers MUST NOT fetch external objects during offline replay.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Offline-complete replay verifies the manifest and every required descriptor, and PublicationBundle.WritePackageAsync writes the exact manifest and object bytes into the local package. Package reads check sizes and digests without network access.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "OfflineReplayReturnsEveryReferencedObjectByteForByte",
+          "OfflineCompletePublicationRequiresAllReferencedBytesBeforeCommit",
+          "PackageRejectsTraversalAndDuplicateEquivalentReferences"
+        ],
         "nativeEvidence": []
       }
     },
@@ -136161,13 +136177,21 @@
       ],
       "text": "The `objects` array MUST cover the selected manifest, captured Registry JSON, associated documents and extensions needed for its completeness claim. Parent manifests are not needed merely to read the selected snapshot.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The store requires the captured Registry object and, for offline-complete manifests, every document and extension object; offline replay includes the selected manifest and does not require the parent manifest. The package reader verifies the mapped bytes against each descriptor.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "OfflineCompletePublicationRequiresAllReferencedBytesBeforeCommit",
+          "OfflineReplayReturnsEveryReferencedObjectByteForByte",
+          "OfflineReplayDoesNotRequireOrReturnParentManifestBytes"
+        ],
         "nativeEvidence": []
       }
     },
@@ -136192,13 +136216,20 @@
       ],
       "text": "The byte bundle provides direct offline publication access; it does not define another Federation native Registry layout. A bundle can accompany a directory mapping or OCI layout. Before claiming its Snapshot ID, native readers still need their own format and verified equivalence with the manifest. This extension adds no OCI role or Git directory-mapping field. A byte-bundle reader MUST NOT advertise unsupported native binding conformance.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The offline package is a Publication package with local Version-to-file mappings; its reader uses local files only and does not create or invoke a Federation-native Registry layout. Open records may retain source provenance, but source reconstruction remains unsupported.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "OfflineReplayReturnsEveryReferencedObjectByteForByte",
+          "OfflineReplayDoesNotRequireOrReturnParentManifestBytes",
+          "OpenRecordReopensPinnedDescriptorsWithoutReadingItsChannel"
+        ],
         "nativeEvidence": []
       }
     },
@@ -136223,13 +136254,21 @@
       ],
       "text": "Reference comparison MUST use the `binding` value, endpoint, validated parameters and decoded Version XID:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Reference identity includes the selected binding, endpoint, validated parameters and decoded Version XID; Git comparison also applies its specified default path and lowercase full commit identity. No reference is silently rebound to another access context.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "GitReferenceComparisonUsesItsDefaultPathAndLowercaseCommitIdentity",
+          "PackageRejectsTraversalAndDuplicateEquivalentReferences",
+          "OfflineReplayAcceptsEquivalentSnapshotResourceReferencesWithoutChangingBytesOrContext"
+        ],
         "nativeEvidence": []
       }
     },
@@ -136254,13 +136293,18 @@
       ],
       "text": "A package MUST reject duplicate equivalent references, even if they name different local files.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "PublicationPackage.Parse rejects equivalent Version references even when their local paths differ; the duplicate-reference test supplies two equivalent references with distinct package paths.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "PackageRejectsTraversalAndDuplicateEquivalentReferences"
+        ],
         "nativeEvidence": []
       }
     },
@@ -136317,13 +136361,20 @@
       ],
       "text": "Binding access fields inside a manifest contribute to its exact-byte identity. Changing HTTP references to UA references creates another manifest and Snapshot ID, even if the captured graph and document bytes agree. To expose one unchanged manifest through another binding, a caller needs an explicit access mapping with checked equivalence to the original exact Version references. This extension does not define an alternate-endpoint discovery protocol. Readers MUST NOT infer such a mapping from equal Registry IDs or silently substitute bindings.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Snapshot identity is the digest of the exact manifest bytes, which include each binding access context. Parsing and open records retain received bytes instead of rewriting their references; API serialization remains a distinct representation.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DescriptorSizesUseExactUnsignedIntegerValuesWithoutRewritingManifestBytes",
+          "ParsesManifestAndRetainsItsExactBytes"
+        ],
         "nativeEvidence": []
       }
     },
@@ -136664,13 +136715,20 @@
       ],
       "text": "Snapshot metadata and manifest bytes MUST NOT be overwritten under their existing identity. Domain revisions used by a retained snapshot MUST be captured immutably or served from retained checked bytes. A Core Version ID alone does not ensure immutable content.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The store checks existing object metadata and bytes before reusing a reference, so it rejects rebinding both Registry and domain-document Versions to different content. Channel updates retain snapshot manifests and supplied objects through the selected persistence provider.",
+        "roles": [
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AReferenceCannotBeReboundToDifferentBytes",
+          "ADocumentVersionCannotBeReboundToDifferentBytes",
+          "DurablePersistenceReopensTheChannelAndRetainedObjects"
+        ],
         "nativeEvidence": []
       }
     },
