@@ -271,6 +271,14 @@ If rejected outputs identify a requested file handle and its Object, the writer
 attempts an uncancelled Close without writing, retaining any cleanup failure
 on the output error. This validates the Method result, not the target's complete
 Version metadata or server-side creation semantics.
+Both creation Methods check cancellation before calling the Session and after
+validating returned outputs, even if the Session ignores its token. Cancellation
+after a successful call closes an identifiable requested handle with an
+uncancelled token, including UInt32 handle zero, and retains any Close failure
+on the cancellation. When no handle was requested, the returned placeholder is
+not closed. Malformed output errors retain precedence over later cancellation.
+This cleanup releases a handle; it does not undo creation of the Resource or
+Version.
 
 `CreateOrReplaceResourceDocumentAsync` composes Resource acquisition and
 document replacement. It checks the accepted Core version, compiled

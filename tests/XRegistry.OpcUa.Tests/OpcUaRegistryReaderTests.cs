@@ -3974,6 +3974,129 @@ public class OpcUaRegistryReaderTests
     }
 
     [Test]
+    [Arguments(false, false)]
+    [Arguments(true, false)]
+    [Arguments(false, true)]
+    [Arguments(true, true)]
+    public async Task ResourceCreationObservesCancellationBeforeCallingSession(bool getOrCreate, bool requestOpen)
+    {
+        var (session, writer) = await WriterForResource();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        var error = await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+        {
+            if (getOrCreate)
+                _ = await writer.GetOrCreateResourceAsync(GroupNode, "schema-a", "v1", requestOpen, cancellation.Token);
+            else
+                _ = await writer.CreateResourceAsync(GroupNode, "schema-a", "v1", requestOpen, cancellation.Token);
+        });
+
+        await Assert.That(error!.CancellationToken).IsEqualTo(cancellation.Token);
+        await Assert.That(session.MethodCalls.Count).IsEqualTo(0);
+        await Assert.That(session.Closed).IsEqualTo(1);
+        await Assert.That(session.WrittenChunks.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(false, 0u, false)]
+    [Arguments(true, 0u, false)]
+    [Arguments(false, 42u, false)]
+    [Arguments(true, 42u, false)]
+    [Arguments(false, uint.MaxValue, false)]
+    [Arguments(true, uint.MaxValue, false)]
+    [Arguments(false, 42u, true)]
+    [Arguments(true, 42u, true)]
+    public async Task ResourceCreationClosesReturnedHandleAfterCancellationWithoutLosingCleanupFailure(
+        bool getOrCreate, uint handle, bool closeFails)
+    {
+        var (session, writer) = await WriterForResource();
+        using var cancellation = new CancellationTokenSource();
+        var method = getOrCreate ? "GetOrCreateResource" : "CreateResource";
+        session.MethodOutputs[method] = getOrCreate
+            ? [new Variant(VersionTwoNode), new Variant("v1"), new Variant(handle), new Variant(false)]
+            : [new Variant(VersionTwoNode), new Variant("v1"), new Variant(handle)];
+        session.AfterMethod = cancellation.Cancel;
+        var cleanup = new FederationException(FederationErrorCode.Unavailable, "Close failed.");
+        if (closeFails) session.CloseFailure = cleanup;
+
+        var error = await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+        {
+            if (getOrCreate)
+                _ = await writer.GetOrCreateResourceAsync(GroupNode, "schema-a", "v1", true, cancellation.Token);
+            else
+                _ = await writer.CreateResourceAsync(GroupNode, "schema-a", "v1", true, cancellation.Token);
+        });
+
+        await Assert.That(error!.CancellationToken).IsEqualTo(cancellation.Token);
+        await Assert.That(session.MethodCalls.Single().Method).IsEqualTo(method);
+        await Assert.That(session.Closed).IsEqualTo(2);
+        await Assert.That(session.ClosedFiles[^1]).IsEqualTo(VersionTwoNode);
+        await Assert.That(session.LastClosedHandle).IsEqualTo(handle);
+        await Assert.That(session.CloseToken.CanBeCanceled).IsFalse();
+        await Assert.That(ReferenceEquals(error.Data["OpcUa.FileCloseFailure"], closeFails ? cleanup : null)).IsTrue();
+        await Assert.That(session.Opened).IsEqualTo(1);
+        await Assert.That(session.PositionedFiles.Count).IsEqualTo(0);
+        await Assert.That(session.WrittenChunks.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task ResourceCreationCancellationWithoutRequestedHandleDoesNotClosePlaceholder(bool getOrCreate)
+    {
+        var (session, writer) = await WriterForResource();
+        using var cancellation = new CancellationTokenSource();
+        var method = getOrCreate ? "GetOrCreateResource" : "CreateResource";
+        session.MethodOutputs[method] = getOrCreate
+            ? [new Variant(VersionTwoNode), new Variant("v1"), new Variant(0u), new Variant(true)]
+            : [new Variant(VersionTwoNode), new Variant("v1"), new Variant(0u)];
+        session.AfterMethod = cancellation.Cancel;
+
+        var error = await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+        {
+            if (getOrCreate)
+                _ = await writer.GetOrCreateResourceAsync(GroupNode, "schema-a", "v1", false, cancellation.Token);
+            else
+                _ = await writer.CreateResourceAsync(GroupNode, "schema-a", "v1", false, cancellation.Token);
+        });
+
+        await Assert.That(error!.CancellationToken).IsEqualTo(cancellation.Token);
+        await Assert.That(session.MethodCalls.Single().Method).IsEqualTo(method);
+        await Assert.That(session.Closed).IsEqualTo(1);
+        await Assert.That(session.ClosedFiles.Single()).IsEqualTo(File);
+        await Assert.That(session.WrittenChunks.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task ResourceCreationRetainsMalformedOutputErrorOverLaterCancellation(bool getOrCreate)
+    {
+        var (session, writer) = await WriterForResource();
+        using var cancellation = new CancellationTokenSource();
+        var method = getOrCreate ? "GetOrCreateResource" : "CreateResource";
+        session.MethodOutputs[method] = getOrCreate
+            ? [new Variant(VersionTwoNode), new Variant("wrong"), new Variant(42u), new Variant(true)]
+            : [new Variant(VersionTwoNode), new Variant("wrong"), new Variant(42u)];
+        session.AfterMethod = cancellation.Cancel;
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+        {
+            if (getOrCreate)
+                _ = await writer.GetOrCreateResourceAsync(GroupNode, "schema-a", "v1", true, cancellation.Token);
+            else
+                _ = await writer.CreateResourceAsync(GroupNode, "schema-a", "v1", true, cancellation.Token);
+        });
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(session.Closed).IsEqualTo(2);
+        await Assert.That(session.LastClosedHandle).IsEqualTo(42u);
+        await Assert.That(session.CloseToken.CanBeCanceled).IsFalse();
+        await Assert.That(session.WrittenChunks.Count).IsEqualTo(0);
+    }
+
+    [Test]
     [Arguments(false, null, "")]
     [Arguments(true, null, "")]
     [Arguments(false, "", "")]

@@ -136923,6 +136923,10 @@
           "ResourceCreationRejectsEmptyOrContradictoryAssignedVersion",
           "ResourceCreationPreservesAssignedOrExplicitVersionIdentity",
           "ResourceCreationClosesRequestedHandleWhenOutputsAreRejected",
+          "ResourceCreationObservesCancellationBeforeCallingSession",
+          "ResourceCreationClosesReturnedHandleAfterCancellationWithoutLosingCleanupFailure",
+          "ResourceCreationCancellationWithoutRequestedHandleDoesNotClosePlaceholder",
+          "ResourceCreationRetainsMalformedOutputErrorOverLaterCancellation",
           "WriterWritesPropertiesDeleteAndFileDocumentsOnARealServer"
         ],
         "nativeEvidence": []

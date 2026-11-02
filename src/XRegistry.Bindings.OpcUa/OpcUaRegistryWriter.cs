@@ -63,10 +63,12 @@ public sealed class OpcUaRegistryWriter
     {
         ArgumentException.ThrowIfNullOrEmpty(resourceId);
         reader.EnsureSpecVersionValidatedForWrite();
+        cancellationToken.ThrowIfCancellationRequested();
         var outputs = await session.CallMethodAsync(group, "CreateResource",
             [new Variant(resourceId), new Variant(versionId ?? string.Empty), new Variant(requestFileOpen)],
             cancellationToken).ConfigureAwait(false);
-        var result = await ReadResourceOutputsAsync(outputs, versionId, requestFileOpen, getOrCreate: false)
+        var result = await ReadResourceOutputsAsync(outputs, versionId, requestFileOpen, getOrCreate: false,
+            cancellationToken)
             .ConfigureAwait(false);
         return new(result.ResourceNode, result.VersionId, result.FileHandle);
     }
@@ -77,15 +79,17 @@ public sealed class OpcUaRegistryWriter
     {
         ArgumentException.ThrowIfNullOrEmpty(resourceId);
         reader.EnsureSpecVersionValidatedForWrite();
+        cancellationToken.ThrowIfCancellationRequested();
         var outputs = await session.CallMethodAsync(group, "GetOrCreateResource",
             [new Variant(resourceId), new Variant(versionId ?? string.Empty), new Variant(requestFileOpen)],
             cancellationToken).ConfigureAwait(false);
-        return await ReadResourceOutputsAsync(outputs, versionId, requestFileOpen, getOrCreate: true)
+        return await ReadResourceOutputsAsync(outputs, versionId, requestFileOpen, getOrCreate: true,
+            cancellationToken)
             .ConfigureAwait(false);
     }
 
     private async ValueTask<OpcUaResourceResolution> ReadResourceOutputsAsync(IReadOnlyList<Variant> outputs,
-        string? requestedVersion, bool requestFileOpen, bool getOrCreate)
+        string? requestedVersion, bool requestFileOpen, bool getOrCreate, CancellationToken cancellationToken)
     {
         var method = getOrCreate ? "GetOrCreateResource" : "CreateResource";
         try
@@ -99,8 +103,10 @@ public sealed class OpcUaRegistryWriter
                 throw new FederationException(FederationErrorCode.InvalidPackage,
                     $"{method} returned an empty or contradictory assigned Version identifier.");
             }
-            return new(resource, version, ReadUInt32Output(outputs, 2, method),
+            var result = new OpcUaResourceResolution(resource, version, ReadUInt32Output(outputs, 2, method),
                 !getOrCreate || ReadBooleanOutput(outputs, 3, method));
+            cancellationToken.ThrowIfCancellationRequested();
+            return result;
         }
         catch (Exception failure) when (requestFileOpen && outputs.Count >= 3 &&
             outputs[0].AsBoxedObject() is NodeId { IsNull: false } file &&
