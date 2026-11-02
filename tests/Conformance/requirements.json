@@ -135024,13 +135024,22 @@
       ],
       "text": "A manifest MUST NOT include its own digest. Consumers MUST reject unknown formats or unknown mandatory extension semantics instead of ignoring them.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The manifest parser rejects a self-digest member and unknown format discriminators. Generic binding and offline package readers reject unsupported mandatory extension semantics before reading captured Registry or domain bytes. Optional extension syntax does not imply support for its semantics.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "RejectsSelfDigestRatherThanMakingManifestIdentityRecursive",
+          "RejectsWrongFormatAndUnknownProperties",
+          "OpenChannelRejectsUnsupportedRequiredExtensionsBeforeReadingRegistry",
+          "OpenRecordRejectsUnsupportedRequiredExtensionsWithoutResolvingSources",
+          "OfflineReplayRejectsUnknownMandatoryExtensionsBeforeReadingRegistryOrDomainObjects"
+        ],
         "nativeEvidence": []
       }
     },
@@ -135919,13 +135928,21 @@
       ],
       "text": "Paths use `/` between nonempty segments of ASCII letters, digits, underscores and hyphens, and end in a file name with one extension. Absolute paths, `.`/`..`, backslashes and percent encodings are prohibited. Readers MUST enforce resolved containment, including symbolic links, and apply byte and traversal limits before reading.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Package parsing enforces the portable ASCII path grammar, and replay checks resolved containment, symbolic links, object counts, traversal depth, individual bytes and aggregate bytes. Caller JSON limits now remain in effect for the captured manifest, including immediately adjacent numeric boundaries and relaxed exponent budgets, without a second parse under defaults. Concurrent path replacement between containment checking and file opening is not yet guarded or tested, so the complete containment obligation remains pending.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "PackageRejectsTraversalAndDuplicateEquivalentReferences",
+          "PackageRejectsSymbolicLinksThatResolveOutsideItsDirectory",
+          "PackageEnforcesDocumentAndAggregateByteLimitsAtTheirBoundaries",
+          "OfflineReplayEnforcesCallerNumberLimitsAtTheManifestBoundary",
+          "OfflineReplayRetainsRelaxedCallerNumberLimitsAcrossEveryManifestParse"
+        ],
         "nativeEvidence": []
       }
     },

@@ -14,13 +14,15 @@ public sealed record PublicationPackageObject(PublicationVersionReference Refere
 public sealed class PublicationPackage
 {
     private readonly byte[] _exactBytes;
+    private readonly RegistryJsonLimits? _jsonLimits;
 
     private PublicationPackage(byte[] exactBytes, PublicationOpenRecord context,
-        IReadOnlyList<PublicationPackageObject> objects)
+        IReadOnlyList<PublicationPackageObject> objects, RegistryJsonLimits? jsonLimits)
     {
         _exactBytes = (byte[])exactBytes.Clone();
         Context = context;
         Objects = objects;
+        _jsonLimits = jsonLimits;
     }
 
     /// <summary>Gets the open context selecting the package's immutable snapshot.</summary>
@@ -103,7 +105,7 @@ public sealed class PublicationPackage
             objects[index++] = new PublicationPackageObject(reference, localPath);
         }
 
-        return new PublicationPackage(exactJson.ToArray(), context, Array.AsReadOnly(objects));
+        return new PublicationPackage(exactJson.ToArray(), context, Array.AsReadOnly(objects), limits);
     }
 
     /// <summary>Reads and opens publication-package.json from a local package directory.</summary>
@@ -207,8 +209,9 @@ public sealed class PublicationPackage
         var manifestBytes = await ReadDescriptorAsync(Context.Snapshot, entries, pathsByReference, bytesByPath,
             maxDocumentBytes, maxTotalBytes, () => totalBytes, value => totalBytes = value, cancellationToken)
             .ConfigureAwait(false);
-        var manifest = PublicationManifest.Parse(manifestBytes);
+        var manifest = PublicationManifest.Parse(manifestBytes, _jsonLimits);
         Context.ValidateAgainstManifest(manifest);
+        PublicationReadClient.RejectUnsupportedRequiredExtensions(manifest);
 
         var descriptors = new Dictionary<string, PublicationByteDescriptor>(StringComparer.Ordinal);
         AddDescriptor(descriptors, Context.Snapshot);
@@ -252,7 +255,9 @@ public sealed class PublicationPackage
         var reader = new PublicationReadClient((access, _) =>
             ValueTask.FromResult<IPublicationReadBinding>(new PackageBinding(access, bytesByReference)),
             maxDocumentBytes);
-        return await reader.OpenRecordAsync(Context, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        return new(reader, Context, manifest, manifestBytes,
+            bytesByReference[PublicationReferenceComparer.GetReferenceIdentityKey(Context.Registry.Reference)]);
     }
 
     private static async ValueTask<byte[]> ReadDescriptorAsync(PublicationByteDescriptor descriptor,

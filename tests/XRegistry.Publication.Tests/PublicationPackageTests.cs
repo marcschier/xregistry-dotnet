@@ -14,6 +14,90 @@ namespace XRegistry.Publication.Tests;
 public class PublicationPackageTests
 {
     [Test]
+    [Arguments(true, 39)]
+    [Arguments(true, 40)]
+    [Arguments(true, 41)]
+    [Arguments(false, 39)]
+    [Arguments(false, 40)]
+    [Arguments(false, 41)]
+    public async Task OfflineReplayEnforcesCallerNumberLimitsAtTheManifestBoundary(
+        bool openDirectory, int tokenLength)
+    {
+        var original = Fixture.Create();
+        var digits = original.RegistryDescriptor.Size.ToString(
+            System.Globalization.CultureInfo.InvariantCulture).Length;
+        var fixture = Fixture.Create(registrySizeSuffix: "." + new string('0', tokenLength - digits - 1));
+        var limits = new RegistryJsonLimits { MaxNumberCharacters = 40 };
+        var package = PublicationPackage.Parse(fixture.Package.GetExactBytes(), limits);
+        await using var directory = await PackageDirectory.CreateAsync(fixture);
+
+        async ValueTask<PublicationOpenedSnapshot> OpenAsync() => openDirectory
+            ? await PublicationPackage.OpenDirectoryAsync(directory.PackagePath, jsonLimits: limits)
+            : await package.OpenSnapshotAsync(directory.PackagePath);
+
+        if (tokenLength > limits.MaxNumberCharacters)
+        {
+            var error = await Assert.That(async () => await OpenAsync())
+                .Throws<RegistryException>() ?? throw new InvalidOperationException("Expected manifest number limit rejection.");
+            await Assert.That(error.Diagnostic.Code).IsEqualTo("number_limit");
+            return;
+        }
+
+        var snapshot = await OpenAsync();
+        await Assert.That(snapshot.GetExactManifestBytes().SequenceEqual(fixture.ManifestBytes)).IsTrue();
+        await Assert.That(snapshot.GetExactRegistryBytes().SequenceEqual(fixture.RegistryBytes)).IsTrue();
+        await Assert.That((await snapshot.ReadDocumentAsync(Fixture.DocumentVersion))
+            .SequenceEqual(fixture.DocumentBytes)).IsTrue();
+    }
+
+    [Test]
+    [Arguments(true)]
+    [Arguments(false)]
+    public async Task OfflineReplayRetainsRelaxedCallerNumberLimitsAcrossEveryManifestParse(bool openDirectory)
+    {
+        var fixture = Fixture.Create(registrySizeSuffix: new string('0', 10_001) + "e-10001");
+        var limits = new RegistryJsonLimits { MaxNumberCharacters = 20_000, MaxNumberExponent = 10_001 };
+        var package = PublicationPackage.Parse(fixture.Package.GetExactBytes(), limits);
+        await using var directory = await PackageDirectory.CreateAsync(fixture);
+        var defaultError = await Assert.That(async () =>
+                await PublicationPackage.OpenDirectoryAsync(directory.PackagePath))
+            .Throws<RegistryException>() ?? throw new InvalidOperationException("Expected default number limit rejection.");
+        await Assert.That(defaultError.Diagnostic.Code).IsEqualTo("number_limit");
+
+        var snapshot = openDirectory
+            ? await PublicationPackage.OpenDirectoryAsync(directory.PackagePath, jsonLimits: limits)
+            : await package.OpenSnapshotAsync(directory.PackagePath);
+
+        await Assert.That(snapshot.Manifest.Registry.Size).IsEqualTo(fixture.RegistryDescriptor.Size);
+        await Assert.That(snapshot.GetExactManifestBytes().SequenceEqual(fixture.ManifestBytes)).IsTrue();
+        await Assert.That(snapshot.GetExactRegistryBytes().SequenceEqual(fixture.RegistryBytes)).IsTrue();
+        await Assert.That((await snapshot.ReadDocumentAsync(Fixture.DocumentVersion))
+            .SequenceEqual(fixture.DocumentBytes)).IsTrue();
+    }
+
+    [Test]
+    [Arguments(true)]
+    [Arguments(false)]
+    public async Task OfflineReplayRejectsUnknownMandatoryExtensionsBeforeReadingRegistryOrDomainObjects(
+        bool openDirectory)
+    {
+        var fixture = Fixture.Create(requireExtension: true);
+        await using var directory = await PackageDirectory.CreateAsync(fixture, writeObjects: false);
+        Directory.CreateDirectory(Path.Combine(directory.PackagePath, "objects"));
+        await File.WriteAllBytesAsync(Path.Combine(directory.PackagePath, "objects", "manifest.json"),
+            fixture.ManifestBytes);
+
+        var error = await Assert.That(async () =>
+                openDirectory
+                    ? await PublicationPackage.OpenDirectoryAsync(directory.PackagePath)
+                    : await fixture.Package.OpenSnapshotAsync(directory.PackagePath))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected mandatory extension rejection.");
+
+        await Assert.That(error.Code).IsEqualTo("unsupported_required_extension");
+        await Assert.That(error.Path).IsEqualTo("/requiredExtensions/0");
+    }
+
+    [Test]
     public async Task OfflinePackageOpensPinnedSnapshotAndReadsExactDocumentBytesLocally()
     {
         var fixture = Fixture.Create();
@@ -233,19 +317,25 @@ public class PublicationPackageTests
         internal PublicationPackage Package { get; }
         internal bool IncludeDocument { get; }
 
-        internal static Fixture Create(string completeness = "offline-complete", bool includeDocument = true)
+        internal static Fixture Create(string completeness = "offline-complete", bool includeDocument = true,
+            string? registrySizeSuffix = null, bool requireExtension = false)
         {
             var registryBytes = Encoding.UTF8.GetBytes("""{"registryid":"captured"}""");
             var documentBytes = Encoding.UTF8.GetBytes("""{"payload":"pinned"}""");
             var registryDescriptor = Descriptor("/publications/team/objects/registry/versions/content", registryBytes);
             var documentDescriptor = Descriptor(DocumentVersion, documentBytes);
+            var registryJson = ToJson(registryDescriptor);
+            if (registrySizeSuffix is not null)
+            {
+                registryJson["size"] = JsonNode.Parse(registryJson["size"]!.ToJsonString() + registrySizeSuffix);
+            }
             var manifest = new JsonObject
             {
                 ["format"] = "xregistry-publication/1",
                 ["scope"] = "urn:example:release",
                 ["capture"] = "assembled",
                 ["completeness"] = completeness,
-                ["registry"] = ToJson(registryDescriptor),
+                ["registry"] = registryJson,
                 ["documents"] = new JsonArray(new JsonObject
                 {
                     ["viewVersion"] = DocumentVersion,
@@ -255,6 +345,14 @@ public class PublicationPackageTests
                     ["content"] = ToJson(documentDescriptor)
                 })
             };
+            if (requireExtension)
+            {
+                manifest["extensions"] = new JsonObject
+                {
+                    ["urn:example:required"] = ToJson(documentDescriptor)
+                };
+                manifest["requiredExtensions"] = new JsonArray("urn:example:required");
+            }
             var manifestBytes = Encoding.UTF8.GetBytes(manifest.ToJsonString());
             var manifestId = Convert.ToHexString(SHA256.HashData(manifestBytes)).ToLowerInvariant();
             var manifestDescriptor = Descriptor($"/publications/team/snapshots/{manifestId}/versions/manifest",

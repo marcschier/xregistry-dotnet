@@ -203,6 +203,12 @@ objects to a directory containing `publication-package.json`.
 `PublicationPackage.OpenDirectoryAsync` reads that package without network
 access. It checks every mapped path for resolved containment, applies object
 and traversal limits, and verifies bytes against their descriptors.
+Limits supplied to `PublicationPackage.Parse` or `OpenDirectoryAsync` also
+govern the captured manifest during replay. Tightened numeric budgets reject
+before accepting its bytes; relaxed budgets remain in effect when opening the
+verified snapshot. Replay uses that checked manifest without a second parse
+under different limits, and rejects unsupported mandatory extensions before
+reading captured Registry or domain objects.
 `PublicationReadClient.OpenRecordAsync` and package readers accept `sources` as
 pinned provenance. They read the materialized top-level snapshot and do not
 fetch or reconstruct constituent sources; source composition remains

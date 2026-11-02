@@ -409,6 +409,20 @@ public class PublicationManifestTests
     }
 
     [Test]
+    public async Task RejectsSelfDigestRatherThanMakingManifestIdentityRecursive()
+    {
+        var json = JsonNode.Parse(ValidManifest)!.AsObject();
+        json["digest"] = "sha256:" + new string('a', 64);
+        var bytes = Encoding.UTF8.GetBytes(json.ToJsonString());
+
+        var error = await Assert.That(() => PublicationManifest.Parse(bytes))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected self-digest rejection.");
+
+        await Assert.That(error.Code).IsEqualTo("unknown_property");
+        await Assert.That(error.Path).IsEqualTo("/digest");
+    }
+
+    [Test]
     public async Task RejectsWrongFormatAndUnknownProperties()
     {
         var wrongFormat = Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(ValidManifest)

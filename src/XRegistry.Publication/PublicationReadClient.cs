@@ -104,7 +104,7 @@ public sealed class PublicationReadClient
         return new(this, openRecord, manifest, manifestBytes, registryBytes);
     }
 
-    private static void RejectUnsupportedRequiredExtensions(PublicationManifest manifest)
+    internal static void RejectUnsupportedRequiredExtensions(PublicationManifest manifest)
     {
         if (manifest.RequiredExtensions.Count > 0)
         {
