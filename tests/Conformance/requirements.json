@@ -134786,13 +134786,22 @@
       ],
       "text": "- Git references MUST select a complete commit object ID, not a branch or tag.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Publication reference parsing requires a complete 40- or 64-digit ASCII hexadecimal Git object ID. Missing selectors, abbreviated IDs, refs, tags, revision expressions and nonhexadecimal values reject. The reader repeats the check before binding acquisition for programmatic channel heads and forwards accepted commit IDs without replacing their authored spelling. This verifies reference selection, not Git repository acquisition or retained-object storage.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "PublicationReferencesRejectMutableOrMissingCaptureSelectors",
+          "PublicationGitPinsRejectIncompleteAndNonHexadecimalObjectIds",
+          "PublicationGitPinsRetainCompleteSha1AndSha256ObjectIds",
+          "ProgrammaticChannelHeadsRejectMutableCaptureSelectorsBeforeOpeningTheirBinding",
+          "PinnedCaptureSelectorsReachOnlyTheExplicitlySelectedBindingUnchanged"
+        ],
         "nativeEvidence": []
       }
     },
@@ -134817,13 +134826,22 @@
       ],
       "text": "- OCI references, including File OCI layouts, MUST select a digest, not a tag.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Publication OCI and File OCI-layout access contexts require the binding's canonical lowercase SHA-256 reference digest. Tags, absent references and malformed digests reject during parsing and before a programmatic head opens its selected binding. Accepted digests reach that binding unchanged; no alternate reference or binding is substituted. Document-tree and unknown extension bindings do not acquire an invented OCI selector. Distribution and File layout acquisition remain separate binding obligations.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "PublicationReferencesRejectMutableOrMissingCaptureSelectors",
+          "PublicationOciPinsRequireTheBindingsCanonicalSha256Digest",
+          "PublicationPinRulesDoNotInventSelectorsForDocumentTreesOrUnknownBindings",
+          "ProgrammaticChannelHeadsRejectMutableCaptureSelectorsBeforeOpeningTheirBinding",
+          "PinnedCaptureSelectorsReachOnlyTheExplicitlySelectedBindingUnchanged"
+        ],
         "nativeEvidence": []
       }
     },

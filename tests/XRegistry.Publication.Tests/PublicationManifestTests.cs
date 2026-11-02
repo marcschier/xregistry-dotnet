@@ -204,6 +204,131 @@ public class PublicationManifestTests
     }
 
     [Test]
+    [Arguments("git", null)]
+    [Arguments("git", "")]
+    [Arguments("git", "main")]
+    [Arguments("git", "refs/heads/main")]
+    [Arguments("git", "refs/tags/release-1")]
+    [Arguments("git", "HEAD~1")]
+    [Arguments("oci", null)]
+    [Arguments("oci", "")]
+    [Arguments("oci", "latest")]
+    [Arguments("file", null)]
+    [Arguments("file", "")]
+    [Arguments("file", "release-1")]
+    public async Task PublicationReferencesRejectMutableOrMissingCaptureSelectors(string binding, string? selector)
+    {
+        var descriptor = CaptureDescriptor(binding, selector);
+        using var document = JsonDocument.Parse(descriptor.ToJsonString());
+
+        var error = await Assert.That(() => PublicationByteDescriptor.Parse(document.RootElement))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected unpinned publication reference.");
+
+        await Assert.That(error.Code).IsEqualTo("unpinned_reference");
+        await Assert.That(error.Path).IsEqualTo(
+            "/reference/registry/parameters/" + (binding == "git" ? "revision" : "reference"));
+    }
+
+    [Test]
+    [Arguments(39, 'a')]
+    [Arguments(41, 'a')]
+    [Arguments(63, 'a')]
+    [Arguments(65, 'a')]
+    [Arguments(40, 'g')]
+    [Arguments(64, 'g')]
+    public async Task PublicationGitPinsRejectIncompleteAndNonHexadecimalObjectIds(int length, char digit)
+    {
+        using var document = JsonDocument.Parse(CaptureDescriptor("git", new string(digit, length)).ToJsonString());
+
+        var error = await Assert.That(() => PublicationByteDescriptor.Parse(document.RootElement))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected invalid Git object ID.");
+
+        await Assert.That(error.Code).IsEqualTo("unpinned_reference");
+        await Assert.That(error.Path).IsEqualTo("/reference/registry/parameters/revision");
+    }
+
+    [Test]
+    [Arguments(40, 'a')]
+    [Arguments(40, 'A')]
+    [Arguments(64, 'a')]
+    [Arguments(64, 'A')]
+    public async Task PublicationGitPinsRetainCompleteSha1AndSha256ObjectIds(int length, char digit)
+    {
+        var selector = new string(digit, length);
+        using var document = JsonDocument.Parse(CaptureDescriptor("git", selector).ToJsonString());
+
+        var descriptor = PublicationByteDescriptor.Parse(document.RootElement);
+
+        await Assert.That(descriptor.Reference.Registry.Parameters["revision"]).IsEqualTo(selector);
+    }
+
+    [Test]
+    [Arguments("oci")]
+    [Arguments("file")]
+    public async Task PublicationOciPinsRequireTheBindingsCanonicalSha256Digest(string binding)
+    {
+        var selector = "sha256:" + new string('a', 64);
+        using var valid = JsonDocument.Parse(CaptureDescriptor(binding, selector).ToJsonString());
+        var parsed = PublicationByteDescriptor.Parse(valid.RootElement);
+        await Assert.That(parsed.Reference.Registry.Parameters["reference"]).IsEqualTo(selector);
+
+        foreach (var invalid in new[]
+        {
+            "sha256:" + new string('a', 63), "sha256:" + new string('a', 65),
+            "sha256:" + new string('A', 64), "sha256:" + new string('g', 64),
+            "SHA256:" + new string('a', 64), "sha512:" + new string('a', 64)
+        })
+        {
+            using var document = JsonDocument.Parse(CaptureDescriptor(binding, invalid).ToJsonString());
+            var error = await Assert.That(() => PublicationByteDescriptor.Parse(document.RootElement))
+                .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected invalid OCI digest pin.");
+            await Assert.That(error.Code).IsEqualTo("unpinned_reference");
+            await Assert.That(error.Path).IsEqualTo("/reference/registry/parameters/reference");
+        }
+    }
+
+    [Test]
+    public async Task PublicationPinRulesDoNotInventSelectorsForDocumentTreesOrUnknownBindings()
+    {
+        var tree = CaptureDescriptor("file", null);
+        tree["reference"]!["registry"]!["parameters"]!["layout"] = "document-tree";
+        using var treeDocument = JsonDocument.Parse(tree.ToJsonString());
+        var treeDescriptor = PublicationByteDescriptor.Parse(treeDocument.RootElement);
+        await Assert.That(treeDescriptor.Reference.Registry.Parameters.ContainsKey("reference")).IsFalse();
+
+        var extension = CaptureDescriptor("git", "vendor-selection");
+        extension["reference"]!["registry"]!["binding"] = "vendor";
+        using var extensionDocument = JsonDocument.Parse(extension.ToJsonString());
+        var extensionDescriptor = PublicationByteDescriptor.Parse(extensionDocument.RootElement);
+        await Assert.That(extensionDescriptor.Reference.Registry.Binding).IsEqualTo("vendor");
+        await Assert.That(extensionDescriptor.Reference.Registry.Parameters["revision"]).IsEqualTo("vendor-selection");
+    }
+
+    private static JsonNode CaptureDescriptor(string binding, string? selector)
+    {
+        var descriptor = JsonNode.Parse(ValidManifest)!["registry"]!.DeepClone();
+        var access = descriptor["reference"]!["registry"]!;
+        access["binding"] = binding;
+        access["endpoint"] = binding switch
+        {
+            "git" => "https://git.example.test/captures.git",
+            "oci" => "oci://registry.example.test/captures",
+            _ => "file:///D:/captured"
+        };
+        var parameters = new JsonObject();
+        if (binding == "file")
+        {
+            parameters["layout"] = "oci-layout";
+        }
+        if (selector is not null)
+        {
+            parameters[binding == "git" ? "revision" : "reference"] = selector;
+        }
+        access["parameters"] = parameters;
+        return descriptor;
+    }
+
+    [Test]
     public async Task ParsesManifestAndRetainsItsExactBytes()
     {
         var manifest = PublicationManifest.Parse(ValidManifest);

@@ -332,7 +332,7 @@ public class PublicationOpenRecordTests
         switch (field)
         {
             case "binding":
-                access["binding"] = "git";
+                access["binding"] = "vendor";
                 break;
             case "endpoint":
                 access["endpoint"] = "https://other.example.test";

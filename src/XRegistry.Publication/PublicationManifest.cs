@@ -247,8 +247,10 @@ public sealed record PublicationByteDescriptor(PublicationVersionReference Refer
             }
         }
 
-        return new PublicationRegistryAccess(binding, endpoint,
+        var access = new PublicationRegistryAccess(binding, endpoint,
             new ReadOnlyDictionary<string, string>(parameters));
+        PublicationJson.RequirePinnedAccess(access);
+        return access;
     }
 }
 
@@ -397,6 +399,31 @@ internal static class PublicationJson
         }
 
         return endpoint;
+    }
+
+    internal static void RequirePinnedAccess(PublicationRegistryAccess access)
+    {
+        const string path = "/reference/registry/parameters/";
+        if (string.Equals(access.Binding, "git", StringComparison.Ordinal))
+        {
+            if (!access.Parameters.TryGetValue("revision", out var revision) ||
+                revision.Length is not (40 or 64) || !revision.All(char.IsAsciiHexDigit))
+            {
+                throw Error("unpinned_reference", path + "revision",
+                    "A publication Git reference requires a complete commit object ID, not a branch or tag.");
+            }
+        }
+        else if (string.Equals(access.Binding, "oci", StringComparison.Ordinal) ||
+            string.Equals(access.Binding, "file", StringComparison.Ordinal) &&
+            access.Parameters.TryGetValue("layout", out var layout) &&
+            string.Equals(layout, "oci-layout", StringComparison.Ordinal))
+        {
+            if (!access.Parameters.TryGetValue("reference", out var reference) || !IsSha256Digest(reference))
+            {
+                throw Error("unpinned_reference", path + "reference",
+                    "A publication OCI reference requires a lowercase SHA-256 digest, not a tag.");
+            }
+        }
     }
 
     internal static string RequireAbsoluteUri(JsonElement value, string path)

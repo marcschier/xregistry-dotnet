@@ -18,6 +18,101 @@ public class PublicationReadClientTests
         new Dictionary<string, string>(StringComparer.Ordinal));
 
     [Test]
+    [Arguments("git")]
+    [Arguments("oci")]
+    [Arguments("file")]
+    public async Task ProgrammaticChannelHeadsRejectMutableCaptureSelectorsBeforeOpeningTheirBinding(string kind)
+    {
+        var fixture = Fixture.Create();
+        var parameters = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [kind == "git" ? "revision" : "reference"] = kind == "git" ? "refs/heads/main" : "latest"
+        };
+        if (kind == "file")
+        {
+            parameters["layout"] = "oci-layout";
+        }
+        var access = Access with { Binding = kind, Parameters = parameters };
+        fixture.ChannelMetadata = fixture.ChannelMetadata with
+        {
+            Head = fixture.ManifestDescriptor with
+            {
+                Reference = fixture.ManifestDescriptor.Reference with { Registry = access }
+            }
+        };
+        var binding = fixture.Binding();
+        var calls = 0;
+        var client = new PublicationReadClient((_, _) =>
+        {
+            calls++;
+            return ValueTask.FromResult<IPublicationReadBinding>(binding);
+        });
+
+        var error = await Assert.That(async () => await client.OpenChannelAsync(Access, ChannelResource))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected unpinned channel head rejection.");
+
+        await Assert.That(error.Code).IsEqualTo("unpinned_reference");
+        await Assert.That(error.Path).IsEqualTo(
+            "/reference/registry/parameters/" + (kind == "git" ? "revision" : "reference"));
+        await Assert.That(calls).IsEqualTo(1);
+        await Assert.That(binding.ChannelReadCount).IsEqualTo(1);
+        await Assert.That(binding.OpenedVersions.Count).IsZero();
+    }
+
+    [Test]
+    [Arguments("git", 40)]
+    [Arguments("git", 64)]
+    [Arguments("oci", 64)]
+    [Arguments("file", 64)]
+    public async Task PinnedCaptureSelectorsReachOnlyTheExplicitlySelectedBindingUnchanged(string kind, int digits)
+    {
+        var fixture = Fixture.Create();
+        var selector = kind == "git" ? new string('A', digits) : "sha256:" + new string('a', digits);
+        var parameters = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [kind == "git" ? "revision" : "reference"] = selector
+        };
+        if (kind == "file")
+        {
+            parameters["layout"] = "oci-layout";
+        }
+        var access = new PublicationRegistryAccess(kind, kind switch
+        {
+            "git" => "https://git.example.test/captures.git",
+            "oci" => "oci://registry.example.test/captures",
+            _ => "file:///D:/captured"
+        }, parameters);
+        fixture.ChannelMetadata = fixture.ChannelMetadata with
+        {
+            Head = fixture.ManifestDescriptor with
+            {
+                Reference = fixture.ManifestDescriptor.Reference with { Registry = access }
+            }
+        };
+        var calls = new List<PublicationRegistryAccess>();
+        var opened = new List<FakeBinding>();
+        var client = new PublicationReadClient((selected, _) =>
+        {
+            calls.Add(selected);
+            var binding = fixture.Binding(selected);
+            opened.Add(binding);
+            return ValueTask.FromResult<IPublicationReadBinding>(binding);
+        });
+
+        var snapshot = await client.OpenChannelAsync(Access, ChannelResource);
+
+        await Assert.That(calls.Count).IsEqualTo(3);
+        await Assert.That(calls[1].Binding).IsEqualTo(kind);
+        await Assert.That(calls[1].Endpoint).IsEqualTo(access.Endpoint);
+        await Assert.That(calls[1].Parameters[kind == "git" ? "revision" : "reference"]).IsEqualTo(selector);
+        await Assert.That(opened[1].OpenedVersions.SequenceEqual([fixture.ManifestDescriptor.Reference.Version])).IsTrue();
+        await Assert.That(snapshot.OpenRecord.Snapshot.Reference.Registry.Parameters[
+            kind == "git" ? "revision" : "reference"]).IsEqualTo(selector);
+        await Assert.That(snapshot.GetExactManifestBytes().SequenceEqual(fixture.ManifestBytes)).IsTrue();
+        await Assert.That(snapshot.GetExactRegistryBytes().SequenceEqual(fixture.RegistryBytes)).IsTrue();
+    }
+
+    [Test]
     public async Task OpenChannelReadsOneCoherentMetaAndSelectsExactBindingsAndVersions()
     {
         var fixture = Fixture.Create();

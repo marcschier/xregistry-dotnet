@@ -177,6 +177,13 @@ floating-point conversion; fractional and negative values are rejected.
 Parsing retains the received bytes. Equivalent numeric values do not imply
 equal Snapshot IDs because manifest identity covers exact bytes.
 
+Publication Git references require complete commit object IDs. OCI references,
+including File OCI layouts, require lowercase SHA-256 digests instead of tags.
+The parsers reject mutable or missing selectors, and the reader checks again
+before opening a binding for a programmatically supplied channel head.
+These checks do not authorize acquisition or select an alternate binding.
+Document-tree and extension bindings retain their own selection rules.
+
 Opening a channel reads the retained manifest and checks its descriptor, scope
 and completeness. Offline replay is limited to `offline-complete` manifests,
 which must supply every referenced object; replay verifies each object again

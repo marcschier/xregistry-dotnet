@@ -171,6 +171,7 @@ public sealed class PublicationReadClient
     private async ValueTask<IPublicationReadBinding> OpenBindingAsync(
         PublicationRegistryAccess registry, CancellationToken cancellationToken)
     {
+        PublicationJson.RequirePinnedAccess(registry);
         var binding = await _openBinding(registry, cancellationToken).ConfigureAwait(false);
         if (binding is null)
         {
