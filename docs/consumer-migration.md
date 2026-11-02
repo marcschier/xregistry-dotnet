@@ -665,8 +665,19 @@ Callback ancestors and unrelated operations retain the named-versus-pointer
 traversal rules above. Unused reusable example references remain inactive;
 selection retains authored references and does not retrieve `externalValue`
 addresses. Parameter examples, format-specific response-presence requirements,
-nested header/encoding/link validation and response schema
+nested header/encoding validation and response schema
 evaluation remain unverified.
+Response links and root reusable links require Link or Reference Objects.
+Response link names follow the component-name character rules. Inline links
+require exactly one string `operationId` or URI-reference `operationRef`;
+optional descriptions are strings and parameters are objects whose values
+remain arbitrary JSON. Request bodies also retain arbitrary JSON values.
+Present servers receive the same URL-template, variable and metadata checks
+as other Server Objects. Reference declarations require string URI references;
+OpenAPI 3.1 checks optional string summary and description, while OpenAPI 3.0
+ignores these siblings. Extension contents remain opaque. These checks do not
+resolve Link Reference Objects, establish linked-operation existence or
+uniqueness, evaluate runtime expressions or invoke linked operations.
 Root and reached HTTP operation `externalDocs` values must be objects with a
 string `url` and, when present, a string `description`. An External
 Documentation Object is not a Reference Object: a `$ref` alone cannot replace

@@ -644,8 +644,7 @@ public static partial class ApiOperationDocumentResolver
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var entryPath = path + "/" + Escape(entry.Name);
-                if (!swagger && (entry.Name.Length == 0 || entry.Name.Any(static c =>
-                    !char.IsAsciiLetterOrDigit(c) && c is not ('.' or '-' or '_'))))
+                if (!swagger && !IsOpenApiComponentName(entry.Name))
                 {
                     return Failure(ApiOperationResolutionStatus.Invalid, "document.component_name",
                         "An OpenAPI component name must contain only ASCII letters, digits, dots, hyphens or underscores.",
@@ -674,10 +673,18 @@ public static partial class ApiOperationDocumentResolver
                     var exampleFailure = ValidateOpenApiExampleDeclaration(entry.Value, entryPath, format, cancellationToken);
                     if (exampleFailure is not null) { return exampleFailure; }
                 }
+                if (!swagger && collection.Name == "links")
+                {
+                    var linkFailure = ValidateOpenApiLinkDeclaration(entry.Value, entryPath, format, cancellationToken);
+                    if (linkFailure is not null) { return linkFailure; }
+                }
             }
         }
         return null;
     }
+
+    private static bool IsOpenApiComponentName(string value) =>
+        value.Length > 0 && value.All(static c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '_');
 
     private static ApiOperationResolutionResult ResolveAvroMessage(JsonElement root, string messageName,
         Uri? documentUri, CancellationToken cancellationToken)
