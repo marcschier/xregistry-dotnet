@@ -201,7 +201,14 @@ Federation can resolve external Resource and Version targets only through a
 caller-injected trusted provider lease; it verifies the target Registry, model
 and node roles,
 application identity, namespace mapping and origin-relative XID before
-returning a target node. Event type discovery, notification decoding and
+returning a target node. Application identity and namespace mapping are checked
+before browsing the selected Registry or opening its Model and Capabilities
+files. Captured external identities retain URI and identifier values, not table
+indexes; each target mapping uses that Session's current namespace table.
+The low-level resolver does not read or validate a Resource's `OriginRegistry`,
+pin an authoritative origin form or enforce a source-declared logical/exact
+reference role. It is not the complete `XREG-Federation` proxy workflow.
+Event type discovery, notification decoding and
 Subscription management provide client-side support for native xRegistry Events.
 Both native deprecation transitions map to Core's
 `io.xregistry.<entity>.deprecated` action. Decoded events retain the concrete

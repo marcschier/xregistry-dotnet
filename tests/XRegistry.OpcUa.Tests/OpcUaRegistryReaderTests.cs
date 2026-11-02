@@ -3918,6 +3918,27 @@ public class OpcUaRegistryReaderTests
     }
 
     [Test]
+    [Arguments("application")]
+    [Arguments("namespace")]
+    public async Task ResolveExternalTargetAsyncRejectsIdentityMismatchBeforeReadingRegistryDocuments(
+        string mismatch)
+    {
+        var fixture = mismatch == "application"
+            ? CreateResolverFixture(leaseServerApplicationUri: "urn:server:foreign",
+                sessionServerArrayUri: "urn:server:foreign")
+            : CreateResolverFixture(identityNamespaceUri: "urn:namespace:foreign");
+
+        var error = await ResolveFailureAsync(fixture);
+
+        await Assert.That(error.Code).IsEqualTo(mismatch == "application"
+            ? FederationErrorCode.PolicyDenied
+            : FederationErrorCode.NotFound);
+        await Assert.That(fixture.Session.OpenedFiles).IsEquivalentTo(Array.Empty<NodeId>());
+        await Assert.That(fixture.Session.BrowsedNodes).IsEquivalentTo(Array.Empty<NodeId>());
+        await Assert.That(fixture.Lease.DisposeCount).IsEqualTo(1);
+    }
+
+    [Test]
     [Arguments("wrong-node")]
     [Arguments("wrong-kind")]
     [Arguments("wrong-type")]

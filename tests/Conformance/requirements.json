@@ -139736,9 +139736,12 @@
       ],
       "text": "For a logical proxy or mirror claiming `XREG-Federation`, the resolver first reads the logical Resource's read-only `OriginRegistry`. Its `RegistryOriginDataType` has three scalar fields in order: `OriginUri` (`UriString`), `ServerUri` (`UriString`) and `RegistryNodeId` (`ExpandedNodeId`). Exactly one form MUST be authoritative:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The complete selected section 10.2, including both exclusive origin forms and all five resolution steps, was read against OpcUaRegistryReader, OpcUaSessionAdapter, OpcUaExternalNodeId and the trusted-provider resolver/lease. The existing reader reads ExternalReference and the low-level resolver validates a caller-supplied target lease, but no Resource-owned RegistryOriginDataType/OriginRegistry reader or exclusive-form admission exists. A caller-owned NativeRegistryContext is not evidence of reading this Property. Implement origin decoding and independent binding validation before presenting this as the complete XREG-Federation workflow.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -139768,13 +139771,21 @@
       ],
       "text": "The root MUST identify a `RegistryType` Object or subtype, not a Resource or endpoint. Unresolved Session-local namespace or server indexes are insufficient. A non-OPC-UA provider MUST use the stable `OriginUri` form; it MUST NOT manufacture an application/root pair from a URL. The resolver MUST validate the claim against its configured or verified provider binding before selecting a locator. The claim does not establish its own trust. URI comparison is exact, with no case folding, trimming, percent decoding or other URI normalization.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Selected section 10.2 and adjacent origin forms were read in full. Existing resolver evidence proves exact application/namespace comparison, selected Registry-root checks and target lease ownership; it does not admit a source OriginRegistry claim against an independently configured stable origin or application/root pair. Non-OPC-UA stable-OriginUri handling, exclusive-origin trust validation before locator selection and root-specific origin identity remain missing. Do not equate exact URI mapping or an authenticated provider lease with this compound origin-admission obligation.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "MapExternalNodeIdRejectsDifferentTargetApplicationUri",
+          "ResolveExternalTargetAsyncRejectsWrongRegistryRootAndDisposesLease",
+          "ResolveExternalTargetAsyncRejectsServerUriAvailableOnlyInAnotherContext",
+          "RegistryAdmissionRejectsCompetingOrNonObjectTypeDefinitions"
+        ],
         "nativeEvidence": []
       }
     },
@@ -139799,13 +139810,23 @@
       ],
       "text": "For an `ExpandedNodeId` received from a source Server, a resolver MUST:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "This extracted lead-in owns the complete five-step list at source lines 2263-2287, not merely its one extracted line. Adapter mapping reads source ServerArray and source namespace context, preserves all identifier kinds and uses a separate caller-supplied trusted provider; the target resolver checks application identity, root/version/model and selected typed structural XID. Direct table-reordering and source-index-zero cases supplement existing four-kind and mismatch tests. A regression first showed Model and Capabilities files opened before application/namespace mismatch rejection; admission now precedes any selected Registry Browse or file open. Complete source OriginRegistry/binding admission, authenticated destination/certificate policy integration and logical versus explicitly exact reference-role enforcement still need an origin-scoped public workflow. Keep the compound list pending.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "MapExternalNodeIdUsesSourceServerAndNamespaceUrisAndPreservesIdentifier",
+          "MapExternalNodeIdPreservesExpandedNodeIdNamespaceUriExactly",
+          "MapExternalNodeIdPreservesGuidAndOpaqueIdentifiers",
+          "CapturedExternalIdentitySurvivesSourceAndTargetTableReordering",
+          "ExternalReferenceServerIndexZeroUsesSourceApplicationWithoutEndpointSubstitution",
+          "ResolveExternalTargetAsyncRejectsIdentityMismatchBeforeReadingRegistryDocuments",
+          "TrustedProviderResolverReadsAnExternalVersionFromAnAlternateTargetModel"
+        ],
         "nativeEvidence": []
       }
     },
@@ -139830,13 +139851,23 @@
       ],
       "text": "5. Before reading the target as a Registry entity, verify its Registry root, model, Core version, NodeClass, TypeDefinition ancestry, structural role and origin-relative XID. A logical `ExternalReference` MUST identify the remote logical Resource Object of FileType or a subtype, not a folder, exact Version or content-digest Variable. Exact Version selection uses that Resource's verified `Versions` hierarchy or an explicitly exact-Version reference. A same-application target still needs the correct Registry-root check. Read file bytes with a new target-local handle under \u00a75.13.1 only after these checks succeed.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The low-level ResolveExternalTargetAsync verifies the selected target root, Session application identity, accepted Core version, compiled model and Capabilities, typed Group/Resource/Versions structure and equality of resolved NodeId to the requested identity. Direct mismatch tests and a two-server FileType read prove bounded target admission. The API accepts either logical or exact XID discovered from the target without retaining a source-declared logical/exact role or source OriginRegistry record. Therefore it cannot yet enforce that a logical ExternalReference never substitutes an exact Version, nor provide the complete same-application/different-root origin workflow. Keep the full obligation pending.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "ResolveExternalTargetAsyncRejectsWrongNodeKindOrTypeMapping",
+          "ResolveExternalTargetAsyncRejectsInvalidSpecVersionAndDisposesLease",
+          "ResolveExternalTargetAsyncRejectsSpecVersionChangeBeforeReadingModel",
+          "ResolveExternalTargetAsyncRejectsIdentityMismatchBeforeReadingRegistryDocuments",
+          "ResolveExternalTargetAsyncResolvesVersionIdentityToExactTargetNodeId",
+          "ResolveExternalTargetAsyncRejectsWrongRegistryRootAndDisposesLease",
+          "TrustedProviderResolverReadsAnExternalVersionFromAnAlternateTargetModel"
+        ],
         "nativeEvidence": []
       }
     },
@@ -139861,13 +139892,24 @@
       ],
       "text": "A table index has meaning only in its captured context. The resolver remaps indexes after reconnecting or selecting another Server. A missing namespace produces a specific failure, never a substitution of namespace zero. For storage without table context, Part 6 provides `nsu=` and, for an application-specific reference, `svu=`. The `svu=` value is an Application URI, not a connectable endpoint. Namespace and Application URIs MUST be compared as exact opaque strings, without URL normalization.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Bounded client URI/table mapping is implemented by OpcUaExternalNodeId and OpcUaSessionAdapter. Source indexes are resolved afresh to copied URI/identifier values, explicit namespaceUri takes precedence, target mapping uses the target Session table without adding entries, exact application/namespace spelling is preserved and a missing namespace is NotFound. A direct test reorders both source tables and two target tables, proves stable captured identity and target-local reindexing, and proves reusing the old raw indexes resolves a different source context rather than silently reusing the capture. Source ServerIndex zero selects the source Application URI, never an endpoint. This does not implement persisted origin pins or the wider origin-scoped deduplication contract.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CapturedExternalIdentitySurvivesSourceAndTargetTableReordering",
+          "ExternalReferenceServerIndexZeroUsesSourceApplicationWithoutEndpointSubstitution",
+          "MapExternalNodeIdPreservesExpandedNodeIdNamespaceUriExactly",
+          "MapExternalNodeIdRejectsMissingTargetNamespaceInsteadOfUsingNamespaceZero",
+          "MapExternalNodeIdRejectsDifferentTargetApplicationUri",
+          "MapExternalNodeIdRejectsOutOfRangeServerIndex",
+          "MapExternalNodeIdRejectsOutOfRangeNamespaceIndex",
+          "MapExternalNodeIdPreservesGuidAndOpaqueIdentifiers"
+        ],
         "nativeEvidence": []
       }
     },
@@ -139893,9 +139935,12 @@
       ],
       "text": "For de-duplication, the source key MUST contain the trusted origin, concrete origin-relative XID and logical/exact role. The application/root form uses both values, not Application URI alone. Equal XIDs or document bytes from independent origins remain separate. An authorized locator change or table reordering MUST NOT change the pinned origin, XID, role or remote Node identity. A changed origin, including a switch between authoritative forms, is a different source, not a reconnect.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Selected section 10.2 was read with all origin and table-context rules. OpcUaExternalNodeId preserves exact application/namespace/identifier and the resolver retains validated target XID, but no native immutable origin-form pin or origin-root/XID/role source-key contract exists. NativeRegistryContext/caller lease is not a substitute for source OriginRegistry validation or persistence. Implement source-key construction, independent-origin separation, authorized locator-only changes and rejection of changed origin/form/role/remote identity; table-reordering evidence alone cannot close this obligation.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",

@@ -51,7 +51,7 @@ it does not transfer historical qualification to a successor.
 | message | 178 | 178 | 0 |
 | model | 487 | 487 | 0 |
 | oci | 140 | 60 | 0 |
-| opcua | 205 | 38 | 0 |
+| opcua | 205 | 44 | 0 |
 | openusd | 122 | 59 | 0 |
 | pagination | 88 | 36 | 0 |
 | publication | 65 | 65 | 0 |

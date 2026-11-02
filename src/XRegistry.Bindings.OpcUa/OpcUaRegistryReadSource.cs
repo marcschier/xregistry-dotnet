@@ -190,8 +190,6 @@ public sealed class OpcUaRegistryReadSource : IFederationReadSource
                     "The trusted-provider resolver returned an incomplete target lease.");
             }
 
-            var root = await reader.VerifyRegistryRootAsync(registryRoot, cancellationToken)
-                .ConfigureAwait(false);
             var serverArray = await reader.Session.ReadServerArrayAsync(cancellationToken).ConfigureAwait(false);
             if (serverArray.Count == 0 ||
                 !string.Equals(serverArray[0], serverApplicationUri, StringComparison.Ordinal))
@@ -203,6 +201,9 @@ public sealed class OpcUaRegistryReadSource : IFederationReadSource
             var namespaces = await reader.Session.ReadNamespaceArrayAsync(cancellationToken)
                 .ConfigureAwait(false);
             OpcUaRegistryReader.ValidateServerNamespaceIdentity(serverArray, namespaces);
+            var targetNode = identity.MapToLocalNodeId(serverApplicationUri, namespaces);
+            var root = await reader.VerifyRegistryRootAsync(registryRoot, cancellationToken)
+                .ConfigureAwait(false);
             var acceptedVersion = await reader.ReadSpecVersionAsync(registryRoot,
                 isSupportedSpecVersion, cancellationToken).ConfigureAwait(false);
             if (!string.Equals(acceptedVersion, leaseSpecVersion, StringComparison.Ordinal))
@@ -218,7 +219,6 @@ public sealed class OpcUaRegistryReadSource : IFederationReadSource
                 throw new FederationException(FederationErrorCode.InconsistentSnapshot,
                     "The target Registry SpecVersion changed while its model and Capabilities were read.");
             }
-            var targetNode = identity.MapToLocalNodeId(serverApplicationUri, namespaces);
             var targetXid = await reader.ReadStringComponentAsync(targetNode, "Xid", cancellationToken)
                 .ConfigureAwait(false);
             var target = new FederationReadRequest(FederationOperation.Entity, targetXid);

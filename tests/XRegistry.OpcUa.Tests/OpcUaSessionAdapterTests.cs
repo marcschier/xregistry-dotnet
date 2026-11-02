@@ -528,6 +528,57 @@ public class OpcUaSessionAdapterTests
     }
 
     [Test]
+    public async Task CapturedExternalIdentitySurvivesSourceAndTargetTableReordering()
+    {
+        var (adapter, proxy) = CreateAdapter();
+        var originalReference = new ExpandedNodeId(new NodeId(42u, 2), null, 2u);
+        var first = await adapter.MapExternalNodeIdAsync(originalReference, CancellationToken.None);
+        proxy.ServerArray =
+            ["urn:example:local-server", "urn:Remote:Server%2fTwo", "urn:remote:server-one"];
+        proxy.NamespaceArray =
+            ["http://opcfoundation.org/UA/", "urn:Exact:Namespace%2fTwo", "urn:example:namespace-one"];
+        var movedReference = new ExpandedNodeId(new NodeId(42u, 1), null, 1u);
+        var second = await adapter.MapExternalNodeIdAsync(movedReference, CancellationToken.None);
+        var reinterpreted = await adapter.MapExternalNodeIdAsync(originalReference, CancellationToken.None);
+        var firstTarget = new NamespaceTable(
+            ["http://opcfoundation.org/UA/", "urn:Exact:Namespace%2fTwo", "urn:target:other"]);
+        var secondTarget = new NamespaceTable(
+            ["http://opcfoundation.org/UA/", "urn:target:other", "urn:Exact:Namespace%2fTwo"]);
+
+        await Assert.That(first.ServerApplicationUri).IsEqualTo("urn:Remote:Server%2fTwo");
+        await Assert.That(first.NamespaceUri).IsEqualTo("urn:Exact:Namespace%2fTwo");
+        await Assert.That(second.ServerApplicationUri).IsEqualTo(first.ServerApplicationUri);
+        await Assert.That(second.NamespaceUri).IsEqualTo(first.NamespaceUri);
+        await Assert.That(second.IdentifierType).IsEqualTo(first.IdentifierType);
+        await Assert.That(second.Identifier).IsEqualTo(first.Identifier);
+        await Assert.That(first.MapToLocalNodeId(first.ServerApplicationUri, firstTarget))
+            .IsEqualTo(new NodeId(42u, 1));
+        await Assert.That(second.MapToLocalNodeId(second.ServerApplicationUri, secondTarget))
+            .IsEqualTo(new NodeId(42u, 2));
+        await Assert.That(first.MapToLocalNodeId(first.ServerApplicationUri, secondTarget))
+            .IsEqualTo(new NodeId(42u, 2));
+        await Assert.That(reinterpreted.ServerApplicationUri).IsEqualTo("urn:remote:server-one");
+        await Assert.That(reinterpreted.NamespaceUri).IsEqualTo("urn:example:namespace-one");
+        await Assert.That(firstTarget.Count).IsEqualTo(3);
+        await Assert.That(secondTarget.Count).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task ExternalReferenceServerIndexZeroUsesSourceApplicationWithoutEndpointSubstitution()
+    {
+        var (adapter, _) = CreateAdapter();
+        var identity = await adapter.MapExternalNodeIdAsync(
+            new ExpandedNodeId("resource", "urn:Exact:Namespace%2fTwo", 0), CancellationToken.None);
+
+        await Assert.That(identity.ServerApplicationUri).IsEqualTo("urn:example:local-server");
+        await Assert.That(identity.NamespaceUri).IsEqualTo("urn:Exact:Namespace%2fTwo");
+        await Assert.That(identity.Identifier).IsEqualTo("resource");
+        var target = new NamespaceTable(["http://opcfoundation.org/UA/", "urn:Exact:Namespace%2fTwo"]);
+        await Assert.That(identity.MapToLocalNodeId("urn:example:local-server", target))
+            .IsEqualTo(new NodeId("resource", 1));
+    }
+
+    [Test]
     public async Task MapExternalNodeIdPreservesGuidAndOpaqueIdentifiers()
     {
         var (adapter, _) = CreateAdapter();
