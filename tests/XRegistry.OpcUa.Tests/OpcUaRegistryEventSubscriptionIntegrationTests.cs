@@ -20,12 +20,22 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
     private static readonly byte[] ExpectedVersionDocument = [0x00, 0x7f, 0x80, 0xff];
 
     [Test]
-    [Arguments(false, false)]
-    [Arguments(true, false)]
-    [Arguments(false, true)]
-    [Arguments(true, true)]
-    public async Task SubscriptionCreatesAndRemovesAnEventMonitoredItemOnARealServer(bool cancelStop, bool concurrentStop)
+    [Arguments(false, false, "none")]
+    [Arguments(true, false, "none")]
+    [Arguments(false, true, "none")]
+    [Arguments(true, true, "none")]
+    [Arguments(false, false, "service")]
+    [Arguments(false, true, "service")]
+    [Arguments(false, false, "repeated")]
+    [Arguments(false, false, "already-absent")]
+    [Arguments(false, false, "cancel")]
+    [Arguments(false, false, "interrupted-without-cancellation")]
+    public async Task SubscriptionCreatesAndRemovesAnEventMonitoredItemOnARealServer(
+        bool cancelStop, bool concurrentStop, string deletionFailure)
     {
+        var failDeletion = deletionFailure != "none";
+        var expectedDeletionRequests = deletionFailure is "repeated" or "already-absent" ? 3 :
+            failDeletion ? 2 : 1;
         await using var server = await InProcessRegistryServer.StartAsync();
         var telemetry = DefaultTelemetry.Create(static _ => { });
         await using var clientApplication = new ApplicationInstance(telemetry)
@@ -96,6 +106,7 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
             }
         }
         var nativeSubscription = connection.Session.Subscriptions.Single();
+        var originalSubscriptionId = nativeSubscription.Id;
         await Assert.That(nativeSubscription.Created).IsTrue();
         await Assert.That(nativeSubscription.CurrentPublishingEnabled).IsTrue();
         var nativeMonitoredItem = nativeSubscription.MonitoredItems.Single();
@@ -126,6 +137,72 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
         await Assert.That(notification.MetaEpoch).IsNull();
         await Assert.That(notification.Changed).IsNull();
         await Assert.That(notification.CorrelationId).IsNull();
+        if (deletionFailure == "cancel")
+        {
+            server.BlockSubscriptionDeletion();
+            using var interrupted = new CancellationTokenSource();
+            var stopping = subscription.StopAsync(interrupted.Token).AsTask();
+            Task? joinedStop = null;
+            try
+            {
+                await server.SubscriptionDeletionEntered.WaitAsync(TimeSpan.FromSeconds(5), cancellation.Token);
+                joinedStop = subscription.StopAsync().AsTask();
+                await interrupted.CancelAsync();
+                await Assert.ThrowsAsync<OperationCanceledException>(async () => await stopping);
+            }
+            finally
+            {
+                server.ReleaseSubscriptionDeletion();
+            }
+            var interruption = await Assert.ThrowsAsync<OperationCanceledException>(
+                async () => await joinedStop!);
+            await Assert.That(interruption!.CancellationToken).IsEqualTo(interrupted.Token);
+            await Assert.That(interruption.InnerException is FederationException).IsTrue();
+            var nativeFailure = (FederationException)interruption.InnerException!;
+            await Assert.That(nativeFailure.InnerException is ServiceResultException).IsTrue();
+            await Assert.That(((ServiceResultException)nativeFailure.InnerException!).StatusCode)
+                .IsEqualTo(StatusCodes.BadRequestInterrupted);
+            await Assert.That(nativeSubscription.Created).IsFalse();
+            await Assert.That(connection.Session.SubscriptionCount).IsEqualTo(1);
+            await Assert.That(server.SubscriptionDeletionRequests).IsEqualTo(1);
+        }
+        else if (failDeletion)
+        {
+            var remoteSubscriptionId = nativeSubscription.Id;
+            var expectedStatus = deletionFailure == "interrupted-without-cancellation"
+                ? StatusCodes.BadRequestInterrupted : StatusCodes.BadResourceUnavailable;
+            server.FailNextSubscriptionDeletion(expectedStatus);
+            var failure = await Assert.ThrowsAsync<FederationException>(
+                async () => await subscription.StopAsync(cancellation.Token));
+            await Assert.That(failure!.Code).IsEqualTo(FederationErrorCode.Unavailable);
+            await Assert.That(failure.InnerException is ServiceResultException).IsTrue();
+            await Assert.That(((ServiceResultException)failure.InnerException!).StatusCode)
+                .IsEqualTo(expectedStatus);
+            await Assert.That(cancellation.IsCancellationRequested).IsFalse();
+            await Assert.That(nativeSubscription.Created).IsFalse();
+            await Assert.That(connection.Session.SubscriptionCount).IsEqualTo(1);
+            await Assert.That(server.SubscriptionDeletionRequests).IsEqualTo(1);
+            if (deletionFailure == "repeated")
+            {
+                server.FailNextSubscriptionDeletion();
+                var retryFailure = await Assert.ThrowsAsync<FederationException>(
+                    async () => await subscription.StopAsync(cancellation.Token));
+                await Assert.That(retryFailure!.Code).IsEqualTo(FederationErrorCode.Unavailable);
+                await Assert.That(retryFailure.InnerException is ServiceResultException).IsTrue();
+                await Assert.That(((ServiceResultException)retryFailure.InnerException!).StatusCode)
+                    .IsEqualTo(StatusCodes.BadResourceUnavailable);
+                await Assert.That(connection.Session.SubscriptionCount).IsEqualTo(1);
+                await Assert.That(server.SubscriptionDeletionRequests).IsEqualTo(2);
+            }
+            else if (deletionFailure == "already-absent")
+            {
+                var removed = await connection.Session.DeleteSubscriptionsAsync(
+                    new RequestHeader(), [remoteSubscriptionId], cancellation.Token);
+                await Assert.That(removed.Results.Count).IsEqualTo(1);
+                await Assert.That(StatusCode.IsGood(removed.Results[0])).IsTrue();
+                await Assert.That(server.SubscriptionDeletionRequests).IsEqualTo(2);
+            }
+        }
         if (concurrentStop)
         {
             server.BlockSubscriptionDeletion();
@@ -158,7 +235,7 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
                 server.ReleaseSubscriptionDeletion();
                 await firstStop.WaitAsync(cancellation.Token);
             }
-            await Assert.That(server.SubscriptionDeletionRequests).IsEqualTo(1);
+            await Assert.That(server.SubscriptionDeletionRequests).IsEqualTo(expectedDeletionRequests);
         }
         else
         {
@@ -166,9 +243,16 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
         }
         await Assert.That(connection.Session.SubscriptionCount).IsEqualTo(0);
         await Assert.That(nativeSubscription.Created).IsFalse();
+        await Assert.That(server.SubscriptionDeletionRequests).IsEqualTo(expectedDeletionRequests);
+        var absence = await connection.Session.DeleteSubscriptionsAsync(
+            new RequestHeader(), [originalSubscriptionId], cancellation.Token);
+        await Assert.That(absence.Results.Count).IsEqualTo(1);
+        await Assert.That(absence.Results[0]).IsEqualTo(StatusCodes.BadSubscriptionIdInvalid);
+        expectedDeletionRequests++;
         await subscription.StopAsync(cancellation.Token);
         await subscription.DisposeAsync();
         await Assert.That(connection.Session.SubscriptionCount).IsEqualTo(0);
+        await Assert.That(server.SubscriptionDeletionRequests).IsEqualTo(expectedDeletionRequests);
         await Assert.That(Volatile.Read(ref delivered)).IsEqualTo(1);
     }
 
@@ -519,6 +603,8 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
         public int SubscriptionDeletionRequests => server.SubscriptionDeletionRequests;
         public void BlockSubscriptionDeletion() => server.BlockSubscriptionDeletion = true;
         public void ReleaseSubscriptionDeletion() => server.ContinueSubscriptionDeletion.TrySetResult();
+        public void FailNextSubscriptionDeletion(StatusCode? status = null) =>
+            server.NextSubscriptionDeletionFailure = status ?? StatusCodes.BadResourceUnavailable;
 
         public static async ValueTask<InProcessRegistryServer> StartAsync(
             string? externalServerApplicationUri = null,
@@ -614,6 +700,7 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
         public uint? DeleteExpectedEpoch => nodeManager?.DeleteExpectedEpoch;
         public int AttributeMethodInvocations => nodeManager?.AttributeMethodInvocations ?? 0;
         public bool BlockSubscriptionDeletion { get; set; }
+        public StatusCode? NextSubscriptionDeletionFailure { get; set; }
         public TaskCompletionSource SubscriptionDeletionEntered { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource ContinueSubscriptionDeletion { get; } =
@@ -626,6 +713,11 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
             if (context.RequestType == RequestType.DeleteSubscriptions)
             {
                 SubscriptionDeletionRequests++;
+                if (NextSubscriptionDeletionFailure is { } failure)
+                {
+                    NextSubscriptionDeletionFailure = null;
+                    throw new ServiceResultException(failure);
+                }
                 if (BlockSubscriptionDeletion)
                 {
                     SubscriptionDeletionEntered.TrySetResult();

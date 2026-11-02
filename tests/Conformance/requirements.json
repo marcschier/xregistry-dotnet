@@ -140622,7 +140622,7 @@
       "text": "The table maps native observations to common resolver outcomes; it defines no new OPC UA StatusCodes. The resolver MUST retain the original Service/operation/Method StatusCode, argument diagnostics and any cleanup failure. A successful Service result does not override a failed node read or Method result.",
       "review": {
         "status": "reviewed",
-        "note": "The selected source at f69085fb was inspected with the complete error table and resolver context. OpcUaSessionAdapter now maps native Service/operation/Method failures, rejects non-Good response and argument statuses, and retains exact original status, response header/diagnostics and Method argument status/diagnostics. Both synchronous and asynchronous SDK exceptions retain their original exception; cancellation remains unchanged. Browse cleanup validates returned operation status and retains multiple release failures without replacing the original operation error. Direct adapter evidence does not establish all reader/writer FileType, federation capture and Subscription cleanup paths or the complete context-dependent resolver table. Those compound obligations remain pending; unsupported advertisement/transport also requires reconciliation with Registry selection semantics. No native qualification is assigned.",
+        "note": "The selected source at f69085fb was inspected with the complete error table and resolver context. OpcUaSessionAdapter maps native Service/operation/Method failures, rejects non-Good response and argument statuses, and retains exact original status, response header/diagnostics and Method argument status/diagnostics. Synchronous and asynchronous SDK exceptions retain their original exception. Browse cleanup validates returned operation status and retains multiple release failures without replacing the original operation error. File reads check cancellation across handle acquisition, chunks and EOF while retaining Close failure. Subscription deletion now retains its remote ID after SDK failure/reset, retries remote deletion, validates retry Service and operation statuses, and handles an already-removed ID. A cancelled deletion that returns SDK BadRequestInterrupted retains the caller token and native failure as cancellation; that status without cancellation remains a native failure. Real-server repeated failure, in-flight cancellation, remote absence and shared completion cases pass. This does not prove restored event delivery after SDK reset, Session-replacement cleanup, all writer/capture paths or the complete context-dependent resolver table. Those compound obligations remain pending; unsupported advertisement/transport also requires reconciliation with Registry selection semantics. No native qualification is assigned.",
         "roles": [
           "client"
         ]
@@ -140643,6 +140643,7 @@
           "CancellationDuringAcquisitionDisposesTransferredLeaseAndRetainsCleanupError",
           "CancelledFileReadDoesNotOpenHandle",
           "FileReadCancellationStopsIgnoredTokenAndClosesTransferredHandle",
+          "SubscriptionCreatesAndRemovesAnEventMonitoredItemOnARealServer",
           "BrowsePageBudgetRetainsReleaseFailureOnLimitError",
           "InternalBrowsePageBudgetRetainsReleaseFailureOnLimitError",
           "DiscoveryWorkBudgetReleasesOutstandingHandleAndRetainsCleanupFailure",

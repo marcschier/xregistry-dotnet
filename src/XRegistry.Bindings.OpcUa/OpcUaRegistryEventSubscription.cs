@@ -54,6 +54,7 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
     private readonly OpcUaRegistryEventDecoder decoder;
     private readonly object stopGate = new();
     private Task? stopTask;
+    private uint remoteSubscriptionId;
 
     private OpcUaRegistryEventSubscription(ManagedSession session, Subscription subscription,
         MonitoredItem monitoredItem, OpcUaRegistryEventDecoder decoder)
@@ -272,6 +273,7 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
         try
         {
             await subscription.CreateAsync(cancellationToken).ConfigureAwait(false);
+            result.remoteSubscriptionId = subscription.Id;
             return result;
         }
         catch (Exception createFailure)
@@ -309,10 +311,36 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
 
     private async Task StopCoreAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         monitoredItem.Notification -= OnNotification;
         try
         {
-            _ = await session.RemoveSubscriptionAsync(subscription, cancellationToken).ConfigureAwait(false);
+            if (subscription.Created)
+            {
+                remoteSubscriptionId = subscription.Id;
+            }
+            else if (remoteSubscriptionId != 0)
+            {
+                // SDK deletion clears Id even when the remote deletion fails.
+                var response = await OpcUaSessionAdapter.InvokeAsync(() => session.DeleteSubscriptionsAsync(
+                    new RequestHeader(), [remoteSubscriptionId], cancellationToken)).ConfigureAwait(false);
+                _ = OpcUaSessionAdapter.Single(response.Results,
+                    static status => status.CodeBits == StatusCodes.BadSubscriptionIdInvalid.CodeBits
+                        ? StatusCodes.Good : status,
+                    response.DiagnosticInfos, response.ResponseHeader);
+            }
+            _ = await OpcUaSessionAdapter.InvokeAsync(async () =>
+                await session.RemoveSubscriptionAsync(subscription, cancellationToken).ConfigureAwait(false))
+                .ConfigureAwait(false);
+            remoteSubscriptionId = 0;
+        }
+        catch (FederationException failure) when (cancellationToken.IsCancellationRequested &&
+            failure.InnerException is ServiceResultException native &&
+            native.StatusCode.CodeBits == StatusCodes.BadRequestInterrupted.CodeBits)
+        {
+            monitoredItem.Notification += OnNotification;
+            throw new OperationCanceledException("The Subscription deletion request was cancelled.",
+                failure, cancellationToken);
         }
         catch
         {

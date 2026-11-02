@@ -259,11 +259,22 @@ Both native deprecation transitions map to Core's
 `io.xregistry.<entity>.deprecated` action. Decoded events retain the concrete
 `EventType` NodeId, so a consumer can distinguish setting or changing deprecation
 from removing it without inventing a Core `undeprecated` action.
-If Subscription removal throws, the wrapper restores its notification handler
-and permits another stop attempt. The real-server test verifies that repeated
-pre-cancelled attempts retain live delivery, that a later stop removes the
-Subscription, and that repeated stop/disposal does not recreate it. This does
-not establish recovery from an interrupted server deletion or connection loss.
+Pre-cancelled Subscription removal leaves the Subscription and its notification
+handler intact. The real-server test verifies live delivery after repeated
+pre-cancelled attempts. Once deletion reaches the SDK, a failure or cancellation
+can clear the SDK's local Subscription ID without establishing remote removal.
+The wrapper retains that ID and retries remote deletion before removing its
+local Subscription. Only a Good result or `Bad_SubscriptionIdInvalid` confirms
+the remote Subscription no longer needs deletion; other failures remain
+explicit and permit another attempt. The original native status is retained.
+When the caller's token is cancelled, SDK `Bad_RequestInterrupted` becomes
+cancellation with that token and the native failure retained as its cause.
+Without caller cancellation, the same status remains a native failure.
+Real-server cases cover one and repeated Service failures, cancellation while
+the server holds the deletion request, an already-removed remote Subscription,
+and subsequent Stop/disposal without another deletion. Retrying deletion does
+not restore event delivery after the SDK has cleared its local Subscription,
+nor establish recovery across a lost or replaced Session.
 Concurrent Stop and Dispose calls await the same deletion task rather than
 returning while deletion is still in progress. The initiating caller's token
 controls deletion; a later caller can cancel its own wait without cancelling
