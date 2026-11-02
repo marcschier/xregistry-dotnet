@@ -24,6 +24,7 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
     private readonly int maxBrowsePages;
     private readonly ConcurrentDictionary<(NodeId Session, NodeId File, uint Handle), byte> readHandles = new();
     private NamespaceTable? namespaceUris;
+    private NodeId namespaceSession;
 
     /// <summary>Creates an adapter; <paramref name="registryType"/> is the server's RegistryType NodeId.</summary>
     public OpcUaSessionAdapter(ISessionClient session, NodeId registryType, uint maxReferencesPerNode = 1000,
@@ -45,9 +46,14 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
     /// <inheritdoc />
     public async ValueTask<NamespaceTable> ReadNamespaceArrayAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        var sourceSession = session.SessionId;
         var values = await ReadStringArrayAsync(new NodeId(2255u, 0), "NamespaceArray", cancellationToken)
             .ConfigureAwait(false);
+        RequireFileSession(sourceSession);
+        cancellationToken.ThrowIfCancellationRequested();
         namespaceUris = new NamespaceTable(values);
+        namespaceSession = sourceSession;
         return namespaceUris;
     }
 
@@ -334,7 +340,7 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
         {
             RequireMutationSecurity(cancellationToken);
         }
-        if (namespaceUris is null)
+        if (namespaceUris is null || namespaceSession != sourceSession)
         {
             _ = await ReadNamespaceArrayAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -408,7 +414,7 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
     {
         cancellationToken.ThrowIfCancellationRequested();
         var sourceSession = session.SessionId;
-        if (namespaceUris is null)
+        if (namespaceUris is null || namespaceSession != sourceSession)
         {
             _ = await ReadNamespaceArrayAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -440,7 +446,7 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
     {
         cancellationToken.ThrowIfCancellationRequested();
         var sourceSession = session.SessionId;
-        if (namespaceUris is null)
+        if (namespaceUris is null || namespaceSession != sourceSession)
         {
             _ = await ReadNamespaceArrayAsync(cancellationToken).ConfigureAwait(false);
         }

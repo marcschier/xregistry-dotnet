@@ -183,8 +183,12 @@ handle or bytes from the interrupted operation. It discards its cached
 namespace table and does not send an outstanding Browse continuation to the
 replacement Session, even for release; a blocked continuation release is
 reported as additional diagnostic information. A later Open reads the new
-namespace table. These checks cover transitions observed within an operation,
-not every disconnected state or stale handle supplied between operations.
+namespace table. The namespace cache also retains its source Session identity:
+Open and file Size/buffer-limit reads refresh it when the Session changes
+between operations, before mapping discovered Method or Property targets.
+A cancelled or changed-Session NamespaceArray read cannot install its result.
+These checks do not cover every disconnected state or stale handle supplied
+between operations.
 `OpcUaSessionConnection` discovers endpoints and opens a Session only
 after caller policy selects one; it maps the advertised root through the
 Session's `NamespaceArray` and verifies the root and Core version.

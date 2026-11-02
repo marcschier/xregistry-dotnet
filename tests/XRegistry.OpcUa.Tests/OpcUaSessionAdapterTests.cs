@@ -915,6 +915,145 @@ public class OpcUaSessionAdapterTests
     }
 
     [Test]
+    [Arguments("Open")]
+    [Arguments("Size")]
+    [Arguments("FileLimit")]
+    [Arguments("ServerLimit")]
+    public async Task FileOperationsRefreshNamespaceMappingWhenSessionChangesBetweenOperations(string operation)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        proxy.NamespaceArray = ["http://opcfoundation.org/UA/", "urn:target", "urn:other"];
+        _ = await adapter.ReadNamespaceArrayAsync(CancellationToken.None);
+        var name = operation switch
+        {
+            "Open" => BrowseNames.Open,
+            "Size" => BrowseNames.Size,
+            _ => BrowseNames.MaxByteStringLength
+        };
+        proxy.BrowseResultFactory = request => operation == "ServerLimit" &&
+            request.NodeId != ObjectIds.Server_ServerCapabilities
+            ? new BrowseResult()
+            : new BrowseResult
+            {
+                References = [new ReferenceDescription
+                {
+                    NodeId = new ExpandedNodeId(new NodeId("Actual", 0), "urn:target"),
+                    BrowseName = new QualifiedName(name),
+                    NodeClass = operation == "Open" ? NodeClass.Method : NodeClass.Variable
+                }]
+            };
+        proxy.SessionId = new NodeId("Replacement", 0);
+        proxy.NamespaceArray = ["http://opcfoundation.org/UA/", "urn:other", "urn:target"];
+        proxy.AfterRead = () =>
+        {
+            if (proxy.ReadRequests[^1].NodeId == VariableIds.Server_NamespaceArray)
+            {
+                proxy.ReadValue = operation == "Size" ? new Variant(3UL) : new Variant(3u);
+            }
+        };
+        var file = new NodeId("File", 2);
+
+        if (operation == "Open")
+        {
+            var handle = await adapter.OpenAsync(file, 1, CancellationToken.None);
+            await Assert.That(handle).IsEqualTo(7u);
+            await Assert.That(proxy.MethodCalls.Single().MethodId).IsEqualTo(new NodeId("Actual", 2));
+        }
+        else if (operation == "Size")
+        {
+            var size = await adapter.ReadFileSizeAsync(file, CancellationToken.None);
+            await Assert.That(size).IsEqualTo((ulong?)3);
+        }
+        else
+        {
+            var limit = await adapter.ReadFileMaxByteStringLengthAsync(file, CancellationToken.None);
+            await Assert.That(limit).IsEqualTo((uint?)3);
+        }
+        if (operation != "Open")
+        {
+            await Assert.That(proxy.ReadRequests[^1].NodeId).IsEqualTo(new NodeId("Actual", 2));
+        }
+        await Assert.That(proxy.ReadRequests.Count(request => request.NodeId == VariableIds.Server_NamespaceArray))
+            .IsEqualTo(2);
+        var before = proxy.ReadCount;
+        if (operation == "Open")
+        {
+            _ = await adapter.OpenAsync(file, 1, CancellationToken.None);
+        }
+        else if (operation == "Size")
+        {
+            _ = await adapter.ReadFileSizeAsync(file, CancellationToken.None);
+        }
+        else
+        {
+            _ = await adapter.ReadFileMaxByteStringLengthAsync(file, CancellationToken.None);
+        }
+        await Assert.That(proxy.ReadCount).IsEqualTo(before + (operation == "Open" ? 0 : 1));
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task FileOpenDoesNotFallBackToPreviousSessionNamespaceTable(bool invalidTable)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        proxy.NamespaceArray = ["http://opcfoundation.org/UA/", "urn:target"];
+        _ = await adapter.ReadNamespaceArrayAsync(CancellationToken.None);
+        proxy.SessionId = new NodeId("Replacement", 0);
+        proxy.NamespaceArray = ["http://opcfoundation.org/UA/", "urn:other"];
+        proxy.BrowseResultFactory = _ => new BrowseResult
+        {
+            References = [new ReferenceDescription
+            {
+                NodeId = new ExpandedNodeId(new NodeId("Actual.Open", 0), "urn:target"),
+                BrowseName = new QualifiedName(BrowseNames.Open),
+                NodeClass = NodeClass.Method
+            }]
+        };
+        if (invalidTable) proxy.ReadValue = new Variant(3u);
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.OpenAsync(new NodeId("File", 1), 1, CancellationToken.None));
+
+        await Assert.That(error!.Code).IsEqualTo(invalidTable
+            ? FederationErrorCode.InvalidPackage : FederationErrorCode.NotFound);
+        await Assert.That(proxy.ReadCount).IsEqualTo(2);
+        await Assert.That(proxy.MethodCalls.Count).IsEqualTo(0);
+        await Assert.That(proxy.BrowseRequests.Count).IsEqualTo(invalidTable ? 0 : 1);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task NamespaceArrayDoesNotCacheCancelledOrChangedSessionResults(bool cancelled)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        using var cancellation = new CancellationTokenSource();
+        proxy.AfterRead = () =>
+        {
+            if (cancelled) cancellation.Cancel();
+            else proxy.SessionId = new NodeId("Replacement", 0);
+        };
+        if (cancelled)
+        {
+            var error = await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+                await adapter.ReadNamespaceArrayAsync(cancellation.Token));
+            await Assert.That(error!.CancellationToken).IsEqualTo(cancellation.Token);
+        }
+        else
+        {
+            var error = await Assert.ThrowsAsync<FederationException>(async () =>
+                await adapter.ReadNamespaceArrayAsync(cancellation.Token));
+            await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.Unavailable);
+        }
+        proxy.AfterRead = null;
+        var handle = await adapter.OpenAsync(new NodeId("File", 1), 1, CancellationToken.None);
+        await Assert.That(handle).IsEqualTo(7u);
+        await Assert.That(proxy.ReadCount).IsEqualTo(2);
+        await Assert.That(proxy.MethodCalls.Count).IsEqualTo(1);
+    }
+
+    [Test]
     public async Task FileTransferCanOpenAgainWithFreshNamespaceTableAfterSessionTransition()
     {
         var (adapter, proxy) = CreateAdapter();
