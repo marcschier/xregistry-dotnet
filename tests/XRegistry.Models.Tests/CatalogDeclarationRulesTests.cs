@@ -135,6 +135,63 @@ public class CatalogDeclarationRulesTests
     }
 
     [Test]
+    [Arguments("s=Registry;ns=2;name=value", true)]
+    [Arguments("nsu=urn:example:registry;s=Registry;name=value", true)]
+    [Arguments("nsu=urn:example:registry%3Bscope;s=Registry", true)]
+    [Arguments("nsu=urn:example:registry;i=0", true)]
+    [Arguments("nsu=urn:example:registry;s=", true)]
+    [Arguments("nsu=urn:example:registry;b=", true)]
+    [Arguments("s=", false)]
+    [Arguments("b=", false)]
+    [Arguments("g=00000000-0000-0000-0000-000000000000", false)]
+    [Arguments("g={72962B91-FA75-4AE6-8D28-B404DC7DAF63}", false)]
+    [Arguments("g=72962B91FA754AE68D28B404DC7DAF63", false)]
+    [Arguments("nsu=http://opcfoundation.org/UA/;i=85", false)]
+    [Arguments("nsu=urn:example:bad%ZZ;s=Registry", false)]
+    [Arguments("s=bad\tidentifier", false)]
+    [Arguments("s=bad\u0085identifier", false)]
+    [Arguments("i=4294967295", true)]
+    [Arguments("i=4294967296", false)]
+    [Arguments("b=AQ==", true)]
+    [Arguments("b=AQI=", true)]
+    [Arguments("b=A QI=", false)]
+    [Arguments("b=A===", false)]
+    [Arguments("b=AQ=I", false)]
+    [Arguments("b=AQI", false)]
+    [Arguments("nsu=urn:example:bad%;s=Registry", false)]
+    [Arguments("nsu=urn:example:bad%1;s=Registry", false)]
+    [Arguments("svr=0;i=85", false)]
+    [Arguments("ns=0;i=85", false)]
+    [Arguments("i=-1", false)]
+    [Arguments("i=+1", false)]
+    public async Task PortableNodeIdSyntaxUsesPart6GrammarAndPart3NullRules(string root, bool valid)
+    {
+        await Assert.That(CatalogBindingSyntax.IsPortableNodeId(root)).IsEqualTo(valid);
+        await ValidateOrReject(Advertisement("opcua", "opc.tcp://ua.example:4840/",
+            new JsonObject { ["registryroot"] = root }.ToJsonString()), valid, "/parameters/registryroot");
+    }
+
+    [Test]
+    [Arguments(4095, true)]
+    [Arguments(4096, true)]
+    [Arguments(4097, false)]
+    public async Task PortableNodeIdIdentifierLimitsApplyToStringAndDecodedOpaqueValues(int length, bool valid)
+    {
+        await Assert.That(CatalogBindingSyntax.IsPortableNodeId("s=" + new string('a', length))).IsEqualTo(valid);
+        await Assert.That(CatalogBindingSyntax.IsPortableNodeId("s=" + string.Concat(Enumerable.Repeat("\U0001F600", length))))
+            .IsEqualTo(valid);
+        await Assert.That(CatalogBindingSyntax.IsPortableNodeId("b=" + Convert.ToBase64String(new byte[length])))
+            .IsEqualTo(valid);
+    }
+
+    [Test]
+    public async Task PortableStringNodeIdsRejectUnpairedSurrogates()
+    {
+        await Assert.That(CatalogBindingSyntax.IsPortableNodeId("s=\ud800")).IsFalse();
+        await Assert.That(CatalogBindingSyntax.IsPortableNodeId("s=\udc00")).IsFalse();
+    }
+
+    [Test]
     [Arguments("oci", 0, false)]
     [Arguments("oci", 1, true)]
     [Arguments("oci", 127, true)]

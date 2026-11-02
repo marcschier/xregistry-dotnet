@@ -47,11 +47,39 @@ public class OpcUaFederationTargetTests
     [Arguments("g=72962B91-FA75-4AE6-8D28-B404DC7DAF63")]
     [Arguments("b=AQID")]
     [Arguments("nsu=urn%3Axregistry;s=Registry")]
+    [Arguments("s=Registry;ns=2;name=value")]
+    [Arguments("nsu=urn:example:registry%3Bscope;s=Registry;name=value")]
+    [Arguments("b=AQ==")]
+    [Arguments("b=AQI=")]
     public async Task PortableNodeIdFormsPassSharedSyntaxAndUaParsing(string registryRoot)
     {
         var target = Target($$"""{"registryroot":"{{registryRoot}}"}""");
 
         await Assert.That(target.RegistryRoot).IsEqualTo(registryRoot);
+    }
+
+    [Test]
+    [Arguments("s=")]
+    [Arguments("b=")]
+    [Arguments("g=00000000-0000-0000-0000-000000000000")]
+    [Arguments("g={72962B91-FA75-4AE6-8D28-B404DC7DAF63}")]
+    [Arguments("nsu=http://opcfoundation.org/UA/;i=85")]
+    [Arguments("nsu=urn:example:bad%ZZ;s=Registry")]
+    public async Task NonPortableOrNullRootsAreRejectedBeforeUaResolution(string root)
+    {
+        await Check.Error(() => Target($$"""{"registryroot":"{{root}}"}"""), FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    public async Task PortableStringRootRetainsIdentifierDelimitersAndDecodedNamespace()
+    {
+        var target = Target("""{"registryroot":"nsu=urn:example:registry%3Bscope;s=Registry;ns=2;name=value"}""");
+        var root = target.ResolveRegistryRoot(new NamespaceTable([
+            "http://opcfoundation.org/UA/", "urn:example:registry;scope"
+        ]));
+        await Assert.That(root.NamespaceIndex).IsEqualTo((ushort)1);
+        await Assert.That(root.TryGetValue(out string? identifier)).IsTrue();
+        await Assert.That(identifier).IsEqualTo("Registry;ns=2;name=value");
     }
 
     [Test]

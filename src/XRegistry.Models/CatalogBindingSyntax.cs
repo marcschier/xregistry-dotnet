@@ -1,7 +1,9 @@
 // Copyright (c) 2026 xregistry-dotnet contributors.
 // SPDX-License-Identifier: MIT
 
+using System.Buffers;
 using System.Globalization;
+using System.Text;
 
 namespace XRegistry.Models;
 
@@ -37,9 +39,7 @@ public static class CatalogBindingSyntax
     /// <summary>Checks the portable ExpandedNodeId form used for an OPC UA Registry root.</summary>
     public static bool IsPortableNodeId(string? value)
     {
-        if (string.IsNullOrEmpty(value) || value.StartsWith("svr=", StringComparison.Ordinal) ||
-            value.StartsWith("svu=", StringComparison.Ordinal) || value.StartsWith("ns=", StringComparison.Ordinal) ||
-            value.Contains(";ns=", StringComparison.Ordinal))
+        if (string.IsNullOrEmpty(value))
         {
             return false;
         }
@@ -54,9 +54,21 @@ public static class CatalogBindingSyntax
                 return false;
             }
 
-            var namespaceUri = Uri.UnescapeDataString(value[4..separator]);
+            var encodedNamespace = value[4..separator];
+            for (var index = 0; index < encodedNamespace.Length; index++)
+            {
+                if (encodedNamespace[index] == '%' &&
+                    (index + 2 >= encodedNamespace.Length ||
+                        !char.IsAsciiHexDigit(encodedNamespace[++index]) ||
+                        !char.IsAsciiHexDigit(encodedNamespace[++index])))
+                {
+                    return false;
+                }
+            }
+            var namespaceUri = Uri.UnescapeDataString(encodedNamespace);
             if (!Uri.TryCreate(namespaceUri, UriKind.Absolute, out _) ||
-                !Uri.IsWellFormedUriString(namespaceUri, UriKind.Absolute))
+                !Uri.IsWellFormedUriString(namespaceUri, UriKind.Absolute) ||
+                namespaceUri == "http://opcfoundation.org/UA/")
             {
                 return false;
             }
@@ -64,12 +76,7 @@ public static class CatalogBindingSyntax
             hasNamespaceUri = true;
             nodeId = value[(separator + 1)..];
         }
-        else if (value.Contains(';', StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        if (nodeId.Length < 2 || nodeId[1] != '=' || nodeId.Contains(';', StringComparison.Ordinal))
+        if (nodeId.Length < 2 || nodeId[1] != '=')
         {
             return false;
         }
@@ -79,16 +86,32 @@ public static class CatalogBindingSyntax
         {
             'i' => uint.TryParse(identifier, NumberStyles.None, CultureInfo.InvariantCulture, out var numericId) &&
                 (hasNamespaceUri || numericId != 0),
-            's' => !identifier.Contains('=') && !identifier.Contains(';'),
-            'g' => Guid.TryParse(identifier, out _),
-            'b' => IsBase64(identifier),
+            's' => (hasNamespaceUri || !identifier.IsEmpty) && IsNodeIdString(identifier),
+            'g' => Guid.TryParseExact(identifier, "D", out var guid) && (hasNamespaceUri || guid != Guid.Empty),
+            'b' => (hasNamespaceUri || !identifier.IsEmpty) && IsBase64(identifier),
             _ => false
         };
     }
 
+    private static bool IsNodeIdString(ReadOnlySpan<char> value)
+    {
+        var characters = 0;
+        while (!value.IsEmpty)
+        {
+            if (++characters > 4096 ||
+                Rune.DecodeFromUtf16(value, out var rune, out var consumed) != OperationStatus.Done ||
+                Rune.IsControl(rune))
+            {
+                return false;
+            }
+            value = value[consumed..];
+        }
+        return true;
+    }
+
     private static bool IsBase64(ReadOnlySpan<char> value)
     {
-        if (value.Length % 4 != 0)
+        if (value.Length > 5464 || value.Length % 4 != 0)
         {
             return false;
         }
@@ -105,7 +128,12 @@ public static class CatalogBindingSyntax
             }
         }
 
-        return value[^padding..].IndexOfAnyExcept('=') < 0;
+        if (value[^padding..].IndexOfAnyExcept('=') >= 0)
+        {
+            return false;
+        }
+        Span<byte> decoded = stackalloc byte[4096];
+        return Convert.TryFromBase64Chars(value, decoded, out _);
     }
 
     /// <summary>Tests for a complete Git ref or SHA-1/SHA-256 object ID, not a revision expression.</summary>

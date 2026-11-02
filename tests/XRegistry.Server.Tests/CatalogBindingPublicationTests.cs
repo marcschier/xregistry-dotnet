@@ -53,9 +53,12 @@ public class CatalogBindingPublicationTests
     [Arguments("{}", "/federationprofiles/0/parameters/registryroot")]
     [Arguments("""{"registryroot":[]}""", "/federationprofiles/0/parameters/registryroot")]
     [Arguments("""{"registryroot":"ns=2;s=Registry"}""", "/federationprofiles/0/parameters/registryroot")]
+    [Arguments("""{"registryroot":"s="}""", "/federationprofiles/0/parameters/registryroot")]
+    [Arguments("""{"registryroot":"b="}""", "/federationprofiles/0/parameters/registryroot")]
+    [Arguments("""{"registryroot":"g=00000000-0000-0000-0000-000000000000"}""", "/federationprofiles/0/parameters/registryroot")]
     public async Task OpcUaRegistryRootIsValidatedAndUnknownParametersRemainOpaque(string invalidParameters, string errorPath)
     {
-        var validParameters = """{"registryroot":"nsu=urn%3Axregistry;s=Registry","future":{"opaque":true}}""";
+        var validParameters = """{"registryroot":"nsu=urn%3Axregistry;s=Registry;ns=2;name=value","future":{"opaque":true}}""";
         await RejectAndAccept(Description("opcua", "opc.tcp://ua.example:4840/", invalidParameters),
             Description("opcua", "opc.tcp://ua.example:4840/", validParameters), errorPath);
     }
