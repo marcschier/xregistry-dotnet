@@ -239,6 +239,24 @@ public class PublicationChannelStoreTests
     }
 
     [Test]
+    public async Task RollingBackToAPreviouslySelectedManifestAdvancesTheCurrentEpoch()
+    {
+        var original = CreateFixture();
+        var later = CreateFixture(includeDocument: true);
+        var store = new PublicationChannelStore(new InMemoryRegistryPersistence(), StoreRegistry);
+
+        var first = await store.PublishAsync(Channel, original.ManifestBytes, original.Objects, 0);
+        var second = await store.PublishAsync(Channel, later.ManifestBytes, later.Objects, first.Channel!.Epoch);
+        var rollback = await store.PublishAsync(Channel, original.ManifestBytes, original.Objects,
+            second.Channel!.Epoch);
+
+        await Assert.That(first.Channel!.Epoch).IsEqualTo(new System.Numerics.BigInteger(1));
+        await Assert.That(second.Channel!.Epoch).IsEqualTo(new System.Numerics.BigInteger(2));
+        await Assert.That(rollback.Channel!.Epoch).IsEqualTo(new System.Numerics.BigInteger(3));
+        await Assert.That(rollback.Snapshot.Digest).IsEqualTo(first.Snapshot.Digest);
+    }
+
+    [Test]
     public async Task OfflineReplayReturnsEveryReferencedObjectByteForByte()
     {
         var fixture = CreateFixture(includeDocument: true);

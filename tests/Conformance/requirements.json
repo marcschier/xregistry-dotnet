@@ -135676,13 +135676,18 @@
       ],
       "text": "Every successful head update MUST advance the Meta epoch, including a rollback to a previously selected manifest. Rolling `stable` back from S13 to S12 moves the epoch from 17 to 21, not back to 12. The same channel Resource identity MUST NOT be reused after deletion. An authority MUST retain that non-reuse history or use a distinct Resource identity. This avoids an old epoch accidentally authorizing a write to a recreated channel.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The channel store advances from the caller's current epoch when publishing any manifest, including one previously selected; a regression test publishes a later manifest and then rolls back to the original at epochs 1, 2 and 3. The store exposes no channel deletion operation or retained deletion-history contract, so non-reuse after deletion remains unimplemented.",
+        "roles": [
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "RollingBackToAPreviouslySelectedManifestAdvancesTheCurrentEpoch"
+        ],
         "nativeEvidence": []
       }
     },
