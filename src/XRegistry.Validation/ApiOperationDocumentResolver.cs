@@ -663,6 +663,12 @@ public static partial class ApiOperationDocumentResolver
                     var schemeFailure = ValidateHttpSecurityScheme(entry.Value, entryPath, format, cancellationToken);
                     if (schemeFailure is not null) { return schemeFailure; }
                 }
+                if (collection.Name == "responses")
+                {
+                    var responseFailure = ValidateHttpResponseDeclaration(entry.Value, entryPath, format,
+                        allowReference: !swagger, cancellationToken);
+                    if (responseFailure is not null) { return responseFailure; }
+                }
             }
         }
         return null;
@@ -1090,7 +1096,7 @@ public static partial class ApiOperationDocumentResolver
                 return Failure(ApiOperationResolutionStatus.Invalid, "selection.not_operation",
                     "The selected value is not an inline Operation Object.", pathPointer);
             }
-            var metadataFailure = ValidateHttpOperationMetadata(operation, pathPointer, cancellationToken);
+            var metadataFailure = ValidateHttpOperationMetadata(operation, pathPointer, format, cancellationToken);
             if (metadataFailure is not null) { return metadataFailure; }
             var serverFailure = ValidateOpenApiServers(operation, pathPointer, format, cancellationToken);
             if (serverFailure is not null) { return serverFailure; }

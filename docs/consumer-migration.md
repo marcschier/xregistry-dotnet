@@ -610,6 +610,23 @@ and tags need not be unique. A malformed unrelated operation prevents named
 selection but does not invalidate a pointer to another operation. Extension
 contents remain opaque. These checks do not establish complete Operation
 Object validation.
+Present operation `responses` declarations must be nonempty response maps.
+Keys are `default`, HTTP status codes from 100 through 599, or, for OpenAPI,
+the uppercase ranges `1XX` through `5XX`. Specification extensions remain
+opaque and do not satisfy the requirement for a response entry. Inline Response
+Objects require a string `description`; their format-specific structured fields
+must be objects. Empty descriptions, default-only maps and unregistered status
+codes within the HTTP range remain permitted. Selection retains explicit codes
+and overlapping ranges without applying runtime precedence.
+Response Reference Objects require string URI references. OpenAPI 3.1 checks
+optional string `summary` and `description`; older formats ignore these siblings.
+Unused reusable responses receive declaration checks before selection, but
+Swagger's root response definitions require inline Response Objects rather than
+Reference Objects. Reached operations, callback ancestors and retrieved Path
+Items retain the named-versus-pointer traversal boundaries above.
+These checks do not acquire response references or rewrite selected operations.
+Format-specific response-presence requirements, reference-target resolution, nested
+header/media/link validation and response schema evaluation remain unverified.
 Root and reached HTTP operation `externalDocs` values must be objects with a
 string `url` and, when present, a string `description`. An External
 Documentation Object is not a Reference Object: a `$ref` alone cannot replace

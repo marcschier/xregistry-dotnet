@@ -26,7 +26,7 @@ public static partial class ApiOperationDocumentResolver
             return Failure(ApiOperationResolutionStatus.Indeterminate, "dependency.cycle",
                 "A callback operation cycle prevents operationId selection.", location.Pointer);
         }
-        var metadataFailure = ValidateHttpOperationMetadata(location.Operation, location.Pointer, cancellationToken);
+        var metadataFailure = ValidateHttpOperationMetadata(location.Operation, location.Pointer, references.Format, cancellationToken);
         if (metadataFailure is not null) { return metadataFailure; }
         var serverFailure = ValidateOpenApiServers(location.Operation, location.Pointer, references.Format, cancellationToken);
         if (serverFailure is not null) { return serverFailure; }
@@ -285,7 +285,7 @@ public static partial class ApiOperationDocumentResolver
     }
 
     private static ApiOperationResolutionResult? ValidateHttpOperationMetadata(
-        JsonElement operation, string pointer, CancellationToken cancellationToken)
+        JsonElement operation, string pointer, string format, CancellationToken cancellationToken)
     {
         foreach (var field in new[] { "operationId", "summary", "description", "deprecated", "tags" })
         {
@@ -317,9 +317,85 @@ public static partial class ApiOperationDocumentResolver
                 index++;
             }
         }
+        var responseFailure = ValidateHttpResponses(operation, pointer, format, cancellationToken);
+        if (responseFailure is not null) { return responseFailure; }
         var securityFailure = ValidateHttpSecurityShapes(operation, pointer, cancellationToken);
         return securityFailure ?? ValidateHttpDocumentationShapes(operation, pointer);
     }
+
+    private static ApiOperationResolutionResult? ValidateHttpResponses(
+        JsonElement operation, string pointer, string format, CancellationToken cancellationToken)
+    {
+        if (!operation.TryGetProperty("responses", out var responses)) { return null; }
+        var path = pointer + "/responses";
+        if (responses.ValueKind != JsonValueKind.Object)
+        {
+            return InvalidHttpResponse("Operation responses must be a Responses Object.", path);
+        }
+        var hasResponse = false;
+        foreach (var response in responses.EnumerateObject())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (response.Name.StartsWith("x-", StringComparison.Ordinal)) { continue; }
+            var key = response.Name;
+            var validCode = key.Length == 3 && key[0] is >= '1' and <= '5' &&
+                (char.IsAsciiDigit(key[1]) && char.IsAsciiDigit(key[2]) ||
+                    format != "Swagger/2.0" && key[1] == 'X' && key[2] == 'X');
+            var responsePath = path + "/" + Escape(key);
+            if (key != "default" && !validCode)
+            {
+                return InvalidHttpResponse("A response key must be default, an HTTP status code or an allowed OpenAPI status range.", responsePath);
+            }
+            hasResponse = true;
+            var failure = ValidateHttpResponseDeclaration(response.Value, responsePath, format,
+                allowReference: true, cancellationToken);
+            if (failure is not null) { return failure; }
+        }
+        return hasResponse ? null : InvalidHttpResponse("A Responses Object must contain at least one response.", path);
+    }
+
+    private static ApiOperationResolutionResult? ValidateHttpResponseDeclaration(
+        JsonElement response, string pointer, string format, bool allowReference, CancellationToken cancellationToken)
+    {
+        if (response.ValueKind != JsonValueKind.Object)
+        {
+            return InvalidHttpResponse("A response declaration must be a Response or Reference Object.", pointer);
+        }
+        if (allowReference && response.TryGetProperty("$ref", out var reference))
+        {
+            if (reference.ValueKind != JsonValueKind.String || !IsHttpMetadataUriReference(reference.GetString()!))
+            {
+                return InvalidHttpResponse("A response reference requires a string URI reference.", pointer + "/$ref");
+            }
+            if (format != "OpenAPI/3.1") { return null; }
+            foreach (var field in new[] { "summary", "description" })
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (response.TryGetProperty(field, out var value) && value.ValueKind != JsonValueKind.String)
+                {
+                    return InvalidHttpResponse("OpenAPI 3.1 Reference Object metadata must be strings.", pointer + "/" + field);
+                }
+            }
+            return null;
+        }
+        if (!response.TryGetProperty("description", out var description) || description.ValueKind != JsonValueKind.String)
+        {
+            return InvalidHttpResponse("A Response Object requires a string description.", pointer + "/description");
+        }
+        foreach (var field in format == "Swagger/2.0"
+            ? new[] { "headers", "schema", "examples" } : new[] { "headers", "content", "links" })
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (response.TryGetProperty(field, out var value) && value.ValueKind != JsonValueKind.Object)
+            {
+                return InvalidHttpResponse("A Response Object structured field must be an object.", pointer + "/" + field);
+            }
+        }
+        return null;
+    }
+
+    private static ApiOperationResolutionResult InvalidHttpResponse(string message, string pointer) =>
+        Failure(ApiOperationResolutionStatus.Invalid, "document.responses", message, pointer);
 
     private static ApiOperationResolutionResult? ValidateHttpDocumentationShapes(JsonElement value, string pointer)
     {
