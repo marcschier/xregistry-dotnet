@@ -79,6 +79,228 @@ public class OpcUaRegistryEventSubscriptionTests
     }
 
     [Test]
+    [Arguments(3, false)]
+    [Arguments(4, true)]
+    [Arguments(5, true)]
+    public async Task DiscoveryPageBudgetIsSharedAcrossAllBrowseOperations(int pages, bool succeeds)
+    {
+        var session = CreateSession();
+        var proxy = (SessionProxy)(object)session;
+        proxy.TypeDefinition = s_registryType;
+        proxy.GeneratedEvents[s_registryType] = [new(s_registryCreated, "RegistryCreatedEventType")];
+
+        if (succeeds)
+        {
+            var types = await OpcUaRegistryEventSubscription.DiscoverEventTypesAsync(
+                session, s_namespaceUris, s_notifier, maxBrowsePages: pages);
+            await Assert.That(types[s_registryCreated]).IsEqualTo("io.xregistry.registry.created");
+            await Assert.That(proxy.BrowseRequests.Count).IsEqualTo(4);
+        }
+        else
+        {
+            var error = await Assert.ThrowsAsync<FederationException>(async () =>
+                await OpcUaRegistryEventSubscription.DiscoverEventTypesAsync(
+                    session, s_namespaceUris, s_notifier, maxBrowsePages: pages));
+            await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+            await Assert.That(error.Message).IsEqualTo("The event discovery page budget is exhausted.");
+            await Assert.That(proxy.BrowseRequests.Count).IsEqualTo(pages);
+        }
+    }
+
+    [Test]
+    [Arguments(1)]
+    [Arguments(2)]
+    public async Task DiscoveryPageBudgetCountsEmptyContinuationPagesAndReleasesHandle(int continuedPages)
+    {
+        var session = CreateSession();
+        var proxy = (SessionProxy)(object)session;
+        proxy.TypeDefinition = s_registryType;
+        proxy.ReturnContinuationForGeneratedEvents = true;
+        proxy.NextContinuation = s_continuationPoint;
+        proxy.ContinuedPagesRemaining = continuedPages;
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await OpcUaRegistryEventSubscription.DiscoverEventTypesAsync(
+                session, s_namespaceUris, s_notifier, maxBrowsePages: continuedPages + 2));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        await Assert.That(error.Message).IsEqualTo("The event discovery page budget is exhausted.");
+        await Assert.That(proxy.BrowseNextReleaseFlags.Count(flag => !flag)).IsEqualTo(continuedPages);
+        await Assert.That(proxy.ReleasedContinuations.Single()).IsEquivalentTo(s_continuationPoint);
+    }
+
+    [Test]
+    [Arguments(1, false)]
+    [Arguments(2, true)]
+    [Arguments(3, true)]
+    public async Task DiscoveryReferenceBudgetIsSharedAcrossAllBrowseOperations(int references, bool succeeds)
+    {
+        var session = CreateSession();
+        var proxy = (SessionProxy)(object)session;
+        proxy.TypeDefinition = s_registryType;
+        proxy.GeneratedEvents[s_registryType] = [new(s_registryCreated, "RegistryCreatedEventType")];
+        if (succeeds)
+        {
+            var types = await OpcUaRegistryEventSubscription.DiscoverEventTypesAsync(
+                session, s_namespaceUris, s_notifier, maxReferences: references);
+            await Assert.That(types.Count).IsEqualTo(1);
+        }
+        else
+        {
+            var error = await Assert.ThrowsAsync<FederationException>(async () =>
+                await OpcUaRegistryEventSubscription.DiscoverEventTypesAsync(
+                    session, s_namespaceUris, s_notifier, maxReferences: references));
+            await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+            await Assert.That(error.Message).IsEqualTo("The event discovery reference budget is exhausted.");
+            await Assert.That(proxy.BrowseRequests.Count).IsEqualTo(2);
+        }
+    }
+
+    [Test]
+    [Arguments(1)]
+    [Arguments(2)]
+    public async Task DiscoveryNotifierBudgetBoundsWideTreesBeforeReadingChildren(int children)
+    {
+        var session = CreateSession();
+        var proxy = (SessionProxy)(object)session;
+        proxy.TypeDefinition = s_registryType;
+        proxy.GeneratedEvents[s_registryType] = [new(s_registryCreated, "RegistryCreatedEventType")];
+        proxy.NotifierChildren[s_notifier] =
+            Enumerable.Range(0, children).Select(index => new NodeId((uint)(500 + index), 2)).ToArray();
+        foreach (var child in proxy.NotifierChildren[s_notifier])
+        {
+            proxy.NotifierTypes[child] = s_groupType;
+        }
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await OpcUaRegistryEventSubscription.DiscoverEventTypesAsync(
+                session, s_namespaceUris, s_notifier, maxNotifiers: children));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        await Assert.That(error.Message).IsEqualTo("The event discovery notifier budget is exhausted.");
+        await Assert.That(proxy.ReadCount).IsEqualTo(1);
+    }
+
+    [Test]
+    [Arguments(2)]
+    [Arguments(3)]
+    public async Task DiscoveryNotifierBudgetPermitsExactLimitCompletion(int limit)
+    {
+        var session = CreateSession();
+        var proxy = (SessionProxy)(object)session;
+        proxy.TypeDefinition = s_registryType;
+        proxy.GeneratedEvents[s_registryType] = [new(s_registryCreated, "RegistryCreatedEventType")];
+        proxy.NotifierChildren[s_notifier] =
+            Enumerable.Range(0, limit - 1).Select(index => new NodeId((uint)(500 + index), 2)).ToArray();
+        foreach (var child in proxy.NotifierChildren[s_notifier])
+        {
+            proxy.NotifierTypes[child] = s_groupType;
+        }
+        var types = await OpcUaRegistryEventSubscription.DiscoverEventTypesAsync(
+            session, s_namespaceUris, s_notifier, maxNotifiers: limit);
+
+        await Assert.That(types.Count).IsEqualTo(1);
+        await Assert.That(proxy.ReadCount).IsEqualTo(limit);
+    }
+
+    [Test]
+    [Arguments("page", 0)]
+    [Arguments("page", -1)]
+    [Arguments("reference", 0)]
+    [Arguments("reference", -1)]
+    [Arguments("notifier", 0)]
+    [Arguments("notifier", -1)]
+    public async Task DiscoveryWorkBudgetsRejectInvalidConfigurationBeforeReading(string kind, int limit)
+    {
+        var session = CreateSession();
+        var proxy = (SessionProxy)(object)session;
+        var error = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () =>
+            await OpcUaRegistryEventSubscription.DiscoverEventTypesAsync(
+                session, s_namespaceUris, s_notifier,
+                maxBrowsePages: kind == "page" ? limit : 100,
+                maxReferences: kind == "reference" ? limit : 100,
+                maxNotifiers: kind == "notifier" ? limit : 100));
+
+        await Assert.That(error!.ParamName).IsEqualTo(kind switch
+        {
+            "page" => "maxBrowsePages",
+            "reference" => "maxReferences",
+            _ => "maxNotifiers"
+        });
+        await Assert.That(proxy.ReadCount).IsEqualTo(0);
+        await Assert.That(proxy.BrowseRequests.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(2, false)]
+    [Arguments(3, true)]
+    public async Task DiscoveryReferenceBudgetCountsUnrecognizedEvents(int limit, bool succeeds)
+    {
+        var session = CreateSession();
+        var proxy = (SessionProxy)(object)session;
+        proxy.TypeDefinition = s_registryType;
+        proxy.GeneratedEvents[s_registryType] =
+        [
+            new(s_registryCreated, "RegistryCreatedEventType"),
+            new(s_unknown, "VendorSpecificEventType")
+        ];
+        if (succeeds)
+        {
+            var types = await OpcUaRegistryEventSubscription.DiscoverEventTypesAsync(
+                session, s_namespaceUris, s_notifier, maxReferences: limit);
+            await Assert.That(types.Count).IsEqualTo(1);
+            await Assert.That(types[s_registryCreated]).IsEqualTo("io.xregistry.registry.created");
+        }
+        else
+        {
+            var error = await Assert.ThrowsAsync<FederationException>(async () =>
+                await OpcUaRegistryEventSubscription.DiscoverEventTypesAsync(
+                    session, s_namespaceUris, s_notifier, maxReferences: limit));
+            await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+            await Assert.That(error.Message).IsEqualTo("The event discovery reference budget is exhausted.");
+        }
+    }
+
+    [Test]
+    [Arguments("page", false)]
+    [Arguments("page", true)]
+    [Arguments("reference", false)]
+    [Arguments("reference", true)]
+    public async Task DiscoveryWorkBudgetReleasesOutstandingHandleAndRetainsCleanupFailure(
+        string kind, bool releaseFails)
+    {
+        var session = CreateSession();
+        var proxy = (SessionProxy)(object)session;
+        proxy.TypeDefinition = s_registryType;
+        proxy.ReturnContinuationForGeneratedEvents = true;
+        proxy.NextContinuation = [2];
+        proxy.ContinuedEvents = [new(s_registryCreated, "RegistryCreatedEventType")];
+        proxy.ReleaseStatus = releaseFails ? StatusCodes.BadUserAccessDenied : StatusCodes.Good;
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await OpcUaRegistryEventSubscription.DiscoverEventTypesAsync(
+                session, s_namespaceUris, s_notifier, maxBrowsePages: kind == "page" ? 2 : 100,
+                maxReferences: kind == "reference" ? 1 : 100));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        await Assert.That(error.Message).IsEqualTo($"The event discovery {kind} budget is exhausted.");
+        await Assert.That(proxy.ReleasedContinuations.Single()).IsEquivalentTo(
+            kind == "page" ? s_continuationPoint : new byte[] { 2 });
+        await Assert.That(proxy.BrowseNextReleaseFlags.Count(flag => !flag))
+            .IsEqualTo(kind == "page" ? 0 : 1);
+        if (releaseFails)
+        {
+            var cleanup = error.Data["OpcUa.ContinuationReleaseFailure"] as FederationException;
+            await Assert.That(cleanup).IsNotNull();
+            await Assert.That(cleanup!.Code).IsEqualTo(FederationErrorCode.PolicyDenied);
+            await Assert.That((cleanup.InnerException as ServiceResultException)!.StatusCode)
+                .IsEqualTo(StatusCodes.BadUserAccessDenied);
+        }
+        else
+        {
+            await Assert.That(error.Data.Contains("OpcUa.ContinuationReleaseFailure")).IsFalse();
+        }
+    }
+
+    [Test]
     [Arguments("Group", "group", "/teams/g")]
     [Arguments("Resource", "resource", "/teams/g/files/f")]
     public async Task DiscoveryAndDecodingRetainBothNativeDeprecationTransitions(
@@ -169,7 +391,7 @@ public class OpcUaRegistryEventSubscriptionTests
 
         await Assert.ThrowsAsync<OperationCanceledException>(async () =>
             await OpcUaRegistryEventSubscription.DiscoverEventTypesAsync(
-                session, s_namespaceUris, s_notifier, cancellation.Token));
+                session, s_namespaceUris, s_notifier, cancellationToken: cancellation.Token));
 
         await Assert.That(proxy.BrowseNextReleaseFlags.Count).IsEqualTo(1);
         await Assert.That(proxy.BrowseNextReleaseFlags[0]).IsTrue();
@@ -571,6 +793,7 @@ public class OpcUaRegistryEventSubscriptionTests
         public ArrayOf<DiagnosticInfo> Diagnostics { get; } = [new DiagnosticInfo { AdditionalInfo = "native diagnostic" }];
         public Func<BrowseDescription, ReferenceDescription[]?>? ReferenceOverride { get; set; }
         public int ReadCount { get; private set; }
+        public int? ContinuedPagesRemaining { get; set; }
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
@@ -694,6 +917,15 @@ public class OpcUaRegistryEventSubscriptionTests
             var references = release
                 ? []
                 : ContinuedEvents.Select(item => Reference(item.NodeId, item.BrowseName, NodeClass.ObjectType)).ToArray();
+            var continuation = NextContinuation;
+            if (!release && ContinuedPagesRemaining is { } remaining)
+            {
+                ContinuedPagesRemaining = remaining - 1;
+                if (remaining <= 0)
+                {
+                    continuation = [];
+                }
+            }
             return new(new BrowseNextResponse
             {
                 ResponseHeader = Header,
@@ -702,7 +934,7 @@ public class OpcUaRegistryEventSubscriptionTests
                 {
                     References = new ArrayOf<ReferenceDescription>(references),
                     StatusCode = release ? ReleaseStatus : NextStatus,
-                    ContinuationPoint = release ? default : new ByteString(NextContinuation)
+                    ContinuationPoint = release ? default : new ByteString(continuation)
                 }]
             });
         }

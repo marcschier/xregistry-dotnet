@@ -74,15 +74,20 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
     /// <summary>Discovers declared xRegistry EventTypes across the notifier hierarchy and ObjectType supertypes.</summary>
     public static async ValueTask<IReadOnlyDictionary<NodeId, string>> DiscoverEventTypesAsync(
         ISessionClient session, NamespaceTable namespaceUris, NodeId notifier,
+        int maxBrowsePages = 10_000, int maxReferences = 1_000_000, int maxNotifiers = 10_000,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(namespaceUris);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxBrowsePages);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxReferences);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxNotifiers);
         if (notifier.IsNull)
         {
             throw new ArgumentException("A notifier NodeId is required.", nameof(notifier));
         }
         _ = ToLocalNodeId(namespaceUris, new ExpandedNodeId(notifier));
+        var budget = new DiscoveryBudget(maxBrowsePages, maxReferences, maxNotifiers);
 
         var rootSupportsEvents =
             await SupportsEventSubscriptionsAsync(session, notifier, cancellationToken).ConfigureAwait(false);
@@ -95,6 +100,7 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
         var discovered = new Dictionary<NodeId, string>();
         var pendingNotifiers = new Queue<(NodeId Node, int Depth)>();
         var visitedNotifiers = new HashSet<NodeId>();
+        budget.ChargeNotifier();
         pendingNotifiers.Enqueue((notifier, 0));
         while (pendingNotifiers.TryDequeue(out var pending))
         {
@@ -114,7 +120,7 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
             if (supportsEvents)
             {
                 var typeDefinitions = await BrowseAllAsync(session, pending.Node, BrowseDirection.Forward,
-                    ReferenceTypeIds.HasTypeDefinition, cancellationToken).ConfigureAwait(false);
+                    ReferenceTypeIds.HasTypeDefinition, budget, cancellationToken).ConfigureAwait(false);
                 if (typeDefinitions.Count != 1 || typeDefinitions[0].NodeClass != NodeClass.ObjectType)
                 {
                     throw new FederationException(FederationErrorCode.InvalidPackage,
@@ -122,11 +128,11 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
                 }
                 await AddEventTypesForTypeHierarchyAsync(session, namespaceUris,
                     ToLocalNodeId(namespaceUris, typeDefinitions[0].NodeId), discovered,
-                    cancellationToken).ConfigureAwait(false);
+                    budget, cancellationToken).ConfigureAwait(false);
             }
 
             var children = await BrowseAllAsync(session, pending.Node, BrowseDirection.Forward,
-                ReferenceTypeIds.HasNotifier, cancellationToken).ConfigureAwait(false);
+                ReferenceTypeIds.HasNotifier, budget, cancellationToken).ConfigureAwait(false);
             foreach (var child in children)
             {
                 if (child.NodeClass != NodeClass.Object)
@@ -134,7 +140,9 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
                     throw new FederationException(FederationErrorCode.InvalidPackage,
                         "A HasNotifier reference must identify an Object.");
                 }
-                pendingNotifiers.Enqueue((ToLocalNodeId(namespaceUris, child.NodeId), pending.Depth + 1));
+                var childNode = ToLocalNodeId(namespaceUris, child.NodeId);
+                budget.ChargeNotifier();
+                pendingNotifiers.Enqueue((childNode, pending.Depth + 1));
             }
         }
 
@@ -146,9 +154,30 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
         return discovered;
     }
 
+    private sealed class DiscoveryBudget(int pages, int references, int notifiers)
+    {
+        private int remainingPages = pages;
+        private int remainingReferences = references;
+        private int remainingNotifiers = notifiers;
+
+        public void ChargePage() => Charge(ref remainingPages, 1, "page");
+        public void ChargeReferences(int count) => Charge(ref remainingReferences, count, "reference");
+        public void ChargeNotifier() => Charge(ref remainingNotifiers, 1, "notifier");
+
+        private static void Charge(ref int remaining, int count, string kind)
+        {
+            if (count > remaining)
+            {
+                throw new FederationException(FederationErrorCode.LimitExceeded,
+                    $"The event discovery {kind} budget is exhausted.");
+            }
+            remaining -= count;
+        }
+    }
+
     private static async ValueTask AddEventTypesForTypeHierarchyAsync(ISessionClient session,
         NamespaceTable namespaceUris, NodeId typeDefinition, Dictionary<NodeId, string> discovered,
-        CancellationToken cancellationToken)
+        DiscoveryBudget budget, CancellationToken cancellationToken)
     {
         var visited = new HashSet<NodeId>();
         var current = typeDefinition;
@@ -166,7 +195,7 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
             }
 
             var eventReferences = await BrowseAllAsync(session, current, BrowseDirection.Forward,
-                ReferenceTypeIds.GeneratesEvent, cancellationToken).ConfigureAwait(false);
+                ReferenceTypeIds.GeneratesEvent, budget, cancellationToken).ConfigureAwait(false);
             foreach (var reference in eventReferences)
             {
                 if (reference.BrowseName.Name is { } browseName &&
@@ -189,7 +218,7 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
             }
 
             var parents = await BrowseAllAsync(session, current, BrowseDirection.Inverse,
-                ReferenceTypeIds.HasSubtype, cancellationToken).ConfigureAwait(false);
+                ReferenceTypeIds.HasSubtype, budget, cancellationToken).ConfigureAwait(false);
             if (parents.Count > 1)
             {
                 throw new FederationException(FederationErrorCode.InvalidPackage,
@@ -211,7 +240,8 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(connection);
         var namespaceUris = await connection.Adapter.ReadNamespaceArrayAsync(cancellationToken)
             .ConfigureAwait(false);
-        var eventTypes = await DiscoverEventTypesAsync(connection.Session, namespaceUris, notifier, cancellationToken)
+        var eventTypes = await DiscoverEventTypesAsync(connection.Session, namespaceUris, notifier,
+            cancellationToken: cancellationToken)
             .ConfigureAwait(false);
         var decoder = new OpcUaRegistryEventDecoder(eventTypes);
         var eventNamespace = eventTypes.Keys.Select(static node => node.NamespaceIndex).Distinct().ToArray();
@@ -366,9 +396,11 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
     }
 
     private static async ValueTask<IReadOnlyList<ReferenceDescription>> BrowseAllAsync(ISessionClient session,
-        NodeId node, BrowseDirection direction, NodeId referenceType, CancellationToken cancellationToken)
+        NodeId node, BrowseDirection direction, NodeId referenceType, DiscoveryBudget budget,
+        CancellationToken cancellationToken)
     {
         var references = new List<ReferenceDescription>();
+        budget.ChargePage();
         var response = await OpcUaSessionAdapter.InvokeAsync(() => session.BrowseAsync(
             new RequestHeader(), new ViewDescription(), MaxReferencesPerBrowse,
             [new BrowseDescription
@@ -387,10 +419,12 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
             var result = OpcUaSessionAdapter.Single(response.Results, static result => result.StatusCode,
                 response.DiagnosticInfos, response.ResponseHeader);
             var continuation = result.ContinuationPoint.ToArray();
+            budget.ChargeReferences(result.References.Count);
             references.AddRange(result.References.ToArray() ?? []);
             while (continuation.Length > 0)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                budget.ChargePage();
                 var next = await OpcUaSessionAdapter.InvokeAsync(() => session.BrowseNextAsync(
                     new RequestHeader(), false, [new ByteString(continuation)], cancellationToken)).ConfigureAwait(false);
                 TrackContinuation(next.Results, outstanding);
@@ -399,6 +433,7 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
                 continuation = result.ContinuationPoint.ToArray();
                 outstanding.Clear();
                 TrackContinuation(next.Results, outstanding);
+                budget.ChargeReferences(result.References.Count);
                 references.AddRange(result.References.ToArray() ?? []);
             }
         }

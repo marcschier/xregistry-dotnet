@@ -139288,7 +139288,15 @@
           "DiscoveryAndDecodingRetainBothNativeDeprecationTransitions",
           "DiscoveryRejectsMalformedTypeAndNotifierDeclarations",
           "DiscoveryRejectsUnmappedSelectedNotifierBeforeReadingIt",
-          "DiscoveryEnforcesExactTypeAndNotifierDepthBudgets"
+          "DiscoveryEnforcesExactTypeAndNotifierDepthBudgets",
+          "DiscoveryPageBudgetIsSharedAcrossAllBrowseOperations",
+          "DiscoveryPageBudgetCountsEmptyContinuationPagesAndReleasesHandle",
+          "DiscoveryReferenceBudgetIsSharedAcrossAllBrowseOperations",
+          "DiscoveryReferenceBudgetCountsUnrecognizedEvents",
+          "DiscoveryNotifierBudgetBoundsWideTreesBeforeReadingChildren",
+          "DiscoveryNotifierBudgetPermitsExactLimitCompletion",
+          "DiscoveryWorkBudgetsRejectInvalidConfigurationBeforeReading",
+          "DiscoveryWorkBudgetReleasesOutstandingHandleAndRetainsCleanupFailure"
         ],
         "nativeEvidence": []
       }
@@ -140622,6 +140630,7 @@
           "SdkCancellationRemainsCancellationInsteadOfNativeFailure",
           "BrowsePageBudgetRetainsReleaseFailureOnLimitError",
           "InternalBrowsePageBudgetRetainsReleaseFailureOnLimitError",
+          "DiscoveryWorkBudgetReleasesOutstandingHandleAndRetainsCleanupFailure",
           "DiscoveryMapsServiceFailureAndRetainsOriginalException",
           "DiscoveryRetainsFailedBrowseAndEveryContinuationCleanupDiagnostic",
           "DiscoveryRejectsNonGoodServiceDespiteGoodOperation"

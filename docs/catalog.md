@@ -184,6 +184,15 @@ declarations are reported rather than filtered out. Returned identities and
 the selected notifier must map within the supplied Session namespace table;
 discovery does not extend that table. The traversal budgets permit 31 type
 edges and 63 notifier edges, with the next edge rejected.
+Event discovery also shares page, returned-reference and queued-notifier
+budgets across the complete traversal. The defaults are 10,000 pages,
+1,000,000 references and 10,000 notifiers, including the selected notifier.
+Empty continuation pages consume the page budget; unrecognized event references
+still consume the reference budget. A wide notifier tree cannot avoid the
+notifier budget by staying within the depth limit. Budget exhaustion reports
+`limit_exceeded`, releases any outstanding continuation and retains release
+failures on the original error. `DiscoverEventTypesAsync` accepts caller limits;
+Subscription creation uses the defaults.
 
 The reader, writer and read source have fake-Session coverage. An in-process
 OPC UA Stack server also verifies Session establishment, SpecVersion gating,
