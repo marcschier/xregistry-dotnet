@@ -2264,6 +2264,200 @@ public class OpcUaRegistryReaderTests
     }
 
     [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task DocumentWritePreCancellationAvoidsResolutionAndOpen(bool resource)
+    {
+        var (session, writer) = await WriterForResource();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var browsed = session.BrowsedNodes.Count;
+        var opened = session.Opened;
+        var closed = session.Closed;
+
+        var error = await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+        {
+            if (resource)
+            {
+                await writer.ReplaceResourceDocumentAsync(GroupNode, "/teams/team-a", "schemas", "schema-a",
+                    ResourceType, new byte[] { 1 }, cancellationToken: cancellation.Token);
+            }
+            else
+            {
+                await writer.ReplaceFileDocumentAsync(File, new byte[] { 1 }, cancellation.Token);
+            }
+        });
+
+        await Assert.That(error!.CancellationToken).IsEqualTo(cancellation.Token);
+        await Assert.That(session.BrowsedNodes.Count).IsEqualTo(browsed);
+        await Assert.That(session.Opened).IsEqualTo(opened);
+        await Assert.That(session.Closed).IsEqualTo(closed);
+        await Assert.That(session.WrittenChunks.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("file", "open", false)]
+    [Arguments("file", "position", false)]
+    [Arguments("file", "first", false)]
+    [Arguments("file", "final", false)]
+    [Arguments("file", "empty", false)]
+    [Arguments("resource", "open", false)]
+    [Arguments("resource", "position", false)]
+    [Arguments("resource", "first", false)]
+    [Arguments("resource", "final", false)]
+    [Arguments("resource", "empty", false)]
+    [Arguments("created", "entry", false)]
+    [Arguments("created", "closed", false)]
+    [Arguments("created", "open", false)]
+    [Arguments("created", "position", false)]
+    [Arguments("created", "first", false)]
+    [Arguments("created", "final", false)]
+    [Arguments("created", "empty", false)]
+    [Arguments("file", "open", true)]
+    [Arguments("file", "first", true)]
+    [Arguments("file", "final", true)]
+    [Arguments("created", "entry", true)]
+    public async Task DocumentWriteCancellationStopsChunksAndClosesTransferredHandle(
+        string operation, string phase, bool closeFails)
+    {
+        var (session, writer) = await WriterForResource(chunkSize: 2);
+        using var cancellation = new CancellationTokenSource();
+        var closeFailure = closeFails ? new InvalidOperationException("close") : null;
+        session.CloseFailure = closeFailure;
+        session.AfterOpen = phase == "open" ? cancellation.Cancel : null;
+        session.AfterPosition = phase is "position" or "empty" ? cancellation.Cancel : null;
+        session.AfterClose = phase == "closed" ? cancellation.Cancel : null;
+        session.AfterWrite = () =>
+        {
+            if (phase == "first" || phase == "final" && session.WrittenChunks.Count == 2)
+            {
+                cancellation.Cancel();
+            }
+        };
+        if (phase == "entry")
+        {
+            cancellation.Cancel();
+        }
+        ReadOnlyMemory<byte> bytes = phase == "empty" ? ReadOnlyMemory<byte>.Empty : new byte[] { 1, 2, 3 };
+        var closed = session.Closed;
+        var positioned = session.PositionedFiles.Count;
+        var opened = session.Opened;
+        var file = operation == "resource" ? LogicalResourceNode : File;
+        var expectedHandle = operation == "created" && phase is "entry" or "closed" ? 42u : 7u;
+
+        var error = await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+        {
+            if (operation == "resource")
+            {
+                await writer.ReplaceResourceDocumentAsync(GroupNode, "/teams/team-a", "schemas", "schema-a",
+                    ResourceType, bytes, cancellationToken: cancellation.Token);
+            }
+            else if (operation == "created")
+            {
+                await writer.CompleteCreatedResourceDocumentAsync(file, 42, bytes, cancellation.Token);
+            }
+            else
+            {
+                await writer.ReplaceFileDocumentAsync(file, bytes, cancellation.Token);
+            }
+        });
+
+        await Assert.That(error!.CancellationToken).IsEqualTo(cancellation.Token);
+        await Assert.That(session.Opened).IsEqualTo(opened + (phase is "entry" or "closed" ? 0 : 1));
+        await Assert.That(session.PositionedFiles.Count)
+            .IsEqualTo(positioned + (phase is "entry" or "closed" or "open" ? 0 : 1));
+        await Assert.That(session.WrittenChunks.Count).IsEqualTo(phase == "first" ? 1 : phase == "final" ? 2 : 0);
+        if (session.WrittenChunks.Count > 0)
+        {
+            await Assert.That(session.WrittenChunks[0]).IsEquivalentTo(new byte[] { 1, 2 });
+        }
+        if (phase == "final")
+        {
+            await Assert.That(session.WrittenChunks[1]).IsEquivalentTo(new byte[] { 3 });
+        }
+        await Assert.That(session.Closed)
+            .IsEqualTo(closed + (operation == "created" && phase is not ("entry" or "closed") ? 2 : 1));
+        await Assert.That(session.ClosedFiles.Last()).IsEqualTo(file);
+        await Assert.That(session.LastClosedHandle).IsEqualTo(expectedHandle);
+        await Assert.That(session.CloseToken.CanBeCanceled).IsFalse();
+        await Assert.That(ReferenceEquals(error.Data["OpcUa.FileCloseFailure"], closeFailure)).IsTrue();
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task CreatedDocumentOriginalCloseFailurePreventsReplacementOpen(bool denied)
+    {
+        var (session, writer) = await WriterForResource();
+        Exception closeFailure = denied
+            ? new FederationException(FederationErrorCode.PolicyDenied, "denied")
+            : new InvalidOperationException("close");
+        session.CloseFailure = closeFailure;
+        var opened = session.Opened;
+        var closed = session.Closed;
+        var positioned = session.PositionedFiles.Count;
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await writer.CompleteCreatedResourceDocumentAsync(File, 42, new byte[] { 1 }));
+
+        await Assert.That(error!.Code)
+            .IsEqualTo(denied ? FederationErrorCode.PolicyDenied : FederationErrorCode.Unavailable);
+        await Assert.That(ReferenceEquals(denied ? error : error.InnerException, closeFailure)).IsTrue();
+        await Assert.That(session.Opened).IsEqualTo(opened);
+        await Assert.That(session.PositionedFiles.Count).IsEqualTo(positioned);
+        await Assert.That(session.WrittenChunks.Count).IsEqualTo(0);
+        await Assert.That(session.Closed).IsEqualTo(closed + 1);
+        await Assert.That(session.LastClosedHandle).IsEqualTo(42u);
+    }
+
+    [Test]
+    [Arguments(0)]
+    [Arguments(99)]
+    [Arguments(100)]
+    public async Task CreatedDocumentReplacementReopensWithTruncationAtAllowedByteBudgets(int length)
+    {
+        var (session, writer) = await WriterForResource(maxBytes: 100, chunkSize: 64);
+        var file = new NodeId("Created", 1);
+        var contents = Enumerable.Range(0, length).Select(value => (byte)value).ToArray();
+
+        await writer.CompleteCreatedResourceDocumentAsync(file, 42, contents);
+
+        await Assert.That(session.LastOpenedFile).IsEqualTo(file);
+        await Assert.That(session.OpenMode).IsEqualTo((byte)6);
+        await Assert.That(session.WrittenChunks.SelectMany(chunk => chunk).ToArray()).IsEquivalentTo(contents);
+        await Assert.That(session.Position).IsEqualTo(0UL);
+        await Assert.That(session.FileClosedHandles[^2]).IsEqualTo((file, 42u));
+        await Assert.That(session.FileClosedHandles[^1]).IsEqualTo((file, 7u));
+        await Assert.That(session.Closed).IsEqualTo(3);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task CreatedDocumentLimitRejectionStillClosesTransferredHandle(bool closeFails)
+    {
+        var (session, writer) = await WriterForResource(maxBytes: 100);
+        var closeFailure = closeFails ? new InvalidOperationException("close") : null;
+        session.CloseFailure = closeFailure;
+        var opened = session.Opened;
+        var closed = session.Closed;
+        var positioned = session.PositionedFiles.Count;
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await writer.CompleteCreatedResourceDocumentAsync(File, 42, new byte[101]));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        await Assert.That(session.Opened).IsEqualTo(opened);
+        await Assert.That(session.PositionedFiles.Count).IsEqualTo(positioned);
+        await Assert.That(session.WrittenChunks.Count).IsEqualTo(0);
+        await Assert.That(session.Closed).IsEqualTo(closed + 1);
+        await Assert.That(session.ClosedFiles.Last()).IsEqualTo(File);
+        await Assert.That(session.LastClosedHandle).IsEqualTo(42u);
+        await Assert.That(session.CloseToken.CanBeCanceled).IsFalse();
+        await Assert.That(ReferenceEquals(error.Data["OpcUa.FileCloseFailure"], closeFailure)).IsTrue();
+    }
+
+    [Test]
     public async Task ResourceDocumentWriteCancellationStillClosesFile()
     {
         var (session, writer) = await WriterForResource(session: new FakeSession
@@ -2424,23 +2618,28 @@ public class OpcUaRegistryReaderTests
     }
 
     [Test]
-    public async Task WriterCompletedCreatedDocumentPreservesHandleAndCloses()
+    public async Task WriterCompletedCreatedDocumentClosesOriginalHandleAndReopensWithTruncation()
     {
         var (session, writer) = await WriterForResource();
+        var start = session.FileOperations.Count;
 
         await writer.CompleteCreatedResourceDocumentAsync(new NodeId("schema-a", 1), 42,
             new byte[] { 4, 5 });
 
-        await Assert.That(session.Opened).IsEqualTo(1);
+        await Assert.That(session.Opened).IsEqualTo(2);
+        await Assert.That(session.OpenMode).IsEqualTo((byte)6);
         await Assert.That(session.Position).IsEqualTo(0UL);
         await Assert.That(session.WrittenChunks.Single()).IsEquivalentTo(new byte[] { 4, 5 });
         await Assert.That(session.LastPositionFile).IsEqualTo(new NodeId("schema-a", 1));
-        await Assert.That(session.LastPositionHandle).IsEqualTo(42u);
+        await Assert.That(session.LastPositionHandle).IsEqualTo(7u);
         await Assert.That(session.LastWrittenFile).IsEqualTo(new NodeId("schema-a", 1));
-        await Assert.That(session.LastWrittenHandle).IsEqualTo(42u);
+        await Assert.That(session.LastWrittenHandle).IsEqualTo(7u);
         await Assert.That(session.ClosedFiles.Last()).IsEqualTo(new NodeId("schema-a", 1));
-        await Assert.That(session.LastClosedHandle).IsEqualTo(42u);
-        await Assert.That(session.Closed).IsEqualTo(2);
+        await Assert.That(session.FileClosedHandles[^2]).IsEqualTo((new NodeId("schema-a", 1), 42u));
+        await Assert.That(session.LastClosedHandle).IsEqualTo(7u);
+        await Assert.That(session.Closed).IsEqualTo(3);
+        await Assert.That(string.Join("|", session.FileOperations.Skip(start)))
+            .IsEqualTo("Close:42|Open:6|Position:7|Write:7|Close:7");
     }
 
     [Test]
@@ -2982,8 +3181,11 @@ public class OpcUaRegistryReaderTests
         public Exception? ReleaseFailure { get; init; }
         public bool IsRegistry { get; init; } = true;
         public bool AdvanceMetadataRevisionOnOpen { get; set; }
-        public Action? AfterOpen { get; init; }
+        public Action? AfterOpen { get; set; }
         public Action? AfterRead { get; init; }
+        public Action? AfterPosition { get; set; }
+        public Action? AfterWrite { get; set; }
+        public Action? AfterClose { get; set; }
         public CancellationToken CloseToken { get; private set; }
         public int Closed { get; private set; }
         public int Opened { get; private set; }
@@ -3004,6 +3206,8 @@ public class OpcUaRegistryReaderTests
         public NodeId LastWrittenFile { get; private set; }
         public uint LastWrittenHandle { get; private set; }
         public ulong Position { get; private set; }
+        public List<NodeId> PositionedFiles { get; } = [];
+        public List<string> FileOperations { get; } = [];
         public List<byte[]> WrittenChunks { get; } = [];
         public List<NodeId> WrittenFiles { get; } = [];
         public List<(NodeId Variable, Variant Value)> WrittenValues { get; } = [];
@@ -3042,6 +3246,7 @@ public class OpcUaRegistryReaderTests
 
         public ValueTask<uint> OpenAsync(NodeId file, byte mode, CancellationToken cancellationToken)
         {
+            FileOperations.Add($"Open:{mode}");
             if (AdvanceMetadataRevisionOnOpen && !metadataRevisionAdvanced &&
                 file.IdentifierAsString == "Metadata")
             {
@@ -3084,6 +3289,7 @@ public class OpcUaRegistryReaderTests
         public ValueTask SetPositionAsync(NodeId file, uint handle, ulong position,
             CancellationToken cancellationToken)
         {
+            FileOperations.Add($"Position:{handle}");
             if (PositionFailure is not null)
             {
                 throw PositionFailure;
@@ -3091,11 +3297,14 @@ public class OpcUaRegistryReaderTests
             LastPositionFile = file;
             LastPositionHandle = handle;
             Position = position;
+            PositionedFiles.Add(file);
+            AfterPosition?.Invoke();
             return default;
         }
 
         public ValueTask WriteAsync(NodeId file, uint handle, byte[] data, CancellationToken cancellationToken)
         {
+            FileOperations.Add($"Write:{handle}");
             if (WriteFailure is not null)
             {
                 throw WriteFailure;
@@ -3104,6 +3313,7 @@ public class OpcUaRegistryReaderTests
             LastWrittenHandle = handle;
             WrittenFiles.Add(file);
             WrittenChunks.Add(data);
+            AfterWrite?.Invoke();
             return default;
         }
 
@@ -3168,6 +3378,7 @@ public class OpcUaRegistryReaderTests
 
         public ValueTask CloseAsync(NodeId file, uint handle, CancellationToken cancellationToken)
         {
+            FileOperations.Add($"Close:{handle}");
             CloseToken = cancellationToken;
             Closed++;
             ClosedFiles.Add(file);
@@ -3178,7 +3389,12 @@ public class OpcUaRegistryReaderTests
                 metadataPropertySnapshot = null;
                 metadataChunkSnapshot = null;
             }
-            return CloseFailure is null ? default : throw CloseFailure;
+            if (CloseFailure is not null)
+            {
+                throw CloseFailure;
+            }
+            AfterClose?.Invoke();
+            return default;
         }
 
     }

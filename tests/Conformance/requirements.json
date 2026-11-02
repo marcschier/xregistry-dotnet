@@ -137147,13 +137147,26 @@
       ],
       "text": "5. Call `Close(fileHandle)` when finished. After every successful Open, the client MUST attempt Close on success, error, cancellation or limit exhaustion while the Session is usable. A failed Open does not allocate a handle to close. Session loss invalidates the handle. Reconnecting requires a new Open, not reuse of that handle or file position.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The selected FileTransfer read lifecycle was read with the replacement and creation-handle rules. ReadFileAsync retains its acquired handle through an uncancelled Close on success, native failure, cancellation and limit exhaustion. Writer replacement now observes ignored cancellation before positioning, after positioning and after every chunk, including empty and final-chunk cases, and closes transferred handles without replacing the original error. Completion of a creation-time handle also closes it on entry cancellation or byte-limit rejection before reopening for truncation. Reader cleanup and real Session file workflows have direct evidence. Session-loss/replacement lifetime behavior and prevention of all caller-directed stale-handle use are not fully established; keep the compound client obligation pending.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "FileReadContinuesPastShortReadsUntilAnEmptyChunkThenCloses",
+          "CancelledFileReadDoesNotOpenHandle",
+          "FileReadCancellationStopsIgnoredTokenAndClosesTransferredHandle",
+          "ReadFailureIsRetainedWhenCloseAlsoFails",
+          "CloseFailureAfterCompleteReadIsReported",
+          "OversizedFileFailsWithLimitAndStillCloses",
+          "DocumentWritePreCancellationAvoidsResolutionAndOpen",
+          "DocumentWriteCancellationStopsChunksAndClosesTransferredHandle",
+          "CreatedDocumentLimitRejectionStillClosesTransferredHandle",
+          "WriterWritesPropertiesDeleteAndFileDocumentsOnARealServer"
+        ],
         "nativeEvidence": []
       }
     },
@@ -137401,13 +137414,27 @@
       ],
       "text": "Resource document replacement creates the Resource if needed, then replaces the selected default Version's complete document. For an absent logical Resource, the client preferably calls `GetOrCreateResource` on the parent Group. Strict `CreateResource` rejects an existing exact `(ResourceId, VersionId)` pair; it does not reject every existing logical Resource, because a new Version can be added to one. It then opens the logical Resource or returned exact Version for writing, uses Write plus EraseExisting to stage a complete replacement, writes the complete new byte stream and closes the handle. It writes or validates exact Version metadata Properties. Complete replacement MUST truncate any previous content: `Open(mode = 6)` combines Write and EraseExisting. Merely setting the file position to zero does not remove a longer previous suffix. For replacement, the client can request no creation-time handle and then Open with mode 6. If it already holds a creation-time write handle without documented truncation semantics, it closes that handle without changes and reopens with mode 6.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The selected replacement procedure was read with staged commit semantics and the creation Method contracts. ReplaceResourceDocumentAsync selects the model-declared logical or exact file and opens mode 6. CompleteCreatedResourceDocumentAsync previously positioned and wrote the creation-time handle directly, without establishing truncation. It now closes that handle unchanged, then reopens the same Object with mode 6 before writing complete bounded chunks. Entry cancellation or an oversized document closes the transferred handle without positioning, writing or reopening; initial Close failure prevents replacement. Empty, below-limit and exact-limit completion cases assert original and replacement handle ownership. The real encrypted writer workflow replaces a longer existing document with shorter bytes. Create/get-or-create calls and metadata writes remain separate public interactions; automatic absent-Resource orchestration, exact metadata validation and complete server commit behavior remain pending.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "WriterCompletedCreatedDocumentClosesOriginalHandleAndReopensWithTruncation",
+          "CreatedDocumentReplacementReopensWithTruncationAtAllowedByteBudgets",
+          "CreatedDocumentOriginalCloseFailurePreventsReplacementOpen",
+          "CreatedDocumentLimitRejectionStillClosesTransferredHandle",
+          "DocumentWritePreCancellationAvoidsResolutionAndOpen",
+          "DocumentWriteCancellationStopsChunksAndClosesTransferredHandle",
+          "ResourceDocumentWriteErasesThenWritesBoundedChunksAndCloses",
+          "ResourceDocumentWriteClosesEmptyReplacementWithoutWritingChunks",
+          "WriterCreateAndGetOrCreatePreserveOutputsAndValidateTypes",
+          "WriterWritesPropertiesDeleteAndFileDocumentsOnARealServer"
+        ],
         "nativeEvidence": []
       }
     },

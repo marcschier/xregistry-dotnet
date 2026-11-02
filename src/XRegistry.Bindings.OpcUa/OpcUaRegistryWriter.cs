@@ -146,6 +146,7 @@ public sealed class OpcUaRegistryWriter
         CancellationToken cancellationToken = default)
     {
         reader.EnsureSpecVersionValidatedForWrite();
+        cancellationToken.ThrowIfCancellationRequested();
         if (contents.Length > reader.MaxBytes)
         {
             throw new FederationException(FederationErrorCode.LimitExceeded, "The document exceeds the byte budget.");
@@ -161,6 +162,7 @@ public sealed class OpcUaRegistryWriter
         CancellationToken cancellationToken = default)
     {
         reader.EnsureSpecVersionValidatedForWrite();
+        cancellationToken.ThrowIfCancellationRequested();
         if (contents.Length > reader.MaxBytes)
         {
             throw new FederationException(FederationErrorCode.LimitExceeded, "The document exceeds the byte budget.");
@@ -169,16 +171,26 @@ public sealed class OpcUaRegistryWriter
         await WriteOpenFileAsync(file, handle, contents, cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>Writes and closes a handle returned by CreateResource with RequestFileOpen set.</summary>
+    /// <summary>Closes a creation-time handle unchanged and reopens with truncation before replacing its document.</summary>
     public async ValueTask CompleteCreatedResourceDocumentAsync(NodeId resource, uint handle,
         ReadOnlyMemory<byte> contents, CancellationToken cancellationToken = default)
     {
         reader.EnsureSpecVersionValidatedForWrite();
-        if (contents.Length > reader.MaxBytes)
+        Exception? failure = null;
+        try
         {
-            throw new FederationException(FederationErrorCode.LimitExceeded, "The document exceeds the byte budget.");
+            cancellationToken.ThrowIfCancellationRequested();
+            if (contents.Length > reader.MaxBytes)
+            {
+                throw new FederationException(FederationErrorCode.LimitExceeded, "The document exceeds the byte budget.");
+            }
         }
-        await WriteOpenFileAsync(resource, handle, contents, cancellationToken).ConfigureAwait(false);
+        catch (Exception exception)
+        {
+            failure = exception;
+        }
+        await CloseFileAsync(resource, handle, failure).ConfigureAwait(false);
+        await ReplaceFileDocumentAsync(resource, contents, cancellationToken).ConfigureAwait(false);
     }
 
     private async ValueTask WriteOpenFileAsync(NodeId file, uint handle, ReadOnlyMemory<byte> contents,
@@ -187,12 +199,19 @@ public sealed class OpcUaRegistryWriter
         Exception? failure = null;
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (contents.Length > reader.MaxBytes)
+            {
+                throw new FederationException(FederationErrorCode.LimitExceeded, "The document exceeds the byte budget.");
+            }
             await session.SetPositionAsync(file, handle, 0, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             for (var offset = 0; offset < contents.Length;)
             {
                 var length = Math.Min(reader.ChunkSize, contents.Length - offset);
                 var chunk = contents.Slice(offset, length).ToArray();
                 await session.WriteAsync(file, handle, chunk, cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
                 offset += length;
             }
         }
@@ -201,6 +220,11 @@ public sealed class OpcUaRegistryWriter
             failure = exception;
         }
 
+        await CloseFileAsync(file, handle, failure).ConfigureAwait(false);
+    }
+
+    private async ValueTask CloseFileAsync(NodeId file, uint handle, Exception? failure)
+    {
         try
         {
             await session.CloseAsync(file, handle, CancellationToken.None).ConfigureAwait(false);
@@ -208,6 +232,10 @@ public sealed class OpcUaRegistryWriter
         catch (Exception closeFailure) when (failure is not null)
         {
             failure.Data["OpcUa.FileCloseFailure"] = closeFailure;
+        }
+        catch (FederationException)
+        {
+            throw;
         }
         catch (Exception exception)
         {

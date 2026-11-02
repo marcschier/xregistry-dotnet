@@ -578,7 +578,7 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
         await Assert.That(resolvedResource.ResourceNode).IsEqualTo(server.DocumentFile);
         await Assert.That(resolvedResource.VersionId).IsEqualTo("v1");
         await Assert.That(resolvedResource.Created).IsFalse();
-        byte[] resolvedDocument = "resolved resource document"u8.ToArray();
+        byte[] resolvedDocument = "short"u8.ToArray();
         await writer.CompleteCreatedResourceDocumentAsync(
             resolvedResource.ResourceNode, resolvedResource.FileHandle, resolvedDocument, cancellation.Token);
         var resolvedReadback = await connection.Reader.ReadFileAsync(server.DocumentFile, cancellation.Token);

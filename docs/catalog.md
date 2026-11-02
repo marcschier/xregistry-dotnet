@@ -165,6 +165,18 @@ get-or-create, delete and attribute Methods; and replaces model-declared
 Resource documents through FileTransfer. It supports both entity `Labels` and
 Resource Meta `MetaLabels`. Document writes are bounded, start at position
 zero, erase the prior contents and always attempt to close an opened handle.
+Pre-cancelled replacements do not resolve or Open a file. After Open, the
+writer checks cancellation before positioning and after positioning or each
+Write, including the final chunk and empty replacements. It attempts Close
+with an uncancelled token and retains any Close failure on the original error.
+`CompleteCreatedResourceDocumentAsync` takes ownership of the supplied
+creation-time handle. It closes that handle unchanged, then reopens the same
+Object with mode 6 before writing, because a creation-time handle does not
+establish truncation semantics. Cancellation or an oversized document still
+closes the supplied handle without writing or reopening it. A failed initial
+Close prevents replacement. Close is a commit operation, not a rollback:
+cancellation after staging bytes does not establish that the Server discarded
+them, and separate create/Open/Write/Close Calls are not one atomic replacement.
 
 The production adapter requires `SignAndEncrypt` before Property Writes,
 named registry/domain Calls, writable file Opens, file Writes and committing
