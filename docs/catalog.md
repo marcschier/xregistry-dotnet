@@ -106,7 +106,12 @@ rejects a root that is not a Registry, pages Browse to completion and releases
 continuation points on failure, and reads FileType objects with Open, Read until
 an empty chunk, and an always-attempted Close. It checks `SpecVersion` before
 interpreting Registry contents and parses the `Capabilities` and `Model` files
-as JSON. `OpcUaSessionConnection` discovers endpoints and opens a Session only
+as JSON. A pre-cancelled file read does not open a handle. If cancellation
+occurs while Open or Read returns, the reader stops before another read or
+accepting the returned bytes, even when the Session ignores its token. An
+acquired handle is closed with an uncancelled token, and a Close failure remains
+attached to the original cancellation under `OpcUa.FileCloseFailure`.
+`OpcUaSessionConnection` discovers endpoints and opens a Session only
 after caller policy selects one; it maps the advertised root through the
 Session's `NamespaceArray` and verifies the root and Core version.
 

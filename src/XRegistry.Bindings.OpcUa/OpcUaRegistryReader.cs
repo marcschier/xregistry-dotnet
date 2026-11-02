@@ -199,18 +199,22 @@ public sealed class OpcUaRegistryReader
         CancellationToken cancellationToken)
     {
         EnsureSpecVersionValidated();
+        cancellationToken.ThrowIfCancellationRequested();
         var handle = await session.OpenAsync(file, ReadMode, cancellationToken).ConfigureAwait(false);
         using var buffer = new MemoryStream();
         Exception? failure = null;
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (whileOpen is not null)
             {
                 await whileOpen().ConfigureAwait(false);
             }
             while (true)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var chunk = await session.ReadAsync(file, handle, chunkSize, cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
                 if (chunk.Length == 0)
                 {
                     break;

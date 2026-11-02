@@ -140641,6 +140641,8 @@
           "SdkCancellationRemainsCancellationInsteadOfNativeFailure",
           "CancelledResolutionDoesNotAcquireProvider",
           "CancellationDuringAcquisitionDisposesTransferredLeaseAndRetainsCleanupError",
+          "CancelledFileReadDoesNotOpenHandle",
+          "FileReadCancellationStopsIgnoredTokenAndClosesTransferredHandle",
           "BrowsePageBudgetRetainsReleaseFailureOnLimitError",
           "InternalBrowsePageBudgetRetainsReleaseFailureOnLimitError",
           "DiscoveryWorkBudgetReleasesOutstandingHandleAndRetainsCleanupFailure",

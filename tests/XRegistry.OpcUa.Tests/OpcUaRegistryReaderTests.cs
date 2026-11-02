@@ -38,6 +38,60 @@ public class OpcUaRegistryReaderTests
     }
 
     [Test]
+    public async Task CancelledFileReadDoesNotOpenHandle()
+    {
+        var session = new FakeSession { Chunks = { Array.Empty<byte>() } };
+        var reader = await ValidatedReader(session);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        var error = await Assert.ThrowsAsync<OperationCanceledException>(
+            async () => await reader.ReadFileAsync(File, cancellation.Token));
+
+        await Assert.That(error!.CancellationToken).IsEqualTo(cancellation.Token);
+        await Assert.That(session.Opened).IsEqualTo(0);
+        await Assert.That(session.FileReads).IsEqualTo(0);
+        await Assert.That(session.Closed).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("open", false)]
+    [Arguments("open", true)]
+    [Arguments("chunk", false)]
+    [Arguments("chunk", true)]
+    [Arguments("eof", false)]
+    [Arguments("eof", true)]
+    public async Task FileReadCancellationStopsIgnoredTokenAndClosesTransferredHandle(
+        string phase, bool closeFails)
+    {
+        using var cancellation = new CancellationTokenSource();
+        var cleanup = new IOException("Synthetic file Close failure.");
+        var session = new FakeSession
+        {
+            Chunks = { phase == "chunk" ? new byte[] { 1 } : Array.Empty<byte>(), Array.Empty<byte>() },
+            AfterOpen = phase == "open" ? cancellation.Cancel : null,
+            AfterRead = phase == "open" ? null : cancellation.Cancel,
+            CloseFailure = closeFails ? cleanup : null
+        };
+        var reader = await ValidatedReader(session);
+
+        var error = await Assert.ThrowsAsync<OperationCanceledException>(
+            async () => await reader.ReadFileAsync(File, cancellation.Token));
+
+        await Assert.That(error!.CancellationToken).IsEqualTo(cancellation.Token);
+        await Assert.That(session.Opened).IsEqualTo(1);
+        await Assert.That(session.FileReads).IsEqualTo(phase == "open" ? 0 : 1);
+        await Assert.That(session.Closed).IsEqualTo(1);
+        await Assert.That(session.LastClosedHandle).IsEqualTo(7u);
+        await Assert.That(session.CloseToken.CanBeCanceled).IsFalse();
+        await Assert.That(error.Data.Contains("OpcUa.FileCloseFailure")).IsEqualTo(closeFails);
+        if (closeFails)
+        {
+            await Assert.That(ReferenceEquals(error.Data["OpcUa.FileCloseFailure"], cleanup)).IsTrue();
+        }
+    }
+
+    [Test]
     public async Task ReadFailureIsRetainedWhenCloseAlsoFails()
     {
         var session = new FakeSession { ReadFailure = new InvalidOperationException("read"), CloseFailure = new InvalidOperationException("close") };
@@ -2651,6 +2705,9 @@ public class OpcUaRegistryReaderTests
         public Exception? ReleaseFailure { get; init; }
         public bool IsRegistry { get; init; } = true;
         public bool AdvanceMetadataRevisionOnOpen { get; set; }
+        public Action? AfterOpen { get; init; }
+        public Action? AfterRead { get; init; }
+        public CancellationToken CloseToken { get; private set; }
         public int Closed { get; private set; }
         public int Opened { get; private set; }
         public int FileReads { get; private set; }
@@ -2724,6 +2781,7 @@ public class OpcUaRegistryReaderTests
             LastOpenedFile = file;
             OpenedFiles.Add(file);
             OpenMode = mode;
+            AfterOpen?.Invoke();
             return new(7u);
         }
 
@@ -2742,6 +2800,7 @@ public class OpcUaRegistryReaderTests
             {
                 Chunks.RemoveAt(0);
             }
+            AfterRead?.Invoke();
             return new(chunk);
         }
 
@@ -2819,6 +2878,7 @@ public class OpcUaRegistryReaderTests
 
         public ValueTask CloseAsync(NodeId file, uint handle, CancellationToken cancellationToken)
         {
+            CloseToken = cancellationToken;
             Closed++;
             ClosedFiles.Add(file);
             FileClosedHandles.Add((file, handle));
