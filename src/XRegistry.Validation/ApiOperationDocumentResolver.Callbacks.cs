@@ -28,6 +28,9 @@ public static partial class ApiOperationDocumentResolver
         }
         var metadataFailure = ValidateHttpOperationMetadata(location.Operation, location.Pointer, references.Format, cancellationToken);
         if (metadataFailure is not null) { return metadataFailure; }
+        var responseFailure = await ValidateEffectiveHttpResponsesAsync(location.Operation, location.Source,
+            location.Pointer, references, cancellationToken).ConfigureAwait(false);
+        if (responseFailure is not null) { return responseFailure; }
         var serverFailure = ValidateOpenApiServers(location.Operation, location.Pointer, references.Format, cancellationToken);
         if (serverFailure is not null) { return serverFailure; }
         var nameFailure = ValidateHttpSecurityNames(location.Operation, location.Pointer,
@@ -396,6 +399,47 @@ public static partial class ApiOperationDocumentResolver
 
     private static ApiOperationResolutionResult InvalidHttpResponse(string message, string pointer) =>
         Failure(ApiOperationResolutionStatus.Invalid, "document.responses", message, pointer);
+
+    private static async ValueTask<ApiOperationResolutionResult?> ValidateEffectiveHttpResponsesAsync(
+        JsonElement operation, ReferencedDocument source, string pointer, ReferenceContext references,
+        CancellationToken cancellationToken)
+    {
+        if (!operation.TryGetProperty("responses", out var responses)) { return null; }
+        foreach (var entry in responses.EnumerateObject())
+        {
+            if (entry.Name.StartsWith("x-", StringComparison.Ordinal)) { continue; }
+            var response = entry.Value;
+            var document = source;
+            var responsePointer = pointer + "/responses/" + Escape(entry.Name);
+            var active = new HashSet<string>(StringComparer.Ordinal);
+            while (true)
+            {
+                references.Work(responsePointer);
+                var failure = ValidateHttpResponseDeclaration(response, responsePointer, references.Format,
+                    allowReference: true, cancellationToken);
+                if (failure is not null) { return failure; }
+                if (!response.TryGetProperty("$ref", out var reference)) { break; }
+                if (!active.Add(document.Identity + "#" + responsePointer))
+                {
+                    return Failure(ApiOperationResolutionStatus.Indeterminate, "dependency.cycle",
+                        "A response reference cycle prevents operation selection.", responsePointer + "/$ref");
+                }
+                if (active.Count > Capabilities.MaxReferenceDepth)
+                {
+                    return Failure(ApiOperationResolutionStatus.Indeterminate, "limit.reference_depth",
+                        "The response reference-chain depth limit was exceeded.", responsePointer + "/$ref");
+                }
+                var target = await references.ResolveAsync(document, reference.GetString()!, responsePointer + "/$ref",
+                    cancellationToken).ConfigureAwait(false);
+                if (target.Failure is not null) { return target.Failure; }
+                var resolved = target.Target!;
+                response = resolved.Value;
+                document = resolved.Document;
+                responsePointer = resolved.Pointer;
+            }
+        }
+        return null;
+    }
 
     private static ApiOperationResolutionResult? ValidateHttpDocumentationShapes(JsonElement value, string pointer)
     {

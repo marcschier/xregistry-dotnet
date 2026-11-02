@@ -624,9 +624,16 @@ Unused reusable responses receive declaration checks before selection, but
 Swagger's root response definitions require inline Response Objects rather than
 Reference Objects. Reached operations, callback ancestors and retrieved Path
 Items retain the named-versus-pointer traversal boundaries above.
-These checks do not acquire response references or rewrite selected operations.
-Format-specific response-presence requirements, reference-target resolution, nested
-header/media/link validation and response schema evaluation remain unverified.
+Reached operation responses resolve Reference Objects through the caller-supplied
+dependency resolver, including callback ancestors selected by pointers. Relative
+references use their containing document's base URI; repeated document retrievals
+share the existing cache. Each target receives response-declaration checks, and
+cycles, denied or unavailable dependencies, malformed targets and reference-depth
+limits prevent partial selection. Unused reusable response references remain
+inactive. Selection retains authored reference strings and does not copy resolved
+responses into operations. Format-specific response-presence requirements,
+nested header/media/link validation and response schema evaluation remain
+unverified.
 Root and reached HTTP operation `externalDocs` values must be objects with a
 string `url` and, when present, a string `description`. An External
 Documentation Object is not a Reference Object: a `$ref` alone cannot replace

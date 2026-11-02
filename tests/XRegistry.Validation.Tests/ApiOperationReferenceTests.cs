@@ -11,6 +11,184 @@ namespace XRegistry.Validation.Tests;
 public class ApiOperationReferenceTests
 {
     [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task HttpResponseReferencesFollowCallbackAncestorsAndRetainPointerLocality(string format, string version)
+    {
+        var document = new JsonObject
+        {
+            ["openapi"] = version,
+            ["paths"] = JsonNode.Parse("""
+                {"/target":{"get":{"operationId":"Target"}},
+                 "/parent":{"get":{"operationId":"Parent","responses":{"200":{"$ref":"https://allowed.test/response#/Ok"}},
+                 "callbacks":{"event":{"{$request.query.url}":{"post":{"operationId":"Child"}}}}}}}
+                """)
+        };
+        foreach (var valid in new[] { true, false, true })
+        {
+            foreach (var selector in new[] { "operations/Child", "/paths/~1parent/get/callbacks/event/%7B$request.query.url%7D/post",
+                "operations/Target", "/paths/~1target/get" })
+            {
+                var local = selector == "/paths/~1target/get";
+                var calls = 0;
+                var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                    resolveReference: (_, _) =>
+                    {
+                        calls++;
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(valid
+                            ? """{"Ok":{"description":""}}""" : """{"Ok":{}}"""));
+                    });
+                await Assert.That(result.Status).IsEqualTo(valid || local
+                    ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+                await Assert.That(calls).IsEqualTo(local ? 0 : 1);
+                if (!valid && !local)
+                {
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.responses");
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo("$/Ok/description");
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                }
+                else
+                {
+                    await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo(
+                        selector.Contains("target", StringComparison.Ordinal) || selector.EndsWith("Target", StringComparison.Ordinal)
+                            ? "Target" : "Child");
+                }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("Swagger/2.0", "2.0")]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task HttpResponseReferencesResolveContainingBasesCacheAndRestoredTargets(string format, string version)
+    {
+        foreach (var valid in new[] { true, false, true })
+        {
+            var document = new JsonObject
+            {
+                [format == "Swagger/2.0" ? "swagger" : "openapi"] = version,
+                ["paths"] = JsonNode.Parse("""{"/items":{"$ref":"https://allowed.test/api/path.json#/item"}}""")
+            };
+            var path = """
+                {"item":{"get":{"operationId":"Target","responses":{
+                "200":{"$ref":"../responses/first.json#/Ok"},"default":{"$ref":"../responses/first.json#/Ok"}}}}}
+                """;
+            var first = """{"Ok":{"$ref":"second.json#/Result"}}""";
+            var second = valid ? """{"Result":{"description":"resolved"}}""" : """{"Result":{"description":false}}""";
+            var calls = new List<string>();
+            var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+                resolveReference: (uri, _) =>
+                {
+                    calls.Add(uri);
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(uri switch
+                    {
+                        "https://allowed.test/api/path.json" => path,
+                        "https://allowed.test/responses/first.json" => first,
+                        "https://allowed.test/responses/second.json" => second,
+                        _ => throw new UnauthorizedAccessException()
+                    }));
+                });
+            await Assert.That(result.Status).IsEqualTo(valid
+                ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+            await Assert.That(string.Join("|", calls)).IsEqualTo(
+                "https://allowed.test/api/path.json|https://allowed.test/responses/first.json|https://allowed.test/responses/second.json");
+            if (valid)
+            {
+                await Assert.That(result.Operation.GetProperty("responses").GetProperty("200").GetProperty("$ref").GetString())
+                    .IsEqualTo("../responses/first.json#/Ok");
+                await Assert.That(result.DocumentUri!.AbsoluteUri).IsEqualTo("https://allowed.test/api/path.json");
+            }
+            else
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.responses");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo("$/Result/description");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("Swagger/2.0", "2.0")]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task HttpResponseReferenceFailuresPreventNamedAndPointerPartialSelection(string format, string version)
+    {
+        foreach (var (target, status, code, expectedCalls) in new (string?, ApiOperationResolutionStatus, string, int)[]
+        {
+            (null, ApiOperationResolutionStatus.Indeterminate, "dependency.unresolved", 1),
+            ("denied", ApiOperationResolutionStatus.Denied, "dependency.denied", 1),
+            ("""{"Ok":false}""", ApiOperationResolutionStatus.Invalid, "document.responses", 1),
+            ("""{"Ok":null}""", ApiOperationResolutionStatus.Invalid, "document.responses", 1),
+            ("""{"Ok":{"$ref":"#/Ok"}}""", ApiOperationResolutionStatus.Indeterminate, "dependency.cycle", 1),
+            ("{", ApiOperationResolutionStatus.Invalid, "dependency.json", 1)
+        })
+        {
+            foreach (var selector in new[] { "operations/Target", "/paths/~1items/get" })
+            {
+                var document = new JsonObject
+                {
+                    [format == "Swagger/2.0" ? "swagger" : "openapi"] = version,
+                    ["paths"] = JsonNode.Parse("""{"/items":{"get":{"operationId":"Target","responses":{"200":{"$ref":"https://allowed.test/response#/Ok"}}}}}""")
+                };
+                var calls = 0;
+                var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                    resolveReference: (_, _) =>
+                    {
+                        calls++;
+                        if (target == "denied") { throw new UnauthorizedAccessException(); }
+                        if (target is null) { return ValueTask.FromResult<ReadOnlyMemory<byte>?>(null); }
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(target));
+                    });
+                await Assert.That(result.Status).IsEqualTo(status);
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                await Assert.That(calls).IsEqualTo(expectedCalls);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments(63)]
+    [Arguments(64)]
+    [Arguments(65)]
+    public async Task HttpResponseReferenceChainsHonorInclusiveDepthWithoutAcquiringUnusedDeclarations(int links)
+    {
+        var chain = new JsonObject();
+        for (var index = 0; index < links; index++)
+        {
+            chain["R" + index] = new JsonObject { ["$ref"] = "#/chain/R" + (index + 1) };
+        }
+        chain["R" + links] = new JsonObject { ["description"] = "end" };
+        var document = new JsonObject
+        {
+            ["openapi"] = "3.1.1", ["chain"] = chain,
+            ["components"] = JsonNode.Parse("""{"responses":{"Unused":{"$ref":"https://not-acquired.test"}}}"""),
+            ["paths"] = JsonNode.Parse("""{"/items":{"get":{"operationId":"Target","responses":{"200":{"$ref":"#/chain/R1"}}}}}""")
+        };
+        var calls = 0;
+        var result = await ApiOperationDocumentResolver.ResolveAsync("OpenAPI/3.1", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+            ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+            resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+        await Assert.That(result.Status).IsEqualTo(links <= 64
+            ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Indeterminate);
+        await Assert.That(calls).IsEqualTo(0);
+        if (links > 64)
+        {
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("limit.reference_depth");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+        else { await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("Target"); }
+    }
+
+    [Test]
     [Arguments("Swagger/2.0", "2.0")]
     [Arguments("OpenAPI/3.0", "3.0.4")]
     [Arguments("OpenAPI/3.1", "3.1.1")]
@@ -182,7 +360,7 @@ public class ApiOperationReferenceTests
         {
             """{"default":{"description":""}}""",
             """{"100":{"description":"informational"},"599":{"description":"unregistered"},"x-private":{"$ref":"bad path"}}""",
-            """{"200":{"$ref":"https://not-acquired.test/responses#/Ok"}}""",
+            """{"200":{"$ref":"#/Ok"}}""",
             """{"200":{"description":"","headers":{},"x-private":{"description":false}}}"""
         };
         if (format != "Swagger/2.0")
@@ -204,6 +382,7 @@ public class ApiOperationReferenceTests
                 [format == "Swagger/2.0" ? "swagger" : "openapi"] = version,
                 ["paths"] = new JsonObject { ["/items"] = new JsonObject { ["get"] = operation.DeepClone() } }
             };
+            document["Ok"] = JsonNode.Parse("""{"description":"resolved"}""");
             foreach (var selector in new[] { "operations/Target", "/paths/~1items/get" })
             {
                 var calls = 0;

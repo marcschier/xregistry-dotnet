@@ -1098,6 +1098,9 @@ public static partial class ApiOperationDocumentResolver
             }
             var metadataFailure = ValidateHttpOperationMetadata(operation, pathPointer, format, cancellationToken);
             if (metadataFailure is not null) { return metadataFailure; }
+            var responseFailure = await ValidateEffectiveHttpResponsesAsync(operation, references.Root, pathPointer,
+                references, cancellationToken).ConfigureAwait(false);
+            if (responseFailure is not null) { return responseFailure; }
             var serverFailure = ValidateOpenApiServers(operation, pathPointer, format, cancellationToken);
             if (serverFailure is not null) { return serverFailure; }
             var securityNameFailure = ValidateHttpSecurityNames(operation, pathPointer, root,
