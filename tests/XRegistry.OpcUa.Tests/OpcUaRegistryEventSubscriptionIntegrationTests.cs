@@ -557,6 +557,15 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
         await writer.DeleteAsync(connection.RegistryRoot, 5, cancellation.Token);
         await Assert.That(server.DeleteInvocations).IsEqualTo(1);
         await Assert.That(server.DeleteExpectedEpoch).IsEqualTo(5u);
+        await writer.DeleteAsync(connection.RegistryRoot, cancellationToken: cancellation.Token);
+        await Assert.That(server.DeleteInvocations).IsEqualTo(2);
+        await Assert.That(server.DeleteExpectedEpoch).IsEqualTo(0u);
+        await writer.DeleteAsync(connection.RegistryRoot, 0u, cancellation.Token);
+        await Assert.That(server.DeleteInvocations).IsEqualTo(3);
+        await Assert.That(server.DeleteExpectedEpoch).IsEqualTo(0u);
+        await writer.DeleteAsync(connection.RegistryRoot, uint.MaxValue, cancellation.Token);
+        await Assert.That(server.DeleteInvocations).IsEqualTo(4);
+        await Assert.That(server.DeleteExpectedEpoch).IsEqualTo(uint.MaxValue);
 
         var group = await writer.CreateGroupAsync(connection.RegistryRoot, "team-a", cancellation.Token);
         var resolvedGroup = await writer.GetOrCreateGroupAsync(connection.RegistryRoot, "team-a",

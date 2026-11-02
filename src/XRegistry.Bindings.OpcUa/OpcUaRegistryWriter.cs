@@ -117,7 +117,7 @@ public sealed class OpcUaRegistryWriter
     {
         reader.EnsureSpecVersionValidatedForWrite();
         return CallWithoutOutputsAsync(entity, "Delete",
-            expectedEpoch is uint epoch ? [new Variant(epoch)] : [], cancellationToken);
+            [new Variant(expectedEpoch ?? 0u)], cancellationToken);
     }
 
     /// <summary>Adds or updates one label or extension attribute using optimistic concurrency.</summary>

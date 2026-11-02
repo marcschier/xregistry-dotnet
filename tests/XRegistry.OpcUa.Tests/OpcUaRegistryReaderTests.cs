@@ -3336,7 +3336,9 @@ public class OpcUaRegistryReaderTests
         await Assert.That(session.MethodCalls.Count).IsEqualTo(6);
         await Assert.That(session.MethodCalls[0].Method).IsEqualTo("Delete");
         await Assert.That(session.MethodCalls[0].Target).IsEqualTo(LogicalResourceNode);
-        await Assert.That(session.MethodCalls[0].Arguments.Count).IsEqualTo(0);
+        await Assert.That(session.MethodCalls[0].Arguments.Count).IsEqualTo(1);
+        await Assert.That(session.MethodCalls[0].Arguments[0].TryGetValue(out uint omittedEpoch) &&
+            omittedEpoch == 0u).IsTrue();
         await Assert.That(session.MethodCalls[1].Method).IsEqualTo("Delete");
         await Assert.That(session.MethodCalls[1].Target).IsEqualTo(LogicalResourceNode);
         await Assert.That(session.MethodCalls[1].Arguments[0].TryGetValue(out uint deleteEpoch) &&
@@ -3369,6 +3371,68 @@ public class OpcUaRegistryReaderTests
             removeMetaEpoch == 9).IsTrue();
         await Assert.That(session.MethodCalls[4].Target).IsEqualTo(logicalMetaLabels);
         await Assert.That(session.MethodCalls[5].Target).IsEqualTo(logicalMetaLabels);
+    }
+
+    [Test]
+    [Arguments(null)]
+    [Arguments(0u)]
+    [Arguments(1u)]
+    [Arguments(52u)]
+    [Arguments(uint.MaxValue)]
+    public async Task WriterAlwaysSuppliesRequiredUInt32EpochOnDeleteAndLabelCalls(uint? expectedEpoch)
+    {
+        var (session, writer) = await WriterForResource();
+        var epoch = expectedEpoch ?? 0u;
+        var labels = new NodeId("Labels", 1);
+        var metaLabels = new NodeId("MetaLabels", 1);
+
+        await writer.DeleteAsync(LogicalResourceNode, expectedEpoch);
+        await writer.AddAttributeAsync(labels, "key", "value", epoch);
+        await writer.RemoveAttributeAsync(labels, "key", epoch);
+        await writer.AddMetaAttributeAsync(metaLabels, "key", "value", epoch);
+        await writer.RemoveMetaAttributeAsync(metaLabels, "key", epoch);
+
+        var expected = new[]
+        {
+            (LogicalResourceNode, "Delete", 1),
+            (labels, "AddAttribute", 3),
+            (labels, "RemoveAttribute", 2),
+            (metaLabels, "AddAttribute", 3),
+            (metaLabels, "RemoveAttribute", 2)
+        };
+        await Assert.That(session.MethodCalls.Count).IsEqualTo(expected.Length);
+        for (var index = 0; index < expected.Length; index++)
+        {
+            var call = session.MethodCalls[index];
+            await Assert.That(call.Target).IsEqualTo(expected[index].Item1);
+            await Assert.That(call.Method).IsEqualTo(expected[index].Item2);
+            await Assert.That(call.Arguments.Count).IsEqualTo(expected[index].Item3);
+            await Assert.That(call.Arguments[^1].TryGetValue(out uint actual) && actual == epoch).IsTrue();
+        }
+    }
+
+    [Test]
+    [Arguments(0u)]
+    [Arguments(11u)]
+    public async Task WriterDeleteRetainsNativeEpochFailureWithoutRetry(uint expectedEpoch)
+    {
+        var native = new ServiceResultException(StatusCodes.BadInvalidState);
+        var failure = new FederationException(FederationErrorCode.Unavailable,
+            "Native Delete rejected.", "BadInvalidState", native);
+        var session = new FakeSession { MethodFailure = failure };
+        var reader = await ValidatedReader(session);
+        var writer = new OpcUaRegistryWriter(reader);
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await writer.DeleteAsync(LogicalResourceNode, expectedEpoch));
+
+        await Assert.That(ReferenceEquals(error, failure)).IsTrue();
+        await Assert.That(ReferenceEquals(error!.InnerException, native)).IsTrue();
+        var call = session.MethodCalls.Single();
+        await Assert.That(call.Target).IsEqualTo(LogicalResourceNode);
+        await Assert.That(call.Method).IsEqualTo("Delete");
+        await Assert.That(call.Arguments.Count).IsEqualTo(1);
+        await Assert.That(call.Arguments[0].TryGetValue(out uint epoch) && epoch == expectedEpoch).IsTrue();
     }
 
     private static string NodeIdTrace(IEnumerable<NodeId> nodes) =>

@@ -203,6 +203,14 @@ get-or-create, delete and attribute Methods; and replaces model-declared
 Resource documents through FileTransfer. It supports both entity `Labels` and
 Resource Meta `MetaLabels`. Document writes are bounded, start at position
 zero, erase the prior contents and always attempt to close an opened handle.
+`DeleteAsync` always sends the required UInt32 `ExpectedEpoch` argument.
+Omitting the optional .NET precondition sends `0`, as does an explicit zero;
+neither form omits the UA Method argument. Nonzero values are sent unchanged.
+Label and Meta label Methods also send their required epoch argument. The
+caller selects the applicable counter: `Epoch` for Groups, exact Versions and
+Metadata Resources, or `MetaEpoch` for document-backed logical Resource
+deletion and Meta labels. Sending the argument does not establish that the
+Server enforces comparison or performs deletion atomically.
 Resource creation results retain the exact Version NodeId and assigned Version
 identifier. Both creation Methods reject an empty assigned identifier or one
 that differs from an explicit requested Version, including case differences.

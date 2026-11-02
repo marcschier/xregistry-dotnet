@@ -135517,13 +135517,20 @@
       ],
       "text": "Every `ExpectedEpoch` argument in the declared label and Delete signatures is REQUIRED. A client supplies `0` when it does not request the comparison; Core's omission of an epoch precondition does not omit a UA Method argument.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The required argument was reviewed with the operation table and Group, logical Resource, Metadata Resource and exact Version deletion procedures. DeleteAsync previously omitted the UA argument when the optional .NET precondition was null. It now always sends one UInt32, using zero for omitted or null preconditions and preserving explicit values. Both label and Meta label mutation Methods already include their required epoch argument; direct cases verify all five signatures and selected targets for null, zero, one, interior and UInt32 maximum values. An encrypted Session reaches a Method requiring exactly one UInt32 for omitted, zero, nonzero and maximum Delete inputs. Native epoch errors retain their identity and are not retried. This bounded client argument contract does not establish producer epoch comparison, deletion semantics or atomicity; those remain separately pending.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "WriterAlwaysSuppliesRequiredUInt32EpochOnDeleteAndLabelCalls",
+          "WriterDeleteRetainsNativeEpochFailureWithoutRetry",
+          "WriterMetaAttributesTargetLogicalResource",
+          "WriterWritesPropertiesDeleteAndFileDocumentsOnARealServer"
+        ],
         "nativeEvidence": []
       }
     },
