@@ -23,4 +23,5 @@
 tests/Conformance/Sources/** -text
 tests/Conformance/Corrections/** -text
 src/XRegistry.Models/Resources/** -text
-tests/XRegistry.Core.Tests/Wot/Resolution/vectors/** -text
+tests/XRegistry.Core.Tests/Wot/Resolution/regressions/** -text
+tests/XRegistry.Core.Tests/Wot/Resolution/shared/** -text

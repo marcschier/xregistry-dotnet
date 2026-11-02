@@ -20,7 +20,8 @@ PROTECTED = (
     Path("tests/Conformance/Sources"),
     Path("tests/Conformance/Corrections"),
     Path("src/XRegistry.Models/Resources"),
-    Path("tests/XRegistry.Core.Tests/Wot/Resolution/vectors"),
+    Path("tests/XRegistry.Core.Tests/Wot/Resolution/regressions"),
+    Path("tests/XRegistry.Core.Tests/Wot/Resolution/shared"),
 )
 PRUNED_NAMES = {
     ".git", ".idea", ".pytest_cache", ".vs", "__pycache__",

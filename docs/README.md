@@ -71,7 +71,9 @@ specification-correction history is in the [changelog](changelog.md).
 ## Evidence and performance
 
 - [Conformance evidence](conformance.md)
-- [Canonical WoT version-resolution vectors](../tests/XRegistry.Core.Tests/Wot/Resolution/vectors/README.md)
+- [Shared WoT resolution examples and implementation regressions](../tests/XRegistry.Core.Tests/Wot/Resolution/README.md)
+- [Frozen WoT implementation-regression source](../tests/XRegistry.Core.Tests/Wot/Resolution/regressions/README.md)
+- [Shared WoT resolution source](../tests/XRegistry.Core.Tests/Wot/Resolution/shared/README.md)
 - [Specification provenance and verification](spec-feedback.md)
 - [Specification tooling](../eng/specification/README.md)
 - [Forward interoperability evidence](interoperability.md)

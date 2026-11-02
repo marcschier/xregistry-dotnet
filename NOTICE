@@ -7,6 +7,12 @@ tests/Conformance/Sources originate from the xRegistry specification project
 and the explicitly recorded working-tree baseline. Their Apache-2.0 license is
 retained in that directory. See eng/specification-lock.json for provenance.
 
+The shared WoT resolution examples and frozen implementation-regression
+fixtures under tests/XRegistry.Core.Tests/Wot/Resolution also originate from
+the Apache-2.0-licensed xRegistry specification project. See that directory's
+sources.json for their provenance and tests/Conformance/Sources/LICENSE for
+the retained license.
+
 Use of xRegistry names does not imply certification, endorsement, or complete
 conformance. Current implementation and qualification status is explicit in
 docs/conformance.md and eng/packages.json.

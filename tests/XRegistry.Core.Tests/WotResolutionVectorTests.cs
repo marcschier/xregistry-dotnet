@@ -12,21 +12,32 @@ namespace XRegistry.Core.Tests;
 public class WotResolutionVectorTests
 {
     private const string Origin = "https://registry.example";
-    private static string VectorDirectory => Path.Combine(AppContext.BaseDirectory, "Wot", "Resolution", "vectors");
+    private static string ResolutionDirectory => Path.Combine(AppContext.BaseDirectory, "Wot", "Resolution");
+    private static string RegressionDirectory => Path.Combine(ResolutionDirectory, "regressions");
+    private static string SharedDirectory => Path.Combine(ResolutionDirectory, "shared");
 
     public static IEnumerable<string> ResolutionVectorFiles() =>
-        Directory.EnumerateFiles(VectorDirectory, "*.json").Where(static path => IsVectorFile(Path.GetFileName(path)))
+        Directory.EnumerateFiles(RegressionDirectory, "*.json").Where(static path => IsVectorFile(Path.GetFileName(path)))
             .Order(StringComparer.Ordinal);
 
-    [Test]
-    public async Task CanonicalVectorManifestMatchesCopiedBytes()
+    public static IEnumerable<string> SharedVectorNames()
     {
-        var manifestPath = Path.Combine(VectorDirectory, "MANIFEST.sha256");
+        using var document = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(SharedDirectory, "vectors.json")));
+        return document.RootElement.EnumerateObject().Select(property => property.Name).Order(StringComparer.Ordinal).ToArray();
+    }
+
+    [Test]
+    public async Task ImplementationRegressionManifestMatchesCopiedBytes()
+    {
+        var manifestPath = Path.Combine(RegressionDirectory, "MANIFEST.sha256");
         var manifestBytes = await File.ReadAllBytesAsync(manifestPath);
+        using var source = JsonDocument.Parse(await File.ReadAllBytesAsync(Path.Combine(ResolutionDirectory, "sources.json")));
+        await Assert.That(Convert.ToHexString(SHA256.HashData(manifestBytes)).ToLowerInvariant())
+            .IsEqualTo(source.RootElement.GetProperty("regressions").GetProperty("manifestSha256").GetString());
         await Assert.That(manifestBytes.Contains((byte)'\r')).IsFalse();
         await Assert.That(manifestBytes[^1]).IsEqualTo((byte)'\n');
         var entries = System.Text.Encoding.ASCII.GetString(manifestBytes).Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        var files = Directory.GetFiles(VectorDirectory).Where(path => Path.GetFileName(path) != "MANIFEST.sha256")
+        var files = Directory.GetFiles(RegressionDirectory).Where(path => Path.GetFileName(path) != "MANIFEST.sha256")
             .OrderBy(Path.GetFileName, StringComparer.Ordinal).ToArray();
         await Assert.That(entries.Length).IsEqualTo(files.Length);
 
@@ -46,10 +57,37 @@ public class WotResolutionVectorTests
 
     [Test]
     [CombinedDataSources]
-    public async Task CanonicalResolutionVectorMatchesImplementation([MethodDataSource(nameof(ResolutionVectorFiles))] string path)
+    public async Task ImplementationRegressionMatchesLiteralExpectation([MethodDataSource(nameof(ResolutionVectorFiles))] string path)
     {
         using var document = JsonDocument.Parse(await File.ReadAllBytesAsync(path));
-        var root = document.RootElement;
+        await CheckLiteralExpectation(document.RootElement);
+    }
+
+    [Test]
+    [CombinedDataSources]
+    public async Task SharedResolutionVectorMatchesLiteralExpectation([MethodDataSource(nameof(SharedVectorNames))] string name)
+    {
+        using var document = JsonDocument.Parse(await File.ReadAllBytesAsync(Path.Combine(SharedDirectory, "vectors.json")));
+        await CheckLiteralExpectation(document.RootElement.GetProperty(name));
+    }
+
+    [Test]
+    public async Task SharedSourceManifestMatchesCopiedBytes()
+    {
+        using var source = JsonDocument.Parse(await File.ReadAllBytesAsync(Path.Combine(ResolutionDirectory, "sources.json")));
+        var files = source.RootElement.GetProperty("shared").GetProperty("files").EnumerateObject().ToArray();
+        await Assert.That(files.Length).IsGreaterThan(0);
+        var names = Directory.GetFiles(SharedDirectory).Select(Path.GetFileName).Order(StringComparer.Ordinal);
+        await Assert.That(names.SequenceEqual(files.Select(file => file.Name).Order(StringComparer.Ordinal))).IsTrue();
+        foreach (var file in files)
+        {
+            var bytes = await File.ReadAllBytesAsync(Path.Combine(SharedDirectory, file.Name));
+            await Assert.That(Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant()).IsEqualTo(file.Value.GetString());
+        }
+    }
+
+    private static async Task CheckLiteralExpectation(JsonElement root)
+    {
         var resources = root.GetProperty("registry").EnumerateArray().Select(ParseResource).ToArray();
         var expect = root.GetProperty("expect");
         string? error = null;
@@ -71,11 +109,12 @@ public class WotResolutionVectorTests
                 var referenceJson = root.GetProperty("reference");
                 var reference = new WotReferenceRequest(referenceJson.GetProperty("kind").GetString()!,
                     referenceJson.GetProperty("target").GetString()!, OptionalString(referenceJson, "minVersion"),
-                    OptionalString(referenceJson, "floorTerm"));
+                    OptionalString(referenceJson, "floorTerm"))
+                {
+                    IsDocumentLocal = referenceJson.TryGetProperty("local", out var local) && local.GetBoolean()
+                };
                 var context = root.TryGetProperty("document", out var documentVersion)
-                    ? new WotDocumentVersionContext(OptionalString(documentVersion, "version.model"),
-                        documentVersion.GetProperty("typeLinks").EnumerateArray().Select(link =>
-                            new WotTypeLink(link.GetProperty("target").GetString()!, OptionalString(link, "minVersion"))).ToArray())
+                    ? ParseContext(documentVersion, reference, resources)
                     : null;
                 var pin = root.TryGetProperty("pin", out var pinJson)
                     ? new WotVersionPin(OptionalString(pinJson, "digest"), OptionalString(pinJson, "versionid"))
@@ -146,6 +185,83 @@ public class WotResolutionVectorTests
     }
 
     [Test]
+    [Arguments("18446744073709551616.0.0", "18446744073709551617.0.0")]
+    [Arguments("1.18446744073709551616.0", "1.18446744073709551617.0")]
+    [Arguments("1.0.18446744073709551616", "1.0.18446744073709551617")]
+    [Arguments("1.0.0-18446744073709551616", "1.0.0-18446744073709551617")]
+    public async Task SemanticVersionComparisonDoesNotOverflowMachineIntegers(string lower, string higher)
+    {
+        await Assert.That(WotSemanticVersion.Parse(lower) < WotSemanticVersion.Parse(higher)).IsTrue();
+        await Assert.That(WotSemanticVersion.Parse(higher) > WotSemanticVersion.Parse(lower)).IsTrue();
+    }
+
+    [Test]
+    public async Task VersionIdentifierLengthLimitAppliesToParsingAndPublication()
+    {
+        var valid = new string('9', 124) + ".0.0";
+        var overlong = "9" + valid;
+        await Assert.That(valid.Length).IsEqualTo(128);
+        await Assert.That(WotSemanticVersion.TryParse(valid, out _)).IsTrue();
+        await Assert.That(WotSemanticVersion.TryParse(overlong, out _)).IsFalse();
+        WotResourceSnapshot[] resources = [new("model", false, valid, [new(valid, "authored", "bytes")])];
+        await Assert.That(WotVersionResolver.Resolve(resources, new("ref", "model", valid), Origin))
+            .IsEqualTo(new WotResolutionResult("model", valid, "bytes", Origin));
+        await Assert.That(WotVersionResolver.AssignPublishedVersion(resources, "model", modelVersion: valid))
+            .IsEqualTo(new WotPublicationAssignment(valid, "authored", valid));
+        var floorFailure = await Assert.That(() => WotVersionResolver.Resolve(resources, new("ref", "model", overlong), Origin))
+            .Throws<WotVersionException>();
+        await Assert.That(floorFailure!.Code).IsEqualTo("unsatisfied");
+        var publicationFailure = await Assert.That(() => WotVersionResolver.AssignPublishedVersion(resources, "model", modelVersion: overlong))
+            .Throws<WotVersionException>();
+        await Assert.That(publicationFailure!.Code).IsEqualTo("invalid-version");
+    }
+
+    [Test]
+    [Arguments("tm:ref")]
+    [Arguments("td:ref")]
+    [Arguments("type")]
+    public async Task ExplicitFloorHasNoCoreIdentifierLengthLimit(string member)
+    {
+        var floor = "1.0.0-" + new string('a', 123);
+        await Assert.That(floor.Length).IsEqualTo(129);
+        var json = member == "type"
+            ? $$"""{"rel":"type","href":"urn:example:thing","uav:minVersion":"{{floor}}"}"""
+            : $$"""{"{{member}}":"urn:example:thing","uav:minVersion":"{{floor}}"}""";
+        using var source = JsonDocument.Parse(json);
+        var reference = WotReferenceParser.Parse(source.RootElement);
+        WotResourceSnapshot[] resources = [new("urn:example:thing", false, "1.0.0", [new("1.0.0", "authored", "bytes")])];
+        var context = member == "type" ? new WotDocumentVersionContext(null, [new("urn:example:thing", floor)]) : null;
+        await Assert.That(WotVersionResolver.Resolve(resources, reference, Origin, context))
+            .IsEqualTo(new WotResolutionResult("urn:example:thing", "1.0.0", "bytes", Origin));
+    }
+
+    [Test]
+    [Arguments(125)]
+    [Arguments(5000)]
+    public async Task LargeNumericFloorIsUnsatisfiedRatherThanInvalid(int digits)
+    {
+        var floor = new string('9', digits) + ".0.0";
+        WotResourceSnapshot[] resources = [new("model", false, "1.0.0", [new("1.0.0", "authored", "bytes")])];
+        var failure = await Assert.That(() => WotVersionResolver.Resolve(resources, new("ref", "model", floor), Origin))
+            .Throws<WotVersionException>();
+        await Assert.That(failure!.Code).IsEqualTo("unsatisfied");
+    }
+
+    [Test]
+    public async Task ImplicitAuthoredFloorStillObeysVersionIdLimit()
+    {
+        var overlong = "1.0.0-" + new string('a', 123);
+        WotResourceSnapshot[] resources = [new("model", false, "1.0.0", [new("1.0.0", "authored", "bytes")])];
+        var reference = new WotReferenceRequest("type", "model");
+        var context = new WotDocumentVersionContext(overlong, [new("model")]);
+        var failure = await Assert.That(() => WotVersionResolver.Resolve(resources, reference, Origin, context))
+            .Throws<WotVersionException>();
+        await Assert.That(failure!.Code).IsEqualTo("invalid-version");
+        await Assert.That(WotVersionResolver.Resolve(resources, reference, Origin, context, new(VersionId: "1.0.0")))
+            .IsEqualTo(new WotResolutionResult("model", "1.0.0", "bytes", Origin));
+    }
+
+    [Test]
     [Arguments("td-extends")]
     [Arguments("td-subthing")]
     [Arguments("td-ref")]
@@ -200,6 +316,27 @@ public class WotResolutionVectorTests
     }
 
     private static bool IsVectorFile(string name) => name.Length > 4 && name[3] == '-' && char.IsAsciiDigit(name[0]) && char.IsAsciiDigit(name[1]) && char.IsAsciiDigit(name[2]);
+
+    private static WotDocumentVersionContext ParseContext(JsonElement document, WotReferenceRequest reference,
+        WotResourceSnapshot[] resources)
+    {
+        var links = document.TryGetProperty("typeLinks", out var typeLinks)
+            ? typeLinks.EnumerateArray().Select(link =>
+                new WotTypeLink(link.GetProperty("target").GetString()!, OptionalString(link, "minVersion"))).ToArray()
+            : [];
+        WotVersionSnapshot? containing = null;
+        if (reference.IsDocumentLocal)
+        {
+            containing = resources.Single(resource => resource.WotId == reference.Target).Versions
+                .Single(version => version.VersionId == document.GetProperty("versionid").GetString()) with
+            {
+                ModelVersion = OptionalString(document, "version.model"),
+                InstanceVersion = OptionalString(document, "version.instance")
+            };
+        }
+
+        return new(OptionalString(document, "version.model"), links) { ContainingVersion = containing };
+    }
 
     private static WotResourceSnapshot ParseResource(JsonElement resource)
     {

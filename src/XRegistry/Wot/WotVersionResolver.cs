@@ -11,13 +11,21 @@ public sealed record WotResourceSnapshot(string WotId, bool DefaultVersionSticky
     IReadOnlyList<WotVersionSnapshot> Versions);
 
 /// <summary>A normalized WoT reference and its optional minimum version.</summary>
-public sealed record WotReferenceRequest(string Kind, string Target, string? MinimumVersion = null, string? FloorTerm = null);
+public sealed record WotReferenceRequest(string Kind, string Target, string? MinimumVersion = null, string? FloorTerm = null)
+{
+    /// <summary>Gets whether a definition reference targets the containing document revision.</summary>
+    public bool IsDocumentLocal { get; init; }
+}
 
 /// <summary>A normalized TD type link.</summary>
 public sealed record WotTypeLink(string Target, string? MinimumVersion = null);
 
-/// <summary>Version information needed to derive floors for TD type links.</summary>
-public sealed record WotDocumentVersionContext(string? ModelVersion, IReadOnlyList<WotTypeLink> TypeLinks);
+/// <summary>Version information for TD type-link floors and document-local references.</summary>
+public sealed record WotDocumentVersionContext(string? ModelVersion, IReadOnlyList<WotTypeLink> TypeLinks)
+{
+    /// <summary>Gets the exact containing revision, including its authored model or instance version.</summary>
+    public WotVersionSnapshot? ContainingVersion { get; init; }
+}
 
 /// <summary>An optional caller pin; at most one of digest and version identifier may be supplied.</summary>
 public sealed record WotVersionPin(string? Digest = null, string? VersionId = null);
@@ -47,6 +55,11 @@ public static class WotVersionResolver
         ArgumentNullException.ThrowIfNull(reference);
         ArgumentException.ThrowIfNullOrWhiteSpace(origin);
         ValidatePin(pin);
+        if (reference.IsDocumentLocal)
+        {
+            return ResolveLocal(reference, origin, document, pin);
+        }
+
         var resource = FindResource(resources, reference.Target);
         WotVersionSnapshot selected;
 
@@ -97,6 +110,34 @@ public static class WotVersionResolver
         }
 
         return new(resource.WotId, selected.VersionId, selected.ContentDigest, origin);
+    }
+
+    private static WotResolutionResult ResolveLocal(WotReferenceRequest reference, string origin,
+        WotDocumentVersionContext? document, WotVersionPin? pin)
+    {
+        if (reference.Kind is not ("ref" or "td-ref") || pin is not null)
+        {
+            throw new ArgumentException("A document-local reference must be an unpinned tm:ref or td:ref.", nameof(reference));
+        }
+
+        var containing = document?.ContainingVersion
+            ?? throw new ArgumentException("A document-local reference requires its exact containing revision.", nameof(document));
+        var floor = GetFloor(reference, document);
+        if (floor is not null)
+        {
+            var authored = reference.Kind == "td-ref" ? containing.InstanceVersion : containing.ModelVersion;
+            if (authored is null)
+            {
+                throw new WotVersionException("unsatisfied");
+            }
+
+            if (!IsInRange(ParseStoredVersion(authored), floor, reference.Kind == "td-ref"))
+            {
+                throw new WotVersionException("unsatisfied");
+            }
+        }
+
+        return new(reference.Target, containing.VersionId, containing.ContentDigest, origin);
     }
 
     /// <summary>Assigns the version identifier and post-publication default for a Thing Model or Thing Description write.</summary>
@@ -162,11 +203,12 @@ public static class WotVersionResolver
         resources.FirstOrDefault(resource => string.Equals(resource.WotId, target, StringComparison.Ordinal))
         ?? throw new WotVersionException("not-found");
 
-    private static WotSemanticVersion? GetFloor(WotReferenceRequest reference, WotDocumentVersionContext? document)
+    internal static WotSemanticVersion? GetFloor(WotReferenceRequest reference, WotDocumentVersionContext? document)
     {
         var expectedTerm = IsTdReference(reference.Kind) ? "td:minVersion" : "tm:minVersion";
         if (reference.FloorTerm is not null &&
-            (reference.MinimumVersion is null || !string.Equals(reference.FloorTerm, expectedTerm, StringComparison.Ordinal)))
+            (reference.MinimumVersion is null || reference.FloorTerm != "uav:minVersion" &&
+                !string.Equals(reference.FloorTerm, expectedTerm, StringComparison.Ordinal)))
         {
             throw new WotVersionException("invalid-floor");
         }
@@ -201,7 +243,7 @@ public static class WotVersionResolver
 
             if (document.ModelVersion is not null)
             {
-                var implicitFloor = ParseFloor(document.ModelVersion);
+                var implicitFloor = ParseFloor(document.ModelVersion, authored: true);
                 var explicitFloor = floor is null ? null : ParseFloor(floor);
                 if (explicitFloor is null || implicitFloor > explicitFloor)
                 {
@@ -218,15 +260,14 @@ public static class WotVersionResolver
     private static bool IsInRange(WotSemanticVersion candidate, WotSemanticVersion? floor, bool capped) =>
         floor is null || candidate >= floor && (!capped || candidate.HasSameMajor(floor));
 
-    private static WotSemanticVersion ParseFloor(string text)
+    private static WotSemanticVersion ParseFloor(string text, bool authored = false)
     {
-        var parsed = ParseStoredVersion(text);
-        if (IsGeneratedId(text))
+        if (!WotSemanticVersion.TryParse(text, enforceLength: authored, out var parsed) || IsGeneratedId(text))
         {
             throw new WotVersionException("invalid-version");
         }
 
-        return parsed;
+        return parsed!;
     }
 
     private static WotSemanticVersion ParseStoredVersion(string text)

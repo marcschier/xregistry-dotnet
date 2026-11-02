@@ -145,7 +145,7 @@ public sealed class WotSemanticVersion : IComparable<WotSemanticVersion>, IEquat
             TryParse(value[..separator], enforceLength: false, out _) && IsIdentifierList(value[(separator + 1)..], allowNumericLeadingZero: true);
     }
 
-    private static bool TryParse(string? value, bool enforceLength, out WotSemanticVersion? version)
+    internal static bool TryParse(string? value, bool enforceLength, out WotSemanticVersion? version)
     {
         version = null;
         if (string.IsNullOrEmpty(value) || enforceLength && value.Length > 128)

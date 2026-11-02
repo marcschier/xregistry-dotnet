@@ -10,6 +10,6 @@
   <ItemGroup>
     <PackageReference Include="TUnit" />
     <ProjectReference Include="..\..\src\XRegistry\XRegistry.csproj" />
-    <Content Include="Wot\Resolution\vectors\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Wot\Resolution\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

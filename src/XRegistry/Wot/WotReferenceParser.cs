@@ -12,7 +12,7 @@ public static class WotReferenceParser
     /// <summary>Parses one link or object containing <c>tm:ref</c> or <c>td:ref</c>.</summary>
     /// <param name="reference">A link with rel and href, or an object with one definition reference.</param>
     /// <param name="baseUri">The document base used to resolve relative reference URIs.</param>
-    /// <returns>A request whose floor syntax and term are checked during unpinned resolution.</returns>
+    /// <returns>A normalized request with a validated authored floor.</returns>
     public static WotReferenceRequest Parse(JsonElement reference, Uri? baseUri = null)
     {
         if (reference.ValueKind != JsonValueKind.Object)
@@ -48,6 +48,7 @@ public static class WotReferenceParser
             target = resolved.AbsoluteUri;
         }
 
+        var isDocumentLocal = false;
         if (hasTmRef || hasTdRef)
         {
             var fragment = target.IndexOf('#');
@@ -55,17 +56,34 @@ public static class WotReferenceParser
             {
                 target = target[..fragment];
             }
+
+            if (baseUri?.IsAbsoluteUri == true)
+            {
+                var documentTarget = baseUri.AbsoluteUri.Split('#')[0];
+                isDocumentLocal = string.Equals(new Uri(target).AbsoluteUri, documentTarget, StringComparison.Ordinal);
+            }
         }
 
         var hasTmFloor = reference.TryGetProperty("tm:minVersion", out _);
         var hasTdFloor = reference.TryGetProperty("td:minVersion", out _);
-        if (hasTmFloor && hasTdFloor)
+        var hasBindingFloor = reference.TryGetProperty("uav:minVersion", out _);
+        if (hasTmFloor && hasTdFloor || hasBindingFloor && (hasTmFloor || hasTdFloor))
         {
             throw new WotVersionException("invalid-floor");
         }
 
-        var floorTerm = hasTmFloor ? "tm:minVersion" : hasTdFloor ? "td:minVersion" : null;
-        return new(kind, target, floorTerm is null ? null : ReadFloor(reference, floorTerm), floorTerm);
+        if (reference.TryGetProperty("uav:compatibilityLine", out _))
+        {
+            throw new WotVersionException("invalid-line");
+        }
+
+        var floorTerm = hasTmFloor ? "tm:minVersion" : hasTdFloor ? "td:minVersion" : hasBindingFloor ? "uav:minVersion" : null;
+        var request = new WotReferenceRequest(kind, target, floorTerm is null ? null : ReadFloor(reference, floorTerm), floorTerm)
+        {
+            IsDocumentLocal = isDocumentLocal
+        };
+        _ = WotVersionResolver.GetFloor(request, document: null);
+        return request;
     }
 
     private static string ReadFloor(JsonElement element, string name)
