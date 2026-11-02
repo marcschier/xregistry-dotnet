@@ -17,6 +17,287 @@ public class OpcUaSessionAdapterTests
         ["urn:example:local-server", "urn:remote:server-one", "urn:Remote:Server%2fTwo"];
     private static readonly string[] s_externalNamespaceUris =
         ["http://opcfoundation.org/UA/", "urn:example:namespace-one", "urn:Exact:Namespace%2fTwo"];
+    private static readonly string[] s_fileMethods = ["Open", "Read", "Write", "SetPosition", "Close"];
+
+    [Test]
+    [Arguments("Open")]
+    [Arguments("Read")]
+    [Arguments("Write")]
+    [Arguments("SetPosition")]
+    [Arguments("Close")]
+    public async Task FileTransferCallsActualMethodOnSelectedObject(string method)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        var file = new NodeId("SelectedFile", 2);
+        var actual = new NodeId("Actual." + method, 2);
+        proxy.BrowseResultFactory = description =>
+        {
+            return new BrowseResult
+            {
+                References =
+                [
+                    new ReferenceDescription
+                    {
+                        NodeId = new ExpandedNodeId(actual),
+                        BrowseName = new QualifiedName(method, 0),
+                        NodeClass = NodeClass.Method
+                    },
+                    new ReferenceDescription
+                    {
+                        NodeId = new ExpandedNodeId(new NodeId("NotAMethod", 2)),
+                        BrowseName = new QualifiedName(method, 0),
+                        NodeClass = NodeClass.Variable
+                    },
+                    new ReferenceDescription
+                    {
+                        NodeId = new ExpandedNodeId(new NodeId("OtherNamespaceMethod", 2)),
+                        BrowseName = new QualifiedName(method, 2),
+                        NodeClass = NodeClass.Method
+                    }
+                ]
+            };
+        };
+        await InvokeFileMethod(adapter, file, method);
+
+        var browse = proxy.BrowseRequests.Single();
+        await Assert.That(browse.NodeId).IsEqualTo(file);
+        await Assert.That(browse.BrowseDirection).IsEqualTo(BrowseDirection.Forward);
+        await Assert.That(browse.ReferenceTypeId).IsEqualTo(ReferenceTypeIds.HierarchicalReferences);
+        var call = proxy.MethodCalls.Single();
+        await Assert.That(call.ObjectId).IsEqualTo(file);
+        await Assert.That(call.MethodId).IsEqualTo(actual);
+        await Assert.That(call.InputArguments.Count).IsEqualTo(method is "Read" or "Write" or "SetPosition" ? 2 : 1);
+        if (method == "Open")
+        {
+            await Assert.That(call.InputArguments[0].TryGetValue(out byte mode) && mode == 1).IsTrue();
+        }
+        else
+        {
+            await Assert.That(call.InputArguments[0].TryGetValue(out uint handle) && handle == 7u).IsTrue();
+        }
+        if (method == "Read")
+        {
+            await Assert.That(call.InputArguments[1].TryGetValue(out int length) && length == 64).IsTrue();
+        }
+        if (method == "Write")
+        {
+            await Assert.That(call.InputArguments[1].TryGetValue(out ByteString bytes)).IsTrue();
+            await Assert.That(bytes.ToArray()).IsEquivalentTo(new byte[] { 1, 2 });
+        }
+        if (method == "SetPosition")
+        {
+            await Assert.That(call.InputArguments[1].TryGetValue(out ulong position) && position == 0UL).IsTrue();
+        }
+    }
+
+    [Test]
+    [Arguments("Open", false)]
+    [Arguments("Read", false)]
+    [Arguments("Write", false)]
+    [Arguments("SetPosition", false)]
+    [Arguments("Close", false)]
+    [Arguments("Open", true)]
+    [Arguments("Read", true)]
+    [Arguments("Write", true)]
+    [Arguments("SetPosition", true)]
+    [Arguments("Close", true)]
+    public async Task FileTransferRejectsMissingOrAmbiguousMethodsWithoutDeclarationFallback(
+        string method, bool ambiguous)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        proxy.BrowseResultFactory = _ => new BrowseResult
+        {
+            References = ambiguous
+                ? new ArrayOf<ReferenceDescription>(
+                    Enumerable.Range(1, 2).Select(index => new ReferenceDescription
+                    {
+                        NodeId = new ExpandedNodeId(new NodeId("Actual." + index, 1)),
+                        BrowseName = new QualifiedName(method),
+                        NodeClass = NodeClass.Method
+                    }).ToArray())
+                : [new ReferenceDescription
+                {
+                    NodeId = new ExpandedNodeId(new NodeId("WrongCaseMethod", 1)),
+                    BrowseName = new QualifiedName(method.ToLowerInvariant()),
+                    NodeClass = NodeClass.Method
+                }]
+        };
+
+        var failure = await Assert.ThrowsAsync<FederationException>(async () =>
+            await InvokeFileMethod(adapter, new NodeId("File", 1), method));
+
+        await Assert.That(failure!.Code).IsEqualTo(
+            ambiguous ? FederationErrorCode.Ambiguous : FederationErrorCode.NotFound);
+        await Assert.That(proxy.MethodCalls.Count).IsEqualTo(0);
+        await Assert.That(proxy.BrowseRequests.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    [Arguments("Open")]
+    [Arguments("Read")]
+    [Arguments("Write")]
+    [Arguments("SetPosition")]
+    [Arguments("Close")]
+    public async Task FileTransferObservesCancellationAfterMethodDiscovery(string method)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        using var cancellation = new CancellationTokenSource();
+        proxy.BrowseResultFactory = _ =>
+        {
+            cancellation.Cancel();
+            return new BrowseResult
+            {
+                References = [new ReferenceDescription
+                {
+                    NodeId = new ExpandedNodeId(new NodeId("Actual", 1)),
+                    BrowseName = new QualifiedName(method),
+                    NodeClass = NodeClass.Method
+                }]
+            };
+        };
+
+        var failure = await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+            await InvokeFileMethod(adapter, new NodeId("File", 1), method, cancellation.Token));
+
+        await Assert.That(failure!.CancellationToken).IsEqualTo(cancellation.Token);
+        await Assert.That(proxy.MethodCalls.Count).IsEqualTo(0);
+        await Assert.That(proxy.BrowseRequests.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    [Arguments("Open")]
+    [Arguments("Read")]
+    [Arguments("Write")]
+    [Arguments("SetPosition")]
+    [Arguments("Close")]
+    public async Task FileTransferRejectsRemoteMethodTarget(string method)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        proxy.BrowseResultFactory = _ => new BrowseResult
+        {
+            References = [new ReferenceDescription
+            {
+                NodeId = new ExpandedNodeId(new NodeId("RemoteMethod", 1), null, 1u),
+                BrowseName = new QualifiedName(method),
+                NodeClass = NodeClass.Method
+            }]
+        };
+
+        var failure = await Assert.ThrowsAsync<FederationException>(async () =>
+            await InvokeFileMethod(adapter, new NodeId("File", 1), method));
+
+        await Assert.That(failure!.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(proxy.MethodCalls.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("OpenWrite")]
+    [Arguments("Write")]
+    [Arguments("SetPosition")]
+    [Arguments("Close")]
+    public async Task FileTransferRechecksEncryptionAfterMethodDiscovery(string method)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        proxy.BrowseResultFactory = _ =>
+        {
+            proxy.Endpoint = new EndpointDescription { SecurityMode = MessageSecurityMode.Sign };
+            return new BrowseResult
+            {
+                References = [new ReferenceDescription
+                {
+                    NodeId = new ExpandedNodeId(new NodeId("Actual", 1)),
+                    BrowseName = new QualifiedName(method == "OpenWrite" ? "Open" : method),
+                    NodeClass = NodeClass.Method
+                }]
+            };
+        };
+
+        var failure = await Assert.ThrowsAsync<FederationException>(async () =>
+            await InvokeFileMethod(adapter, new NodeId("File", 1), method));
+
+        await Assert.That(failure!.Code).IsEqualTo(FederationErrorCode.PolicyDenied);
+        await Assert.That(proxy.MethodCalls.Count).IsEqualTo(0);
+        await Assert.That(proxy.BrowseRequests.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task FileTransferFindsActualMethodOnContinuationPage()
+    {
+        var (adapter, proxy) = CreateAdapter();
+        var file = new NodeId("SelectedFile", 2);
+        var actual = new NodeId("Actual.Open", 2);
+        proxy.BrowseResultFactory = _ => new BrowseResult { ContinuationPoint = new ByteString(new byte[] { 1 }) };
+        proxy.NextBrowseReferences = [new ReferenceDescription
+        {
+            NodeId = new ExpandedNodeId(actual),
+            BrowseName = new QualifiedName("Open"),
+            NodeClass = NodeClass.Method
+        }];
+
+        var handle = await adapter.OpenAsync(file, 6, CancellationToken.None);
+
+        await Assert.That(handle).IsEqualTo(7u);
+        await Assert.That(proxy.NextBrowseCount).IsEqualTo(1);
+        var call = proxy.MethodCalls.Single();
+        await Assert.That(call.ObjectId).IsEqualTo(file);
+        await Assert.That(call.MethodId).IsEqualTo(actual);
+        await Assert.That(call.InputArguments[0].TryGetValue(out byte mode) && mode == 6).IsTrue();
+        await Assert.That(proxy.ReleasedContinuations.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task FileTransferDoesNotCallAPartiallyDiscoveredMethodAfterBrowseBudgetExhaustion()
+    {
+        var (adapter, proxy) = CreateAdapter(maxBrowsePages: 1);
+        proxy.BrowseResultFactory = _ => new BrowseResult
+        {
+            ContinuationPoint = new ByteString(new byte[] { 1 }),
+            References = [new ReferenceDescription
+            {
+                NodeId = new ExpandedNodeId(new NodeId("Actual.Open", 1)),
+                BrowseName = new QualifiedName("Open"),
+                NodeClass = NodeClass.Method
+            }]
+        };
+
+        var failure = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.OpenAsync(new NodeId("File", 1), 1, CancellationToken.None));
+
+        await Assert.That(failure!.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        await Assert.That(proxy.MethodCalls.Count).IsEqualTo(0);
+        await Assert.That(proxy.NextBrowseCount).IsEqualTo(0);
+        await Assert.That(proxy.ReleasedContinuations.Single()).IsEquivalentTo(new byte[] { 1 });
+    }
+
+    private static async ValueTask InvokeFileMethod(OpcUaSessionAdapter adapter, NodeId file, string method,
+        CancellationToken cancellationToken = default)
+    {
+        switch (method)
+        {
+            case "Open":
+                var handle = await adapter.OpenAsync(file, 1, cancellationToken);
+                await Assert.That(handle).IsEqualTo(7u);
+                break;
+            case "OpenWrite":
+                _ = await adapter.OpenAsync(file, 6, cancellationToken);
+                break;
+            case "Read":
+                var bytes = await adapter.ReadAsync(file, 7, 64, cancellationToken);
+                await Assert.That(bytes).IsEquivalentTo(new byte[] { 1, 2 });
+                break;
+            case "Write":
+                await adapter.WriteAsync(file, 7, [1, 2], cancellationToken);
+                break;
+            case "SetPosition":
+                await adapter.SetPositionAsync(file, 7, 0, cancellationToken);
+                break;
+            case "Close":
+                await adapter.CloseAsync(file, 7, cancellationToken);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(method));
+        }
+    }
 
     [Test]
     [Arguments(MessageSecurityMode.None)]
@@ -147,7 +428,12 @@ public class OpcUaSessionAdapterTests
         await adapter.SetPositionAsync(file, handle, 0, CancellationToken.None);
         await adapter.CloseAsync(file, handle, CancellationToken.None);
 
-        await Assert.That(proxy.NativeOperationCount).IsEqualTo(4);
+        await Assert.That(proxy.NativeOperationCount).IsEqualTo(9);
+        await Assert.That(proxy.MethodCalls.Select(call => call.MethodId)).IsEquivalentTo(new NodeId[]
+        {
+            new("Actual.Open", 1), new("Actual.Close", 1), new("Actual.SetPosition", 1),
+            new("Actual.Close", 1)
+        });
     }
 
     [Test]
@@ -184,7 +470,7 @@ public class OpcUaSessionAdapterTests
         await Assert.That(proxy.NativeOperationCount).IsEqualTo(before);
         proxy.Endpoint = new EndpointDescription { SecurityMode = MessageSecurityMode.SignAndEncrypt };
         await adapter.CloseAsync(file, handle, CancellationToken.None);
-        await Assert.That(proxy.NativeOperationCount).IsEqualTo(before + 1);
+        await Assert.That(proxy.NativeOperationCount).IsEqualTo(before + 2);
     }
 
     [Test]
@@ -1405,6 +1691,8 @@ public class OpcUaSessionAdapterTests
         public NodeId SessionId { get; set; } = new("Session", 0);
         public int EndpointReads { get; private set; }
         public int NativeOperationCount { get; private set; }
+        public List<CallMethodRequest> MethodCalls { get; } = [];
+        public List<BrowseDescription> BrowseRequests { get; } = [];
         public ExtensionObject Extension { get; set; }
         public string DataTypeBrowseName { get; set; } = "BuildInfo";
         public string[] ServerArray { get; set; } = [];
@@ -1430,6 +1718,7 @@ public class OpcUaSessionAdapterTests
         public Func<BrowseDescription, BrowseResult>? BrowseResultFactory { get; set; }
         public int? ContinuedPagesRemaining { get; set; }
         public int NextBrowseCount { get; private set; }
+        public ArrayOf<ReferenceDescription> NextBrowseReferences { get; set; }
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
@@ -1483,6 +1772,8 @@ public class OpcUaSessionAdapterTests
                         Results = [WriteStatus]
                     });
                 case "CallAsync":
+                    var call = ((ArrayOf<CallMethodRequest>)args![1]!)[0];
+                    MethodCalls.Add(call);
                     return new ValueTask<CallResponse>(new CallResponse
                     {
                         ResponseHeader = Header,
@@ -1490,7 +1781,9 @@ public class OpcUaSessionAdapterTests
                         Results = [new CallMethodResult
                         {
                             StatusCode = CallStatus,
-                            OutputArguments = [new Variant(7u)],
+                            OutputArguments = call.MethodId.IdentifierAsString == "Actual.Read"
+                                ? [new Variant(new ByteString(new byte[] { 1, 2 }))]
+                                : [new Variant(7u)],
                             InputArgumentResults = ArgumentResults,
                             InputArgumentDiagnosticInfos = Diagnostics
                         }]
@@ -1525,6 +1818,7 @@ public class OpcUaSessionAdapterTests
 
         private ValueTask<BrowseResponse> Browse(ArrayOf<BrowseDescription> nodes)
         {
+            BrowseRequests.Add(nodes[0]);
             var dataType = new ReferenceDescription
             {
                 ReferenceTypeId = ReferenceTypeIds.HasEncoding,
@@ -1539,7 +1833,16 @@ public class OpcUaSessionAdapterTests
                 DiagnosticInfos = Diagnostics,
                 Results = [BrowseResultFactory?.Invoke(nodes[0]) ?? new BrowseResult
                 {
-                    References = [dataType],
+                    References = nodes[0].BrowseDirection == BrowseDirection.Forward &&
+                        nodes[0].ReferenceTypeId == ReferenceTypeIds.HierarchicalReferences
+                        ? new ArrayOf<ReferenceDescription>(s_fileMethods
+                            .Select(name => new ReferenceDescription
+                            {
+                                NodeId = new ExpandedNodeId(new NodeId("Actual." + name, 1)),
+                                BrowseName = new QualifiedName(name),
+                                NodeClass = NodeClass.Method
+                            }).ToArray())
+                        : [dataType],
                     StatusCode = BrowseStatus,
                     ContinuationPoint = new ByteString(BrowseContinuation)
                 }]
@@ -1572,7 +1875,8 @@ public class OpcUaSessionAdapterTests
                 Results = [new BrowseResult
                 {
                     StatusCode = release ? ReleaseStatus : NextBrowseStatus ?? BrowseStatus,
-                    ContinuationPoint = release ? default : new ByteString(continuation)
+                    ContinuationPoint = release ? default : new ByteString(continuation),
+                    References = release ? default : NextBrowseReferences
                 }]
             });
         }

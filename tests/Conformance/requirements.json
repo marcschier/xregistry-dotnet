@@ -137102,13 +137102,25 @@
       ],
       "text": "The baseline read uses the [FileType Methods][ua-filetype] on the selected file Object. A Method's ObjectId and MethodId MUST identify that Object and its actual Method node. A BrowseName shown here is not a numeric MethodId. This procedure also applies to `Model`, `Capabilities` and a namespace file.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The selected Method identity obligation was reviewed against the shared Session adapter and real-server file fixtures. Open, Read, Write, SetPosition and Close now discover the actual namespace-zero Method on the selected Object and Call its returned Session-local NodeId. Discovery completes all pages, rejects absent or competing Methods without numeric-declaration fallback, and rejects remote targets. Mutation encryption and cancellation are checked again after discovery. Direct cases distinguish instance IDs from declarations and same-name non-Methods or other namespaces; continuation and page-limit cases prevent selection from incomplete discovery. Existing real Session document, model and capability reads and encrypted replacement workflows pass with instance Method IDs. This disposition covers client Method dispatch, not server lifecycle, stale-handle prevention or native-platform qualification.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FileTransferCallsActualMethodOnSelectedObject",
+          "FileTransferRejectsMissingOrAmbiguousMethodsWithoutDeclarationFallback",
+          "FileTransferObservesCancellationAfterMethodDiscovery",
+          "FileTransferRejectsRemoteMethodTarget",
+          "FileTransferRechecksEncryptionAfterMethodDiscovery",
+          "FileTransferFindsActualMethodOnContinuationPage",
+          "FileTransferDoesNotCallAPartiallyDiscoveredMethodAfterBrowseBudgetExhaustion",
+          "ReadHandleCanCloseOnAnUnsecuredChannelAndRetryNativeCloseFailure",
+          "WriterWritesPropertiesDeleteAndFileDocumentsOnARealServer"
+        ],
         "nativeEvidence": []
       }
     },

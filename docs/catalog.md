@@ -114,6 +114,14 @@ attached to the original cancellation under `OpcUa.FileCloseFailure`.
 When a completed read is followed by a failed Close, an already classified
 federation error retains its original code, diagnostic and cause. An
 unclassified Close exception reports `unavailable`.
+The Session adapter discovers each FileTransfer Method on the selected Object
+and calls its returned NodeId, rather than a standard FileType declaration ID.
+It requires one Method with the requested namespace-zero BrowseName, completes
+all Browse pages before selecting it, and does not fall back when the Method
+is missing or ambiguous. A Method on another Server is rejected before Call.
+Writable operations recheck encryption after discovery; cancellation at that
+point also prevents Call. Discovery is repeated for each operation rather than
+caching instance Method NodeIds across changes to the AddressSpace.
 `OpcUaSessionConnection` discovers endpoints and opens a Session only
 after caller policy selects one; it maps the advertised root through the
 Session's `NamespaceArray` and verifies the root and Core version.
