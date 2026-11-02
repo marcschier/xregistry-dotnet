@@ -610,6 +610,24 @@ and tags need not be unique. A malformed unrelated operation prevents named
 selection but does not invalidate a pointer to another operation. Extension
 contents remain opaque. These checks do not establish complete Operation
 Object validation.
+OpenAPI Request Body Objects require a `content` map; an empty map remains
+permitted. Optional `description` and `required` fields must be strings and
+booleans, respectively. Content entries receive the shared Media Type Object
+and Example Object checks, including OpenAPI 3.1 boolean schemas. Reference
+Objects require string URI references; OpenAPI 3.1 checks optional string
+summary and description, while OpenAPI 3.0 ignores reference siblings.
+Root reusable request bodies receive declaration checks even when unused.
+Reached request bodies resolve references and nested example references using
+containing-document bases, shared acquisition caches and bounded reference
+chains. Dependency failures, malformed targets, cycles and depth exhaustion
+prevent partial selection; unused reusable references remain inactive.
+OpenAPI 3.0 request bodies are interpreted for POST, PUT and PATCH. Bodies on
+GET, HEAD, DELETE, OPTIONS and TRACE are ignored without retrieval, including
+through referenced operations and callback ancestors. OpenAPI 3.1 permits
+request bodies on every supported method; Swagger's non-native `requestBody`
+field remains uninterpreted. Selection preserves authored declarations without
+injecting defaults or replacing references. These checks do not validate nested
+encodings, evaluate body schemas or send requests.
 Present operation `responses` declarations must be nonempty response maps.
 Keys are `default`, HTTP status codes from 100 through 599, or, for OpenAPI,
 the uppercase ranges `1XX` through `5XX`. Specification extensions remain

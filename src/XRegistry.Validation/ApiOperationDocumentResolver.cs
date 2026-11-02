@@ -683,6 +683,11 @@ public static partial class ApiOperationDocumentResolver
                     var headerFailure = ValidateOpenApiHeaderDeclaration(entry.Value, entryPath, format, cancellationToken);
                     if (headerFailure is not null) { return headerFailure; }
                 }
+                if (!swagger && collection.Name == "requestBodies")
+                {
+                    var bodyFailure = ValidateOpenApiRequestBodyDeclaration(entry.Value, entryPath, format, cancellationToken);
+                    if (bodyFailure is not null) { return bodyFailure; }
+                }
             }
         }
         return null;
@@ -959,7 +964,7 @@ public static partial class ApiOperationDocumentResolver
                     "The referenced and containing Path Items both define the same HTTP method.",
                     sourcePointer + "/" + method));
             }
-            operations[method] = resolvedOperation.Operation!;
+            operations[method] = resolvedOperation.Operation! with { HttpMethod = method };
         }
 
         return PathItemResolution.Succeeded(operations);
@@ -1113,10 +1118,10 @@ public static partial class ApiOperationDocumentResolver
                 return Failure(ApiOperationResolutionStatus.Invalid, "selection.not_operation",
                     "The selected value is not an inline Operation Object.", pathPointer);
             }
-            var metadataFailure = ValidateHttpOperationMetadata(operation, pathPointer, format, cancellationToken);
+            var metadataFailure = ValidateHttpOperationMetadata(operation, pathPointer, format, tokens[methodIndex], cancellationToken);
             if (metadataFailure is not null) { return metadataFailure; }
-            var responseFailure = await ValidateEffectiveHttpResponsesAsync(operation, references.Root, pathPointer,
-                references, cancellationToken).ConfigureAwait(false);
+            var responseFailure = await ValidateEffectiveHttpDeclarationsAsync(operation, references.Root, pathPointer,
+                tokens[methodIndex], references, cancellationToken).ConfigureAwait(false);
             if (responseFailure is not null) { return responseFailure; }
             var serverFailure = ValidateOpenApiServers(operation, pathPointer, format, cancellationToken);
             if (serverFailure is not null) { return serverFailure; }
@@ -1195,6 +1200,7 @@ public static partial class ApiOperationDocumentResolver
 
     private sealed record OperationLocation(JsonElement Operation, string Pointer, ReferencedDocument Source)
     {
+        internal string? HttpMethod { get; init; }
         internal Uri? DocumentUri => Source.IsRoot ? null : Source.Uri;
     }
 

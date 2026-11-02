@@ -26,10 +26,11 @@ public static partial class ApiOperationDocumentResolver
             return Failure(ApiOperationResolutionStatus.Indeterminate, "dependency.cycle",
                 "A callback operation cycle prevents operationId selection.", location.Pointer);
         }
-        var metadataFailure = ValidateHttpOperationMetadata(location.Operation, location.Pointer, references.Format, cancellationToken);
+        var metadataFailure = ValidateHttpOperationMetadata(location.Operation, location.Pointer, references.Format,
+            location.HttpMethod, cancellationToken);
         if (metadataFailure is not null) { return metadataFailure; }
-        var responseFailure = await ValidateEffectiveHttpResponsesAsync(location.Operation, location.Source,
-            location.Pointer, references, cancellationToken).ConfigureAwait(false);
+        var responseFailure = await ValidateEffectiveHttpDeclarationsAsync(location.Operation, location.Source,
+            location.Pointer, location.HttpMethod, references, cancellationToken).ConfigureAwait(false);
         if (responseFailure is not null) { return responseFailure; }
         var serverFailure = ValidateOpenApiServers(location.Operation, location.Pointer, references.Format, cancellationToken);
         if (serverFailure is not null) { return serverFailure; }
@@ -292,7 +293,7 @@ public static partial class ApiOperationDocumentResolver
     }
 
     private static ApiOperationResolutionResult? ValidateHttpOperationMetadata(
-        JsonElement operation, string pointer, string format, CancellationToken cancellationToken)
+        JsonElement operation, string pointer, string format, string? httpMethod, CancellationToken cancellationToken)
     {
         foreach (var field in new[] { "operationId", "summary", "description", "deprecated", "tags" })
         {
@@ -323,6 +324,11 @@ public static partial class ApiOperationDocumentResolver
                 }
                 index++;
             }
+        }
+        if (SupportsOpenApiRequestBody(format, httpMethod) && operation.TryGetProperty("requestBody", out var body))
+        {
+            var failure = ValidateOpenApiRequestBodyDeclaration(body, pointer + "/requestBody", format, cancellationToken);
+            if (failure is not null) { return failure; }
         }
         var responseFailure = ValidateHttpResponses(operation, pointer, format, cancellationToken);
         if (responseFailure is not null) { return responseFailure; }
@@ -484,6 +490,51 @@ public static partial class ApiOperationDocumentResolver
 
     private static ApiOperationResolutionResult InvalidHttpResponse(string message, string pointer) =>
         Failure(ApiOperationResolutionStatus.Invalid, "document.responses", message, pointer);
+
+    private static bool SupportsOpenApiRequestBody(string format, string? httpMethod) =>
+        format == "OpenAPI/3.1" || (format == "OpenAPI/3.0" && httpMethod is "post" or "put" or "patch");
+
+    private static ApiOperationResolutionResult? ValidateOpenApiRequestBodyDeclaration(
+        JsonElement body, string pointer, string format, CancellationToken cancellationToken)
+    {
+        if (body.ValueKind != JsonValueKind.Object)
+        {
+            return InvalidBody("A request body declaration must be a Request Body or Reference Object.", pointer);
+        }
+        if (body.TryGetProperty("$ref", out var reference))
+        {
+            if (reference.ValueKind != JsonValueKind.String || !IsHttpMetadataUriReference(reference.GetString()!))
+            {
+                return InvalidBody("A request body reference requires a string URI reference.", pointer + "/$ref");
+            }
+            if (format != "OpenAPI/3.1") { return null; }
+            foreach (var field in new[] { "summary", "description" })
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (body.TryGetProperty(field, out var value) && value.ValueKind != JsonValueKind.String)
+                {
+                    return InvalidBody("Reference Object metadata must be strings.", pointer + "/" + field);
+                }
+            }
+            return null;
+        }
+        foreach (var field in new[] { "description", "required" })
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!body.TryGetProperty(field, out var value)) { continue; }
+            var valid = field == "description" ? value.ValueKind == JsonValueKind.String
+                : value.ValueKind is JsonValueKind.True or JsonValueKind.False;
+            if (!valid) { return InvalidBody("Request body metadata must have its declared native JSON type.", pointer + "/" + field); }
+        }
+        if (!body.TryGetProperty("content", out var content) || content.ValueKind != JsonValueKind.Object)
+        {
+            return InvalidBody("A Request Body Object requires a content map.", pointer + "/content");
+        }
+        return ValidateOpenApiMediaDeclarations(content, pointer + "/content", format, cancellationToken);
+
+        static ApiOperationResolutionResult InvalidBody(string message, string path) =>
+            Failure(ApiOperationResolutionStatus.Invalid, "document.request_body", message, path);
+    }
 
     private static ApiOperationResolutionResult? ValidateOpenApiHeaderDeclaration(
         JsonElement header, string pointer, string format, CancellationToken cancellationToken)
@@ -694,10 +745,19 @@ public static partial class ApiOperationDocumentResolver
             Failure(ApiOperationResolutionStatus.Invalid, "document.example", message, path);
     }
 
-    private static async ValueTask<ApiOperationResolutionResult?> ValidateEffectiveHttpResponsesAsync(
-        JsonElement operation, ReferencedDocument source, string pointer, ReferenceContext references,
+    private static async ValueTask<ApiOperationResolutionResult?> ValidateEffectiveHttpDeclarationsAsync(
+        JsonElement operation, ReferencedDocument source, string pointer, string? httpMethod, ReferenceContext references,
         CancellationToken cancellationToken)
     {
+        if (SupportsOpenApiRequestBody(references.Format, httpMethod) && operation.TryGetProperty("requestBody", out var body))
+        {
+            var resolution = await ResolveHttpDeclarationAsync(
+                new ReferenceTarget(source, body, pointer + "/requestBody"), references,
+                ValidateOpenApiRequestBodyDeclaration, "request body", cancellationToken).ConfigureAwait(false);
+            if (resolution.Failure is not null) { return resolution.Failure; }
+            var failure = await ValidateEffectiveOpenApiContentAsync(resolution.Target!, references, cancellationToken).ConfigureAwait(false);
+            if (failure is not null) { return failure; }
+        }
         if (!operation.TryGetProperty("responses", out var responses)) { return null; }
         foreach (var entry in responses.EnumerateObject())
         {
