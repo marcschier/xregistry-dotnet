@@ -101,7 +101,12 @@ public static partial class ApiOperationDocumentResolver
             {
                 return InvalidOpenApiServer("A server description must be a string.", serverPath + "/description");
             }
-            if (!server.TryGetProperty("variables", out var variables)) { continue; }
+            if (!server.TryGetProperty("variables", out var variables))
+            {
+                var urlFailure = ValidateOpenApiServerUrl(url.GetString()!, variables, serverPath + "/url", cancellationToken);
+                if (urlFailure is not null) { return urlFailure; }
+                continue;
+            }
             if (variables.ValueKind != JsonValueKind.Object)
             {
                 return InvalidOpenApiServer("Server variables must be a map of Server Variable Objects.", serverPath + "/variables");
@@ -148,8 +153,55 @@ public static partial class ApiOperationDocumentResolver
                     return InvalidOpenApiServer("The server variable default must occur in its enum.", variablePath + "/default");
                 }
             }
+            var templateFailure = ValidateOpenApiServerUrl(url.GetString()!, variables, serverPath + "/url", cancellationToken);
+            if (templateFailure is not null) { return templateFailure; }
         }
         return null;
+    }
+
+    private static ApiOperationResolutionResult? ValidateOpenApiServerUrl(
+        string template, JsonElement variables, string pointer, CancellationToken cancellationToken)
+    {
+        const int maxExpandedCharacters = 32768;
+        var expanded = new System.Text.StringBuilder();
+        var index = 0;
+        while (index < template.Length)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var marker = template.AsSpan(index).IndexOfAny('{', '}');
+            var literalLength = marker < 0 ? template.Length - index : marker;
+            if (literalLength > maxExpandedCharacters - expanded.Length) { return ExpansionLimit(); }
+            expanded.Append(template.AsSpan(index, literalLength));
+            index += literalLength;
+            if (marker < 0) { break; }
+            if (template[index] == '}') { return InvalidTemplate(); }
+            var end = template.IndexOf('}', index + 1);
+            if (end < 0 || template.AsSpan(index + 1, end - index - 1).Contains('{'))
+            {
+                return InvalidTemplate();
+            }
+            var name = template[(index + 1)..end];
+            if (variables.ValueKind != JsonValueKind.Object || !variables.TryGetProperty(name, out var variable))
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid, "document.server_url",
+                    "Every server URL template variable must have a declared default.", pointer);
+            }
+            var replacement = variable.GetProperty("default").GetString()!;
+            if (replacement.Length > maxExpandedCharacters - expanded.Length) { return ExpansionLimit(); }
+            expanded.Append(replacement);
+            index = end + 1;
+        }
+        return IsHttpMetadataUriReference(expanded.ToString()) ? null :
+            Failure(ApiOperationResolutionStatus.Invalid, "document.server_url",
+                "The server URL with its declared defaults must be a valid URI reference.", pointer);
+
+        ApiOperationResolutionResult InvalidTemplate() =>
+            Failure(ApiOperationResolutionStatus.Invalid, "document.server_url",
+                "Server URL template variables must use balanced, non-nested braces.", pointer);
+
+        ApiOperationResolutionResult ExpansionLimit() =>
+            Failure(ApiOperationResolutionStatus.Indeterminate, "limit.server_url",
+                "The server URL default expansion exceeds the 32768-character limit.", pointer);
     }
 
     private static ApiOperationResolutionResult InvalidOpenApiServer(string message, string pointer) =>

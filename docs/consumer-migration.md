@@ -681,8 +681,21 @@ operation, in addition to root declarations. Empty server arrays, duplicate enum
 values and opaque extensions remain authored data. Selection neither substitutes
 server variables nor copies inherited servers into operations, and server
 addresses are never sent to the dependency resolver. Swagger does not inherit
-OpenAPI's `servers` field. URL-template syntax, variable bindings and effective
-server URL construction remain outside these shape and enum checks.
+OpenAPI's `servers` field.
+Server URL templates require balanced, non-nested braces and an exact variable
+declaration for every placeholder. Admission substitutes declared defaults once
+and checks URI-reference syntax without normalizing or returning the result.
+Default values are literal substitutions, not templates to expand recursively;
+unused variable defaults need not form URLs. Repeated placeholders and encoded
+braces remain distinct. The expanded value is limited to 32,768 characters,
+inclusive; exceeding this implementation limit reports `Indeterminate`, not
+`Invalid`, before allocating the expanded value beyond the limit.
+Checks follow the same root, Path Item, operation and callback traversal as
+server shape admission. Relative server addresses remain relative to their
+containing document; selection neither materializes an absolute server URL nor
+uses the server address as a dependency base. The selected Operation Object
+retains its authored template and variables. Alternate variable assignments,
+deployment reachability and complete URL/RFC qualification remain unverified.
 OpenAPI 3.1 operation-ID selection also searches `webhooks`, including referenced
 Path Items. Webhook names are exact strings, not slash-prefixed paths; an `x-`
 name in this map is a webhook, not a Paths specification extension. Duplicate
