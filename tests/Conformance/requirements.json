@@ -60235,9 +60235,13 @@
       ],
       "text": "This specification defines the JSON serialization of the xRegistry entities. Alternative serialization formats MAY be defined.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-bba3f10b6edc31aca3e9ded5-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -60266,9 +60270,11 @@
       ],
       "text": "If there is an issue with reading or parsing the data provided to the server, then an error ([parsing_data](#parsing_data)) MUST be generated.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-651ccd1fad16c47ba2c8cad2-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -60400,13 +60406,18 @@
       ],
       "text": "To reduce the number of interactions needed when creating an entity, if any of its parent entities do not exist, then they MUST be implicitly created. Each of those entities MUST be created with the appropriate `<SINGULAR>id` as specified by the protocol-specific mechanism by which the nested entity is identified. For example, in HTTP the `<PATH>` would include the `<SINGULAR>id` values of the parent entities. If any of those entities have REQUIRED attributes whose values cannot be populated by the server or by defaults, then they cannot be implicitly created, and would need to be created directly. This also means that the creation of the original entity would fail and generate an error ([required_attribute_missing](./spec.md#required_attribute_missing)) for the appropriate parent entity.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The active wording permits implicit parent creation when required values can be supplied by the server or defaults. The engine applies model defaults and atomically rejects parents whose required values remain absent; both cases have direct public-engine coverage.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ImplicitParentWithUnsatisfiedRequiredAttributeFailsAtThatParentAndRollsBack",
+          "DefaultSatisfiesRequiredAttributeForImplicitParentCreation"
+        ],
         "nativeEvidence": []
       }
     },
@@ -60464,9 +60475,11 @@
       ],
       "text": "Unless otherwise stated in a protocol binding specification, if the processing of a request fails (even during the generation of the response) then an error MUST be generated and the entire request MUST be undone. See the [Error Processing](#error-processing) section for more information.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-098beccdcb86537e13b6b92d-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -60498,9 +60511,11 @@
       ],
       "text": "Any feature, whether it is specification-defined or not, that has not been explicitly defined as REQUIRED is OPTIONAL (but RECOMMENDED) to be supported by implementations. Implementations SHOULD document which features they do not support. For example, the specification defines a `createdat` attribute for the entities within a Registry. The specification is written such that it is assumed that if the entity is mutable, then the `createdat` attribute is mutable as well. However, it is permissible for implementations to ban updating of this attribute once the entity is created, if their requirements mandate this behaviour.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "This paragraph sets the general optional-feature policy and recommends documenting unsupported features. docs/server.md records this server\u2019s implemented surfaces and known boundaries; the recommendation does not define another runtime behavior, and the complete feature inventory remains an integration-documentation task.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -60529,9 +60544,11 @@
       ],
       "text": "Additionally, implementations MAY choose to customize the data and behavior on a per-user basis as needed. For example, the following non-exhaustive list of customizations might be implemented:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-9e18cdb8a0f3888242fd7347-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -60561,9 +60578,12 @@
       ],
       "text": "Implementations MAY (but are NOT REQUIRED) to validate cross-entity constraints that might be violated due to changes in a referenced entity. For example, [Endpoint's `envelope`](../endpoint/spec.md#envelope) attribute mandates that all Messages in that Endpoint use that same `envelope` value. One of those Messages might have a `basemessage` value that points to a Message that breaks that rule. For a variety of reasons (e.g. authorization constraints), server implementations might not be able to verify this constraint. Likewise, the same situation might occur via the use of `xref`. Clients need to be aware of these possibilities.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-7b3598544e15431e10217b93-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -61286,9 +61306,13 @@
       ],
       "text": "Implementations of this specification MAY define additional (extension) attributes. However, they MUST adhere to the following rules:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-9bb8166bf9dd133b4b22ebb4-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -61317,9 +61341,12 @@
       ],
       "text": "- All extension attributes that appear in the serialization of an entity MUST conform to the model definition of the Registry, otherwise an error ([unknown_attribute](#unknown_attribute)) MUST be generated. This means that they MUST satisfy at least one of the following:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-688d6e85c3de35e51bf99201-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -61348,9 +61375,12 @@
       ],
       "text": "- They MUST NOT conflict with the name of an attribute defined by this specification, including the `<RESOURCE>*` and `<COLLECTION>*` attributes that are implicitly defined. Note that if a Resource type has the [`hasdocument` aspect](./model.md#groupsstringresourcesstringhasdocument) set the `false` then this rule does not apply for the `<RESOURCE>*` attributes as those attributes are not implicitly defined for that Resource type.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-bf15d10e6081024f78187800-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -61379,9 +61409,13 @@
       ],
       "text": "- It is RECOMMENDED that extension attributes on different entities do not use the same name unless they have the exact same semantic meaning.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-44726852fb06459f09c8d588-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -61410,9 +61444,13 @@
       ],
       "text": "- It is STRONGLY RECOMMENDED that they be named in such a way as to avoid potential conflicts with future xRegistry specification-defined attributes. For example, use of a model (or domain) specific prefix could be used to help avoid possible future conflicts.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-7f446f7a06e77e2c14324b01-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -61441,13 +61479,17 @@
       ],
       "text": "Use of an attribute (specification-defined, or extension) that does not conform to this specification MUST generate an error ([invalid_attribute](#invalid_attribute)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The source change only hyphenates \u201cspecification-defined\u201d; the invalid-attribute obligation is unchanged. The direct error-contract test checks rejected unknown and invalid attributes, required arguments, and no publication.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EngineErrorsRetainTheCorrectSubjectAndRequiredCatalogArgumentsWithoutPublication"
+        ],
         "nativeEvidence": []
       }
     },
@@ -64483,9 +64525,12 @@
       ],
       "text": "Registry collections (`<GROUPS>`, `<RESOURCES>` and `versions`) that are defined by the [Registry Model](./model.md#registry-model) MUST be serialized according to the rules defined in this section.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-4f4ba90b634c2a42bd066ed5-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -64514,9 +64559,12 @@
       ],
       "text": "The serialization of a collection is done as 3 attributes and they MUST adhere to their respective forms as follows:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-2611ea14edb0ab60904c24ad-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -64545,9 +64593,12 @@
       ],
       "text": "- The term `<COLLECTION>` MUST be the plural name of the collection (e.g. `endpoints`, `versions`).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-16a48c1de6d2d299d2395b26-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -64577,9 +64628,12 @@
       ],
       "text": "- The `<COLLECTION>url` attribute MUST be a URL that can be used to retrieve the `<COLLECTION>` map via a protocol-specific query mechanism. This URL MAY include any necessary [filtering](#filter-flag) and MUST be a read-only attribute. This attribute MUST be an absolute URL except in document view when the collection is inlined, in which case it MUST be a relative URL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-38f41b5da637cd900baa3378-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -64608,9 +64662,12 @@
       ],
       "text": "- The `<COLLECTION>count` attribute MUST contain the number of entities in the `<COLLECTION>` map (after any necessary [filtering](#filter-flag)) and MUST be a read-only attribute.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-345d9826193d221fcc016a9c-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -64639,9 +64696,12 @@
       ],
       "text": "- The `<COLLECTION>` attribute is a map and MUST contain the entities of the collection (after any necessary [filtering](#filter-flag)), and MUST use the `<SINGULAR>id` of each entity as its map key.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-c8866f15254145eed071a277-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -64670,9 +64730,11 @@
       ],
       "text": "- The key of each entity in the collection map MUST be unique within the scope of the collection.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-713b05a53b00dd530d9c5e0f-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -64702,9 +64764,12 @@
       ],
       "text": "- The specifics of whether each `<COLLECTION>*` attribute is REQUIRED or OPTIONAL will be based on whether the document- or API-view is used. See the next section for more information.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-bae1017c745bae57adab0739-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -64733,9 +64798,12 @@
       ],
       "text": "When the `<COLLECTION>` attribute is expected to be present in the serialization, but the number of entities in the collection is zero, it MUST still be included as an empty map (e.g. `{}`) in the serialization.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-894103e120713057d6f376d0-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -65204,9 +65272,12 @@
       ],
       "text": "The serialization of the Registry entity MUST adhere to this form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-bebafb283cc0a7021502c695-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -65235,9 +65306,11 @@
       ],
       "text": "This entity behaves like all other entities in the Registry with respect to how it is managed. However, since it contains attributes that are only visible upon request (e.g. `model` and `capabilities`), for clarity, when those attributes are modified the Registry entity is considered to be updated, and therefore its `epoch` and `modifiedat` values MUST be updated per their defined semantics.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-e963cf8dd01080919bb1b005-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -65267,9 +65340,12 @@
       ],
       "text": "- [`registryid`](#singularid-id-attribute) - REQUIRED in API and document views. OPTIONAL in requests.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-cdfa37e755bb5870b77ef403-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -65299,9 +65375,12 @@
       ],
       "text": "- [`self`](#self-attribute) - REQUIRED in API and document views. OPTIONAL/ignored in requests.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-6f5952b38b8c868869f99e38-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -65330,9 +65409,12 @@
       ],
       "text": "- [`shortself`](#shortself-attribute) - OPTIONAL in API and document views, based on the `shortself` capability. OPTIONAL/ignored in requests.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-b752377534502f0d728e203b-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -65362,9 +65444,12 @@
       ],
       "text": "- [`xid`](#xid-attribute) - REQUIRED in API and document views. OPTIONAL/ignored in requests.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-08b9196ba9bfd3e484c9e13d-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -65394,9 +65479,12 @@
       ],
       "text": "- [`epoch`](#epoch-attribute) - REQUIRED in API and document views. OPTIONAL in requests.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-4637a54c66e5d7928ed89e09-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -65425,9 +65513,12 @@
       ],
       "text": "- [`name`](#name-attribute) - OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-5f2a8b577ee744ccaeaa57d6-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -65456,9 +65547,12 @@
       ],
       "text": "- [`description`](#description-attribute) - OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-2304ad811b97e47a3aeff4d2-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -65487,9 +65581,12 @@
       ],
       "text": "- [`documentation`](#documentation-attribute) - OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-07bd86207be042d777bffbab-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -65518,9 +65615,12 @@
       ],
       "text": "- [`icon`](#icon-attribute) - OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-7d2a9f921d881c57ba73d2fe-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -65549,9 +65649,12 @@
       ],
       "text": "- [`labels`](#labels-attribute) - OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-b3071e02a2c79a1d1473437f-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -65581,9 +65684,12 @@
       ],
       "text": "- [`createdat`](#createdat-attribute) - REQUIRED in API and document views. OPTIONAL in requests.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-a6d84bb951c01d8b66ef61b0-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -65613,9 +65719,12 @@
       ],
       "text": "- [`modifiedat`](#modifiedat-attribute) - REQUIRED in API and document views. OPTIONAL in requests.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-066ab168e345e830f9115e16-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -66348,9 +66457,11 @@
       ],
       "text": "In order to programmatically discover which capabilities are supported by an implementation, servers SHOULD support exposing this information via a \"capabilities\" map that lists each supported feature along with any related configuration detail that will help in successful usage of that feature.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-d08d2e270e7905972a47f148-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -66379,9 +66490,12 @@
       ],
       "text": "The JSON serialization of capabilities map MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-829796d55c4b54be8eea5cda-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -66411,9 +66525,12 @@
       ],
       "text": "- `\"<STRING>\"`, as a top-level key, MUST be the name of the capability. This specification places no restriction on the `\"<STRING>\"` value, other than it MUST be unique across all capabilities and not be an empty string. It is RECOMMENDED that extensions use some domain-specific name to avoid possible conflicts with other extensions.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-72bd098bcefdd0e71efb241f-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -66443,9 +66560,12 @@
       ],
       "text": "When serializing their supported capabilities, servers MUST include all capabilities (including extensions) since the absence of a capability indicates lack of support for that feature. However, absence, presence, or configuration values of a feature in the map MAY vary based on the authorization level of the client making the request.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-d7deeecae221ad127d404035-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -66475,9 +66595,12 @@
       ],
       "text": "The list of values for the arrays MUST be case-insensitive and MAY include extension values.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-1453809ca81f771615300866-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -66506,9 +66629,12 @@
       ],
       "text": "For clarity, servers MUST include all supported capabilities in the serialization, even if they are set to their default values or have empty lists.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-bdbc493f7602cdf53fe0c33b-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -66538,9 +66664,11 @@
       ],
       "text": "It is RECOMMENDED that protocols for this specification support retrieval of the capabilities via the inlining of the Registry entity's `capabilities` attribute well as a stand-alone map independent of the Registry entity (e.g. [`GET /capabilities`](./http.md#get-capabilities) in the HTTP case). However, as with all interactions with a server, security/access controls MAY be needed.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-7446fc4dc84effb891bb7369-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -67004,9 +67132,11 @@
       ],
       "text": "- When not specified, the default value MUST be an empty list and no flags are supported.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The omitted-value default is an empty flags list. This engine always emits an explicit enabled flags list, so the omitted-capability branch is not exposed here; no implementation claim is made for that branch.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -67036,13 +67166,18 @@
       ],
       "text": "- Implementations MAY include additional values based on other supported features. For example, if the [pagination](../pagination/spec.md) specification is supported then the `limit` flag SHOULD also appear.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The server supports pagination as an opt-in capability, offers `limit`, and synchronizes it into active flags when pagination is enabled. Capability update and offered-choice tests cover the behavior.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "PaginationValueNormalizesTheLimitFlagAcrossCapabilityUpdates",
+          "OfferedChoicesPreserveImmutableModelAndHostControlledCapabilityMutability"
+        ],
         "nativeEvidence": []
       }
     },
@@ -67656,9 +67791,11 @@
       ],
       "text": "The JSON serialization of the capabilities offering map MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-6c89226dfdfb0f95862f67cd-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -67687,9 +67824,11 @@
       ],
       "text": "- The top-level `\"<STRING>\"` MUST be the capability name.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-2f5801066d2c897a1fb0b437-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -67718,9 +67857,11 @@
       ],
       "text": "- `<TYPE>` MUST be one of the data types specified in [Attributes and Extensions](#attributes-and-extensions).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-a3ab5746bdd9ad939c5fce14-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -67749,9 +67890,11 @@
       ],
       "text": "- `\"enum\"`, when specified, contains a list of zero or more `<VALUE>`s whose type MUST match either `\"type\"` (when scalar) or `\"item.type\"` if `\"type\"` is `\"array\"` or `\"map\"` and `\"item.type\"` is a scalar.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-6b5e57f655bb5e672ecdca39-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -67780,9 +67923,11 @@
       ],
       "text": "- `\"min\"` and `\"max\"`, when specified, MUST match the same type as either `\"type\"` or `\"item.type\"` if `\"type\"` is `\"array\"` or `\"map\"`. These indicate the minimum or maximum (inclusive) value range of this capability. When not specified, there is no stated lower (or upper) limit. These MUST only be used when \"type\" is a numeric type.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-4f129fcb125f0341e8ae9da2-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -67811,9 +67956,11 @@
       ],
       "text": "- `\"item\"` MUST be specified when `\"type\"` is `\"array\"` or `\"map\"`, and specify details about the items in the array, or values of the map. Note, all map keys MUST be of type string.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-e9b2e32aad0fc956b35045c7-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -67842,9 +67989,11 @@
       ],
       "text": "To maximize discoverability for clients, even in cases where there is no variability allowed for certain capabilities, they MUST still be listed in a server's \"offering\" serialization.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-f0baa8cf6621d6d42bc65a7f-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -67873,9 +68022,12 @@
       ],
       "text": "For example, if `pagination` is not supported, but is a known feature, then a server MUST still include:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-725cacd7816476a22fa8da02-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -67904,9 +68056,12 @@
       ],
       "text": "Groups represent entities that typically act as a collection mechanism for related Resources. However, it is worth noting that Groups do not have to have Resources associated with them. It is possible to have Groups be the main (or only) entity of a Registry. Each Group type MAY have any number of Resource types within it. This specification does not define how the Resources within a Group type are related to each other.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-174a1327e5a9a47ebfb700ce-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -67935,9 +68090,12 @@
       ],
       "text": "The serialization of a Group entity MUST adhere to this form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-c7d686fa5401065c1a0d11f1-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -67967,9 +68125,12 @@
       ],
       "text": "- [`<GROUP>id`](#singularid-id-attribute) - REQUIRED in API and document views. OPTIONAL in requests.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-36b68bdc09dd04828c7feb24-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -67999,9 +68160,12 @@
       ],
       "text": "- [`self`](#self-attribute) - REQUIRED in API and document views. OPTIONAL/ignored in requests.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-b41bfb4ac85417e363519c77-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -68030,9 +68194,12 @@
       ],
       "text": "- [`shortself`](#shortself-attribute) - OPTIONAL in API and document views, based on the `shortself` capability. OPTIONAL/ignored in requests.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-683dfe11a0a6411aa0147d80-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -68062,9 +68229,12 @@
       ],
       "text": "- [`xid`](#xid-attribute) - REQUIRED in API and document views. OPTIONAL/ignored in requests.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-37458ade22c847817849c62c-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -68094,9 +68264,12 @@
       ],
       "text": "- [`epoch`](#epoch-attribute) - REQUIRED in API and document views. OPTIONAL in requests.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-d6968f7274ba48ed7f941736-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -68125,9 +68298,12 @@
       ],
       "text": "- [`name`](#name-attribute) - OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-d24f85c8919cba2177989b89-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -68156,9 +68332,12 @@
       ],
       "text": "- [`description`](#description-attribute) - OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-32935d6e28f73090c777a7a6-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -68187,9 +68366,12 @@
       ],
       "text": "- [`documentation`](#documentation-attribute) - OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-f535c0d2f084eed0a8c9a110-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -68218,9 +68400,12 @@
       ],
       "text": "- [`icon`](#icon-attribute) - OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-691f216d207a4b59aa60386a-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -68249,9 +68434,12 @@
       ],
       "text": "- [`labels`](#labels-attribute) - OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-1cc95695264b481d3cec4486-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -68281,9 +68469,12 @@
       ],
       "text": "- [`createdat`](#createdat-attribute) - REQUIRED in API and document views. OPTIONAL in requests.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-decbd982afd42fd9f73d4117-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -68313,9 +68504,12 @@
       ],
       "text": "- [`modifiedat`](#modifiedat-attribute) - REQUIRED in API and document views. OPTIONAL in requests.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-d378a480019685a44d656513-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -68344,9 +68538,12 @@
       ],
       "text": "- [`deprecated`](#deprecated-attribute) - OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-97a8db5133009f09f82e7484-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -68443,9 +68640,12 @@
       ],
       "text": "2.  It acts as an alias for the \"default\" Version of the Resource. This means that any operation (read or write) that deals with attributes exposed via the Resource, but are inherited from the \"default\" Version, MUST act upon that Version's corresponding attribute. See [Default Version of a Resource](#default-version-of-a-resource), [Updating Nested Registry Collections](#updating-nested-registry-collections) and [Version Entity](#version-entity) for additional semantics that apply to write operations on Resources.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-317821f6b15381727d5f5d60-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -68474,9 +68674,12 @@
       ],
       "text": "When a Resource is serialized as xRegistry metadata without the inherited default Version attributes, such as when the [`doc` flag](#doc-flag) is used, it MUST adhere to the following:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-a3994735edc0c546a410bc20-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -68505,9 +68708,12 @@
       ],
       "text": "When the default Version attributes do appear in the xRegistry metadata serialization of the Resource (e.g. the [`doc` flag](#doc-flag) is not used) it MUST adhere to the following:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-9f4adc6dc795531db1236cf9-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -69082,9 +69288,11 @@
       ],
       "text": "- If a Resource exists with only one Version then it MUST become the \"default\" Version.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-180d9a7919c952bc61ec5880-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -69113,9 +69321,12 @@
       ],
       "text": "- If more than one Version is created at the same time as the owning Resource is created, and the `meta.defaultversionid` is not set as part of the request, then use of the [SetDefaultVersionID Flag](#setdefaultversionid-flag) is RECOMMENDED. See [Default Version of a Resource](#default-version-of-a-resource) for more information.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-a1456809c65aef1db8d41bab-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -69144,9 +69355,11 @@
       ],
       "text": "Processing of a request to create/update a Resource has many different aspects to consider. The following describes the general algorithm that servers are expected to follow. Implementations are not mandated to follow this exact sequence of actions but the net semantic results MUST be adhered to.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-7573786115722d45e446d597-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -69175,9 +69388,12 @@
       ],
       "text": "- Implementations MAY choose to optimize the order in which the incoming request's data is processed as long as the net semantic results are as defined by this specification.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-d22971ec097c748b38b95ed4-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -69206,9 +69422,12 @@
       ],
       "text": "- For example: - \"fail-fast\" error checking is RECOMMENDED. - Determining if the resulting Resource has a non-empty `meta.xref` value might allow for skipping unnecessary work.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-879c334b49960395bc8e9338-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -69237,9 +69456,11 @@
       ],
       "text": "- However, when the Resource is created as part of the current operation there is no \"prior\" default Version, so knowing how to apply those attributes requires some additional clarity: - If a Resource-level `versionid` attribute is present, and that Version is not in the request's `versions` collection, then a new Version with that `versionid` MUST be created with the Resource-level attributes. If it is in the `versions` collection then the Resource-level attributes MUST be ignored. - If `versionid` is not present, but `meta.defaultversionid` is present, and that Version is not in the request's `versions` collection, then a new Version with that `versionid` MUST be created, with the Resource-level attributes. If it is in the `versions` collection then the Resource-level attributes MUST be ignored. Also see [SetDefaultVersionID Flag](#setdefaultversionid-flag) for an additional mechanism by which it might be set. - If neither of those attributes are present, then the `versions` collection will dictate the result: - If `versions` is missing, or empty, then the server MUST generate a new unique [`versionid` value](#version-ids) and create a new Version using that value, with the Resource-level attributes. - If `versions` is present with at least one Version, then the Resource-level attributes MUST be ignored. This is because without any indication from the client as to which Version the Resource-level attributes need to be applied to, rather than creating a new Version, the assumption is that `versions` contains all of the Versions that are meant to be created.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-04ef05c4c5d8ace6a59a11a7-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -69268,9 +69489,11 @@
       ],
       "text": "- If the operation is converting a cross-reference Resource back into a \"normal\" Resource then the new Version created MUST adhere the rules specified in the [Cross Referencing Resources](#cross-referencing-resources) section.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-28097feb5a406d4e19ee30ac-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -69534,9 +69757,12 @@
       ],
       "text": "- Any attributes referencing the source MUST use the source's metadata. In this respect, users of this serialization would never know that this is a cross-referenced Resource except for the presence of the `meta.xref` attribute. For example, its `<RESOURCE>id` MUST be the source's `id` and not the target's.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-56d93e543f425d8884378989-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -69565,9 +69791,12 @@
       ],
       "text": "- The `xref` attribute MUST always appear when the source's `meta` sub-object is serialized so clients can easily determine that this Resource is a cross-referenced Resource.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-8aab3ec022ff6af292ef1fa2-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -69596,9 +69825,12 @@
       ],
       "text": "- The `xref` XID MUST be the `xid` of the target Resource.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-51111f05dabbecc610e6ef6f-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -69627,9 +69859,12 @@
       ],
       "text": "From a consumption (read) perspective, aside from the presence of the `xref` attribute, the Resource appears to be a normal Resource that exists within `group1`. All of the specification-defined features (e.g. `inline`, `filter` request flags) MAY be used when retrieving the Resource.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-e91a037955f62e77085df2f0-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -69659,9 +69894,11 @@
       ],
       "text": "However, from a write perspective it is quite different. In order to update the target Resource's attributes (or nested entities), a write operation MUST be done on the appropriate target Resource entity directly. Write operations on the source MAY be done, however, the changes are limited to converting it from a \"cross-reference\" Resource back into a \"normal\" Resource. See the following for more information:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-a6f6ee2e7e68fb6c2125f290-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -69690,9 +69927,11 @@
       ],
       "text": "When converting a \"normal\" Resource into a cross-reference Resource (adding an `xref` value), or creating/updating a Resource that is a cross-reference Resource, the following MUST be adhered to:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-8596f33c347e83720e178662-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -69721,9 +69960,11 @@
       ],
       "text": "- The request MUST include an `xref` attribute with a value that is the `xid` of the target Resource.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-01b0153b70d8c3aefa6e1b6c-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -69752,9 +69993,11 @@
       ],
       "text": "- The request MAY include the `<RESOURCE>id` attribute (of the source Resource) on the Resource or `meta` entity.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-61b9a49d245eb72ba335aa71-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -69783,9 +70026,11 @@
       ],
       "text": "- The request MAY include `epoch` within `meta` (to do an `epoch` validation check) only if the Resource already exists as a normal Resource.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-e1387115c17f0211da717dab-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -69815,9 +70060,11 @@
       ],
       "text": "- The request MUST NOT include nested collections or any other attributes (for the Resource or its \"meta\" entity). This includes default Version attributes within the Resource serialization. Presence of these extra attributes MUST generate an error ([extra_xref_attribute](#extra_xref_attribute)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-16919db5f07e6b4d37e1eb79-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -69846,9 +70093,11 @@
       ],
       "text": "- If the Resource already exists, as a \"normal\" Resource, then any Versions associated with the Resource MUST be deleted.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-8cd6237daa83168017ccd4ec-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -69877,9 +70126,11 @@
       ],
       "text": "When converting a cross-reference Resource back into a \"normal\" Resource, the following MUST be adhered to:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-b0c99067080bcc4dee91fedf-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -69908,9 +70159,11 @@
       ],
       "text": "- The request MUST delete the `xref` attribute or set it to `null`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-70acda13f61263e7f67ddbf0-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -69939,9 +70192,11 @@
       ],
       "text": "- A default Version of the Resource MUST be created.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-cabf35d43ce2788516a716c5-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -69970,9 +70225,11 @@
       ],
       "text": "- Any attributes specified at the Resource level MUST be interpreted as a request to set the default Version attributes. Absence of any attributes MUST result in a default Version being created with all attributes set to their default values. Note that normal Resource update semantics apply. See [Creating or Updating Resources and Versions](#creating-or-updating-resources-and-versions) for more information.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-664e70f6d4d602bee3f6d4c3-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -70001,9 +70258,11 @@
       ],
       "text": "- When not specified in the request, the Resource's `meta.createdat` value MUST be reset to the timestamp of when this source Resource was originally created.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-11d590d6a33d5a46e824e6f9-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -70032,9 +70291,11 @@
       ],
       "text": "- When not specified in the request, the Resource's `meta.modifiedat` value MUST be set to \"now\".",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-49f33de3bc5b794e665ffc18-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -70063,9 +70324,11 @@
       ],
       "text": "- The Resource's `meta.epoch` value MUST be greater than the original Resource's previously known value (if any) and greater than the target Resource's `meta.epoch` value. In pseudocode this is: `epoch = max(original_Epoch, target_Resource_Epoch) + 1`. This will ensure that the Resource's `epoch` value will never decrease as a result of this operation. Note that going from a \"normal\" Resource to a cross-reference Resource does not have this guarantee. If the target Resource no longer exists then `target_Resource_Epoch` MUST be treated as zero.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-c10f890f61b395dfa3347c91-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -70094,9 +70357,11 @@
       ],
       "text": "- Aside from the processing rules specified above, the Resource's attributes that might have existed prior to the Resource being converted from a \"normal\" Resource into a cross-reference Resource MUST NOT be resurrected with their old values.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-d42f0365789adb548f7ce4db-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -70125,9 +70390,11 @@
       ],
       "text": "- Any relationship with the target Resource MUST be deleted.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-3c549afbdac717341e38b6c4-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -70156,9 +70423,12 @@
       ],
       "text": "If the target Resource itself is a cross-reference Resource, then including the target Resource's attributes MUST NOT be done when serializing the source Resource. Recursive, or transitively, following of `xref` XIDs is not done.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-35870c8a76ba2be1c4cf2555-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -70187,13 +70457,17 @@
       ],
       "text": "Both the source and target Resources MUST be of the same Resource model type, simply having similar Resource type definitions is not sufficient. When the source and target Resources belong to different Group types, the [`ximportresources`](./model.md#groupsstringximportresources) feature MUST be used to share the Resource type definition.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Cross-reference validation requires the same compiled Resource definition; imported type identity is preserved while a structurally identical independent definition is rejected. The public-engine test covers both across restart.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ImportedTypeIdentitySurvivesPersistenceButIndependentCopiesAreRejected"
+        ],
         "nativeEvidence": []
       }
     },
@@ -70218,9 +70492,12 @@
       ],
       "text": "An `xref` value that points to a non-existing Resource, either because it was deleted, never existed or the current client does not have permission to see it, is not an error and is not a condition that a server is REQUIRED to detect. In these \"dangling xref\" situations, the serialization of the source Resource will not include any target Resource attributes or nested collections. Rather, it will only show the `xref` and ID-like attributes. Therefore, a client that receives a response containing only those attributes can treat this as an indicator that the target Resource is inaccessible, and can make the determination as to whether this is something to investigate or not.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-12fde8db6f4690b3e9c4ec70-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -70249,9 +70526,12 @@
       ],
       "text": "However, a non-existing Resource is not the same as a poorly formed XID value. An `xref` that isn't syntactically correct, or references a non-existing Group type or Resource type , MUST generate an error ([malformed_xref](#malformed_xref)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-1cac1127f551890fd812db86-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -70280,9 +70560,11 @@
       ],
       "text": "Each Resource MUST have a Meta entity, and when the Resource is deleted then the Meta entity MUST also be deleted. Delete requests directed to the Meta entity MUST generate an error ([action_not_supported](./spec.md#action_not_supported)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-c86dbc52213d6886011f6ec3-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -70311,9 +70593,12 @@
       ],
       "text": "The serialization of the Meta entity MUST adhere to this form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-7fc9e0a372f2d8c962af71f8-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -70343,9 +70628,12 @@
       ],
       "text": "- [`<RESOURCE>id`](#singularid-id-attribute) - REQUIRED in API and document views. OPTIONAL in requests.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-3d91d9e818e558bc34a18a84-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -70375,9 +70663,12 @@
       ],
       "text": "- [`self`](#self-attribute) - REQUIRED in API and document views. OPTIONAL/ignored in requests. References the Meta entity, not the Resource.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-a074cdb1426c69cbd31f1638-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -70406,9 +70697,12 @@
       ],
       "text": "- [`shortself`](#shortself-attribute) - OPTIONAL in API and document views, based on the `shortself` capability. OPTIONAL/ignored in requests. References the Meta entity, not the Resource.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-50ff76648c3cfe572e4a530b-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -70438,9 +70732,12 @@
       ],
       "text": "- [`xid`](#xid-attribute) - REQUIRED in API and document views. OPTIONAL/ignored in requests. References the Meta entity, not the Resource.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-78a5e6f818f5a4346a8179e0-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -70470,9 +70767,12 @@
       ],
       "text": "- [`epoch`](#epoch-attribute) - REQUIRED in API and document views. OPTIONAL in requests. This represents the `epoch` value of the entire Resource, not of one particular Version. And, it adheres to the normal `epoch` processing rules - its value is only updated when the Meta attributes are updated, and also when a Version is added/removed.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-326c0282ad512615d4528c7c-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -70501,9 +70801,12 @@
       ],
       "text": "- [`labels`](#labels-attribute) - OPTIONAL in API and document views.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-0070f01fdf358456257de15d-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -70533,9 +70836,12 @@
       ],
       "text": "- [`createdat`](#createdat-attribute) - REQUIRED in API and document views. OPTIONAL in requests. Creation date of the Resource/Meta entity.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-a59dae2da730c5333a5955da-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -70565,9 +70871,12 @@
       ],
       "text": "- [`modifiedat`](#modifiedat-attribute) - REQUIRED in API and document views. OPTIONAL in requests. Modification date of the Meta entity. This will change at the same time that `epoch` changes.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-4d75723f883512b7454dd18a-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -70596,9 +70905,12 @@
       ],
       "text": "- [`deprecated`](#deprecated-attribute) - OPTIONAL. Deprecated state of the entire Resource.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-917eecb72ed4f8e54f2315fb-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -71092,9 +71404,11 @@
       ],
       "text": "- REQUIRED.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-c6d3124b985ebfeef9c61c4f-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -71123,9 +71437,11 @@
       ],
       "text": "- MUST be the `versionid` of the default Version of the Resource.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-9821f25795f82edc90b3a2dd-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -71154,9 +71470,11 @@
       ],
       "text": "- A non-`null` value MUST set `defaultversionsticky` to `true`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-283e961155c3001bd06a768f-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -71185,9 +71503,11 @@
       ],
       "text": "- A `null` value MUST set `defaultversionsticky` to `false`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-ae58a64d682c4326ad4b7aa9-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -71216,13 +71536,19 @@
       ],
       "text": "At the end of an update operation, this attribute MUST be set according to the [`versionmode`](./model.md#groupsstringresourcesstringversionmode) value of the Resource in any of the following situations:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The current Core paragraph distinguishes clearing, explicit selection, non-sticky mode selection, and making the current selection sticky without a defaultversionid. Public-engine tests cover the pointer/Meta-only transition, persistence, version additions/deletions, and invalid targets.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultPointerTransitionsChangeOnlyMetaAndPersist",
+          "StickyDefaultAndDeletingItsVersionSelectNewest",
+          "UnknownDefaultPointerRejectsWithoutChangingMetaVersionsOrEvents"
+        ],
         "nativeEvidence": []
       }
     },
@@ -71248,9 +71574,11 @@
       ],
       "text": "Regardless of the reason for `defaultversionid` or `defaultversionsticky` being modified, those changes alone MUST NOT change any attributes in any Version of the Resource. For example, attributes such as `modifiedat` and `epoch` of the previous or current default Version remain unchanged. However, the Resource's `meta` sub-object's `modifiedat` and `epoch` attributes MUST be updated.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-5738490cb3a89fa933339852-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -71279,9 +71607,11 @@
       ],
       "text": "For clarity, when processing a request that results in `defaultversionsticky` being `false`, then any existing `defaultversionid` value, or value specified in the request, MUST be ignored for the purpose of setting its final value.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-7a7fd9572579a755faec8fd3-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -71310,9 +71640,11 @@
       ],
       "text": "Any attempt to set `defaultversionid` to a non-existing Version, after all Version processing for the current operation is completed, MUST generate an error ([unknown_id](#unknown_id)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-b894e4f4186e500b8c416e17-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -71843,9 +72175,12 @@
       ],
       "text": "When a Version is serialized as xRegistry metadata it MUST adhere to the following:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-f5c48e634ea69ada2e5d3593-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -71876,9 +72211,12 @@
       ],
       "text": "- [`<RESOURCE>id`](#singularid-id-attribute) - REQUIRED in API and document views. OPTIONAL in requests. MUST be the `<RESOURCE>id` of the owning Resource.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-5f235579ff97e37b083ca018-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -71908,9 +72246,12 @@
       ],
       "text": "- [`versionid`](#versionid-attribute) - REQUIRED in API and document views. OPTIONAL in requests.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-015086293be6ee214d8f56a6-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -71941,9 +72282,12 @@
       ],
       "text": "- [`self`](#self-attribute) - REQUIRED in API and document views. OPTIONAL/ignored in requests. MUST be a URL to this Version, not the owning Resource.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-aafbd2c242140d8b1914e278-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -71972,9 +72316,12 @@
       ],
       "text": "- [`shortself`](#shortself-attribute) - OPTIONAL in API and document view, based on the `shortself` capability. OPTIONAL/ignored in requests.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-239d6e13eab3f3cfe85bdeda-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -72005,9 +72352,12 @@
       ],
       "text": "- [`xid`](#xid-attribute) - REQUIRED in API and document views. OPTIONAL/ignored in requests. MUST be the `xid` of this Version, not the owning Resource.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-d4c2ead56b018c6d70f6a9f0-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -72038,9 +72388,12 @@
       ],
       "text": "- [`epoch`](#epoch-attribute) - REQUIRED in API and document views. OPTIONAL in requests. MUST be the `epoch` value of this Version, not the owning Resource.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-7b22ccfee93b3fb78a349bc7-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -72069,9 +72422,12 @@
       ],
       "text": "- [`name`](#name-attribute) - OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-92e07a8433c0578c4e022d15-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -72100,9 +72456,12 @@
       ],
       "text": "- [`description`](#description-attribute) - OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-ac57ef1a938df58844d35796-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -72131,9 +72490,12 @@
       ],
       "text": "- [`documentation`](#documentation-attribute) - OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-85c21e62c9955cc2947ba325-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -72162,9 +72524,12 @@
       ],
       "text": "- [`icon`](#icon-attribute) - OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-bce09bdc82f82648ff145203-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -72193,9 +72558,12 @@
       ],
       "text": "- [`labels`](#labels-attribute) - OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-68caa74b12ac5c7a88fd86de-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -72225,9 +72593,12 @@
       ],
       "text": "- [`createdat`](#createdat-attribute) - REQUIRED in API and document views. OPTIONAL in requests.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-1adfabbbefe8423520034437-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -72257,9 +72628,12 @@
       ],
       "text": "- [`modifiedat`](#modifiedat-attribute) - REQUIRED in API and document views. OPTIONAL in requests.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-ca056f79b5d0598cf3ef3b61-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -73627,9 +74001,11 @@
       ],
       "text": "When [`strictvalidation`](model.md#groupsstringresourcesstringstrictvalidation)` is `true`, the above conditions MUST generate an error ([format_unknown](#format_unknown), [compatibility_unknown](#compatibility_unknown) or [format_external](#format_external)) and reject the update request instead.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-b05e907ae9c6e458442a16a8-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -73658,9 +74034,11 @@
       ],
       "text": "When `false`, the [`compatibilityvalidatedreason`](#compatibilityvalidatedreason-attribute) MUST be present with an explanation as to why the server was unable to perform validation of the Version.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-97a27a230b08680d6f8b5cc1-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -73690,9 +74068,11 @@
       ],
       "text": "Note that `false` MUST NOT be used for validation failure. In those cases the write operation MUST generate an error ([compatibility_violation](#compatibility_violation)) and reject the request regardless of the value of the [`strictvalidation`](model.md#groupsstringresourcesstringstrictvalidation)` model aspect.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-4fd2d384e203a3ef44d31954-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -73721,9 +74101,11 @@
       ],
       "text": "- OPTIONAL",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-2822befe335dd800229d58db-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -73752,9 +74134,11 @@
       ],
       "text": "- When specified, MUST be either `true` or `false`, case-sensitive.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-71fc7d3e00628566d49ecad6-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -73783,9 +74167,11 @@
       ],
       "text": "- MUST be a [read-only](#read-only-changed) attribute.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-719c6dcc50a2122a1d704568-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -73814,9 +74200,11 @@
       ],
       "text": "- MUST be present if the Resource model's `validatecompatibility` attribute is `true`, the Version's `format` value is present, and the Resource's `meta.compatibility` attribute is present.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-d8db170d229a20dd34b4ccce-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -73845,9 +74233,11 @@
       ],
       "text": "- MUST NOT be present if the Resource model's `validatecompatibility` attribute is `false`, or the Version's `format` value is absent, or the Resource's `meta.compatibility` attribute is absent.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-8aa91e728f1505da742a7017-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -73876,13 +74266,17 @@
       ],
       "text": "- Description: When [`compatibilityvalidated`](#compatibilityvalidated-attribute) has a value of `false`, this attribute MUST provide information as to why the compatibility validation check was not performed.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The corrected description requires a reason when compatibility validation was not performed, not when format validation was skipped. Unsupported compatibility outcomes produce a non-empty reason, and strict mode rejects them.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "UnsupportedVariantsRemainUncheckedWithReasonsAndStrictModeRejects"
+        ],
         "nativeEvidence": []
       }
     },
@@ -73907,9 +74301,11 @@
       ],
       "text": "- OPTIONAL",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-26c97065233400962db75613-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -73938,9 +74334,11 @@
       ],
       "text": "- When specified, MUST be a non-empty string.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-9234cd8adcf5eb05e7ceb6e4-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -73969,9 +74367,11 @@
       ],
       "text": "- MUST be a [read-only](#read-only-changed) attribute.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-ca69ae001387d3bb6596c124-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -74000,9 +74400,11 @@
       ],
       "text": "- MUST be present when [`compatibilityvalidated`](#compatibilityvalidated-attribute) is present with a value of `false`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-4648f26f70c48a19eab5253d-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -74031,9 +74433,11 @@
       ],
       "text": "- MUST NOT be present when [`compatibilityvalidated`](#compatibilityvalidated-attribute) is absent or has a value of `true`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-4d4c0f6acb6a3ec0bb444dad-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -75443,9 +75847,12 @@
       ],
       "text": "Implementations of this specification SHOULD support all specification-defined flags.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-e4d0b5232d9fbfe38c78b64a-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -75614,9 +76021,12 @@
       ],
       "text": "The `doc` flag MAY be used to indicate that the response MUST use \"document view\" when serializing entities and MUST be modified to do the following:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-3c78b5ce2e7bc158e2fe620a-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -75645,9 +76055,12 @@
       ],
       "text": "- MUST remove the default Version attributes from a Resource's serialization.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-20d7d0efde621cb86d787420-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -75676,9 +76089,11 @@
       ],
       "text": "- MUST remove the Version `formatvalidated` and `compatibilityvalidated` attributes from Version serializations.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-313a74df1dbad13ecbd2e699-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -75707,9 +76122,11 @@
       ],
       "text": "- MUST remove the `shortself` attribute from all entity serializations.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-67cb450f947008ed2ad0fe00-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -75738,9 +76155,12 @@
       ],
       "text": "- When a Resource (source) uses the `xref` feature, the target Resource's attributes MUST be excluded from the source's serialization.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-50db86824c15b068696a5f26-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -75769,9 +76189,12 @@
       ],
       "text": "- Resources and Versions MUST be serialized in their [xRegistry metadata view](#resource-metadata-vs-resource-document) and not as any potential domain-specific document.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-91e8231d52318a6adf3839ec-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -75800,9 +76223,12 @@
       ],
       "text": "- MUST convert the following attributes into relative URLs if, and only if, the entities that they reference are included in the response output: `self`, `<COLLECTION>url`, `metaurl`, `defaultversionurl`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-2d22418a35ae78ccc1791e36-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -75832,9 +76258,12 @@
       ],
       "text": "All of the relative URLs mentioned in the last bullet above MUST begin with `#` and be followed by a [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) reference to the entity within the response, e.g. `#/endpoints/e1`. This means that they are relative to the root of the document (response) generated, and not necessarily relative to the root of the Registry. Additionally, when those URLs are relative and reference a Resource or Version, any protocol-specific modifications to the URLs (e.g. the HTTP `$details` suffix) MUST NOT be present despite the semantics of the suffix being applied (as noted below).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-3faab90d877c9f8c6d7a675e-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -75863,13 +76292,17 @@
       ],
       "text": "When a relative URL references the root of the response, it MUST be `#`, which represents an empty JSON Pointer selecting the whole document, not `#/`, which selects an object member with an empty name.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "An empty JSON Pointer to the response root serializes as `#`; the representation helper prefixes the pointer with `#`, and the document-view test asserts the root self URL is exactly `#`.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DocumentViewMetaInlineKeepsResourceShapeWithoutDuplicatingTargetMetadataForAliases"
+        ],
         "nativeEvidence": []
       }
     },
@@ -75894,9 +76327,12 @@
       ],
       "text": "For clarity, the serialization of a Resource (when using `?inline=meta`) in document view MUST adhere to the following:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-615fc4f984f84e91bc2ff5c7-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -75925,9 +76361,12 @@
       ],
       "text": "Note that the `meta` entity's attributes `epoch` through `defaultversionsticky` MUST be excluded if `xref` is set because those would appear as part of the target Resource's `meta` entity. Also notice the default Version's attributes do not appear.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-f05fe2338787e3a6810c6bfa-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -75957,9 +76396,12 @@
       ],
       "text": "If this flag is used on a request directed to a Resource's `versions` collection, or to one of its Versions, but the Resource is defined as an `xref` to another Resource, then the server MUST generate an error ([cannot_doc_xref](#cannot_doc_xref)) and SHOULD indicate that using this flag on this part of the hierarchy is not valid - due to those entities not technically existing in document view.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-37b4485419e75c30ba4ff0bc-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -77548,9 +77990,11 @@
       ],
       "text": "The `inline` flag MAY be used on requests to indicate whether nested collections/objects, or certain (potentially large) attributes, are to be included in the response message.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-73beaf0356b1140e3d3832e1-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -77579,9 +78023,11 @@
       ],
       "text": "The `inline` flag on a request indicates that the response MUST include the contents of all specified inlineable attributes. Inlineable attributes include:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-2050296c3034b0048ca60f65-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -77610,9 +78056,12 @@
       ],
       "text": "While the `<RESOURCE>` and `<RESOURCE>base64` attributes are defined as two separate attributes, they are technically two separate \"views\" of the same underlying data. As such, the usage of each will be based on the content type of the Resource, and specifying `<RESOURCE>` in the `inline` flag value MUST be interpreted as a request for the appropriate attribute. In other words, `<RESOURCE>base64` is not a valid `inline` value.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-9a9920849c6f8b9f54a2d745-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -77641,9 +78090,12 @@
       ],
       "text": "The value of the `inline` flag is a list of `<PATH>` values where each is a string indicating which inlineable attribute to show in the response. References to nested attributes are represented using an [xRegistry dot (`.`) notation](#xregistry-dot--notation) where the xRegistry collection names along the hierarchy are concatenated. For example: `endpoints.messages.versions` will inline all Versions of Messages.  Non-leaf parts of the `<PATH>` MUST only reference xRegistry collection names and not any specific entity IDs since `<PATH>` is meant to be an abstract traversal of the model.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-c32dc73568f6c3cfab4cf8d2-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -77672,9 +78124,11 @@
       ],
       "text": "There MAY be multiple `<PATH>`s specified in a single request and each protocol binding specification will indicate how the list is specified.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-95130e27e526d84e1011d425-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -77704,9 +78158,11 @@
       ],
       "text": "The `*` value MAY be used to indicate that all nested inlineable attributes at that level in the hierarchy (and below) MUST be inlined - except `model`, `modelsource` and `capabilities` at the root of the Registry. These three are excluded since the data associated with them are configuration related. To include their data the request MUST include `<PATH>` values of `model`, `modelsource` or `capabilities` explicitly. Use of `*` MUST only be used as the last part of the `<PATH>` (in its entirety). For example, `foo*` and `*.foo` are not valid `<PATH>` values, but `*` and `endpoints.*` are.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-4c77be4686a24caa4e24cbc0-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -77736,9 +78192,12 @@
       ],
       "text": "An `inline` flag without any value MAY be supported and if so it MUST have the same semantic meaning as a value of `*`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-f86a5c1f3a369389c67c69c8-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -77767,9 +78226,12 @@
       ],
       "text": "The specific value of `<PATH>` will vary based on where the request is directed. For example, a request to the root of the Registry MUST start with a `<GROUPS>` name, while a request directed at a Group would start with a `<RESOURCES>` name.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-f7a5f372028dd222d03f7491-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -77798,9 +78260,11 @@
       ],
       "text": "When specifying a collection to be inlined, it MUST be specified using the plural name for the collection in its defined case.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-67adfe872142c3fc2a22034c-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -77866,9 +78330,11 @@
       ],
       "text": "Note: If the Registry cannot return all expected data in one response because it is too large then it MUST generate an error ([too_large](#too_large)). In those cases, the client will need to query the individual inlineable collection attributes in isolation so the Registry can leverage a pagination type of feature to iteratively retrieve the entities.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-f6c5b87b1d2875a4bf499ddc-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -79113,9 +79579,11 @@
       ],
       "text": "If an error occurs during the processing of a request, even if the error was during the creation of the response (e.g. an invalid `inline` value was provided), then an error MUST be generated and the entire request MUST be undone.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-d2be899ee60655b57779a90b-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -79145,9 +79613,11 @@
       ],
       "text": "In general, when an error is generated, it SHOULD be sent back to the client. However, this MAY not happen if the server determines there is a good reason to not do so - such as due to security concerns.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-387dbed3cc6e7c52e6409cdf-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -79176,8 +79646,8 @@
       ],
       "text": "Each protocol binding specification will define how the error structure SHOULD be returned back to clients.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-788c1d3a1407d95628a0717e-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
         "roles": []
       },
       "implementation": {
@@ -79208,9 +79678,11 @@
       ],
       "text": "| Type  | REQUIRED. MUST be a URI to the error definition/specification. |",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-77fac78e1b5f1e4fcfc0cd43-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -79240,9 +79712,11 @@
       ],
       "text": "| Code  | REQUIRED. MUST be the HTTP response code and status text. |",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-975a64e67f2fb5d8de15fd42-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -79273,9 +79747,11 @@
       ],
       "text": "| Title | REQUIRED. MUST be a short (non-empty) human-readable summary of the error. This SHOULD be sufficiently detailed for most users to determine what is the cause of the error. See the text below about substitution strings. |",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-25545498437b1ff7df7739f5-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -79305,9 +79781,11 @@
       ],
       "text": "| Detail | OPTIONAL. While \"Title\" conveys the critical error information, if additional details might be useful to users, such as hints as to how to fix the error, then this field SHOULD be used. |",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-308c8bd94afbdfe6ef9390a3-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -79338,9 +79816,11 @@
       ],
       "text": "| Subject | OPTIONAL. If present, MUST be a reference to the entity being processed when the error occurred. In the case of a Registry entity, it MUST be the XID of the entity. If no specific value is appropriate then this field MAY be excluded. MUST start with \"/\" when referencing an xRegistry entity or collection. |",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-a250f7baef731b3a7f5016ee-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -79369,9 +79849,11 @@
       ],
       "text": "| Args | OPTIONAL. A map of the substitution strings that were used when generating the \"Title\" text. |",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-681a8f6cbbae56c24a05b600-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -79400,9 +79882,11 @@
       ],
       "text": "| Instance | OPTIONAL. This is a non-empty string that can be used by servers to identify details related to the request/error processing. For example, a request or transaction ID of the request that generated the error. This information is not meant to be useful to clients directly, but can be provided to server administrators to help debugging if necessary. This specification places no restriction on the format of this value. |",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-fc2040bbd5f6ec466721b334-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -79431,9 +79915,11 @@
       ],
       "text": "| Source | OPTIONAL. A non-empty string representing the component that raised the error. Similar to \"Instance\", this is not meant to be used by clients, rather it is for debugging purposes. |",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-fa4271cf2bdc02832d5f8b2e-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -79464,9 +79950,11 @@
       ],
       "text": "The definition of each error's \"Title\" field MAY include substitutable placeholders that allows for situational specific data to be included. Each placeholder will be denoted as `<...>` in the \"Title\" text, where \"...\" MUST be of the form `[a-z][a-z0-9_]*`, no longer than 63 characters, and used as the key in the \"Args\" map. At runtime, each placeholder MUST be replaced with the appropriate value from \"Args\", and \"Args\" (if non-empty) MUST appear in the error structure returned to the client. As an optimization, if \"<subject>\" is used then it MUST NOT be included \"Args\" as it MUST already appear as a stand-alone field in the error structure.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-4d79ab1bc968670ed8bf691d-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -79496,9 +79984,11 @@
       ],
       "text": "The \"Type\", \"Code\", and \"Subject\" values MUST be as specified in error's specification. The \"Title\" field MAY be modified as needed based on the context in which the implementation is running. This includes being specified in a language other than English, however it MUST still include the same substitution values (possibly in a different order).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-6b3d4217f8907c44fe6873ea-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -79528,9 +80018,11 @@
       ],
       "text": "Most of the error conditions mentioned in this specification will include a reference to one of the errors listed in this section. While it is RECOMMENDED that implementations use those errors (for consistency), they MAY choose to use a more appropriate one. Implementations MAY define additional extension fields, as well as new error definitions. For new errors, it is RECOMMENDED that the \"Subject\" value appears within the \"Title\" field, when appropriate.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-edf3bca385551ad76ff486ec-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -79559,9 +80051,11 @@
       ],
       "text": "While not a requirement, it is RECOMMENDED that custom errors adhere to the following rules for consistency:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Exact clause text and containing Markdown block match historically reviewed core-a40b2092028ac8bbe4aa63f8-1 in the same section; the pinned source diff shows no local change. Reuse the semantic disposition only; active implementation and execution evidence remain independently tracked.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
