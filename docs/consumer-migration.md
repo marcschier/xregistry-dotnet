@@ -694,8 +694,8 @@ types. Operation `consumes` overrides the root declaration, including an empty
 array that clears it. Unused reusable parameters require inline Parameter
 Objects; their body schemas and extension values do not trigger acquisition.
 Selected operations retain authored parameters without injecting inherited
-entries or defaults. Swagger schema evaluation, constraint keywords,
-default-value compatibility and runtime serialization remain unverified.
+entries or defaults. Swagger schema evaluation, default-value compatibility
+and runtime serialization remain unverified.
 For reached operations under OpenAPI or Swagger `paths`, every authored template
 expression requires an exact, case-sensitive path parameter at the Path Item
 or operation level. Conversely, declared path parameters must name expressions
@@ -743,8 +743,20 @@ Items receive the same type, format and collection checks. Unlike OpenAPI,
 Swagger does not exempt a header named `Content-Type` from these checks.
 Inline headers, unused reusable responses and retrieved response or Path Item
 targets receive declaration checks. Selection preserves authored declarations
-without inserting defaults or acquiring extension values. Constraint keywords,
-default-value compatibility and runtime header serialization remain unverified.
+without inserting defaults or acquiring extension values.
+Swagger Header, non-body Parameter and nested Items constraint keywords receive
+native JSON type checks. Numeric bounds must be numbers; exclusive-bound flags
+must be booleans and require their corresponding bounds. Item and length limits
+must be nonnegative mathematical integers, including integral decimal and
+exponent forms. `multipleOf` must be positive. These numeric checks preserve
+exact values without conversion to floating point; numeric source tokens beyond
+256 characters report an indeterminate limit instead of rounding or overflow.
+`uniqueItems` is boolean, `pattern` is a string and `enum` is a nonempty array
+whose values remain opaque. Checks reach unused reusable declarations and
+retrieved targets without rewriting authored values. Enum uniqueness, pattern
+syntax, default-value compatibility and runtime constraint evaluation remain
+unverified; contradictory bounds are not rejected merely because they describe
+an unsatisfiable domain.
 OpenAPI response `content` entries must be Media Type Objects. Present `schema`
 values must be objects, with boolean schemas also permitted in OpenAPI 3.1.
 Present `examples` and `encoding` values must be objects; `example` accepts any

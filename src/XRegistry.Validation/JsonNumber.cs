@@ -23,7 +23,21 @@ internal readonly record struct JsonNumber(bool Negative, string Digits, BigInte
             ValidationContext.Fail(DocumentValidationStatus.Indeterminate, path, "limit.number",
                 "Numeric schema constraints are limited to 256 source characters.");
         }
+        return Normalize(raw);
+    }
 
+    internal static bool TryRead(JsonElement value, out JsonNumber number)
+    {
+        number = default;
+        if (value.ValueKind != JsonValueKind.Number) { return false; }
+        var raw = value.GetRawText();
+        if (raw.Length > 256) { return false; }
+        number = Normalize(raw);
+        return true;
+    }
+
+    private static JsonNumber Normalize(string raw)
+    {
         var exponentOffset = raw.IndexOfAny(['e', 'E']);
         var mantissa = exponentOffset < 0 ? raw : raw[..exponentOffset];
         var exponent = exponentOffset < 0 ? BigInteger.Zero

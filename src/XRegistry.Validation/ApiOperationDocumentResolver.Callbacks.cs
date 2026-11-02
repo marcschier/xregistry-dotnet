@@ -505,6 +505,46 @@ public static partial class ApiOperationDocumentResolver
             {
                 return InvalidScalar("Swagger collectionFormat must be native to the declaration's location.", path + "/collectionFormat");
             }
+            foreach (var field in new[] { "minimum", "maximum", "multipleOf", "exclusiveMinimum", "exclusiveMaximum",
+                "minLength", "maxLength", "minItems", "maxItems", "uniqueItems", "pattern", "enum" })
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!declaration.TryGetProperty(field, out var value)) { continue; }
+                var valid = field switch
+                {
+                    "exclusiveMinimum" or "exclusiveMaximum" or "uniqueItems" =>
+                        value.ValueKind is JsonValueKind.True or JsonValueKind.False,
+                    "pattern" => value.ValueKind == JsonValueKind.String,
+                    "enum" => value.ValueKind == JsonValueKind.Array && value.GetArrayLength() > 0,
+                    _ => value.ValueKind == JsonValueKind.Number
+                };
+                if (!valid)
+                {
+                    return InvalidScalar("A Swagger scalar constraint must have its native JSON type.", path + "/" + field);
+                }
+                if (value.ValueKind == JsonValueKind.Number)
+                {
+                    if (!JsonNumber.TryRead(value, out var number))
+                    {
+                        return Failure(ApiOperationResolutionStatus.Indeterminate, "limit.number",
+                            "Numeric Swagger constraints are limited to 256 source characters.", path + "/" + field);
+                    }
+                    if (field == "multipleOf" && (number.Negative || number.IsZero))
+                    {
+                        return InvalidScalar("Swagger multipleOf requires a positive number.", path + "/" + field);
+                    }
+                    if (field is "minLength" or "maxLength" or "minItems" or "maxItems" &&
+                        (number.Negative || !number.IsInteger))
+                    {
+                        return InvalidScalar("A Swagger length or item count requires a nonnegative integer.", path + "/" + field);
+                    }
+                }
+                if (field is "exclusiveMinimum" or "exclusiveMaximum" &&
+                    !declaration.TryGetProperty(field == "exclusiveMinimum" ? "minimum" : "maximum", out _))
+                {
+                    return InvalidScalar("An exclusive Swagger bound requires its corresponding numeric bound.", path + "/" + field);
+                }
+            }
             if (!declaration.TryGetProperty("items", out var items))
             {
                 return type.GetString() == "array"
