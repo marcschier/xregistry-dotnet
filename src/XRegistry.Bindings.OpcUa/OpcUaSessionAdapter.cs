@@ -212,19 +212,25 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
     public async ValueTask<uint> OpenAsync(NodeId file, byte mode, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (mode != 1)
+        var writable = (mode & 2) != 0;
+        if ((mode & 0xF0) != 0 || (mode & 3) == 0 || (mode & 4) != 0 && !writable)
+        {
+            throw new FederationException(FederationErrorCode.InvalidPackage,
+                "The FileType Open mode must select Read or Write, clear reserved bits and use EraseExisting only with Write.");
+        }
+        if (writable)
         {
             RequireMutationSecurity(cancellationToken);
         }
         var sourceSession = session.SessionId;
         var output = await CallFileMethodAsync(file, BrowseNames.Open, [new Variant(mode)],
-            mode != 1, cancellationToken)
+            writable, cancellationToken)
             .ConfigureAwait(false);
         if (output.Count == 0 || !output[0].TryGetValue(out uint handle))
         {
             throw new FederationException(FederationErrorCode.InvalidPackage, "FileType Open returned no handle.");
         }
-        if (mode == 1)
+        if (!writable)
         {
             readHandles[(sourceSession, file, handle)] = 0;
         }

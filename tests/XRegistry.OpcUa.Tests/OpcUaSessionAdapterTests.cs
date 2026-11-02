@@ -664,6 +664,95 @@ public class OpcUaSessionAdapterTests
     [Test]
     [Arguments(MessageSecurityMode.None)]
     [Arguments(MessageSecurityMode.Sign)]
+    [Arguments(MessageSecurityMode.SignAndEncrypt)]
+    public async Task FileTransferOpenValidatesEveryModeBitCombinationBeforeNativeOperations(
+        MessageSecurityMode security)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        proxy.Endpoint = new EndpointDescription { SecurityMode = security };
+        var file = new NodeId("File", 1);
+        for (var candidate = 0; candidate <= byte.MaxValue; candidate++)
+        {
+            var mode = (byte)candidate;
+            var valid = mode is 1 or 2 or 3 or 6 or 7 or 9 or 10 or 11 or 14 or 15;
+            var writable = mode is 2 or 3 or 6 or 7 or 10 or 11 or 14 or 15;
+            var before = proxy.NativeOperationCount;
+            if (!valid || writable && security != MessageSecurityMode.SignAndEncrypt)
+            {
+                var failure = await Assert.ThrowsAsync<FederationException>(async () =>
+                    await adapter.OpenAsync(file, mode, CancellationToken.None));
+                await Assert.That(failure!.Code).IsEqualTo(
+                    !valid ? FederationErrorCode.InvalidPackage : FederationErrorCode.PolicyDenied);
+                await Assert.That(proxy.NativeOperationCount).IsEqualTo(before);
+            }
+            else
+            {
+                var handle = await adapter.OpenAsync(file, mode, CancellationToken.None);
+                await Assert.That(handle).IsEqualTo(7u);
+                var call = proxy.MethodCalls[^1];
+                await Assert.That(call.ObjectId).IsEqualTo(file);
+                await Assert.That(call.MethodId).IsEqualTo(new NodeId("Actual.Open", 1));
+                await Assert.That(call.InputArguments.Count).IsEqualTo(1);
+                await Assert.That(call.InputArguments[0].TryGetValue(out byte actual) && actual == mode).IsTrue();
+                await adapter.CloseAsync(file, handle, CancellationToken.None);
+            }
+        }
+        await Assert.That(proxy.MethodCalls.Count).IsEqualTo(
+            security == MessageSecurityMode.SignAndEncrypt ? 20 : 4);
+    }
+
+    [Test]
+    [Arguments(MessageSecurityMode.None)]
+    [Arguments(MessageSecurityMode.Sign)]
+    public async Task FileTransferReadAppendModeAllowsReadOnlyPositionAndCloseWithoutMutationPermission(
+        MessageSecurityMode security)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        var file = new NodeId("File", 1);
+        proxy.Endpoint = new EndpointDescription { SecurityMode = security };
+
+        var handle = await adapter.OpenAsync(file, 9, CancellationToken.None);
+        await adapter.SetPositionAsync(file, handle, 0, CancellationToken.None);
+        var bytes = await adapter.ReadAsync(file, handle, 2, CancellationToken.None);
+        var calls = proxy.MethodCalls.Count;
+        var writeFailure = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.WriteAsync(file, handle, [3], CancellationToken.None));
+        await Assert.That(writeFailure!.Code).IsEqualTo(FederationErrorCode.PolicyDenied);
+        await Assert.That(proxy.MethodCalls.Count).IsEqualTo(calls);
+        await adapter.CloseAsync(file, handle, CancellationToken.None);
+
+        await Assert.That(bytes).IsEquivalentTo(new byte[] { 1, 2 });
+        await Assert.That(string.Join("|", proxy.MethodCalls.Select(call => call.MethodId.IdentifierAsString)))
+            .IsEqualTo("Actual.Open|Actual.SetPosition|Actual.Read|Actual.Close");
+        var beforeRetry = proxy.NativeOperationCount;
+        var retry = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.CloseAsync(file, handle, CancellationToken.None));
+        await Assert.That(retry!.Code).IsEqualTo(FederationErrorCode.PolicyDenied);
+        await Assert.That(proxy.NativeOperationCount).IsEqualTo(beforeRetry);
+    }
+
+    [Test]
+    [Arguments((byte)0)]
+    [Arguments((byte)9)]
+    [Arguments((byte)255)]
+    public async Task FileTransferOpenPreCancellationPrecedesModeAndChannelInspection(byte mode)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        proxy.Endpoint = null;
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        var failure = await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+            await adapter.OpenAsync(new NodeId("File", 1), mode, cancellation.Token));
+
+        await Assert.That(failure!.CancellationToken).IsEqualTo(cancellation.Token);
+        await Assert.That(proxy.EndpointReads).IsEqualTo(0);
+        await Assert.That(proxy.NativeOperationCount).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(MessageSecurityMode.None)]
+    [Arguments(MessageSecurityMode.Sign)]
     [Arguments(MessageSecurityMode.Invalid)]
     public async Task MutationsRejectUnencryptedChannelsBeforeNativeOperations(MessageSecurityMode mode)
     {

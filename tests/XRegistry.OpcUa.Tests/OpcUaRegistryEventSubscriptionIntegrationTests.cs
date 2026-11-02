@@ -18,6 +18,7 @@ namespace XRegistry.OpcUa.Tests;
 public class OpcUaRegistryEventSubscriptionIntegrationTests
 {
     private static readonly byte[] ExpectedVersionDocument = [0x00, 0x7f, 0x80, 0xff];
+    private static readonly byte[] InitialWritableDocument = "initial document"u8.ToArray();
 
     [Test]
     [Arguments(false, false, "none")]
@@ -503,6 +504,24 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
         var groupEntity = await connection.Reader.ReadGroupPropertiesAsync(
             connection.RegistryRoot, "teams", "team-a", server.GroupType, cancellation.Token);
         await Assert.That(groupEntity.GetProperty("region").GetString()).IsEqualTo("west");
+
+        var appendedReadHandle = await connection.Adapter.OpenAsync(
+            server.DocumentFile, 9, cancellation.Token);
+        try
+        {
+            var eof = await connection.Adapter.ReadAsync(
+                server.DocumentFile, appendedReadHandle, 64, cancellation.Token);
+            await Assert.That(eof.Length).IsEqualTo(0);
+            await connection.Adapter.SetPositionAsync(server.DocumentFile, appendedReadHandle, 0,
+                cancellation.Token);
+            var contents = await connection.Adapter.ReadAsync(
+                server.DocumentFile, appendedReadHandle, 64, cancellation.Token);
+            await Assert.That(contents).IsEquivalentTo(InitialWritableDocument);
+        }
+        finally
+        {
+            await connection.Adapter.CloseAsync(server.DocumentFile, appendedReadHandle, CancellationToken.None);
+        }
 
         var initial = await connection.Adapter.ReadJsonValueAsync(server.WriteProbe, cancellation.Token);
         await Assert.That(initial.Value.GetString()).IsEqualTo("before");
@@ -1303,7 +1322,7 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
 
         private FileState AddDocumentResource(BaseObjectState group, NodeId node, string resourceId, string groupXid)
         {
-            documentContents.Add(resourceId, []);
+            documentContents.Add(resourceId, resourceId == "schema-a" ? InitialWritableDocument.ToArray() : []);
             var document = AddDocumentFile(group, node, resourceId, resourceId);
             var versions = new BaseObjectState(document)
             {
@@ -1340,9 +1359,14 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
                 OnCall = (ISystemContext _, MethodState _, NodeId _, byte mode, ref uint handle) =>
                 {
                     handle = ++nextFileHandle;
-                    openFiles.Add(handle, mode == 1
+                    var stream = (mode & 2) == 0
                         ? new MemoryStream(documentContents[resourceId].ToArray(), writable: false)
-                        : new MemoryStream());
+                        : new MemoryStream();
+                    if ((mode & 8) != 0)
+                    {
+                        stream.Position = stream.Length;
+                    }
+                    openFiles.Add(handle, stream);
                     return ServiceResult.Good;
                 },
             };

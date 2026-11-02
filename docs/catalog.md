@@ -262,6 +262,14 @@ A changed channel mode is checked again for each mutation. This does not grant
 Roles or Permissions or authenticate an unsecured read; those remain separate
 caller and Server responsibilities.
 
+FileType Open validates the Part 20 mode bitmask before native operations.
+Read or Write must be selected, reserved bits must be zero, and EraseExisting
+requires Write. Append selects the initial position independently of write
+access, so mode `9` (Read and Append) receives the same read-handle exemption
+as mode `1`; every mode with Write set requires encryption. The adapter sends
+the accepted byte unchanged. The Server remains responsible for access rights,
+initial positioning and concurrent-open rules.
+
 The adapter rejects non-Good Service, operation and Method argument statuses;
 a plausible value cannot override a bad or uncertain status. Good subcodes
 remain accepted. Known native failures map to the draft's resolver outcomes.
