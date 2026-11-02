@@ -122,6 +122,16 @@ still pass through Open, Read and Close. The adapter rejects nonpositive Read
 lengths before any native operation, and both reader and adapter reject a
 response larger than its request. Read failures still attempt an uncancelled
 Close and retain a cleanup failure on the original error.
+FileTransfer Method results must match their Part 20 signatures: Open returns
+one UInt32 handle, Read returns one ByteString, and Write, SetPosition and Close
+return no output arguments. Unexpected output counts or types report
+`invalid_package`; native status errors retain precedence. If a successful Open
+returns extra arguments but its first output identifies the handle, the adapter
+attempts an uncancelled Close before reporting the malformed response and
+attaches any cleanup failure. This cleanup does not undo staged changes.
+A successful native Close consumes the read-handle exemption even if its
+unexpected outputs are then rejected; malformed output does not authorize
+reuse of a closed handle.
 The Session adapter discovers each FileTransfer Method on the selected Object
 and calls its returned NodeId, rather than a standard FileType declaration ID.
 It requires one Method with the requested namespace-zero BrowseName, completes

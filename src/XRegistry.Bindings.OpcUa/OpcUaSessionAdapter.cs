@@ -220,7 +220,7 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
         var output = await CallFileMethodAsync(file, BrowseNames.Open, [new Variant(mode)],
             mode != 1, cancellationToken)
             .ConfigureAwait(false);
-        if (output.Count != 1 || !output[0].TryGetValue(out uint handle))
+        if (output.Count == 0 || !output[0].TryGetValue(out uint handle))
         {
             throw new FederationException(FederationErrorCode.InvalidPackage, "FileType Open returned no handle.");
         }
@@ -231,6 +231,20 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
         else
         {
             readHandles.TryRemove((sourceSession, file, handle), out _);
+        }
+        if (output.Count != 1)
+        {
+            var failure = new FederationException(FederationErrorCode.InvalidPackage,
+                "FileType Open returned an unexpected output count.");
+            try
+            {
+                await CloseAsync(file, handle, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception closeFailure)
+            {
+                failure.Data["OpcUa.FileCloseFailure"] = closeFailure;
+            }
+            throw failure;
         }
         return handle;
     }
@@ -263,8 +277,9 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
         {
             RequireMutationSecurity(cancellationToken);
         }
-        _ = await CallFileMethodAsync(file, BrowseNames.SetPosition, [new Variant(handle), new Variant(position)],
+        var output = await CallFileMethodAsync(file, BrowseNames.SetPosition, [new Variant(handle), new Variant(position)],
             !readHandles.ContainsKey((session.SessionId, file, handle)), cancellationToken).ConfigureAwait(false);
+        RequireNoFileOutputs(output, BrowseNames.SetPosition);
     }
 
     /// <inheritdoc />
@@ -272,9 +287,10 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
     {
         ArgumentNullException.ThrowIfNull(data);
         RequireMutationSecurity(cancellationToken);
-        _ = await CallFileMethodAsync(file, BrowseNames.Write,
+        var output = await CallFileMethodAsync(file, BrowseNames.Write,
             [new Variant(handle), new Variant(new ByteString(data))], mutation: true, cancellationToken)
             .ConfigureAwait(false);
+        RequireNoFileOutputs(output, BrowseNames.Write);
     }
 
     /// <inheritdoc />
@@ -618,9 +634,19 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
         {
             RequireMutationSecurity(cancellationToken);
         }
-        _ = await CallFileMethodAsync(file, BrowseNames.Close, [new Variant(handle)],
+        var output = await CallFileMethodAsync(file, BrowseNames.Close, [new Variant(handle)],
             !readHandles.ContainsKey(key), cancellationToken).ConfigureAwait(false);
         readHandles.TryRemove(key, out _);
+        RequireNoFileOutputs(output, BrowseNames.Close);
+    }
+
+    private static void RequireNoFileOutputs(IReadOnlyList<Variant> output, string methodBrowseName)
+    {
+        if (output.Count != 0)
+        {
+            throw new FederationException(FederationErrorCode.InvalidPackage,
+                $"FileType {methodBrowseName} returned unexpected output arguments.");
+        }
     }
 
     private void RequireMutationSecurity(CancellationToken cancellationToken)

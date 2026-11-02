@@ -480,6 +480,188 @@ public class OpcUaSessionAdapterTests
     }
 
     [Test]
+    [Arguments("Write", 1)]
+    [Arguments("Write", 2)]
+    [Arguments("SetPosition", 1)]
+    [Arguments("SetPosition", 2)]
+    [Arguments("Close", 1)]
+    [Arguments("Close", 2)]
+    public async Task FileTransferVoidMethodsRejectUnexpectedOutputsWithoutRetry(string method, int count)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        proxy.MethodOutputs = _ => new ArrayOf<Variant>(
+            Enumerable.Repeat(new Variant(7u), count).ToArray());
+
+        var failure = await Assert.ThrowsAsync<FederationException>(async () =>
+            await InvokeFileMethod(adapter, new NodeId("File", 1), method));
+
+        await Assert.That(failure!.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(failure.Message).Contains(method);
+        await Assert.That(proxy.MethodCalls.Count).IsEqualTo(1);
+        await Assert.That(proxy.BrowseRequests.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    [Arguments((byte)1, false, false)]
+    [Arguments((byte)1, true, false)]
+    [Arguments((byte)6, false, false)]
+    [Arguments((byte)6, true, false)]
+    [Arguments((byte)1, false, true)]
+    [Arguments((byte)1, true, true)]
+    [Arguments((byte)6, false, true)]
+    [Arguments((byte)6, true, true)]
+    public async Task FileTransferMalformedOpenClosesIdentifiableHandleAndRetainsCleanupError(
+        byte mode, bool closeFails, bool cancelDuringOpen)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        var file = new NodeId("File", 1);
+        if (mode == 1)
+        {
+            proxy.Endpoint = new EndpointDescription { SecurityMode = MessageSecurityMode.None };
+        }
+        using var cancellation = new CancellationTokenSource();
+        proxy.MethodOutputs = call =>
+        {
+            if (call.MethodId.IdentifierAsString == "Actual.Open")
+            {
+                if (cancelDuringOpen)
+                {
+                    cancellation.Cancel();
+                }
+                if (closeFails)
+                {
+                    proxy.CallStatus = StatusCodes.BadUserAccessDenied;
+                }
+                return [new Variant(11u), new Variant("extra")];
+            }
+            return [];
+        };
+
+        var failure = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.OpenAsync(file, mode, cancellation.Token));
+
+        await Assert.That(failure!.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(failure.Message).Contains("output count");
+        await Assert.That(proxy.MethodCalls.Count).IsEqualTo(2);
+        var close = proxy.MethodCalls[1];
+        await Assert.That(close.ObjectId).IsEqualTo(file);
+        await Assert.That(close.MethodId).IsEqualTo(new NodeId("Actual.Close", 1));
+        await Assert.That(close.InputArguments[0].TryGetValue(out uint handle) && handle == 11u).IsTrue();
+        await Assert.That(proxy.MethodTokens[0]).IsEqualTo(cancellation.Token);
+        await Assert.That(proxy.MethodTokens[1].CanBeCanceled).IsFalse();
+        await Assert.That(failure.Data.Contains("OpcUa.FileCloseFailure")).IsEqualTo(closeFails);
+        if (closeFails)
+        {
+            var cleanup = failure.Data["OpcUa.FileCloseFailure"] as FederationException;
+            await Assert.That(cleanup).IsNotNull();
+            await Assert.That(cleanup!.Code).IsEqualTo(FederationErrorCode.PolicyDenied);
+            await Assert.That(((ServiceResultException)cleanup.InnerException!).StatusCode)
+                .IsEqualTo(StatusCodes.BadUserAccessDenied);
+        }
+        else if (mode == 1)
+        {
+            var retry = await Assert.ThrowsAsync<FederationException>(async () =>
+                await adapter.CloseAsync(file, 11u, CancellationToken.None));
+            await Assert.That(retry!.Code).IsEqualTo(FederationErrorCode.PolicyDenied);
+            await Assert.That(proxy.MethodCalls.Count).IsEqualTo(2);
+        }
+    }
+
+    [Test]
+    [Arguments("Open", "none")]
+    [Arguments("Open", "signed")]
+    [Arguments("Open", "string")]
+    [Arguments("Open", "null")]
+    [Arguments("Open", "extra")]
+    [Arguments("Read", "none")]
+    [Arguments("Read", "signed")]
+    [Arguments("Read", "unsigned")]
+    [Arguments("Read", "string")]
+    [Arguments("Read", "null")]
+    [Arguments("Read", "extra")]
+    public async Task FileTransferRejectsMissingOrMistypedSingleOutputs(string method, string shape)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        proxy.MethodOutputs = _ => shape switch
+        {
+            "none" => [],
+            "signed" => [new Variant(7)],
+            "unsigned" => [new Variant(7u)],
+            "string" => [new Variant("7")],
+            "null" => [Variant.Null],
+            _ => [new Variant(new ByteString(new byte[] { 1 })), new Variant(7u)]
+        };
+
+        var failure = await Assert.ThrowsAsync<FederationException>(async () =>
+            await InvokeFileMethod(adapter, new NodeId("File", 1), method));
+
+        await Assert.That(failure!.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(failure.Message).Contains(method);
+        await Assert.That(proxy.MethodCalls.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    [Arguments("Open")]
+    [Arguments("Read")]
+    [Arguments("Write")]
+    [Arguments("SetPosition")]
+    [Arguments("Close")]
+    public async Task FileTransferNativeFailurePrecedesMalformedOutputs(string method)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        proxy.CallStatus = StatusCodes.BadUserAccessDenied;
+        proxy.MethodOutputs = _ => [new Variant("malformed")];
+
+        var failure = await Assert.ThrowsAsync<FederationException>(async () =>
+            await InvokeFileMethod(adapter, new NodeId("File", 1), method));
+
+        await Assert.That(failure!.Code).IsEqualTo(FederationErrorCode.PolicyDenied);
+        await Assert.That(((ServiceResultException)failure.InnerException!).StatusCode)
+            .IsEqualTo(StatusCodes.BadUserAccessDenied);
+        await Assert.That(proxy.MethodCalls.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task FileTransferMalformedSuccessfulCloseConsumesReadHandleExemption()
+    {
+        var (adapter, proxy) = CreateAdapter();
+        proxy.Endpoint = new EndpointDescription { SecurityMode = MessageSecurityMode.None };
+        var file = new NodeId("File", 1);
+        var handle = await adapter.OpenAsync(file, 1, CancellationToken.None);
+        proxy.MethodOutputs = _ => [new Variant(7u)];
+
+        var failure = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.CloseAsync(file, handle, CancellationToken.None));
+
+        await Assert.That(failure!.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        var calls = proxy.MethodCalls.Count;
+        var retry = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.CloseAsync(file, handle, CancellationToken.None));
+        await Assert.That(retry!.Code).IsEqualTo(FederationErrorCode.PolicyDenied);
+        await Assert.That(proxy.MethodCalls.Count).IsEqualTo(calls);
+    }
+
+    [Test]
+    [Arguments(0u)]
+    [Arguments(uint.MaxValue)]
+    public async Task FileTransferPreservesFullUInt32HandleRange(uint expected)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        var file = new NodeId("File", 1);
+        proxy.Endpoint = new EndpointDescription { SecurityMode = MessageSecurityMode.None };
+        proxy.MethodOutputs = call => call.MethodId.IdentifierAsString == "Actual.Open"
+            ? [new Variant(expected)] : [];
+
+        var handle = await adapter.OpenAsync(file, 1, CancellationToken.None);
+        await adapter.CloseAsync(file, handle, CancellationToken.None);
+
+        await Assert.That(handle).IsEqualTo(expected);
+        await Assert.That(proxy.MethodCalls.Count).IsEqualTo(2);
+        await Assert.That(proxy.MethodCalls[1].InputArguments[0].TryGetValue(out uint closed) && closed == expected)
+            .IsTrue();
+    }
+
+    [Test]
     [Arguments(MessageSecurityMode.None)]
     [Arguments(MessageSecurityMode.Sign)]
     [Arguments(MessageSecurityMode.Invalid)]
@@ -1903,6 +2085,8 @@ public class OpcUaSessionAdapterTests
         public Action? AfterBrowseNext { get; set; }
         public Action? AfterCall { get; set; }
         public byte[] ReadMethodBytes { get; set; } = [1, 2];
+        public Func<CallMethodRequest, ArrayOf<Variant>>? MethodOutputs { get; set; }
+        public List<CancellationToken> MethodTokens { get; } = [];
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
@@ -1958,6 +2142,7 @@ public class OpcUaSessionAdapterTests
                 case "CallAsync":
                     var call = ((ArrayOf<CallMethodRequest>)args![1]!)[0];
                     MethodCalls.Add(call);
+                    MethodTokens.Add((CancellationToken)args[2]!);
                     AfterCall?.Invoke();
                     return new ValueTask<CallResponse>(new CallResponse
                     {
@@ -1966,9 +2151,13 @@ public class OpcUaSessionAdapterTests
                         Results = [new CallMethodResult
                         {
                             StatusCode = CallStatus,
-                            OutputArguments = call.MethodId.IdentifierAsString == "Actual.Read"
-                                ? [new Variant(new ByteString(ReadMethodBytes))]
-                                : [new Variant(7u)],
+                            OutputArguments = MethodOutputs?.Invoke(call) ??
+                                (call.MethodId.IdentifierAsString switch
+                                {
+                                    "Actual.Read" => [new Variant(new ByteString(ReadMethodBytes))],
+                                    "Actual.Write" or "Actual.SetPosition" or "Actual.Close" => [],
+                                    _ => [new Variant(7u)]
+                                }),
                             InputArgumentResults = ArgumentResults,
                             InputArgumentDiagnosticInfos = Diagnostics
                         }]
