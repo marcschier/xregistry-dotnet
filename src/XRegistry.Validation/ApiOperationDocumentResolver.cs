@@ -428,8 +428,16 @@ public static partial class ApiOperationDocumentResolver
                 if (securityFailure is not null) { return securityFailure; }
                 if (reference.Selector.Kind == ApiOperationSelectorKind.JsonPointer)
                 {
-                    return await ResolvePointerAsync(format, root, reference.Selector.Tokens, references,
+                    var selected = await ResolvePointerAsync(format, root, reference.Selector.Tokens, references,
                         cancellationToken).ConfigureAwait(false);
+                    if (selected.Status != ApiOperationResolutionStatus.Selected || references.OperationIdLinks.Count == 0)
+                    {
+                        return selected;
+                    }
+                    var operationCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+                    var failure = await CollectHttpOperationMatchesAsync(format, root, null, [], operationCounts,
+                        references, budget, cancellationToken).ConfigureAwait(false);
+                    return failure ?? ValidateOpenApiLinkOperationIds(references, operationCounts) ?? selected;
                 }
                 return await ResolveOperationIdAsync(format, root, reference.Selector.Tokens[^1], references,
                     budget, cancellationToken).ConfigureAwait(false);
@@ -855,6 +863,26 @@ public static partial class ApiOperationDocumentResolver
     {
         var matches = new List<OperationLocation>();
         var operationCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+        var failure = await CollectHttpOperationMatchesAsync(format, root, operationId, matches, operationCounts,
+            references, budget, cancellationToken).ConfigureAwait(false);
+        if (failure is not null) { return failure; }
+        failure = ValidateOpenApiLinkOperationIds(references, operationCounts);
+        if (failure is not null) { return failure; }
+        return matches.Count switch
+        {
+            0 => Failure(ApiOperationResolutionStatus.NotFound, "selection.not_found",
+                $"No operation has the exact operationId '{operationId}'."),
+            1 => Selected(matches[0].Operation, matches[0].Pointer, matches[0].DocumentUri),
+            _ => Failure(ApiOperationResolutionStatus.Ambiguous, "selection.ambiguous",
+                $"More than one operation has the exact operationId '{operationId}'.")
+        };
+    }
+
+    private static async ValueTask<ApiOperationResolutionResult?> CollectHttpOperationMatchesAsync(
+        string format, JsonElement root, string? operationId, List<OperationLocation> matches,
+        Dictionary<string, int> operationCounts, ReferenceContext references, ValidationContext budget,
+        CancellationToken cancellationToken)
+    {
         foreach (var collectionName in format == "OpenAPI/3.1" ? new[] { "paths", "webhooks" } : new[] { "paths" })
         {
             if (!root.TryGetProperty(collectionName, out var paths)) { continue; }
@@ -899,7 +927,12 @@ public static partial class ApiOperationDocumentResolver
                 }
             }
         }
+        return null;
+    }
 
+    private static ApiOperationResolutionResult? ValidateOpenApiLinkOperationIds(
+        ReferenceContext references, Dictionary<string, int> operationCounts)
+    {
         foreach (var link in references.OperationIdLinks)
         {
             references.Work(link.Pointer + "/operationId");
@@ -910,14 +943,7 @@ public static partial class ApiOperationDocumentResolver
                     link.Pointer + "/operationId");
             }
         }
-        return matches.Count switch
-        {
-            0 => Failure(ApiOperationResolutionStatus.NotFound, "selection.not_found",
-                $"No operation has the exact operationId '{operationId}'."),
-            1 => Selected(matches[0].Operation, matches[0].Pointer, matches[0].DocumentUri),
-            _ => Failure(ApiOperationResolutionStatus.Ambiguous, "selection.ambiguous",
-                $"More than one operation has the exact operationId '{operationId}'.")
-        };
+        return null;
     }
 
     private static async ValueTask<PathItemResolution> ResolvePathItemAsync(JsonElement pathItem,

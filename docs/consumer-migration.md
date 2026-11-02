@@ -858,17 +858,26 @@ work budgets remain shared. Dependency failures, malformed targets, cycles
 and depth exhaustion prevent partial selection. Unused reusable link references
 remain inactive. Selection retains authored references and never retrieves
 server addresses.
-Named OpenAPI selection checks each reached Link `operationId` against the
-operation occurrences discovered by that traversal, including callbacks,
+OpenAPI selection checks each reached Link `operationId` against the
+operation occurrences discovered by description-wide traversal, including callbacks,
 retrieved Path Items and OpenAPI 3.1 webhooks. The identifier must resolve to
-exactly one occurrence, with case-sensitive matching. Missing targets and
-multiple occurrences report an invalid link at its `operationId`; a referenced
-Path Item mounted at two paths counts twice even when its document is acquired
-once. Self-links remain valid when the operation occurrence is unique.
+exactly one occurrence, with case-sensitive matching. Missing targets report an
+invalid link at its `operationId`; duplicate operation IDs or ambiguous linked
+occurrences also prevent selection. A referenced Path Item mounted at two paths
+counts twice even when its document is acquired once. Self-links remain valid
+when the operation occurrence is unique.
 Unused reusable links and unreferenced reusable Path Items do not establish
-operation occurrences. Pointer selection retains its local traversal and does
-not perform this description-wide target check. `operationRef` target resolution
-and runtime-expression evaluation remain unverified; operation selection never
+operation occurrences.
+Pointer selection first validates its selected operation locally. When that
+operation reaches an `operationId` link, selection also traverses the
+description's paths, callbacks and OpenAPI 3.1 webhooks to establish target
+existence and uniqueness. This can acquire additional Path Item or declaration
+dependencies through the caller-supplied resolver, using the existing shared
+cache and budgets. Missing, denied or malformed dependencies prevent partial
+selection. Unrelated paths in documents acquired only for Link or response
+declarations do not become operation occurrences. Pointers without reached
+`operationId` links retain local traversal. `operationRef` target resolution and
+runtime-expression evaluation remain unverified; operation selection never
 invokes linked operations.
 Root and reached HTTP operation `externalDocs` values must be objects with a
 string `url` and, when present, a string `description`. An External

@@ -32,7 +32,7 @@ public static partial class ApiOperationDocumentResolver
     }
 
     private static async ValueTask<ApiOperationResolutionResult?> CollectOperationMatchesAsync(
-        OperationLocation location, string operationId, bool includeCallbacks, List<OperationLocation> matches,
+        OperationLocation location, string? operationId, bool includeCallbacks, List<OperationLocation> matches,
         Dictionary<string, int> operationCounts, ReferenceContext references, ValidationContext budget,
         HashSet<string> active, int depth,
         CancellationToken cancellationToken)
@@ -1994,7 +1994,7 @@ public static partial class ApiOperationDocumentResolver
     }
 
     private static async ValueTask<ApiOperationResolutionResult?> CollectCallbackMatchesAsync(
-        JsonElement callback, ReferencedDocument source, string pointer, string operationId,
+        JsonElement callback, ReferencedDocument source, string pointer, string? operationId,
         List<OperationLocation> matches, Dictionary<string, int> operationCounts,
         ReferenceContext references, ValidationContext budget,
         HashSet<string> active, int depth, CancellationToken cancellationToken)
