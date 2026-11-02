@@ -5,9 +5,13 @@
   <PropertyGroup>
     <IsPackable>true</IsPackable>
     <PackageId>XRegistry.Publication</PackageId>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\XRegistry\XRegistry.csproj" />
     <ProjectReference Include="..\XRegistry.Models\XRegistry.Models.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="XRegistry.Publication.Tests" />
   </ItemGroup>
 </Project>

@@ -121,48 +121,52 @@ public sealed class PublicationPackage
         ArgumentOutOfRangeException.ThrowIfLessThan(maxPathDepth, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(maxPackageBytes, 1);
         cancellationToken.ThrowIfCancellationRequested();
-        var root = ResolvePackageRoot(directory);
-        var packagePath = ResolveObjectPath(root, "publication-package.json");
-        var info = new FileInfo(packagePath);
-        if (!info.Exists)
+        using var tree = PublicationPackageFileTree.Open(directory);
+        FileStream packageStream;
+        try
+        {
+            packageStream = tree.OpenRead("publication-package.json");
+        }
+        catch (FileNotFoundException)
         {
             throw PublicationJson.Error("unavailable", "publication-package.json",
                 "The package manifest is missing from its local directory.");
         }
+        catch (DirectoryNotFoundException)
+        {
+            throw PublicationJson.Error("unavailable", "publication-package.json",
+                "The package manifest directory is missing from its local directory.");
+        }
 
-        if (info.Length > maxPackageBytes)
+        await using var packageStreamLifetime = packageStream.ConfigureAwait(false);
+        if (packageStream.Length > maxPackageBytes)
         {
             throw PublicationJson.Error("object_limit", "publication-package.json",
                 "The package manifest exceeds the configured byte limit.");
         }
 
-        using var packageBytes = new MemoryStream((int)info.Length);
+        using var packageBytes = new MemoryStream((int)packageStream.Length);
         var buffer = new byte[81920];
-        var stream = new FileStream(packagePath, FileMode.Open, FileAccess.Read, FileShare.Read,
-            81920, FileOptions.Asynchronous | FileOptions.SequentialScan);
-        await using (stream.ConfigureAwait(false))
+        while (true)
         {
-            while (true)
+            var read = await packageStream.ReadAsync(buffer, cancellationToken)
+                .ConfigureAwait(false);
+            if (read == 0)
             {
-                var read = await stream.ReadAsync(buffer, cancellationToken)
-                    .ConfigureAwait(false);
-                if (read == 0)
-                {
-                    break;
-                }
-
-                if (packageBytes.Length > maxPackageBytes - read)
-                {
-                    throw PublicationJson.Error("object_limit", "publication-package.json",
-                        "The package manifest exceeds the configured byte limit.");
-                }
-
-                packageBytes.Write(buffer, 0, read);
+                break;
             }
+
+            if (packageBytes.Length > maxPackageBytes - read)
+            {
+                throw PublicationJson.Error("object_limit", "publication-package.json",
+                    "The package manifest exceeds the configured byte limit.");
+            }
+
+            packageBytes.Write(buffer, 0, read);
         }
 
         var package = Parse(packageBytes.ToArray(), jsonLimits);
-        return await package.OpenSnapshotAsync(root, maxDocumentBytes, maxTotalBytes,
+        return await package.OpenSnapshotAsync(tree, maxDocumentBytes, maxTotalBytes,
             maxObjects, maxPathDepth, cancellationToken).ConfigureAwait(false);
     }
 
@@ -179,6 +183,16 @@ public sealed class PublicationPackage
         ArgumentOutOfRangeException.ThrowIfLessThan(maxObjects, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(maxPathDepth, 1);
         cancellationToken.ThrowIfCancellationRequested();
+        using var tree = PublicationPackageFileTree.Open(directory);
+        return await OpenSnapshotAsync(tree, maxDocumentBytes, maxTotalBytes, maxObjects,
+            maxPathDepth, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async ValueTask<PublicationOpenedSnapshot> OpenSnapshotAsync(PublicationPackageFileTree tree,
+        int maxDocumentBytes, long maxTotalBytes, int maxObjects, int maxPathDepth,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
         if (Objects.Count > maxObjects)
         {
             throw PublicationJson.Error("object_limit", "/objects",
@@ -194,19 +208,14 @@ public sealed class PublicationPackage
             }
         }
 
-        var root = ResolvePackageRoot(directory);
         var entries = Objects.ToDictionary(
             static item => PublicationReferenceComparer.GetReferenceIdentityKey(item.Reference),
-            StringComparer.Ordinal);
-        var pathsByReference = Objects.ToDictionary(
-            static item => PublicationReferenceComparer.GetReferenceIdentityKey(item.Reference),
-            item => ResolveObjectPath(root, item.Path),
             StringComparer.Ordinal);
         var bytesByReference = new Dictionary<string, byte[]>(StringComparer.Ordinal);
         var bytesByPath = new Dictionary<string, byte[]>(PathComparer);
         long totalBytes = 0;
 
-        var manifestBytes = await ReadDescriptorAsync(Context.Snapshot, entries, pathsByReference, bytesByPath,
+        var manifestBytes = await ReadDescriptorAsync(tree, Context.Snapshot, entries, bytesByPath,
             maxDocumentBytes, maxTotalBytes, () => totalBytes, value => totalBytes = value, cancellationToken)
             .ConfigureAwait(false);
         var manifest = PublicationManifest.Parse(manifestBytes, _jsonLimits);
@@ -246,7 +255,7 @@ public sealed class PublicationPackage
                 continue;
             }
 
-            var bytes = await ReadDescriptorAsync(pair.Value, entries, pathsByReference, bytesByPath,
+            var bytes = await ReadDescriptorAsync(tree, pair.Value, entries, bytesByPath,
                 maxDocumentBytes, maxTotalBytes, () => totalBytes, value => totalBytes = value, cancellationToken)
                 .ConfigureAwait(false);
             bytesByReference.Add(pair.Key, bytes);
@@ -260,8 +269,8 @@ public sealed class PublicationPackage
             bytesByReference[PublicationReferenceComparer.GetReferenceIdentityKey(Context.Registry.Reference)]);
     }
 
-    private static async ValueTask<byte[]> ReadDescriptorAsync(PublicationByteDescriptor descriptor,
-        Dictionary<string, PublicationPackageObject> entries, Dictionary<string, string> pathsByReference,
+    private static async ValueTask<byte[]> ReadDescriptorAsync(PublicationPackageFileTree tree,
+        PublicationByteDescriptor descriptor, Dictionary<string, PublicationPackageObject> entries,
         Dictionary<string, byte[]> bytesByPath, int maxDocumentBytes, long maxTotalBytes,
         Func<long> getTotalBytes, Action<long> setTotalBytes, CancellationToken cancellationToken)
     {
@@ -279,60 +288,60 @@ public sealed class PublicationPackage
                 "The package does not map a required Version reference to a local file.");
         }
 
-        var path = pathsByReference[referenceKey];
+        var path = item.Path;
         if (!bytesByPath.TryGetValue(path, out var bytes))
         {
-            var info = new FileInfo(path);
-            if (!info.Exists)
-            {
-                throw PublicationJson.Error("unavailable", item.Path,
-                    "A package object is missing from its local directory.");
-            }
-
-            if (info.Length > maxDocumentBytes || info.Length > maxTotalBytes - getTotalBytes())
-            {
-                throw PublicationJson.Error("object_limit", item.Path,
-                    "Package bytes exceed the configured total or per-object limit.");
-            }
-
-            var expectedSize = (int)descriptor.Size;
-            bytes = new byte[expectedSize];
+            FileStream stream;
             try
             {
-                var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read,
-                    81920, FileOptions.Asynchronous | FileOptions.SequentialScan);
-                await using (stream.ConfigureAwait(false))
-                {
-                    var read = 0;
-                    while (read < bytes.Length)
-                    {
-                        var count = await stream.ReadAsync(bytes.AsMemory(read), cancellationToken).ConfigureAwait(false);
-                        if (count == 0)
-                        {
-                            throw PublicationJson.Error("size_mismatch", item.Path,
-                                "A package object ended before its declared byte size.");
-                        }
-
-                        read += count;
-                    }
-
-                    var extra = new byte[1];
-                    if (await stream.ReadAsync(extra, cancellationToken).ConfigureAwait(false) != 0)
-                    {
-                        throw PublicationJson.Error("size_mismatch", item.Path,
-                            "A package object exceeds its declared byte size.");
-                    }
-                }
+                stream = tree.OpenRead(path);
             }
             catch (FileNotFoundException)
             {
                 throw PublicationJson.Error("unavailable", item.Path,
-                    "A package object disappeared before it could be read.");
+                    "A package object is missing from its local directory.");
             }
             catch (DirectoryNotFoundException)
             {
                 throw PublicationJson.Error("unavailable", item.Path,
-                    "A package object directory disappeared before it could be read.");
+                    "A package object directory is missing from its local directory.");
+            }
+
+            await using (stream.ConfigureAwait(false))
+            {
+                var length = stream.Length;
+                if (length > maxDocumentBytes || length > maxTotalBytes - getTotalBytes())
+                {
+                    throw PublicationJson.Error("object_limit", item.Path,
+                        "Package bytes exceed the configured total or per-object limit.");
+                }
+
+                if (length != (long)descriptor.Size)
+                {
+                    throw PublicationJson.Error("size_mismatch", item.Path,
+                        "A package object does not match its declared byte size.");
+                }
+
+                bytes = new byte[(int)descriptor.Size];
+                var read = 0;
+                while (read < bytes.Length)
+                {
+                    var count = await stream.ReadAsync(bytes.AsMemory(read), cancellationToken).ConfigureAwait(false);
+                    if (count == 0)
+                    {
+                        throw PublicationJson.Error("size_mismatch", item.Path,
+                            "A package object ended before its declared byte size.");
+                    }
+
+                    read += count;
+                }
+
+                var extra = new byte[1];
+                if (await stream.ReadAsync(extra, cancellationToken).ConfigureAwait(false) != 0)
+                {
+                    throw PublicationJson.Error("size_mismatch", item.Path,
+                        "A package object exceeds its declared byte size.");
+                }
             }
 
             setTotalBytes(checked(getTotalBytes() + bytes.Length));
@@ -341,56 +350,6 @@ public sealed class PublicationPackage
 
         PublicationIntegrity.Verify(bytes, descriptor);
         return (byte[])bytes.Clone();
-    }
-
-    private static string ResolvePackageRoot(string directory)
-    {
-        var fullPath = Path.GetFullPath(directory);
-        var info = new DirectoryInfo(fullPath);
-        if (!info.Exists)
-        {
-            throw PublicationJson.Error("unavailable", directory,
-                "The Publication package directory does not exist.");
-        }
-
-        var resolved = info.ResolveLinkTarget(true);
-        return Path.GetFullPath(resolved?.FullName ?? info.FullName);
-    }
-
-    private static string ResolveObjectPath(string root, string relativePath)
-    {
-        var current = root;
-        var segments = relativePath.Split('/');
-        for (var index = 0; index < segments.Length; index++)
-        {
-            current = Path.GetFullPath(Path.Combine(current, segments[index]));
-            FileSystemInfo info = index == segments.Length - 1
-                ? new FileInfo(current)
-                : new DirectoryInfo(current);
-            if (info.LinkTarget is not null)
-            {
-                var target = info.ResolveLinkTarget(true)
-                    ?? throw PublicationJson.Error("path_escape", relativePath,
-                        "A package path contains an unresolved symbolic link.");
-                current = Path.GetFullPath(target.FullName);
-            }
-
-            EnsureContained(root, current, relativePath);
-        }
-
-        return current;
-    }
-
-    private static void EnsureContained(string root, string path, string relativePath)
-    {
-        var relative = Path.GetRelativePath(root, path);
-        if (Path.IsPathRooted(relative) || relative == ".." ||
-            relative.StartsWith(".." + Path.DirectorySeparatorChar,
-                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
-        {
-            throw PublicationJson.Error("path_escape", relativePath,
-                "A package path resolves outside its selected directory.");
-        }
     }
 
     private static void AddDescriptor(Dictionary<string, PublicationByteDescriptor> descriptors,

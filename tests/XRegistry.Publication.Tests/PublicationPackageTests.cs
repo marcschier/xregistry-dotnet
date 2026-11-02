@@ -252,6 +252,25 @@ public class PublicationPackageTests
         await Assert.That(error.Code).IsEqualTo("path_escape");
     }
 
+    [Test]
+    public async Task PackageTreeRejectsExternalLinkInsertedAfterItsRootWasOpened()
+    {
+        var fixture = Fixture.Create();
+        await using var directory = await PackageDirectory.CreateAsync(fixture);
+        using var tree = PublicationPackageFileTree.Open(directory.PackagePath);
+        var objectDirectory = Path.Combine(directory.PackagePath, "objects");
+        Directory.Move(objectDirectory, Path.Combine(directory.PackagePath, "objects-original"));
+        var outsidePath = Path.Combine(directory.RootPath, "outside");
+        Directory.CreateDirectory(outsidePath);
+        await File.WriteAllBytesAsync(Path.Combine(outsidePath, "document.bin"), fixture.DocumentBytes);
+        await CreateDirectoryLinkAsync(objectDirectory, outsidePath);
+
+        var error = await Assert.That(() => tree.OpenRead("objects/document.bin"))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected replaced-path rejection.");
+
+        await Assert.That(error.Code).IsEqualTo("path_escape");
+    }
+
     private static async ValueTask CreateDirectoryLinkAsync(string linkPath, string targetPath)
     {
         if (!OperatingSystem.IsWindows())

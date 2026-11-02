@@ -226,8 +226,14 @@ through binding adapters.
 `PublicationBundle.WritePackageAsync` writes the selected manifest and required
 objects to a directory containing `publication-package.json`.
 `PublicationPackage.OpenDirectoryAsync` reads that package without network
-access. It checks every mapped path for resolved containment, applies object
-and traversal limits, and verifies bytes against their descriptors.
+access. It keeps the selected directory anchored while opening each path,
+rejects symbolic links and Windows reparse points during traversal, and checks
+regular-file sizes before reading. This prevents a concurrent path replacement
+from redirecting a read outside the package root. Handle-anchored package reads
+support Windows and Linux x64/arm64. Other operating systems and Linux
+architectures throw `PlatformNotSupportedException`.
+Readers apply object and traversal limits and verify bytes against their
+descriptors.
 Limits supplied to `PublicationPackage.Parse` or `OpenDirectoryAsync` also
 govern the captured manifest during replay. Tightened numeric budgets reject
 before accepting its bytes; relaxed budgets remain in effect when opening the
