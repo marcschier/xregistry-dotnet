@@ -54,6 +54,9 @@ public interface IOpcUaRegistrySession
     ValueTask<OpcUaJsonValue> ReadJsonValueAsync(NodeId variable, CancellationToken cancellationToken);
     /// <summary>Reads a Variable Value as an OPC UA ExpandedNodeId.</summary>
     ValueTask<ExpandedNodeId> ReadExpandedNodeIdAsync(NodeId variable, CancellationToken cancellationToken);
+    /// <summary>Reads the exact declared RegistryOriginDataType without a JSON conversion.</summary>
+    ValueTask<OpcUaRegistryOriginValue> ReadRegistryOriginAsync(NodeId variable, NodeId expectedDataType,
+        CancellationToken cancellationToken);
     /// <summary>Maps an ExpandedNodeId through this Session's ServerArray and NamespaceArray.</summary>
     ValueTask<OpcUaExternalNodeId> MapExternalNodeIdAsync(ExpandedNodeId nodeId,
         CancellationToken cancellationToken);
@@ -905,6 +908,43 @@ public sealed class OpcUaRegistryReader
                 "The ResourceType VersionId does not match the selected resource or version.");
         }
         return RegistryJson.Parse(entityObject.ToJsonString()).RootElement;
+    }
+
+    /// <summary>Reads the logical Resource's typed origin claim, never a default Version's origin.</summary>
+    public async ValueTask<OpcUaRegistryOriginValue> ReadOriginRegistryAsync(NodeId groupNode, string groupXid,
+        string resourceCollection, string resourceId, NodeId resourceType, NodeId originDataType,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureSpecVersionValidated();
+        if (originDataType.IsNull)
+        {
+            throw new ArgumentException("The expected RegistryOriginDataType is required.", nameof(originDataType));
+        }
+        _ = RequireResourceDefinition(groupXid, resourceCollection);
+        _ = new FederationReadRequest(FederationOperation.Entity, groupXid);
+        var resource = await FindSelectedResourceAsync(groupNode, resourceId, resourceType, null, null,
+            cancellationToken).ConfigureAwait(false);
+        _ = await ReadResourceEntityAsync(resource, groupXid, resourceCollection, resourceId, null,
+            cancellationToken).ConfigureAwait(false);
+        var properties = (await BrowseAllAsync(resource.Target, cancellationToken).ConfigureAwait(false))
+            .Where(reference => string.Equals(reference.BrowseName.Name, "OriginRegistry", StringComparison.Ordinal))
+            .ToArray();
+        if (properties.Length != 1 || properties[0].NodeClass != NodeClass.Variable)
+        {
+            throw new FederationException(FederationErrorCode.InvalidPackage,
+                "The logical Resource must expose one OriginRegistry Variable.");
+        }
+        var origin = await session.ReadRegistryOriginAsync(properties[0].Target, originDataType, cancellationToken)
+            .ConfigureAwait(false);
+        var stable = !string.IsNullOrEmpty(origin.OriginUri);
+        if (stable
+            ? !string.IsNullOrEmpty(origin.ServerUri) || !origin.RegistryNodeId.IsNull
+            : string.IsNullOrEmpty(origin.ServerUri) || origin.RegistryNodeId.IsNull)
+        {
+            throw new FederationException(FederationErrorCode.InvalidPackage,
+                "OriginRegistry must use exactly one authoritative origin form.");
+        }
+        return origin;
     }
 
     /// <summary>Reads the selected Resource or Version federation target without converting it to an xRegistry URL.</summary>

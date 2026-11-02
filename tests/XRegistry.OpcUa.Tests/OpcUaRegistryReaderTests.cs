@@ -1588,6 +1588,87 @@ public class OpcUaRegistryReaderTests
     }
 
     [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task OriginRegistryIsReadFromLogicalResourceWithoutSelectingItsDefaultVersion(bool stable)
+    {
+        var (session, reader) = await OriginReader();
+        var root = stable ? ExpandedNodeId.Null : new ExpandedNodeId(new NodeId("RemoteRegistry", 2), null, 2u);
+        session.OriginValue = new(stable ? "urn:Origin:Exact%2f" : "", stable ? "" : "urn:remote", root);
+        var originType = new NodeId("RegistryOriginDataType", 1);
+
+        var origin = await reader.ReadOriginRegistryAsync(GroupNode, "/teams/team-a", "schemas", "schema-a",
+            ResourceType, originType);
+
+        await Assert.That(ReferenceEquals(origin, session.OriginValue)).IsTrue();
+        await Assert.That(session.OriginReads.Count).IsEqualTo(1);
+        await Assert.That(session.OriginReads[0]).IsEqualTo((new NodeId("logical:OriginRegistry", 1), originType));
+        await Assert.That(session.BrowsedNodes.Contains(VersionsNode)).IsFalse();
+        await Assert.That(session.BrowsedNodes.Contains(DefaultVersionNode)).IsFalse();
+        await Assert.That(session.OpenedFiles.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    [Arguments("absent")]
+    [Arguments("object")]
+    [Arguments("duplicate")]
+    public async Task OriginRegistryRequiresOneLogicalResourceVariable(string state)
+    {
+        var (session, reader) = await OriginReader(state);
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await reader.ReadOriginRegistryAsync(GroupNode, "/teams/team-a", "schemas", "schema-a",
+                ResourceType, new NodeId("RegistryOriginDataType", 1)));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(session.OriginReads.Count).IsEqualTo(0);
+        await Assert.That(session.BrowsedNodes.Contains(DefaultVersionNode)).IsFalse();
+    }
+
+    [Test]
+    [Arguments(false, false, false)]
+    [Arguments(false, true, false)]
+    [Arguments(false, false, true)]
+    [Arguments(true, true, false)]
+    [Arguments(true, false, true)]
+    [Arguments(true, true, true)]
+    public async Task OriginRegistryRejectsMixedAndIncompleteAuthoritativeForms(
+        bool hasOrigin, bool hasServer, bool hasRoot)
+    {
+        var (session, reader) = await OriginReader();
+        session.OriginValue = new(hasOrigin ? "urn:origin" : "", hasServer ? "urn:server" : "",
+            hasRoot ? new ExpandedNodeId("Registry", "urn:registry") : ExpandedNodeId.Null);
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await reader.ReadOriginRegistryAsync(GroupNode, "/teams/team-a", "schemas", "schema-a",
+                ResourceType, new NodeId("RegistryOriginDataType", 1)));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(session.OriginReads.Count).IsEqualTo(1);
+    }
+
+    private static async ValueTask<(FakeSession Session, OpcUaRegistryReader Reader)> OriginReader(string state = "valid")
+    {
+        var session = new FakeSession();
+        var reader = await ModelReader(session);
+        ConfigureResourceAddressSpace(session);
+        session.BrowsePages[GroupNode] = new([ResourceReferencePage()]);
+        var properties = session.BrowsePages[LogicalResourceNode].Peek().References.ToList();
+        if (state != "absent")
+        {
+            properties.Add(state == "object"
+                ? new(new NodeId("logical:OriginRegistry", 1), new QualifiedName("OriginRegistry", 1), NodeClass.Object)
+                : VariableRef("OriginRegistry", "logical"));
+        }
+        if (state == "duplicate")
+        {
+            properties.Add(VariableRef("OriginRegistry", "logical"));
+        }
+        session.BrowsePages[LogicalResourceNode] = new([new(properties)]);
+        return (session, reader);
+    }
+
+    [Test]
     public async Task ExternalReferenceIsMappedToUriIdentitySeparateFromResourceUrl()
     {
         var resourceType = new NodeId("ResourceType", 1);
@@ -2870,6 +2951,15 @@ public class OpcUaRegistryReaderTests
             }
             return new(JsonValues.TryGetValue(variable.IdentifierAsString, out var value) ? value : JsonValue);
         }
+        public OpcUaRegistryOriginValue? OriginValue { get; set; }
+        public List<(NodeId Variable, NodeId DataType)> OriginReads { get; } = [];
+        public ValueTask<OpcUaRegistryOriginValue> ReadRegistryOriginAsync(NodeId variable, NodeId expectedDataType,
+            CancellationToken cancellationToken)
+        {
+            OriginReads.Add((variable, expectedDataType));
+            return new(OriginValue ?? throw new InvalidOperationException("No origin fixture supplied."));
+        }
+
         public ValueTask<ExpandedNodeId> ReadExpandedNodeIdAsync(NodeId variable, CancellationToken cancellationToken) =>
             new(ExpandedNodeIds[variable.IdentifierAsString]);
 

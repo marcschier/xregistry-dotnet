@@ -19,6 +19,243 @@ public class OpcUaSessionAdapterTests
         ["http://opcfoundation.org/UA/", "urn:example:namespace-one", "urn:Exact:Namespace%2fTwo"];
 
     [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task RegistryOriginDecodingRetainsScalarFieldsAndExpandedNodeContext(bool stableOrigin)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        await adapter.ReadNamespaceArrayAsync(CancellationToken.None);
+        var root = stableOrigin ? ExpandedNodeId.Null :
+            new ExpandedNodeId(new NodeId("Registry", 2), "urn:Exact:Namespace%2fTwo", 2u);
+        proxy.Extension = EncodeOrigin(stableOrigin ? "urn:Origin:Exact%2f" : "",
+            stableOrigin ? "" : "urn:Remote:Server%2fTwo", root);
+
+        var origin = await adapter.ReadRegistryOriginAsync(new NodeId("OriginRegistry", 2),
+            new NodeId(338u), CancellationToken.None);
+
+        await Assert.That(origin.OriginUri).IsEqualTo(stableOrigin ? "urn:Origin:Exact%2f" : "");
+        await Assert.That(origin.ServerUri).IsEqualTo(stableOrigin ? "" : "urn:Remote:Server%2fTwo");
+        await Assert.That(origin.RegistryNodeId).IsEqualTo(root);
+    }
+
+    [Test]
+    [Arguments("numeric")]
+    [Arguments("string")]
+    [Arguments("guid")]
+    [Arguments("opaque")]
+    public async Task RegistryOriginDecodingPreservesRootIdentifierKindAndSourceIndexes(string kind)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        await adapter.ReadNamespaceArrayAsync(CancellationToken.None);
+        var node = kind switch
+        {
+            "numeric" => new NodeId(42u, 2),
+            "string" => new NodeId("CaseSensitive%2f", 2),
+            "guid" => new NodeId(Guid.Parse("9b81dd7d-333a-4746-ad52-403a07e353df"), 2),
+            _ => new NodeId(ByteString.From(new byte[] { 0, 128, 255 }), 2)
+        };
+        var root = new ExpandedNodeId(node, null, 2u);
+        proxy.Extension = EncodeOrigin("", "urn:Remote:Server%2fTwo", root);
+
+        var origin = await adapter.ReadRegistryOriginAsync(new NodeId("OriginRegistry", 2),
+            new NodeId(338u), CancellationToken.None);
+
+        await Assert.That(origin.RegistryNodeId).IsEqualTo(root);
+        await Assert.That(origin.RegistryNodeId.IdType).IsEqualTo(node.IdType);
+        await Assert.That(origin.RegistryNodeId.NamespaceIndex).IsEqualTo((ushort)2);
+        await Assert.That(origin.RegistryNodeId.ServerIndex).IsEqualTo(2u);
+    }
+
+    [Test]
+    [Arguments("truncated")]
+    [Arguments("extra")]
+    [Arguments("scalar")]
+    public async Task RegistryOriginDecodingRejectsMalformedScalarStructure(string state)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        await adapter.ReadNamespaceArrayAsync(CancellationToken.None);
+        var bytes = EncodeOriginBytes("urn:origin", "", ExpandedNodeId.Null);
+        proxy.Extension = new ExtensionObject(new ExpandedNodeId(43u),
+            ByteString.From(state == "truncated" ? bytes[..^1] : [.. bytes, 0]));
+        if (state == "scalar")
+        {
+            proxy.ReadValue = new Variant("not an ExtensionObject");
+        }
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.ReadRegistryOriginAsync(new NodeId("OriginRegistry", 2),
+                new NodeId(338u), CancellationToken.None));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    [Arguments(65536, true)]
+    [Arguments(65537, false)]
+    public async Task RegistryOriginDecodingEnforcesExactStructureByteBudget(int length, bool succeeds)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        await adapter.ReadNamespaceArrayAsync(CancellationToken.None);
+        var overhead = EncodeOriginBytes("", "", ExpandedNodeId.Null).Length;
+        var bytes = EncodeOriginBytes(new string('a', length - overhead), "", ExpandedNodeId.Null);
+        await Assert.That(bytes.Length).IsEqualTo(length);
+        proxy.Extension = new ExtensionObject(new ExpandedNodeId(43u), ByteString.From(bytes));
+
+        if (succeeds)
+        {
+            var origin = await adapter.ReadRegistryOriginAsync(new NodeId("OriginRegistry", 2),
+                new NodeId(338u), CancellationToken.None);
+            await Assert.That(origin.OriginUri!.Length).IsEqualTo(length - overhead);
+        }
+        else
+        {
+            var error = await Assert.ThrowsAsync<FederationException>(async () =>
+                await adapter.ReadRegistryOriginAsync(new NodeId("OriginRegistry", 2),
+                    new NodeId(338u), CancellationToken.None));
+            await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        }
+    }
+
+    [Test]
+    public async Task RegistryOriginDecodingRetainsNativeReadStatusAndDiagnostics()
+    {
+        var (adapter, proxy) = CreateAdapter();
+        await adapter.ReadNamespaceArrayAsync(CancellationToken.None);
+        proxy.ReadStatus = StatusCodes.BadUserAccessDenied;
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.ReadRegistryOriginAsync(new NodeId("OriginRegistry", 2),
+                new NodeId(338u), CancellationToken.None));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.PolicyDenied);
+        await Assert.That(((ServiceResultException)error.InnerException!).StatusCode)
+            .IsEqualTo(StatusCodes.BadUserAccessDenied);
+        await Assert.That(ReferenceEquals(error.Data["OpcUa.ResponseHeader"], proxy.Header)).IsTrue();
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task RegistryOriginDecodingRejectsAnUnrelatedDeclaredDataType(bool wrongShape)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        await adapter.ReadNamespaceArrayAsync(CancellationToken.None);
+        proxy.Extension = EncodeOrigin("urn:origin", "", ExpandedNodeId.Null);
+        proxy.DeclaredDataType = wrongShape ? new Variant("RegistryOriginDataType") :
+            new Variant(new NodeId("Unrelated", 2));
+        var before = proxy.ReadCount;
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.ReadRegistryOriginAsync(new NodeId("OriginRegistry", 2),
+                new NodeId(338u), CancellationToken.None));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(proxy.ReadCount).IsEqualTo(before + 1);
+    }
+
+    [Test]
+    [Arguments("before")]
+    [Arguments("datatype")]
+    [Arguments("value")]
+    public async Task RegistryOriginDecodingPreservesCancellationWithoutFurtherReads(string stage)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        await adapter.ReadNamespaceArrayAsync(CancellationToken.None);
+        proxy.Extension = EncodeOrigin("urn:origin", "", ExpandedNodeId.Null);
+        using var cancellation = new CancellationTokenSource();
+        var before = proxy.ReadCount;
+        var expected = stage == "before" ? 0 : stage == "datatype" ? 1 : 2;
+        proxy.AfterRead = () =>
+        {
+            if (proxy.ReadCount == before + expected)
+            {
+                cancellation.Cancel();
+            }
+        };
+        if (stage == "before")
+        {
+            cancellation.Cancel();
+        }
+
+        var error = await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+            await adapter.ReadRegistryOriginAsync(new NodeId("OriginRegistry", 2),
+                new NodeId(338u), cancellation.Token));
+
+        await Assert.That(error!.CancellationToken).IsEqualTo(cancellation.Token);
+        await Assert.That(proxy.ReadCount).IsEqualTo(before + expected);
+    }
+
+    [Test]
+    public async Task RegistryOriginDecodingPreservesNullScalarFields()
+    {
+        var (adapter, proxy) = CreateAdapter();
+        await adapter.ReadNamespaceArrayAsync(CancellationToken.None);
+        proxy.Extension = EncodeOrigin(null, null, ExpandedNodeId.Null);
+
+        var origin = await adapter.ReadRegistryOriginAsync(new NodeId("OriginRegistry", 2),
+            new NodeId(338u), CancellationToken.None);
+
+        await Assert.That(origin.OriginUri).IsNull();
+        await Assert.That(origin.ServerUri).IsNull();
+        await Assert.That(origin.RegistryNodeId.IsNull).IsTrue();
+    }
+
+    [Test]
+    [Arguments("absent")]
+    [Arguments("competing")]
+    [Arguments("object")]
+    public async Task RegistryOriginDecodingRequiresOneEncodingDataType(string state)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        await adapter.ReadNamespaceArrayAsync(CancellationToken.None);
+        proxy.Extension = EncodeOrigin("urn:origin", "", ExpandedNodeId.Null);
+        var reference = new ReferenceDescription
+        {
+            NodeId = new ExpandedNodeId(338u),
+            NodeClass = state == "object" ? NodeClass.Object : NodeClass.DataType
+        };
+        proxy.BrowseResultFactory = _ => new BrowseResult
+        {
+            References = state == "absent" ? [] : state == "competing" ? [reference, reference] : [reference]
+        };
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.ReadRegistryOriginAsync(new NodeId("OriginRegistry", 2),
+                new NodeId(338u), CancellationToken.None));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    public async Task RegistryOriginDecodingRejectsAnUnrelatedDataTypeWithTheSameBrowseName()
+    {
+        var (adapter, proxy) = CreateAdapter();
+        await adapter.ReadNamespaceArrayAsync(CancellationToken.None);
+        proxy.DataTypeBrowseName = "RegistryOriginDataType";
+        proxy.DeclaredDataType = new Variant(new NodeId("DifferentDataType", 2));
+        proxy.Extension = EncodeOrigin("urn:origin", "", ExpandedNodeId.Null);
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.ReadRegistryOriginAsync(new NodeId("OriginRegistry", 2),
+                new NodeId("DifferentDataType", 2), CancellationToken.None));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    private static ExtensionObject EncodeOrigin(string? originUri, string? serverUri, ExpandedNodeId root) =>
+        new(new ExpandedNodeId(43u), ByteString.From(EncodeOriginBytes(originUri, serverUri, root)));
+
+    private static byte[] EncodeOriginBytes(string? originUri, string? serverUri, ExpandedNodeId root)
+    {
+        var context = ServiceMessageContext.CreateEmpty(DefaultTelemetry.Create(static _ => { }));
+        using var encoder = new BinaryEncoder(context);
+        encoder.WriteString("OriginUri", originUri);
+        encoder.WriteString("ServerUri", serverUri);
+        encoder.WriteExpandedNodeId("RegistryNodeId", root);
+        return encoder.CloseAndReturnBuffer() ?? throw new InvalidOperationException("No encoded origin bytes.");
+    }
+
+    [Test]
     public async Task ReadJsonValueDecodesExtensionObjectAndResolvesItsDataType()
     {
         var value = new BuildInfo
@@ -767,6 +1004,9 @@ public class OpcUaSessionAdapterTests
         public string[] ServerArray { get; set; } = [];
         public string[] NamespaceArray { get; set; } = [];
         public Variant? ReadValue { get; set; }
+        public Variant? DeclaredDataType { get; set; }
+        public int ReadCount { get; private set; }
+        public Action? AfterRead { get; set; }
         public StatusCode ReadStatus { get; set; }
         public StatusCode BrowseStatus { get; set; }
         public StatusCode WriteStatus { get; set; }
@@ -846,6 +1086,7 @@ public class OpcUaSessionAdapterTests
 
         private ValueTask<ReadResponse> Read(ArrayOf<ReadValueId> nodes)
         {
+            ReadCount++;
             var node = nodes[0].NodeId;
             var value = node.TryGetValue(out uint identifier) && node.NamespaceIndex == 0
                 ? identifier switch
@@ -855,12 +1096,15 @@ public class OpcUaSessionAdapterTests
                     _ => Variant.From(Extension)
                 }
                 : Variant.From(Extension);
-            return new(new ReadResponse
+            var response = new ReadResponse
             {
                 ResponseHeader = Header,
                 DiagnosticInfos = Diagnostics,
-                Results = [new DataValue(ReadValue ?? value, ReadStatus)]
-            });
+                Results = [new DataValue(nodes[0].AttributeId == Attributes.DataType
+                    ? DeclaredDataType ?? new Variant(new NodeId(338u)) : ReadValue ?? value, ReadStatus)]
+            };
+            AfterRead?.Invoke();
+            return new(response);
         }
 
         private ValueTask<BrowseResponse> Browse(ArrayOf<BrowseDescription> nodes)

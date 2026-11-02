@@ -328,6 +328,78 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
     }
 
     /// <inheritdoc />
+    public async ValueTask<OpcUaRegistryOriginValue> ReadRegistryOriginAsync(NodeId variable,
+        NodeId expectedDataType, CancellationToken cancellationToken)
+    {
+        if (variable.IsNull || expectedDataType.IsNull)
+        {
+            throw new ArgumentException("The origin Variable and expected DataType must be non-null.");
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        var typeResponse = await InvokeAsync(() => session.ReadAsync(new RequestHeader(), 0, TimestampsToReturn.Neither,
+            [new ReadValueId { NodeId = variable, AttributeId = Attributes.DataType }], cancellationToken))
+            .ConfigureAwait(false);
+        var declaredType = Single(typeResponse.Results, static result => result.StatusCode,
+            typeResponse.DiagnosticInfos, typeResponse.ResponseHeader);
+        if (declaredType.WrappedValue.AsBoxedObject() is not NodeId dataType || dataType != expectedDataType)
+        {
+            throw new FederationException(FederationErrorCode.InvalidPackage,
+                "The OriginRegistry Variable does not declare the expected RegistryOriginDataType.");
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        var response = await InvokeAsync(() => session.ReadAsync(new RequestHeader(), 0, TimestampsToReturn.Neither,
+            [new ReadValueId { NodeId = variable, AttributeId = Attributes.Value }], cancellationToken))
+            .ConfigureAwait(false);
+        var result = Single(response.Results, static result => result.StatusCode,
+            response.DiagnosticInfos, response.ResponseHeader);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (result.WrappedValue.AsBoxedObject() is not ExtensionObject value)
+        {
+            throw new FederationException(FederationErrorCode.InvalidPackage,
+                "OriginRegistry is not a scalar ExtensionObject.");
+        }
+        var dataTypes = await BrowseOnce(Local(value.TypeId), BrowseDirection.Inverse,
+            ReferenceTypeIds.HasEncoding, cancellationToken).ConfigureAwait(false);
+        if (dataTypes.Count != 1 || dataTypes[0].NodeClass != NodeClass.DataType ||
+            Local(dataTypes[0].NodeId) != expectedDataType)
+        {
+            throw new FederationException(FederationErrorCode.InvalidPackage,
+                "OriginRegistry does not use the expected RegistryOriginDataType.");
+        }
+
+        var context = ServiceMessageContext.CreateEmpty(s_telemetry.Value);
+        if (!value.TryGetAsBinary(out var bytes, context))
+        {
+            throw new FederationException(FederationErrorCode.UnsupportedOperation,
+                "The OriginRegistry encoding cannot be decoded without losing its typed fields.");
+        }
+        if (bytes.Length > 64 * 1024)
+        {
+            throw new FederationException(FederationErrorCode.LimitExceeded,
+                "The OriginRegistry structure exceeds the byte budget.");
+        }
+        try
+        {
+            using var decoder = new BinaryDecoder(bytes.ToArray(), context);
+            var origin = new OpcUaRegistryOriginValue(decoder.ReadString("OriginUri"),
+                decoder.ReadString("ServerUri"), decoder.ReadExpandedNodeId("RegistryNodeId"));
+            if (decoder.Position != bytes.Length)
+            {
+                throw new FederationException(FederationErrorCode.InvalidPackage,
+                    "OriginRegistry has fields beyond its three declared scalar fields.");
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+            return origin;
+        }
+        catch (ServiceResultException failure)
+        {
+            throw new FederationException(FederationErrorCode.InvalidPackage,
+                "OriginRegistry does not encode its three declared scalar fields.",
+                failure.StatusCode.ToString(), failure);
+        }
+    }
+
+    /// <inheritdoc />
     public async ValueTask<OpcUaJsonValue> ReadJsonValueAsync(NodeId variable, CancellationToken cancellationToken)
     {
         var response = await InvokeAsync(() => session.ReadAsync(new RequestHeader(), 0, TimestampsToReturn.Neither,

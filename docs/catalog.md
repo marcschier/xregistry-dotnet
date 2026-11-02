@@ -246,9 +246,21 @@ indexes; each target mapping uses that Session's current namespace table.
 reference's logical Resource or explicitly exact-Version role. A target XID
 that contradicts that role is rejected before resolving its Group hierarchy;
 the successful result retains the checked role. An unknown role rejects before
-provider acquisition. The low-level resolver does not read or validate a
-Resource's `OriginRegistry` or pin an authoritative origin form. It is not the
-complete `XREG-Federation` proxy workflow.
+provider acquisition.
+`OpcUaRegistryReader.ReadOriginRegistryAsync` separately reads the logical
+Resource's `OriginRegistry` Variable, without selecting its default Version.
+The adapter checks the Variable's declared DataType and the ExtensionObject's
+encoding DataType against the supplied RegistryOriginDataType NodeId. It
+decodes the three scalar fields in order from binary, rejects malformed or
+trailing data and limits the encoded body to 64 KiB. URI spelling, identifier
+kind and source table indexes remain unchanged. The reader rejects missing,
+duplicate or non-Variable properties and mixed or incomplete origin forms.
+The returned `OpcUaRegistryOriginValue` is an untrusted source value, not a
+provider binding or portable stored identity. The caller must still resolve
+its table context and validate it against an independently trusted provider.
+The external-target resolver does not yet compose this origin read with
+provider selection, origin-root agreement or persisted source keys; it is not
+the complete `XREG-Federation` proxy workflow.
 Cancellation already requested at resolver entry prevents provider acquisition.
 If acquisition returns a lease after cancellation, the resolver disposes that
 lease before propagating cancellation. A disposal failure is retained under

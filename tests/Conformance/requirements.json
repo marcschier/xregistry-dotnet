@@ -139756,7 +139756,7 @@
       "text": "For a logical proxy or mirror claiming `XREG-Federation`, the resolver first reads the logical Resource's read-only `OriginRegistry`. Its `RegistryOriginDataType` has three scalar fields in order: `OriginUri` (`UriString`), `ServerUri` (`UriString`) and `RegistryNodeId` (`ExpandedNodeId`). Exactly one form MUST be authoritative:",
       "review": {
         "status": "reviewed",
-        "note": "The complete selected section 10.2, including both exclusive origin forms and all five resolution steps, was read against OpcUaRegistryReader, OpcUaSessionAdapter, OpcUaExternalNodeId and the trusted-provider resolver/lease. The existing reader reads ExternalReference and the low-level resolver validates a caller-supplied target lease, but no Resource-owned RegistryOriginDataType/OriginRegistry reader or exclusive-form admission exists. A caller-owned NativeRegistryContext is not evidence of reading this Property. Implement origin decoding and independent binding validation before presenting this as the complete XREG-Federation workflow.",
+        "note": "The complete selected section 10.2, including both exclusive origin forms and all five resolution steps, was read against the reader, adapter, portable target identity and trusted-provider lease. ReadOriginRegistryAsync now selects the logical Resource's unique OriginRegistry Variable without visiting its default Version and rejects mixed or incomplete origin forms. Typed decoding validates both the declared DataType and encoding owner against the caller's expected NodeId; it retains exact scalar fields, all four identifier kinds and unresolved source indexes, and rejects malformed/trailing data or bodies beyond 64 KiB. These are client decoding and form checks, not independent trust admission, resolved portable origin identity, read-only server exposure or composition with provider selection. A caller-owned NativeRegistryContext is not evidence of those remaining obligations. Keep this compound requirement pending.",
         "roles": [
           "client",
           "server"
@@ -139764,7 +139764,21 @@
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "OriginRegistryIsReadFromLogicalResourceWithoutSelectingItsDefaultVersion",
+          "OriginRegistryRequiresOneLogicalResourceVariable",
+          "OriginRegistryRejectsMixedAndIncompleteAuthoritativeForms",
+          "RegistryOriginDecodingRetainsScalarFieldsAndExpandedNodeContext",
+          "RegistryOriginDecodingPreservesRootIdentifierKindAndSourceIndexes",
+          "RegistryOriginDecodingPreservesNullScalarFields",
+          "RegistryOriginDecodingRejectsAnUnrelatedDeclaredDataType",
+          "RegistryOriginDecodingRejectsAnUnrelatedDataTypeWithTheSameBrowseName",
+          "RegistryOriginDecodingRequiresOneEncodingDataType",
+          "RegistryOriginDecodingRejectsMalformedScalarStructure",
+          "RegistryOriginDecodingEnforcesExactStructureByteBudget",
+          "RegistryOriginDecodingRetainsNativeReadStatusAndDiagnostics",
+          "RegistryOriginDecodingPreservesCancellationWithoutFurtherReads"
+        ],
         "nativeEvidence": []
       }
     },

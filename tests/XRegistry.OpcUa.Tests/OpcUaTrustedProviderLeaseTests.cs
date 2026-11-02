@@ -291,6 +291,9 @@ public class OpcUaTrustedProviderLeaseTests
         public ValueTask<IReadOnlyList<Variant>> CallMethodAsync(NodeId target, string methodBrowseName,
             IReadOnlyList<Variant> inputArguments, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
+        public ValueTask<OpcUaRegistryOriginValue> ReadRegistryOriginAsync(NodeId variable, NodeId expectedDataType,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+
         public ValueTask<ExpandedNodeId> ReadExpandedNodeIdAsync(NodeId variable,
             CancellationToken cancellationToken) => throw new NotSupportedException();
         public ValueTask<OpcUaExternalNodeId> MapExternalNodeIdAsync(ExpandedNodeId nodeId,
