@@ -20,6 +20,31 @@ public class PublicationChannelStoreTests
         "https://publisher.example.test", new Dictionary<string, string>(StringComparer.Ordinal));
 
     [Test]
+    public async Task SourceSnapshotWithoutMandatoryProvenanceCannotChangeAPublishedChannelOrPersistence()
+    {
+        var fixture = CreateFixture();
+        var persistence = new InMemoryRegistryPersistence();
+        var store = new PublicationChannelStore(persistence, StoreRegistry);
+        var before = await store.PublishAsync(Channel, fixture.ManifestBytes, fixture.Objects, 0);
+        using var baseline = await persistence.ReadSnapshotAsync();
+        var json = JsonNode.Parse(fixture.ManifestBytes)!.AsObject();
+        json["capture"] = "source-snapshot";
+        var bytes = Encoding.UTF8.GetBytes(json.ToJsonString());
+
+        var error = await Assert.That(async () =>
+                await store.PublishAsync(Channel, bytes, fixture.Objects, before.Channel!.Epoch))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected capture provenance rejection.");
+
+        await Assert.That(error.Code).IsEqualTo("missing_capture_provenance");
+        await Assert.That(error.Path).IsEqualTo("/requiredExtensions");
+        var after = await store.OpenChannelAsync(Channel);
+        await Assert.That(after.Channel!.Epoch).IsEqualTo(before.Channel!.Epoch);
+        await Assert.That(after.Snapshot.Digest).IsEqualTo(before.Snapshot.Digest);
+        using var current = await persistence.ReadSnapshotAsync();
+        await Assert.That(current.Generation).IsEqualTo(baseline.Generation);
+    }
+
+    [Test]
     public async Task PublishRetainsExactBytesAndAdvancesTheChannelEpoch()
     {
         var fixture = CreateFixture();

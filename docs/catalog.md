@@ -184,6 +184,13 @@ before opening a binding for a programmatically supplied channel head.
 These checks do not authorize acquisition or select an alternate binding.
 Document-tree and extension bindings retain their own selection rules.
 
+A `source-snapshot` manifest must declare at least one included mandatory
+extension. Missing or empty `requiredExtensions` rejects before a channel
+update changes persistence. This is a necessary structural check, not proof
+that an extension retains a source identity or establishes an immutable
+capture guarantee. Generic readers still reject unsupported mandatory
+extension semantics; the parser does not assign a provenance vocabulary.
+
 Opening a channel reads the retained manifest and checks its descriptor, scope
 and completeness. Offline replay is limited to `offline-complete` manifests,
 which must supply every referenced object; replay verifies each object again

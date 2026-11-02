@@ -107,6 +107,12 @@ public sealed class PublicationManifest
             }
         }
 
+        if (string.Equals(capture, "source-snapshot", StringComparison.Ordinal) && requiredExtensions.Length == 0)
+        {
+            throw PublicationJson.Error("missing_capture_provenance", "/requiredExtensions",
+                "Source-snapshot capture requires a mandatory provenance extension.");
+        }
+
         return new PublicationManifest(exactBytes, scope, capture, completeness, registry, parent,
             Array.AsReadOnly(documents), new ReadOnlyDictionary<string, PublicationByteDescriptor>(extensions),
             Array.AsReadOnly(requiredExtensions));

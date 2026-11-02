@@ -135214,13 +135214,22 @@
       ],
       "text": "- `source-snapshot` is permitted only when the source provides an immutable capture guarantee. For this claim, the producer MUST retain its source identity and capture evidence in a provenance extension under `requiredExtensions`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The parser rejects source-snapshot capture when requiredExtensions is absent or empty, and every mandatory extension must have an included descriptor. The producer-side channel store rejects this state before changing its head, epoch or persistence generation. Existing assembled and live-observation classifications do not acquire a mandatory provenance requirement. This is only a necessary structural condition: an included mandatory descriptor does not prove its bytes retain source identity and capture evidence or that the source supplied an immutable capture guarantee. Producer provenance interpretation and verification remain pending; no normative provenance vocabulary is invented.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "SourceSnapshotCaptureRejectsAbsentOrEmptyMandatoryProvenance",
+          "CaptureClassesPreserveIncludedMandatoryExtensionsWithoutInventingTheirVocabulary",
+          "NonAtomicCaptureClassesDoNotRequireAnInventedProvenanceExtension",
+          "SourceSnapshotWithoutMandatoryProvenanceCannotChangeAPublishedChannelOrPersistence",
+          "RejectsCredentialedBindingsAndMissingRequiredExtensions"
+        ],
         "nativeEvidence": []
       }
     },

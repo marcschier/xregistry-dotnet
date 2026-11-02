@@ -329,6 +329,65 @@ public class PublicationManifestTests
     }
 
     [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task SourceSnapshotCaptureRejectsAbsentOrEmptyMandatoryProvenance(bool emptyArray)
+    {
+        var json = JsonNode.Parse(ValidManifest)!.AsObject();
+        json["capture"] = "source-snapshot";
+        if (emptyArray)
+        {
+            json["requiredExtensions"] = new JsonArray();
+        }
+        else
+        {
+            json.Remove("requiredExtensions");
+        }
+        var bytes = Encoding.UTF8.GetBytes(json.ToJsonString());
+
+        var error = await Assert.That(() => PublicationManifest.Parse(bytes))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected missing capture provenance.");
+
+        await Assert.That(error.Code).IsEqualTo("missing_capture_provenance");
+        await Assert.That(error.Path).IsEqualTo("/requiredExtensions");
+    }
+
+    [Test]
+    [Arguments("assembled")]
+    [Arguments("live-observation")]
+    [Arguments("source-snapshot")]
+    public async Task CaptureClassesPreserveIncludedMandatoryExtensionsWithoutInventingTheirVocabulary(string capture)
+    {
+        var json = JsonNode.Parse(ValidManifest)!.AsObject();
+        json["capture"] = capture;
+        var bytes = Encoding.UTF8.GetBytes(json.ToJsonString());
+
+        var manifest = PublicationManifest.Parse(bytes);
+
+        await Assert.That(manifest.Capture).IsEqualTo(capture);
+        await Assert.That(manifest.RequiredExtensions.SequenceEqual(["urn:example:manifest-extension"])).IsTrue();
+        await Assert.That(manifest.Extensions.ContainsKey(manifest.RequiredExtensions[0])).IsTrue();
+        await Assert.That(manifest.GetExactBytes().SequenceEqual(bytes)).IsTrue();
+    }
+
+    [Test]
+    [Arguments("assembled")]
+    [Arguments("live-observation")]
+    public async Task NonAtomicCaptureClassesDoNotRequireAnInventedProvenanceExtension(string capture)
+    {
+        var json = JsonNode.Parse(ValidManifest)!.AsObject();
+        json["capture"] = capture;
+        json.Remove("requiredExtensions");
+        json.Remove("extensions");
+
+        var manifest = PublicationManifest.Parse(Encoding.UTF8.GetBytes(json.ToJsonString()));
+
+        await Assert.That(manifest.Capture).IsEqualTo(capture);
+        await Assert.That(manifest.RequiredExtensions.Count).IsZero();
+        await Assert.That(manifest.Extensions.Count).IsZero();
+    }
+
+    [Test]
     public async Task ParsesManifestAndRetainsItsExactBytes()
     {
         var manifest = PublicationManifest.Parse(ValidManifest);
