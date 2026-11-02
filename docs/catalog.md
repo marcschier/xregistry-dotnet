@@ -143,6 +143,17 @@ Resource documents through FileTransfer. It supports both entity `Labels` and
 Resource Meta `MetaLabels`. Document writes are bounded, start at position
 zero, erase the prior contents and always attempt to close an opened handle.
 
+The adapter rejects non-Good Service, operation and Method argument statuses;
+a plausible value cannot override a bad or uncertain status. Good subcodes
+remain accepted. Known native failures map to the draft's resolver outcomes.
+The original SDK exception, or a `ServiceResultException` carrying the original
+status, remains the inner exception. `Exception.Data` retains response headers,
+operation diagnostics and Method argument results and diagnostics. Failed
+continuation releases remain attached to the original operation failure;
+multiple cleanup failures are aggregated rather than replacing an earlier one.
+The public message does not copy native diagnostic text. Cancellation remains
+cancellation rather than becoming a native error.
+
 The reader, writer and read source have fake-Session coverage. An in-process
 OPC UA Stack server also verifies Session establishment, SpecVersion gating,
 event Subscription creation and removal, publishing enablement and native

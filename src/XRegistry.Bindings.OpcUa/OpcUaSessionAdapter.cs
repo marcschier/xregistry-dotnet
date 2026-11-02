@@ -172,24 +172,27 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
     /// <inheritdoc />
     public async ValueTask<OpcUaBrowsePage> BrowseAsync(NodeId node, CancellationToken cancellationToken)
     {
-        var response = await session.BrowseAsync(new RequestHeader(), new ViewDescription(), maxReferencesPerNode,
+        var response = await InvokeAsync(() => session.BrowseAsync(new RequestHeader(), new ViewDescription(), maxReferencesPerNode,
             [Describe(node, BrowseDirection.Forward, ReferenceTypeIds.HierarchicalReferences)],
-            cancellationToken).ConfigureAwait(false);
-        return await ToPageAsync(response.Results).ConfigureAwait(false);
+            cancellationToken)).ConfigureAwait(false);
+        return await ToPageAsync(response.Results, response.DiagnosticInfos, response.ResponseHeader)
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async ValueTask<OpcUaBrowsePage> BrowseNextAsync(byte[] continuationPoint, bool release,
         CancellationToken cancellationToken)
     {
-        var response = await session.BrowseNextAsync(new RequestHeader(), release, [new ByteString(continuationPoint)],
-            cancellationToken).ConfigureAwait(false);
+        var response = await InvokeAsync(() => session.BrowseNextAsync(new RequestHeader(), release,
+            [new ByteString(continuationPoint)], cancellationToken)).ConfigureAwait(false);
         if (release)
         {
-            _ = Single(response.Results, IsBad);
+            _ = Single(response.Results, static result => result.StatusCode,
+                response.DiagnosticInfos, response.ResponseHeader);
             return new OpcUaBrowsePage([]);
         }
-        return await ToPageAsync(response.Results, continuationPoint).ConfigureAwait(false);
+        return await ToPageAsync(response.Results, response.DiagnosticInfos, response.ResponseHeader,
+            continuationPoint).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -229,14 +232,15 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
     /// <inheritdoc />
     public async ValueTask WriteValueAsync(NodeId variable, Variant value, CancellationToken cancellationToken)
     {
-        var response = await session.WriteAsync(new RequestHeader(),
+        var response = await InvokeAsync(() => session.WriteAsync(new RequestHeader(),
             [new WriteValue
             {
                 NodeId = variable,
                 AttributeId = Attributes.Value,
                 Value = new DataValue(value),
-            }], cancellationToken).ConfigureAwait(false);
-        _ = Single(response.Results, StatusCode.IsBad);
+            }], cancellationToken)).ConfigureAwait(false);
+        _ = Single(response.Results, static status => status,
+            response.DiagnosticInfos, response.ResponseHeader);
     }
 
     /// <inheritdoc />
@@ -261,10 +265,11 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
     /// <inheritdoc />
     public async ValueTask<string> ReadStringAsync(NodeId variable, CancellationToken cancellationToken)
     {
-        var response = await session.ReadAsync(new RequestHeader(), 0, TimestampsToReturn.Neither,
-            [new ReadValueId { NodeId = variable, AttributeId = Attributes.Value }], cancellationToken)
+        var response = await InvokeAsync(() => session.ReadAsync(new RequestHeader(), 0, TimestampsToReturn.Neither,
+            [new ReadValueId { NodeId = variable, AttributeId = Attributes.Value }], cancellationToken))
             .ConfigureAwait(false);
-        var result = Single(response.Results, r => StatusCode.IsBad(r.StatusCode));
+        var result = Single(response.Results, static result => result.StatusCode,
+            response.DiagnosticInfos, response.ResponseHeader);
         return result.WrappedValue.TryGetValue(out string? text) && text is not null
             ? text
             : throw new FederationException(FederationErrorCode.InvalidPackage, "The Variable is not a String.");
@@ -274,10 +279,11 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
     public async ValueTask<ExpandedNodeId> ReadExpandedNodeIdAsync(NodeId variable,
         CancellationToken cancellationToken)
     {
-        var response = await session.ReadAsync(new RequestHeader(), 0, TimestampsToReturn.Neither,
-            [new ReadValueId { NodeId = variable, AttributeId = Attributes.Value }], cancellationToken)
+        var response = await InvokeAsync(() => session.ReadAsync(new RequestHeader(), 0, TimestampsToReturn.Neither,
+            [new ReadValueId { NodeId = variable, AttributeId = Attributes.Value }], cancellationToken))
             .ConfigureAwait(false);
-        var result = Single(response.Results, r => StatusCode.IsBad(r.StatusCode));
+        var result = Single(response.Results, static result => result.StatusCode,
+            response.DiagnosticInfos, response.ResponseHeader);
         return result.WrappedValue.TryGetValue(out ExpandedNodeId reference) &&
             !reference.IsNull
                 ? reference
@@ -288,10 +294,11 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
     private async ValueTask<IReadOnlyList<string>> ReadStringArrayAsync(NodeId node, string name,
         CancellationToken cancellationToken)
     {
-        var response = await session.ReadAsync(new RequestHeader(), 0, TimestampsToReturn.Neither,
+        var response = await InvokeAsync(() => session.ReadAsync(new RequestHeader(), 0, TimestampsToReturn.Neither,
             [new ReadValueId { NodeId = node, AttributeId = Attributes.Value }],
-            cancellationToken).ConfigureAwait(false);
-        var result = Single(response.Results, r => StatusCode.IsBad(r.StatusCode));
+            cancellationToken)).ConfigureAwait(false);
+        var result = Single(response.Results, static result => result.StatusCode,
+            response.DiagnosticInfos, response.ResponseHeader);
         IEnumerable<string>? values = result.WrappedValue.AsBoxedObject() switch
         {
             string[] array => (IEnumerable<string>)array,
@@ -312,10 +319,11 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
     /// <inheritdoc />
     public async ValueTask<OpcUaJsonValue> ReadJsonValueAsync(NodeId variable, CancellationToken cancellationToken)
     {
-        var response = await session.ReadAsync(new RequestHeader(), 0, TimestampsToReturn.Neither,
-            [new ReadValueId { NodeId = variable, AttributeId = Attributes.Value }], cancellationToken)
+        var response = await InvokeAsync(() => session.ReadAsync(new RequestHeader(), 0, TimestampsToReturn.Neither,
+            [new ReadValueId { NodeId = variable, AttributeId = Attributes.Value }], cancellationToken))
             .ConfigureAwait(false);
-        var result = Single(response.Results, r => StatusCode.IsBad(r.StatusCode));
+        var result = Single(response.Results, static result => result.StatusCode,
+            response.DiagnosticInfos, response.ResponseHeader);
         var value = result.WrappedValue.AsBoxedObject();
         if (value is ExtensionObject extensionObject)
         {
@@ -404,9 +412,10 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
         NodeId referenceType, CancellationToken cancellationToken)
     {
         var references = new List<ReferenceDescription>();
-        var response = await session.BrowseAsync(new RequestHeader(), new ViewDescription(), maxReferencesPerNode,
-            [Describe(node, direction, referenceType)], cancellationToken).ConfigureAwait(false);
-        var page = Single(response.Results, IsBad);
+        var response = await InvokeAsync(() => session.BrowseAsync(new RequestHeader(), new ViewDescription(),
+            maxReferencesPerNode, [Describe(node, direction, referenceType)], cancellationToken)).ConfigureAwait(false);
+        var page = await CheckedBrowseAsync(response.Results, response.DiagnosticInfos,
+            response.ResponseHeader).ConfigureAwait(false);
         while (true)
         {
             var continuation = page.ContinuationPoint.Length == 0 ? null : page.ContinuationPoint.ToArray();
@@ -423,9 +432,10 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
                     return references;
                 }
                 cancellationToken.ThrowIfCancellationRequested();
-                var next = await session.BrowseNextAsync(new RequestHeader(), false, [new ByteString(continuation)],
-                    cancellationToken).ConfigureAwait(false);
-                page = Single(next.Results, IsBad);
+                var next = await InvokeAsync(() => session.BrowseNextAsync(new RequestHeader(), false,
+                    [new ByteString(continuation)], cancellationToken)).ConfigureAwait(false);
+                page = await CheckedBrowseAsync(next.Results, next.DiagnosticInfos,
+                    next.ResponseHeader, continuation).ConfigureAwait(false);
             }
             catch (Exception exception) when (continuation is not null)
             {
@@ -438,10 +448,11 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
     private async ValueTask<IReadOnlyList<Variant>> CallAsync(NodeId target, NodeId method, Variant[] input,
         CancellationToken cancellationToken)
     {
-        var response = await session.CallAsync(new RequestHeader(),
+        var response = await InvokeAsync(() => session.CallAsync(new RequestHeader(),
             [new CallMethodRequest { ObjectId = target, MethodId = method, InputArguments = input }],
-            cancellationToken).ConfigureAwait(false);
-        var result = Single(response.Results, r => StatusCode.IsBad(r.StatusCode));
+            cancellationToken)).ConfigureAwait(false);
+        var result = Single(response.Results, static result => result.StatusCode,
+            response.DiagnosticInfos, response.ResponseHeader);
         return result.OutputArguments.ToArray() ?? [];
     }
 
@@ -466,28 +477,10 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
     }
 
     private async ValueTask<OpcUaBrowsePage> ToPageAsync(ArrayOf<BrowseResult> results,
-        byte[]? previousContinuation = null)
+        ArrayOf<DiagnosticInfo> diagnostics, ResponseHeader? responseHeader, byte[]? previousContinuation = null)
     {
-        if (results.Count != 1)
-        {
-            throw new FederationException(FederationErrorCode.InvalidPackage,
-                "The server returned an unexpected result count.");
-        }
-        var result = results[0];
-        if (IsBad(result))
-        {
-            var failure = new FederationException(FederationErrorCode.Unavailable,
-                "The OPC UA service reported a failure.");
-            var returnedContinuation = result.ContinuationPoint.Length == 0
-                ? null
-                : result.ContinuationPoint.ToArray();
-            if (returnedContinuation is not null &&
-                (previousContinuation is null || !returnedContinuation.AsSpan().SequenceEqual(previousContinuation)))
-            {
-                await ReleaseAsync(returnedContinuation, failure).ConfigureAwait(false);
-            }
-            throw failure;
-        }
+        var result = await CheckedBrowseAsync(results, diagnostics, responseHeader, previousContinuation)
+            .ConfigureAwait(false);
 
         var outstanding = result.ContinuationPoint.Length == 0 ? null : result.ContinuationPoint.ToArray();
         try
@@ -508,17 +501,105 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
         }
     }
 
-    private static T Single<T>(ArrayOf<T> results, Func<T, bool> failed)
+    private static T Single<T>(ArrayOf<T> results, Func<T, StatusCode> getStatus,
+        ArrayOf<DiagnosticInfo> diagnostics, ResponseHeader? responseHeader)
     {
+        if (responseHeader is not null && !StatusCode.IsGood(responseHeader.ServiceResult))
+        {
+            var failure = StatusFailure(responseHeader.ServiceResult, diagnostics, responseHeader);
+            failure.Data["OpcUa.Results"] = results;
+            throw failure;
+        }
         if (results.Count != 1)
         {
             throw new FederationException(FederationErrorCode.InvalidPackage,
                 "The server returned an unexpected result count.");
         }
         var result = results[0];
-        return failed(result)
-            ? throw new FederationException(FederationErrorCode.Unavailable, "The OPC UA service reported a failure.")
-            : result;
+        var status = getStatus(result);
+        if (StatusCode.IsGood(status) && result is CallMethodResult method)
+        {
+            foreach (var argument in method.InputArgumentResults)
+            {
+                if (!StatusCode.IsGood(argument))
+                {
+                    status = argument;
+                    break;
+                }
+            }
+        }
+        if (!StatusCode.IsGood(status))
+        {
+            var failure = StatusFailure(status, diagnostics, responseHeader);
+            if (result is CallMethodResult call)
+            {
+                failure.Data["OpcUa.MethodStatusCode"] = call.StatusCode;
+                failure.Data["OpcUa.InputArgumentResults"] = call.InputArgumentResults;
+                failure.Data["OpcUa.InputArgumentDiagnosticInfos"] = call.InputArgumentDiagnosticInfos;
+            }
+            throw failure;
+        }
+        return result;
+    }
+
+    private static FederationException StatusFailure(StatusCode status,
+        ArrayOf<DiagnosticInfo> diagnostics = default, ResponseHeader? responseHeader = null,
+        ServiceResultException? innerException = null)
+    {
+        var code = status.CodeBits switch
+        {
+            var value when value == StatusCodes.BadNotSupported.CodeBits ||
+                value == StatusCodes.BadMethodInvalid.CodeBits => FederationErrorCode.UnsupportedOperation,
+            var value when value == StatusCodes.BadNodeIdUnknown.CodeBits ||
+                value == StatusCodes.BadNotFound.CodeBits => FederationErrorCode.NotFound,
+            var value when value == StatusCodes.BadUserAccessDenied.CodeBits ||
+                value == StatusCodes.BadSecurityChecksFailed.CodeBits => FederationErrorCode.PolicyDenied,
+            var value when value == StatusCodes.BadInvalidArgument.CodeBits => FederationErrorCode.InvalidPackage,
+            var value when value == StatusCodes.BadContinuationPointInvalid.CodeBits =>
+                FederationErrorCode.InconsistentSnapshot,
+            var value when value == StatusCodes.BadTooManyOperations.CodeBits ||
+                value == StatusCodes.BadEncodingLimitsExceeded.CodeBits => FederationErrorCode.LimitExceeded,
+            _ => FederationErrorCode.Unavailable
+        };
+        var failure = new FederationException(code, "The OPC UA operation did not return a Good status.",
+            diagnostic: status.ToString(), innerException: innerException ?? new ServiceResultException(status));
+        failure.Data["OpcUa.DiagnosticInfos"] = diagnostics;
+        if (responseHeader is not null)
+        {
+            failure.Data["OpcUa.ResponseHeader"] = responseHeader;
+        }
+        return failure;
+    }
+
+    private static async ValueTask<T> InvokeAsync<T>(Func<ValueTask<T>> operation)
+    {
+        try
+        {
+            return await operation().ConfigureAwait(false);
+        }
+        catch (ServiceResultException failure)
+        {
+            throw StatusFailure(failure.StatusCode, innerException: failure);
+        }
+    }
+
+    private async ValueTask<BrowseResult> CheckedBrowseAsync(ArrayOf<BrowseResult> results,
+        ArrayOf<DiagnosticInfo> diagnostics, ResponseHeader? responseHeader, byte[]? previousContinuation = null)
+    {
+        try
+        {
+            return Single(results, static result => result.StatusCode, diagnostics, responseHeader);
+        }
+        catch (FederationException failure) when (results.Count == 1)
+        {
+            var continuation = results[0].ContinuationPoint.ToArray();
+            if (continuation is { Length: > 0 } &&
+                (previousContinuation is null || !continuation.SequenceEqual(previousContinuation)))
+            {
+                await ReleaseAsync(continuation, failure).ConfigureAwait(false);
+            }
+            throw;
+        }
     }
 
     private NodeId Local(ExpandedNodeId id)
@@ -532,18 +613,22 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
                 "A Browse result refers to a namespace or server that cannot be mapped in this Session.");
     }
 
-    private static bool IsBad(BrowseResult result) => StatusCode.IsBad(result.StatusCode);
-
     private async ValueTask ReleaseAsync(byte[] continuation, Exception failure)
     {
         try
         {
-            await session.BrowseNextAsync(new RequestHeader(), true, [new ByteString(continuation)],
-                CancellationToken.None).ConfigureAwait(false);
+            var response = await InvokeAsync(() => session.BrowseNextAsync(new RequestHeader(), true,
+                [new ByteString(continuation)], CancellationToken.None)).ConfigureAwait(false);
+            _ = Single(response.Results, static result => result.StatusCode,
+                response.DiagnosticInfos, response.ResponseHeader);
         }
         catch (Exception releaseFailure)
         {
-            failure.Data["OpcUa.ContinuationReleaseFailure"] = releaseFailure;
+            failure.Data["OpcUa.ContinuationReleaseFailure"] =
+                failure.Data["OpcUa.ContinuationReleaseFailure"] is Exception previousFailure
+                    ? new AggregateException("Multiple OPC UA continuation releases failed.",
+                        previousFailure, releaseFailure)
+                    : releaseFailure;
         }
     }
 }

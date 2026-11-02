@@ -140548,13 +140548,25 @@
       ],
       "text": "The table maps native observations to common resolver outcomes; it defines no new OPC UA StatusCodes. The resolver MUST retain the original Service/operation/Method StatusCode, argument diagnostics and any cleanup failure. A successful Service result does not override a failed node read or Method result.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The selected source at f69085fb was inspected with the complete error table and resolver context. OpcUaSessionAdapter now maps native Service/operation/Method failures, rejects non-Good response and argument statuses, and retains exact original status, response header/diagnostics and Method argument status/diagnostics. Both synchronous and asynchronous SDK exceptions retain their original exception; cancellation remains unchanged. Browse cleanup validates returned operation status and retains multiple release failures without replacing the original operation error. Direct adapter evidence does not establish all reader/writer FileType, federation capture and Subscription cleanup paths or the complete context-dependent resolver table. Those compound obligations remain pending; unsupported advertisement/transport also requires reconciliation with Registry selection semantics. No native qualification is assigned.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "GoodServiceDoesNotOverrideFailedOperationAndRetainsDiagnostics",
+          "ReadFailureMapsNativeStatusAndRetainsDiagnosticContext",
+          "NonGoodServiceCannotBeOverriddenByGoodOperation",
+          "MethodFailureRetainsArgumentStatusAndDiagnostics",
+          "FailedBrowseRetainsReturnedContinuationReleaseFailure",
+          "InternalBrowseRetainsBothContinuationReleaseFailuresWithoutReplacingOperationFailure",
+          "ExplicitContinuationReleaseRejectsNonGoodStatus",
+          "SdkServiceFailureMapsOutcomeAndRetainsOriginalException",
+          "SdkCancellationRemainsCancellationInsteadOfNativeFailure"
+        ],
         "nativeEvidence": []
       }
     },
@@ -140580,13 +140592,20 @@
       ],
       "text": "For an unknown bad or uncertain status, the resolver MUST report failure with the original diagnostic. It MUST NOT treat that status as Good. A normal dangling local `xref` retains Core serialization; it does not mean the source Resource is missing. An explicitly requested early stop or an expired continuation point cannot prove that a label selector has no match.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The selected source at f69085fb was inspected with the complete resolver table. A red-capable ReadString test proved that Uncertain with a valid-looking String was accepted and unknown Bad lost its native status. Shared adapter validation now accepts only Good, preserves Good subcodes, reports unknown bad/uncertain statuses as Unavailable with the original status and diagnostics, and applies the same validation to Read, Browse, BrowseNext, Write and Call. Direct evidence covers those status partitions. This compound block also requires dangling-local-xref serialization and complete versus stopped/expired label-selection semantics; their source-qualified interaction evidence remains pending. No native qualification is assigned.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "ReadStringRejectsNonGoodStatusAndRetainsTheOriginalStatus",
+          "NonReadOperationsRejectUncertainStatus",
+          "GoodStatusWithInformationBitsRetainsTheValue",
+          "ExplicitContinuationReleaseRejectsNonGoodStatus"
+        ],
         "nativeEvidence": []
       }
     },
