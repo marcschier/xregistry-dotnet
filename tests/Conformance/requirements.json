@@ -117904,7 +117904,8 @@
         "testIds": [
           "CodecIdentifiersRemainCaseSensitiveAndOpenEnded",
           "UnrecognizedCodecNamesRemainExactForBothMediaKinds",
-          "CanonicalMediaCodecVectorsExerciseMaterializationAndMetadataValidation"
+          "CanonicalMediaCodecVectorsExerciseMaterializationAndMetadataValidation",
+          "MediaDeclarationsPreserveExactCodecNamesAcrossWritesAndPersistenceRestart"
         ],
         "nativeEvidence": []
       }
@@ -117985,7 +117986,8 @@
           "StreamFormatEnumsRejectUnknownCaseVariantsAndNonStringValues",
           "CanonicalMediaOptionTypesRejectEveryNonStringJsonKind",
           "CanonicalMediaSignalingEnumEnforcesExactSpellingAndDirection",
-          "InheritedMediaOptionShapesRejectInvalidJsonKindsAtExactPaths"
+          "InheritedMediaOptionShapesRejectInvalidJsonKindsAtExactPaths",
+          "MediaDeclarationFailuresAreAtomicAcrossDirectPatchAndNestedWrites"
         ],
         "nativeEvidence": []
       }
@@ -118025,7 +118027,9 @@
         "testIds": [
           "KnownCodecsCannotBeDeclaredForTheOtherMediaKind",
           "UnrecognizedCodecNamesRemainExactForBothMediaKinds",
-          "CanonicalMediaCodecVectorsExerciseMaterializationAndMetadataValidation"
+          "CanonicalMediaCodecVectorsExerciseMaterializationAndMetadataValidation",
+          "MediaDeclarationFailuresAreAtomicAcrossDirectPatchAndNestedWrites",
+          "MediaDeclarationsPreserveExactCodecNamesAcrossWritesAndPersistenceRestart"
         ],
         "nativeEvidence": []
       }
@@ -118064,7 +118068,8 @@
         "testIds": [
           "DeclaredStreamFormatsAcceptIndependentKnownCodecDeclarations",
           "CanonicalMediaCodecVectorsExerciseMaterializationAndMetadataValidation",
-          "CanonicalMediaStreamFormatVectorsExerciseEveryDeclaredRuntimeAlternative"
+          "CanonicalMediaStreamFormatVectorsExerciseEveryDeclaredRuntimeAlternative",
+          "MediaDeclarationsPreserveExactCodecNamesAcrossWritesAndPersistenceRestart"
         ],
         "nativeEvidence": []
       }

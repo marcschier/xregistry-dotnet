@@ -14,6 +14,76 @@ namespace XRegistry.Server.Tests;
 public class EndpointAuthoredStorageTests
 {
     [Test]
+    [Arguments("""{"usage":["producer"],"protocol":"SRT","protocoloptions":{"videocodec":"AAC"}}""")]
+    [Arguments("""{"usage":["producer"],"protocol":"SRT","protocoloptions":{"audiocodec":"H264"}}""")]
+    [Arguments("""{"usage":["producer"],"protocol":"SRT","protocoloptions":{"streamformat":"flv"}}""")]
+    [Arguments("""{"usage":["producer"],"protocol":"SRT","protocoloptions":{"videocodec":false}}""")]
+    [Arguments("""{"usage":["consumer"],"protocol":"SRT","protocoloptions":{"videocodec":"H264"}}""")]
+    public async Task MediaDeclarationFailuresAreAtomicAcrossDirectPatchAndNestedWrites(string invalid)
+    {
+        foreach (var kind in new[] { RegistryModelKind.Endpoint, RegistryModelKind.Media })
+        {
+            var engine = Domain(kind);
+            await ExpectCode(() => Send(engine, RegistryAction.Replace, "/endpoints/e", invalid), "invalid_attribute");
+            await Empty(engine);
+
+            const string original = """
+                {"usage":["producer"],"protocol":"SRT","protocoloptions":{
+                "streamformat":"mpegts","videocodec":"VendorVideo/8","audiocodec":"VendorAudio/9"}}
+                """;
+            await Send(engine, RegistryAction.Replace, "/endpoints/e", original);
+            var before = (await Send(engine, RegistryAction.Read, "/endpoints/e")).Metadata!.RootElement;
+            var eventCount = (await engine.ReadEventBatchesAsync(Writer())).Count;
+            foreach (var action in new[] { RegistryAction.Replace, RegistryAction.Patch })
+            {
+                await ExpectCode(() => Send(engine, action, "/endpoints/e", invalid), "invalid_attribute");
+                var after = (await Send(engine, RegistryAction.Read, "/endpoints/e")).Metadata!.RootElement;
+                await Assert.That(MetadataEqual(after, before)).IsTrue();
+                await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(eventCount);
+            }
+
+            var nested = Domain(kind);
+            var batch = "{\"endpoints\":{\"a-valid\":" + original + ",\"z-invalid\":" + invalid + "}}";
+            await ExpectCode(() => Send(nested, RegistryAction.Post, "/", batch), "invalid_attribute");
+            await Empty(nested);
+        }
+    }
+
+    [Test]
+    public async Task MediaDeclarationsPreserveExactCodecNamesAcrossWritesAndPersistenceRestart()
+    {
+        foreach (var kind in new[] { RegistryModelKind.Endpoint, RegistryModelKind.Media })
+        {
+            var persistence = new InMemoryRegistryPersistence();
+            var engine = Domain(kind, persistence);
+            const string authored = """
+                {"usage":["producer"],"protocol":"SRT","protocoloptions":{
+                "streamformat":"mpegts","videocodec":"aac","audiocodec":"h264"}}
+                """;
+            await Send(engine, RegistryAction.Replace, "/endpoints/direct", authored);
+            await Send(engine, RegistryAction.Post, "/", "{\"endpoints\":{\"nested\":" + authored + "}}");
+            await Send(engine, RegistryAction.Patch, "/endpoints/direct",
+                """{"protocoloptions":{"streamformat":"mpegts","videocodec":"VendorVideo/8","audiocodec":"PCMU"}}""");
+            var restarted = Domain(kind, persistence);
+            foreach (var id in new[] { "direct", "nested" })
+            {
+                var stored = (await Send(restarted, RegistryAction.Read, "/endpoints/" + id)).Metadata!;
+                var options = stored.RootElement.GetProperty("protocoloptions");
+                await Assert.That(options.GetProperty("streamformat").GetString()).IsEqualTo("mpegts");
+                await Assert.That(options.GetProperty("videocodec").GetString()).IsEqualTo(id == "direct" ? "VendorVideo/8" : "aac");
+                await Assert.That(options.GetProperty("audiocodec").GetString()).IsEqualTo(id == "direct" ? "PCMU" : "h264");
+                var materialized = EndpointDefinition.MaterializeMedia(stored);
+                await Assert.That(materialized.GetProtocolOption("videocodec").GetString())
+                    .IsEqualTo(options.GetProperty("videocodec").GetString());
+                await Assert.That(materialized.GetProtocolOption("audiocodec").GetString())
+                    .IsEqualTo(options.GetProperty("audiocodec").GetString());
+                await Assert.That(materialized.DeferredChecks.Any(check => check.Code == "media_input_compatibility")).IsTrue();
+            }
+            await Assert.That((await restarted.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(3);
+        }
+    }
+
+    [Test]
     public async Task MetadataRoundTripPreservesValuesWithoutRequiringJsonEscapeSpelling()
     {
         var engine = Create("""
