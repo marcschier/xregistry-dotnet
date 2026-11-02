@@ -1,6 +1,8 @@
 // Copyright (c) 2026 xregistry-dotnet contributors.
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
+
 namespace XRegistry.Models;
 
 /// <summary>Binding declaration syntax, independent of acquisition and caller access policy.</summary>
@@ -16,6 +18,95 @@ public static class CatalogBindingSyntax
         "opcua" => parameter is "registryroot" or "applicationuri" or "transportprofileuri",
         _ => true
     };
+
+    /// <summary>Checks an absolute OPC UA endpoint URI before transport discovery.</summary>
+    public static bool IsNativeEndpoint(string? value)
+    {
+        if (value is null || value.Any(static c => char.IsControl(c) || char.IsWhiteSpace(c)) ||
+            !Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
+            !Uri.IsWellFormedUriString(value, UriKind.Absolute))
+        {
+            return false;
+        }
+
+        return uri.Host.Length != 0 && uri.UserInfo.Length == 0 &&
+            !value.Contains('?', StringComparison.Ordinal) && !value.Contains('#', StringComparison.Ordinal) &&
+            uri.Query.Length == 0 && uri.Fragment.Length == 0;
+    }
+
+    /// <summary>Checks the portable ExpandedNodeId form used for an OPC UA Registry root.</summary>
+    public static bool IsPortableNodeId(string? value)
+    {
+        if (string.IsNullOrEmpty(value) || value.StartsWith("svr=", StringComparison.Ordinal) ||
+            value.StartsWith("svu=", StringComparison.Ordinal) || value.StartsWith("ns=", StringComparison.Ordinal) ||
+            value.Contains(";ns=", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var nodeId = value;
+        var hasNamespaceUri = false;
+        if (value.StartsWith("nsu=", StringComparison.Ordinal))
+        {
+            var separator = value.IndexOf(';');
+            if (separator <= 4 || separator == value.Length - 1)
+            {
+                return false;
+            }
+
+            var namespaceUri = Uri.UnescapeDataString(value[4..separator]);
+            if (!Uri.TryCreate(namespaceUri, UriKind.Absolute, out _) ||
+                !Uri.IsWellFormedUriString(namespaceUri, UriKind.Absolute))
+            {
+                return false;
+            }
+
+            hasNamespaceUri = true;
+            nodeId = value[(separator + 1)..];
+        }
+        else if (value.Contains(';', StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (nodeId.Length < 2 || nodeId[1] != '=' || nodeId.Contains(';', StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var identifier = nodeId.AsSpan(2);
+        return nodeId[0] switch
+        {
+            'i' => uint.TryParse(identifier, NumberStyles.None, CultureInfo.InvariantCulture, out var numericId) &&
+                (hasNamespaceUri || numericId != 0),
+            's' => !identifier.Contains('=') && !identifier.Contains(';'),
+            'g' => Guid.TryParse(identifier, out _),
+            'b' => IsBase64(identifier),
+            _ => false
+        };
+    }
+
+    private static bool IsBase64(ReadOnlySpan<char> value)
+    {
+        if (value.Length % 4 != 0)
+        {
+            return false;
+        }
+
+        var padding = value.Length > 0 && value[^1] == '='
+            ? value.Length > 1 && value[^2] == '=' ? 2 : 1
+            : 0;
+        for (var index = 0; index < value.Length - padding; index++)
+        {
+            var character = value[index];
+            if (!(char.IsAsciiLetterOrDigit(character) || character is '+' or '/'))
+            {
+                return false;
+            }
+        }
+
+        return value[^padding..].IndexOfAnyExcept('=') < 0;
+    }
 
     /// <summary>Tests for a complete Git ref or SHA-1/SHA-256 object ID, not a revision expression.</summary>
     public static bool IsGitRevision(string? value)

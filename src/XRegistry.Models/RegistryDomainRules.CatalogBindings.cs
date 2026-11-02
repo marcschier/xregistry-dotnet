@@ -18,7 +18,7 @@ public static partial class RegistryDomainRules
     private static void ValidateCatalogBinding(JsonElement advertisement, string path)
     {
         var name = advertisement.GetProperty("name").GetString();
-        if (name is not ("http" or "git" or "oci" or "file"))
+        if (name is not ("http" or "git" or "oci" or "file" or "opcua"))
         {
             return;
         }
@@ -83,6 +83,23 @@ public static partial class RegistryDomainRules
                 else
                 {
                     throw Invalid("Unknown File layout.", At(parametersPath, "layout"));
+                }
+                break;
+            case "opcua":
+                if (!CatalogBindingSyntax.IsNativeEndpoint(endpoint))
+                {
+                    throw Invalid("Expected an absolute OPC UA endpoint URL with a host.", endpointPath);
+                }
+                if (!CatalogBindingSyntax.IsPortableNodeId(CatalogRequiredText(parameters, "registryroot", parametersPath)))
+                {
+                    throw Invalid("The OPC UA Registry root must be a portable, non-null ExpandedNodeId.", At(parametersPath, "registryroot"));
+                }
+                foreach (var parameter in new[] { "applicationuri", "transportprofileuri" })
+                {
+                    if (parameters.ValueKind == JsonValueKind.Object && parameters.TryGetProperty(parameter, out var value))
+                    {
+                        CatalogAbsoluteUri(CatalogText(value, At(parametersPath, parameter)), At(parametersPath, parameter));
+                    }
                 }
                 break;
         }

@@ -4,6 +4,7 @@
 using Opc.Ua;
 using System.Text.Json;
 using XRegistry.Federation;
+using XRegistry.Models;
 
 namespace XRegistry.Bindings.OpcUa;
 
@@ -41,10 +42,8 @@ public sealed class OpcUaFederationTarget
             throw new ArgumentException("The selected advertisement is not the opcua profile.", nameof(advertisement));
         }
 
-        var endpoint = AbsoluteUri(advertisement.Endpoint);
-        if (advertisement.Endpoint.Contains('?', StringComparison.Ordinal) ||
-            advertisement.Endpoint.Contains('#', StringComparison.Ordinal) ||
-            endpoint.UserInfo.Length != 0 || endpoint.Host.Length == 0)
+        _ = AbsoluteUri(advertisement.Endpoint);
+        if (!CatalogBindingSyntax.IsNativeEndpoint(advertisement.Endpoint))
         {
             throw new FederationException(FederationErrorCode.UnsupportedOperation,
                 "The OPC UA endpoint must be a credential-free native endpoint URL.");
@@ -68,10 +67,7 @@ public sealed class OpcUaFederationTarget
         }
 
         var rootText = rootValue.GetString()!;
-        if (rootText.StartsWith("svr=", StringComparison.Ordinal) ||
-            rootText.StartsWith("svu=", StringComparison.Ordinal) ||
-            rootText.StartsWith("ns=", StringComparison.Ordinal) ||
-            rootText.Contains(";ns=", StringComparison.Ordinal))
+        if (!CatalogBindingSyntax.IsPortableNodeId(rootText))
         {
             throw Invalid(
                 "registryroot must use the portable NodeId form without a server prefix or namespace index.");

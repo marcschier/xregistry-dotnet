@@ -110,6 +110,31 @@ public class CatalogDeclarationRulesTests
     }
 
     [Test]
+    [Arguments("opc.tcp://ua.example:4840/", """{"registryroot":"i=85"}""", true, "")]
+    [Arguments("opc.tcp://ua.example:4840/", """{"registryroot":"s=Registry"}""", true, "")]
+    [Arguments("opc.tcp://ua.example:4840/", """{"registryroot":"g=72962B91-FA75-4AE6-8D28-B404DC7DAF63"}""", true, "")]
+    [Arguments("opc.tcp://ua.example:4840/", """{"registryroot":"b=AQID"}""", true, "")]
+    [Arguments("opc.tcp://ua.example:4840/", """{"registryroot":"nsu=urn%3Axregistry;s=Registry"}""", true, "")]
+    [Arguments("opc.tcp://ua.example:4840/", """{"registryroot":"i=85","applicationuri":"urn:example:ua","transportprofileuri":"http://opcfoundation.org/UA-Profile/Transport/uatcp-uasc-uabinary"}""", true, "")]
+    [Arguments("urn:xregistry", """{"registryroot":"i=85"}""", false, "/endpoint")]
+    [Arguments("opc.tcp://ua.example:4840/?mode=fast", """{"registryroot":"i=85"}""", false, "/endpoint")]
+    [Arguments("opc.tcp://ua.example:4840/?", """{"registryroot":"i=85"}""", false, "/endpoint")]
+    [Arguments("opc.tcp://ua.example:4840/#", """{"registryroot":"i=85"}""", false, "/endpoint")]
+    [Arguments("opc.tcp://ua.example:4840/", """{"registryroot":"ns=2;s=Registry"}""", false, "/parameters/registryroot")]
+    [Arguments("opc.tcp://ua.example:4840/", """{"registryroot":"svr=1;nsu=urn%3Axregistry;s=Registry"}""", false, "/parameters/registryroot")]
+    [Arguments("opc.tcp://ua.example:4840/", """{"registryroot":"i=0"}""", false, "/parameters/registryroot")]
+    [Arguments("opc.tcp://ua.example:4840/", """{"registryroot":"b=%%%"}""", false, "/parameters/registryroot")]
+    [Arguments("opc.tcp://ua.example:4840/", """{"registryroot":"nsu=relative;s=Registry"}""", false, "/parameters/registryroot")]
+    [Arguments("opc.tcp://ua.example:4840/", "{}", false, "/parameters/registryroot")]
+    [Arguments("opc.tcp://ua.example:4840/", """{"registryroot":"i=85","applicationuri":"relative"}""", false, "/parameters/applicationuri")]
+    [Arguments("opc.tcp://ua.example:4840/", """{"registryroot":"i=85","transportprofileuri":17}""", false, "/parameters/transportprofileuri")]
+    public async Task OpcUaAdvertisementsValidateEndpointRootAndOptionalUris(
+        string endpoint, string parameters, bool valid, string errorPath)
+    {
+        await ValidateOrReject(Advertisement("opcua", endpoint, parameters), valid, errorPath);
+    }
+
+    [Test]
     [Arguments("oci", 0, false)]
     [Arguments("oci", 1, true)]
     [Arguments("oci", 127, true)]

@@ -42,6 +42,19 @@ public class OpcUaFederationTargetTests
     }
 
     [Test]
+    [Arguments("i=85")]
+    [Arguments("s=Registry")]
+    [Arguments("g=72962B91-FA75-4AE6-8D28-B404DC7DAF63")]
+    [Arguments("b=AQID")]
+    [Arguments("nsu=urn%3Axregistry;s=Registry")]
+    public async Task PortableNodeIdFormsPassSharedSyntaxAndUaParsing(string registryRoot)
+    {
+        var target = Target($$"""{"registryroot":"{{registryRoot}}"}""");
+
+        await Assert.That(target.RegistryRoot).IsEqualTo(registryRoot);
+    }
+
+    [Test]
     public async Task MissingNamespaceIsNotSubstitutedWithNamespaceZero()
     {
         var target = Target("""{"registryroot":"nsu=urn%3Amissing;s=Registry"}""");
@@ -79,6 +92,10 @@ public class OpcUaFederationTargetTests
         await Check.Error(() => Description("******registry.example.test:4840")
             .Select(new(["opcua"])), FederationErrorCode.InvalidPackage);
         await Check.Error(() => Description("opc.tcp://registry.example.test:4840?x=1")
+            .Select(new(["opcua"])), FederationErrorCode.InvalidPackage);
+        await Check.Error(() => Description("opc.tcp://registry.example.test:4840?")
+            .Select(new(["opcua"])), FederationErrorCode.InvalidPackage);
+        await Check.Error(() => Description("opc.tcp://registry.example.test:4840#")
             .Select(new(["opcua"])), FederationErrorCode.InvalidPackage);
     }
 

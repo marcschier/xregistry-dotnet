@@ -39,6 +39,28 @@ public class CatalogBindingPublicationTests
     }
 
     [Test]
+    [Arguments("urn:example:ua", "/federationprofiles/0/endpoint")]
+    [Arguments("opc.tcp://ua.example:4840/?mode=fast", "/federationprofiles/0/endpoint")]
+    [Arguments("opc.tcp://user:password@ua.example:4840/", "/federationprofiles/0/endpoint")]
+    public async Task OpcUaEndpointSyntaxIsValidatedAtPublication(string invalidEndpoint, string errorPath)
+    {
+        const string parameters = """{"registryroot":"i=85"}""";
+        await RejectAndAccept(Description("opcua", invalidEndpoint, parameters),
+            Description("opcua", "opc.tcp://ua.example:4840/", parameters), errorPath);
+    }
+
+    [Test]
+    [Arguments("{}", "/federationprofiles/0/parameters/registryroot")]
+    [Arguments("""{"registryroot":[]}""", "/federationprofiles/0/parameters/registryroot")]
+    [Arguments("""{"registryroot":"ns=2;s=Registry"}""", "/federationprofiles/0/parameters/registryroot")]
+    public async Task OpcUaRegistryRootIsValidatedAndUnknownParametersRemainOpaque(string invalidParameters, string errorPath)
+    {
+        var validParameters = """{"registryroot":"nsu=urn%3Axregistry;s=Registry","future":{"opaque":true}}""";
+        await RejectAndAccept(Description("opcua", "opc.tcp://ua.example:4840/", invalidParameters),
+            Description("opcua", "opc.tcp://ua.example:4840/", validParameters), errorPath);
+    }
+
+    [Test]
     [Arguments("git", null, """{"revision":"refs/heads/main"}""", "revision")]
     [Arguments("git", "{}", """{"revision":"refs/heads/main"}""", "revision")]
     [Arguments("git", """{"revision":""}""", """{"revision":"refs/heads/main"}""", "revision")]
@@ -89,8 +111,7 @@ public class CatalogBindingPublicationTests
     [Arguments("GIT", "https://git.example/repo?opaque=1")]
     [Arguments("OCI", "oci://artifacts.example/opaque:tag")]
     [Arguments("HTTP", "urn:example:unknown")]
-    [Arguments("opcua", "opc.tcp://ua.example:4840/")]
-    public async Task FutureBindingsAndOpcUaRemainOpaqueCatalogData(string name, string endpoint)
+    public async Task FutureBindingsRemainOpaqueCatalogData(string name, string endpoint)
     {
         var engine = Create(CatalogModelSource());
         var created = await Send(engine, RegistryAction.Replace, Entry,
