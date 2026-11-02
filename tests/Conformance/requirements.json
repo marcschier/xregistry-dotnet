@@ -97487,13 +97487,20 @@
       ],
       "text": "- REQUIRED.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The selected Endpoint usage rule rejects missing usage at /usage. Direct public validation covers missing and non-object input without inferring an Endpoint domain from a collection name; this disposition applies only to the successor usage requirement at lines 433-450.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EndpointUsageRejectsMissingWrongKindsUnknownRolesAndUnqualifiedMixedRoles",
+          "KestrelDoesNotInferEndpointDomainFromACollectionName"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97518,13 +97525,20 @@
       ],
       "text": "- MUST contain only the following possible values: - \"subscriber\" - \"consumer\" - \"producer\"",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact native role strings are accepted; unknown, empty and case-distinct role names or non-string members reject with invalid_attribute at /usage. The complete ordered native-role matrix verifies singleton acceptance independently of protocol.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EndpointUsageRejectsMissingWrongKindsUnknownRolesAndUnqualifiedMixedRoles",
+          "EndpointRoleCombinationsFollowExactNativeAndProtocolRules"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97549,13 +97563,20 @@
       ],
       "text": "- MUST be an array of at least one value.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The public usage validator rejects empty arrays and every non-array JSON kind. Singleton native roles are accepted; duplicate and oversized combinations are checked separately by the exhaustive role matrix.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EndpointUsageRejectsMissingWrongKindsUnknownRolesAndUnqualifiedMixedRoles",
+          "EndpointRoleCombinationsFollowExactNativeAndProtocolRules"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97580,13 +97601,20 @@
       ],
       "text": "- MUST declare exactly one usage value, except for the single combination permitted below.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "All ordered one-, two- and three-role combinations are checked across qualifying, nonqualifying, case-distinct and aliased protocols. Only native singletons or the distinct consumer/subscriber pair on qualifying protocols pass; authored order and protocol casing are retained.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EndpointRoleCombinationsFollowExactNativeAndProtocolRules",
+          "KestrelEnforcesOptedInEndpointUsageWithoutPublishingInvalidPatches"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97611,13 +97639,19 @@
       ],
       "text": "- MUST NOT combine `producer` with any other value.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The ordered native-role matrix rejects producer combined with either other role, duplicates or all three roles on every tested protocol. A producer singleton remains accepted.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EndpointRoleCombinationsFollowExactNativeAndProtocolRules"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97642,13 +97676,19 @@
       ],
       "text": "- MUST NOT declare all three values.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Every ordered three-role combination rejects at /usage, including all six permutations of the three distinct roles and repeated-role arrays. The same test independently accepts the permitted smaller combinations.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EndpointRoleCombinationsFollowExactNativeAndProtocolRules"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97673,13 +97713,20 @@
       ],
       "text": "- MAY declare `[\"subscriber\", \"consumer\"]` only when the protocol is `MQTT/3.1.1`, `MQTT/5.0`, `AMQP/1.0`, or `NATS`. In these protocols a single client connection both establishes subscription interest and receives the resulting messages, so the two roles are served by one protocol interface and one endpoint contract.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Both role orders pass for the four declared protocols, case-insensitive selectors and the specification's MQTT/AMQP default-version aliases. Unknown versions and missing or non-string protocols reject mixed roles. This checks declaration semantics, not establishment of an actual shared network connection.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EndpointRoleCombinationsFollowExactNativeAndProtocolRules",
+          "EndpointUsageRejectsMissingWrongKindsUnknownRolesAndUnqualifiedMixedRoles"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97705,13 +97752,20 @@
       ],
       "text": "- MUST NOT declare `[\"subscriber\", \"consumer\"]` for `HTTP` or `KAFKA` endpoints. In those protocols the two roles are distinct interfaces and MUST be modeled as separate Endpoint resources.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "HTTP and KAFKA reject both orders of the consumer/subscriber pair regardless of protocol casing. Each singleton remains valid. The Kestrel test also proves that changing a valid mixed-role MQTT endpoint to HTTP fails without changing its stored protocol, usage or epoch.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EndpointRoleCombinationsFollowExactNativeAndProtocolRules",
+          "KestrelEnforcesOptedInEndpointUsageWithoutPublishingInvalidPatches"
+        ],
         "nativeEvidence": []
       }
     },
