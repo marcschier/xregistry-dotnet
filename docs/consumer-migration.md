@@ -975,6 +975,14 @@ description's operation-ID lookup. Admission neither evaluates callback
 expressions nor sends callback requests.
 Unused reusable Link references remain inactive. These checks do not qualify
 the complete linked description.
+OpenAPI response header names and applicable multipart encoding header names
+must be nonempty HTTP tokens. Spaces, control characters, non-ASCII characters
+and HTTP separators report `Invalid document.header_name` at the header map
+entry before its reference is acquired. Valid token punctuation remains
+permitted. Case-insensitive `Content-Type` entries retain their specified
+ignored behavior, and encoding headers on non-multipart bodies remain inactive.
+This check validates authored names without normalizing casing or changing the
+selected operation.
 For OpenAPI 3.1, an authored root `jsonSchemaDialect` must be a string
 containing a URI, not a relative URI reference. Invalid JSON types, relative
 values and malformed URI syntax report `Invalid document.schema_dialect` at

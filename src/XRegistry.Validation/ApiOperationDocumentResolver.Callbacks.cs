@@ -444,6 +444,10 @@ public static partial class ApiOperationDocumentResolver
                 cancellationToken.ThrowIfCancellationRequested();
                 if (format != "Swagger/2.0" && header.Name.Equals("Content-Type", StringComparison.OrdinalIgnoreCase)) { continue; }
                 var headerPath = pointer + "/headers/" + Escape(header.Name);
+                if (format != "Swagger/2.0" && !IsHttpToken(header.Name.AsSpan()))
+                {
+                    return InvalidHttpHeaderName(headerPath);
+                }
                 var failure = format == "Swagger/2.0"
                     ? ValidateSwaggerScalarDeclaration(header.Value, headerPath, "Header", false, false, cancellationToken)
                     : ValidateOpenApiHeaderDeclaration(header.Value, headerPath, format, cancellationToken);
@@ -829,6 +833,10 @@ public static partial class ApiOperationDocumentResolver
                     {
                         cancellationToken.ThrowIfCancellationRequested();
                         if (header.Name.Equals("Content-Type", StringComparison.OrdinalIgnoreCase)) { continue; }
+                        if (!IsHttpToken(header.Name.AsSpan()))
+                        {
+                            return InvalidHttpHeaderName(path + "/headers/" + Escape(header.Name));
+                        }
                         var failure = ValidateOpenApiHeaderDeclaration(header.Value,
                             path + "/headers/" + Escape(header.Name), format, cancellationToken);
                         if (failure is not null) { return failure; }
@@ -2258,4 +2266,8 @@ public static partial class ApiOperationDocumentResolver
         }
         return true;
     }
+
+    private static ApiOperationResolutionResult InvalidHttpHeaderName(string pointer) =>
+        Failure(ApiOperationResolutionStatus.Invalid, "document.header_name",
+            "An HTTP header name must be a nonempty ASCII token.", pointer);
 }

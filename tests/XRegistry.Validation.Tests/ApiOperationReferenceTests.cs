@@ -11,6 +11,78 @@ namespace XRegistry.Validation.Tests;
 public class ApiOperationReferenceTests
 {
     [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiActiveHeaderMapNamesUseHttpTokenSyntax(string format, string version)
+    {
+        foreach (var name in new[] { "", "bad name", "bad:name", "bad/name", "bad\tname", "bad\r\nname", "caf\u00e9", "bad(name)", "bad@name" })
+        {
+            foreach (var kind in new[] { "response", "encoding" })
+            {
+                var operation = JsonNode.Parse("""
+                    {"operationId":"Target","responses":{"200":{"description":""}}}
+                    """)!;
+                var header = new JsonObject { [name] = JsonNode.Parse("""{"$ref":"https://must-not-load.test/header"}""") };
+                if (kind == "response") { operation["responses"]!["200"]!["headers"] = header; }
+                else
+                {
+                    operation["requestBody"] = JsonNode.Parse("""
+                        {"content":{"multipart/form-data":{"encoding":{"part":{}}}}}
+                        """);
+                    operation["requestBody"]!["content"]!["multipart/form-data"]!["encoding"]!["part"]!["headers"] = header;
+                }
+                var document = new JsonObject
+                {
+                    ["openapi"] = version,
+                    ["paths"] = new JsonObject { ["/source"] = new JsonObject { ["post"] = operation } }
+                };
+                foreach (var selector in new[] { "operations/Target", "/paths/~1source/post" })
+                {
+                    var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                        System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                        ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                        resolveReference: (_, _) => throw new InvalidOperationException("Invalid header names must precede acquisition."));
+                    await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.header_name");
+                    var prefix = kind == "response" ? "$/paths/~1source/post/responses/200/headers/"
+                        : "$/paths/~1source/post/requestBody/content/multipart~1form-data/encoding/part/headers/";
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo(prefix +
+                        name.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal));
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiHeaderNameChecksPreserveTokensIgnoredContentTypeAndInactiveEncodings(string format, string version)
+    {
+        var operation = JsonNode.Parse("""
+            {"operationId":"Target","responses":{"200":{"description":"","headers":{
+            "!#$%&'*+-.^_`|~012AZaz":{"schema":{"type":"string"}},"cOnTeNt-TyPe":false}}},
+            "requestBody":{"content":{"multipart/form-data":{"encoding":{"part":{"headers":{
+            "X-Trace":{"schema":{"type":"string"}},"CONTENT-TYPE":{"$ref":"https://must-not-load.test/header"}}}}},
+            "application/json":{"encoding":{"part":{"headers":{"bad name":false}}}}}}}
+            """)!;
+        var document = new JsonObject
+        {
+            ["openapi"] = version,
+            ["paths"] = new JsonObject { ["/source"] = new JsonObject { ["post"] = operation } }
+        };
+        foreach (var selector in new[] { "operations/Target", "/paths/~1source/post" })
+        {
+            var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                resolveReference: (_, _) => throw new InvalidOperationException("Ignored declarations stay inactive."));
+            await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+            await Assert.That(JsonNode.DeepEquals(operation, JsonNode.Parse(result.Operation.GetRawText()))).IsTrue();
+        }
+    }
+
+    [Test]
     public async Task OpenApi31DialectDeclarationRequiresAnAbsoluteUriBeforeSelectionOrAcquisition()
     {
         foreach (var declaration in new[]
@@ -4921,10 +4993,10 @@ public class ApiOperationReferenceTests
             foreach (var (json, suffix, code) in invalid)
             {
                 var header = JsonNode.Parse(json);
-                var response = new JsonObject { ["description"] = "", ["headers"] = new JsonObject { ["X/~"] = header?.DeepClone() } };
+                var response = new JsonObject { ["description"] = "", ["headers"] = new JsonObject { ["X~"] = header?.DeepClone() } };
                 var document = new JsonObject { ["openapi"] = version,
                     ["paths"] = JsonNode.Parse("""{"/items":{"get":{"operationId":"Target"}}}""") };
-                var path = "$/paths/~1items/get/responses/200/headers/X~1~0";
+                var path = "$/paths/~1items/get/responses/200/headers/X~0";
                 if (location == "component")
                 {
                     document["components"] = new JsonObject { ["headers"] = new JsonObject { ["H"] = header?.DeepClone() } };
@@ -4933,14 +5005,14 @@ public class ApiOperationReferenceTests
                 else if (location == "unused-response")
                 {
                     document["components"] = new JsonObject { ["responses"] = new JsonObject { ["Unused"] = response.DeepClone() } };
-                    path = "$/components/responses/Unused/headers/X~1~0";
+                    path = "$/components/responses/Unused/headers/X~0";
                 }
                 else
                 {
                     document["paths"]!["/items"]!["get"]!["responses"] = new JsonObject
                     { ["200"] = location == "inline" ? response.DeepClone()
                         : JsonNode.Parse("""{"$ref":"https://allowed.test/response#/Ok"}""") };
-                    if (location == "remote-response") { path = "$/Ok/headers/X~1~0"; }
+                    if (location == "remote-response") { path = "$/Ok/headers/X~0"; }
                 }
                 foreach (var selector in new[] { "operations/Target", "operations/Missing", "/paths/~1items/get" })
                 {
