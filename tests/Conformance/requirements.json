@@ -135616,13 +135616,22 @@
       ],
       "text": "`snapshot` and `registry` MUST equal the selected manifest descriptor and its Registry descriptor. `scope` and `completeness` MUST match the checked manifest. In the sample, `snapshot` equals the channel's `head`, and `registry` equals the manifest's `registry` field.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The reader retains the selected head, checks its exact bytes and snapshot identity, and validates open-record scope, completeness and Registry descriptor against the checked manifest. Snapshot Resource references use Core's case-insensitive identity comparison; the manifest Version ID remains case-sensitive. Equivalent Resource spellings preserve the original manifest and open-record bytes without changing the lowercase digest identity. Mismatched context fields or selected descriptors reject.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ValidatesTheOpenRecordAgainstItsExactManifestAndChannelHead",
+          "RejectsOpenRecordsThatMismatchManifestOrSelectedHead",
+          "RejectsNegativeEpochAndSnapshotIdentityMismatch",
+          "OpenChannelReadsOneCoherentMetaAndSelectsExactBindingsAndVersions",
+          "SnapshotValidationUsesCoreResourceIdentityWithoutChangingVersionIdentity",
+          "OfflineReplayAcceptsEquivalentSnapshotResourceReferencesWithoutChangingBytesOrContext"
+        ],
         "nativeEvidence": []
       }
     },

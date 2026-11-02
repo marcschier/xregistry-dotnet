@@ -409,6 +409,32 @@ public class PublicationManifestTests
     }
 
     [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task SnapshotValidationUsesCoreResourceIdentityWithoutChangingVersionIdentity(bool versionCaseDiffers)
+    {
+        var manifest = PublicationManifest.Parse(ValidManifest);
+        var version = "/publications/team/snapshots/" + manifest.SnapshotId.ToUpperInvariant() +
+            "/versions/" + (versionCaseDiffers ? "Manifest" : "manifest");
+        var descriptor = new PublicationByteDescriptor(new(manifest.Registry.Reference.Registry, version),
+            "sha256:" + manifest.SnapshotId, ValidManifest.Length);
+
+        if (versionCaseDiffers)
+        {
+            var error = await Assert.That(() => manifest.ValidateSnapshotDescriptor(descriptor))
+                .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected Version case rejection.");
+            await Assert.That(error.Code).IsEqualTo("snapshot_identity_mismatch");
+            return;
+        }
+
+        manifest.ValidateSnapshotDescriptor(descriptor);
+        await Assert.That(manifest.SnapshotId)
+            .IsEqualTo(Convert.ToHexString(SHA256.HashData(ValidManifest)).ToLowerInvariant());
+        await Assert.That(manifest.GetExactBytes().SequenceEqual(ValidManifest)).IsTrue();
+        await Assert.That(descriptor.Reference.Version).IsEqualTo(version);
+    }
+
+    [Test]
     public async Task RejectsSelfDigestRatherThanMakingManifestIdentityRecursive()
     {
         var json = JsonNode.Parse(ValidManifest)!.AsObject();

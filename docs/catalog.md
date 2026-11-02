@@ -177,6 +177,11 @@ floating-point conversion; fractional and negative values are rejected.
 Parsing retains the received bytes. Equivalent numeric values do not imply
 equal Snapshot IDs because manifest identity covers exact bytes.
 
+Snapshot references use Core's Resource identity comparison, while the
+`manifest` Version ID remains case-sensitive. Accepting an equivalent Resource
+spelling does not rewrite the manifest, descriptor or open record, and does
+not change the lowercase Snapshot ID or digest.
+
 Publication Git references require complete commit object IDs. OCI references,
 including File OCI layouts, require lowercase SHA-256 digests instead of tags.
 The parsers reject mutable or missing selectors, and the reader checks again

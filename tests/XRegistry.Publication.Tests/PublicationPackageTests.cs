@@ -14,6 +14,38 @@ namespace XRegistry.Publication.Tests;
 public class PublicationPackageTests
 {
     [Test]
+    [Arguments(true)]
+    [Arguments(false)]
+    public async Task OfflineReplayAcceptsEquivalentSnapshotResourceReferencesWithoutChangingBytesOrContext(
+        bool openDirectory)
+    {
+        var fixture = Fixture.Create();
+        var manifest = PublicationManifest.Parse(fixture.ManifestBytes);
+        var version = "/publications/team/snapshots/" + manifest.SnapshotId.ToUpperInvariant() +
+            "/versions/manifest";
+        var descriptor = fixture.ManifestDescriptor with
+        {
+            Reference = fixture.ManifestDescriptor.Reference with { Version = version }
+        };
+        var context = PublicationOpenRecord.Create(fixture.Context.Scope, descriptor,
+            fixture.RegistryDescriptor, fixture.Context.Completeness);
+        var package = PublicationPackage.Create(context, fixture.Package.Objects);
+        await using var directory = await PackageDirectory.CreateAsync(fixture, package);
+
+        var snapshot = openDirectory
+            ? await PublicationPackage.OpenDirectoryAsync(directory.PackagePath)
+            : await package.OpenSnapshotAsync(directory.PackagePath);
+
+        await Assert.That(snapshot.Manifest.SnapshotId).IsEqualTo(manifest.SnapshotId);
+        await Assert.That(snapshot.OpenRecord.Snapshot.Reference.Version).IsEqualTo(version);
+        await Assert.That(snapshot.OpenRecord.GetExactBytes().SequenceEqual(context.GetExactBytes())).IsTrue();
+        await Assert.That(snapshot.GetExactManifestBytes().SequenceEqual(fixture.ManifestBytes)).IsTrue();
+        await Assert.That(snapshot.GetExactRegistryBytes().SequenceEqual(fixture.RegistryBytes)).IsTrue();
+        await Assert.That((await snapshot.ReadDocumentAsync(Fixture.DocumentVersion))
+            .SequenceEqual(fixture.DocumentBytes)).IsTrue();
+    }
+
+    [Test]
     [Arguments(true, 39)]
     [Arguments(true, 40)]
     [Arguments(true, 41)]

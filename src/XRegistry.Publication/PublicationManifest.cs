@@ -69,7 +69,7 @@ public sealed class PublicationManifest
         var path = RegistryPath.Parse(descriptor.Reference.Version);
         if (path.Kind != RegistryPathKind.Version ||
             !string.Equals(path.ResourceType, "snapshots", StringComparison.Ordinal) ||
-            !string.Equals(path.ResourceId!.Value, SnapshotId, StringComparison.Ordinal) ||
+            !string.Equals(path.ResourceId!.Value, SnapshotId, StringComparison.OrdinalIgnoreCase) ||
             !string.Equals(path.VersionId!.Value, "manifest", StringComparison.Ordinal))
         {
             throw PublicationJson.Error("snapshot_identity_mismatch", "",
