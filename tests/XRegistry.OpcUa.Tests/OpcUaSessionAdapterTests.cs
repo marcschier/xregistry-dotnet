@@ -269,6 +269,143 @@ public class OpcUaSessionAdapterTests
         await Assert.That(proxy.ReleasedContinuations.Single()).IsEquivalentTo(new byte[] { 1 });
     }
 
+    [Test]
+    [Arguments("Open", "namespace")]
+    [Arguments("Open", "browse")]
+    [Arguments("Open", "call")]
+    [Arguments("OpenWrite", "namespace")]
+    [Arguments("OpenWrite", "browse")]
+    [Arguments("OpenWrite", "call")]
+    [Arguments("Read", "namespace")]
+    [Arguments("Read", "browse")]
+    [Arguments("Read", "call")]
+    [Arguments("Write", "namespace")]
+    [Arguments("Write", "browse")]
+    [Arguments("Write", "call")]
+    [Arguments("SetPosition", "namespace")]
+    [Arguments("SetPosition", "browse")]
+    [Arguments("SetPosition", "call")]
+    [Arguments("Close", "namespace")]
+    [Arguments("Close", "browse")]
+    [Arguments("Close", "call")]
+    public async Task FileTransferRejectsSessionChangeAcrossAwaitedOperations(string method, string stage)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        var file = new NodeId("File", 1);
+        Action replaceSession = () => proxy.SessionId = new NodeId("ReplacementSession", 0);
+        if (stage == "namespace")
+        {
+            proxy.AfterRead = replaceSession;
+        }
+        if (stage == "browse")
+        {
+            proxy.AfterBrowse = replaceSession;
+        }
+        if (stage == "call")
+        {
+            proxy.AfterCall = replaceSession;
+        }
+
+        var failure = await Assert.ThrowsAsync<FederationException>(async () =>
+            await InvokeFileMethod(adapter, file, method));
+
+        await Assert.That(failure!.Code).IsEqualTo(FederationErrorCode.Unavailable);
+        await Assert.That(failure.Message).Contains("Session changed");
+        await Assert.That(proxy.MethodCalls.Count).IsEqualTo(stage == "call" ? 1 : 0);
+        await Assert.That(proxy.BrowseRequests.Count).IsEqualTo(stage == "namespace" ? 0 : 1);
+        await Assert.That(proxy.NextBrowseCount).IsEqualTo(0);
+        await Assert.That(proxy.ReleasedContinuations.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task FileTransferDoesNotReuseOrReleaseContinuationInReplacementSession(bool duringNext)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        proxy.BrowseResultFactory = _ => new BrowseResult
+        {
+            ContinuationPoint = new ByteString(new byte[] { 1 })
+        };
+        Action replaceSession = () => proxy.SessionId = new NodeId("ReplacementSession", 0);
+        if (duringNext)
+        {
+            proxy.AfterBrowseNext = replaceSession;
+        }
+        else
+        {
+            proxy.AfterBrowse = replaceSession;
+        }
+
+        var failure = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.OpenAsync(new NodeId("File", 1), 1, CancellationToken.None));
+
+        await Assert.That(failure!.Code).IsEqualTo(FederationErrorCode.Unavailable);
+        await Assert.That(proxy.NextBrowseCount).IsEqualTo(duringNext ? 1 : 0);
+        await Assert.That(proxy.MethodCalls.Count).IsEqualTo(0);
+        await Assert.That(proxy.ReleasedContinuations.Count).IsEqualTo(0);
+        var cleanup = failure.Data["OpcUa.ContinuationReleaseFailure"] as FederationException;
+        await Assert.That(cleanup).IsNotNull();
+        await Assert.That(cleanup!.Code).IsEqualTo(FederationErrorCode.Unavailable);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task FileTransferReadHandleExemptionDoesNotCrossSessionChangeDuringDiscovery(bool close)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        proxy.Endpoint = new EndpointDescription { SecurityMode = MessageSecurityMode.None };
+        var file = new NodeId("File", 1);
+        var handle = await adapter.OpenAsync(file, 1, CancellationToken.None);
+        proxy.AfterBrowse = () => proxy.SessionId = new NodeId("ReplacementSession", 0);
+        var before = proxy.MethodCalls.Count;
+
+        var failure = await Assert.ThrowsAsync<FederationException>(async () =>
+        {
+            if (close)
+            {
+                await adapter.CloseAsync(file, handle, CancellationToken.None);
+            }
+            else
+            {
+                await adapter.SetPositionAsync(file, handle, 0, CancellationToken.None);
+            }
+        });
+
+        await Assert.That(failure!.Code).IsEqualTo(FederationErrorCode.Unavailable);
+        await Assert.That(proxy.MethodCalls.Count).IsEqualTo(before);
+        proxy.AfterBrowse = null;
+        var retry = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.CloseAsync(file, handle, CancellationToken.None));
+        await Assert.That(retry!.Code).IsEqualTo(FederationErrorCode.PolicyDenied);
+        await Assert.That(proxy.MethodCalls.Count).IsEqualTo(before);
+    }
+
+    [Test]
+    public async Task FileTransferCanOpenAgainWithFreshNamespaceTableAfterSessionTransition()
+    {
+        var (adapter, proxy) = CreateAdapter();
+        proxy.AfterCall = () => proxy.SessionId = new NodeId("ReplacementSession", 0);
+        var file = new NodeId("File", 1);
+
+        var failure = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.OpenAsync(file, 1, CancellationToken.None));
+        await Assert.That(failure!.Code).IsEqualTo(FederationErrorCode.Unavailable);
+        await Assert.That(proxy.ReadCount).IsEqualTo(1);
+        proxy.AfterCall = null;
+        proxy.NamespaceArray = ["http://opcfoundation.org/UA/", "urn:new-session"];
+
+        var handle = await adapter.OpenAsync(file, 1, CancellationToken.None);
+
+        await Assert.That(handle).IsEqualTo(7u);
+        await Assert.That(proxy.ReadCount).IsEqualTo(2);
+        await Assert.That(proxy.MethodCalls.Count).IsEqualTo(2);
+        proxy.Endpoint = new EndpointDescription { SecurityMode = MessageSecurityMode.None };
+        await adapter.CloseAsync(file, handle, CancellationToken.None);
+        await Assert.That(proxy.MethodCalls.Count).IsEqualTo(3);
+    }
+
     private static async ValueTask InvokeFileMethod(OpcUaSessionAdapter adapter, NodeId file, string method,
         CancellationToken cancellationToken = default)
     {
@@ -1719,6 +1856,9 @@ public class OpcUaSessionAdapterTests
         public int? ContinuedPagesRemaining { get; set; }
         public int NextBrowseCount { get; private set; }
         public ArrayOf<ReferenceDescription> NextBrowseReferences { get; set; }
+        public Action? AfterBrowse { get; set; }
+        public Action? AfterBrowseNext { get; set; }
+        public Action? AfterCall { get; set; }
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
@@ -1774,6 +1914,7 @@ public class OpcUaSessionAdapterTests
                 case "CallAsync":
                     var call = ((ArrayOf<CallMethodRequest>)args![1]!)[0];
                     MethodCalls.Add(call);
+                    AfterCall?.Invoke();
                     return new ValueTask<CallResponse>(new CallResponse
                     {
                         ResponseHeader = Header,
@@ -1827,7 +1968,7 @@ public class OpcUaSessionAdapterTests
                 BrowseName = new QualifiedName(DataTypeBrowseName, 0),
                 NodeClass = NodeClass.DataType
             };
-            return new(new BrowseResponse
+            var response = new BrowseResponse
             {
                 ResponseHeader = Header,
                 DiagnosticInfos = Diagnostics,
@@ -1846,7 +1987,9 @@ public class OpcUaSessionAdapterTests
                     StatusCode = BrowseStatus,
                     ContinuationPoint = new ByteString(BrowseContinuation)
                 }]
-            });
+            };
+            AfterBrowse?.Invoke();
+            return new(response);
         }
 
         private ValueTask<BrowseNextResponse> BrowseNext(bool release, ArrayOf<ByteString> continuations)
@@ -1868,7 +2011,7 @@ public class OpcUaSessionAdapterTests
                     continuation = [];
                 }
             }
-            return new(new BrowseNextResponse
+            var response = new BrowseNextResponse
             {
                 ResponseHeader = Header,
                 DiagnosticInfos = Diagnostics,
@@ -1878,7 +2021,9 @@ public class OpcUaSessionAdapterTests
                     ContinuationPoint = release ? default : new ByteString(continuation),
                     References = release ? default : NextBrowseReferences
                 }]
-            });
+            };
+            AfterBrowseNext?.Invoke();
+            return new(response);
         }
     }
 }

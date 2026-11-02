@@ -298,6 +298,7 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
         Variant[] input, bool mutation, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        var sourceSession = session.SessionId;
         if (mutation)
         {
             RequireMutationSecurity(cancellationToken);
@@ -306,17 +307,25 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
         {
             _ = await ReadNamespaceArrayAsync(cancellationToken).ConfigureAwait(false);
         }
-        return await CallNamedMethodAsync(file, methodBrowseName, input, mutation, cancellationToken,
-            methodNamespace: 0)
+        RequireFileSession(sourceSession);
+        var output = await CallNamedMethodAsync(file, methodBrowseName, input, mutation, cancellationToken,
+            methodNamespace: 0, expectedSession: sourceSession)
             .ConfigureAwait(false);
+        RequireFileSession(sourceSession);
+        return output;
     }
 
     private async ValueTask<IReadOnlyList<Variant>> CallNamedMethodAsync(NodeId target, string methodBrowseName,
-        Variant[] input, bool mutation, CancellationToken cancellationToken, ushort? methodNamespace = null)
+        Variant[] input, bool mutation, CancellationToken cancellationToken, ushort? methodNamespace = null,
+        NodeId? expectedSession = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var methods = await BrowseOnce(target, BrowseDirection.Forward, ReferenceTypeIds.HierarchicalReferences,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken, expectedSession).ConfigureAwait(false);
+        if (expectedSession is { } sourceSession)
+        {
+            RequireFileSession(sourceSession);
+        }
         var matches = methods.Where(reference => reference.NodeClass == NodeClass.Method &&
             (methodNamespace is null || reference.BrowseName.NamespaceIndex == methodNamespace) &&
             string.Equals(reference.BrowseName.Name, methodBrowseName, StringComparison.Ordinal)).ToArray();
@@ -335,9 +344,33 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
             throw new FederationException(FederationErrorCode.InvalidPackage,
                 "The selected Method is outside the connected Server AddressSpace.");
         }
+        if (expectedSession is { } callSession)
+        {
+            RequireFileSession(callSession);
+        }
         return await CallAsync(target, Local(matches[0].NodeId), input, cancellationToken)
             .ConfigureAwait(false);
     }
+
+    private void RequireFileSession(NodeId expectedSession, bool hasContinuation = false)
+    {
+        if (session.SessionId != expectedSession)
+        {
+            namespaceUris = null;
+            var failure = new FederationException(FederationErrorCode.Unavailable,
+                "The OPC UA Session changed during FileTransfer; reopen the file in the selected Session.");
+            if (hasContinuation)
+            {
+                RetainUnavailableContinuation(failure);
+            }
+            throw failure;
+        }
+    }
+
+    private static void RetainUnavailableContinuation(Exception failure) =>
+        failure.Data["OpcUa.ContinuationReleaseFailure"] = new FederationException(
+            FederationErrorCode.Unavailable,
+            "The OPC UA continuation cannot be released in a replacement Session.");
 
     /// <inheritdoc />
     public async ValueTask<string> ReadStringAsync(NodeId variable, CancellationToken cancellationToken)
@@ -592,11 +625,16 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
     }
 
     private async ValueTask<IReadOnlyList<ReferenceDescription>> BrowseOnce(NodeId node, BrowseDirection direction,
-        NodeId referenceType, CancellationToken cancellationToken)
+        NodeId referenceType, CancellationToken cancellationToken, NodeId? expectedSession = null)
     {
         var references = new List<ReferenceDescription>();
         var response = await InvokeAsync(() => session.BrowseAsync(new RequestHeader(), new ViewDescription(),
             maxReferencesPerNode, [Describe(node, direction, referenceType)], cancellationToken)).ConfigureAwait(false);
+        if (expectedSession is { } initialSession)
+        {
+            RequireFileSession(initialSession,
+                response.Results.ToArray()?.Any(static result => result.ContinuationPoint.Length != 0) == true);
+        }
         var page = await CheckedBrowseAsync(response.Results, response.DiagnosticInfos,
             response.ResponseHeader).ConfigureAwait(false);
         var pages = 1;
@@ -621,15 +659,30 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
                     throw new FederationException(FederationErrorCode.LimitExceeded,
                         "The OPC UA Browse result exceeds the page budget.");
                 }
+                if (expectedSession is { } browseSession)
+                {
+                    RequireFileSession(browseSession);
+                }
                 var next = await InvokeAsync(() => session.BrowseNextAsync(new RequestHeader(), false,
                     [new ByteString(continuation)], cancellationToken)).ConfigureAwait(false);
+                if (expectedSession is { } sourceSession)
+                {
+                    RequireFileSession(sourceSession);
+                }
                 page = await CheckedBrowseAsync(next.Results, next.DiagnosticInfos,
                     next.ResponseHeader, continuation).ConfigureAwait(false);
                 pages++;
             }
             catch (Exception exception) when (continuation is not null)
             {
-                await ReleaseAsync(continuation, exception).ConfigureAwait(false);
+                if (expectedSession is not { } cleanupSession || session.SessionId == cleanupSession)
+                {
+                    await ReleaseAsync(continuation, exception).ConfigureAwait(false);
+                }
+                else
+                {
+                    RetainUnavailableContinuation(exception);
+                }
                 throw;
             }
         }

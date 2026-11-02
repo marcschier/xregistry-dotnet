@@ -122,6 +122,15 @@ is missing or ambiguous. A Method on another Server is rejected before Call.
 Writable operations recheck encryption after discovery; cancellation at that
 point also prevents Call. Discovery is repeated for each operation rather than
 caching instance Method NodeIds across changes to the AddressSpace.
+Each FileTransfer operation retains its entry Session identity across namespace
+bootstrap, Method discovery and Call. If the Session changes, the adapter
+reports `unavailable` rather than issuing a subsequent Call or returning a
+handle or bytes from the interrupted operation. It discards its cached
+namespace table and does not send an outstanding Browse continuation to the
+replacement Session, even for release; a blocked continuation release is
+reported as additional diagnostic information. A later Open reads the new
+namespace table. These checks cover transitions observed within an operation,
+not every disconnected state or stale handle supplied between operations.
 `OpcUaSessionConnection` discovers endpoints and opens a Session only
 after caller policy selects one; it maps the advertised root through the
 Session's `NamespaceArray` and verifies the root and Core version.
