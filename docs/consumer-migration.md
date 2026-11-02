@@ -673,10 +673,30 @@ operation may redefine a Path Item parameter. Header parameters named
 `Accept`, `Content-Type` or `Authorization` are ignored case-insensitively,
 without acquiring nested examples. Unused reusable references remain inactive,
 and operation pointers do not traverse referenced Path Items. Selection retains
-authored parameter declarations. Effective cross-level parameter merging,
-schema evaluation and serialization compatibility remain unverified;
-Swagger parameter semantics are unchanged.
-For reached operations under OpenAPI `paths`, every authored template
+authored parameter declarations. OpenAPI effective cross-level serialization,
+schema evaluation and serialization compatibility remain unverified.
+Swagger operation and Path Item parameter lists now receive native Parameter
+declaration and bounded Reference Object checks. Parameters require a string
+name and one of the `query`, `header`, `path`, `formData` or `body` locations.
+Path parameters require `required: true`; body parameters require a Schema
+Object. Other locations use primitive or array types, with `file` permitted
+only in `formData`. Nested array items share the Swagger Header type and
+format checks. `multi` collection format and boolean `allowEmptyValue` are
+restricted to query or form parameters. Unlike OpenAPI, Swagger does not exempt
+the reserved header parameter names from validation.
+Swagger parameter names and locations define uniqueness within each list,
+including resolved references. Operation declarations override inherited
+parameters with the same pair; empty lists do not remove inherited parameters.
+The effective set permits at most one body parameter and cannot combine body
+and form parameters. Form parameters require nonempty effective `consumes`
+containing only multipart/form-data or application/x-www-form-urlencoded media
+types. Operation `consumes` overrides the root declaration, including an empty
+array that clears it. Unused reusable parameters require inline Parameter
+Objects; their body schemas and extension values do not trigger acquisition.
+Selected operations retain authored parameters without injecting inherited
+entries or defaults. Swagger schema evaluation, constraint keywords,
+default-value compatibility and runtime serialization remain unverified.
+For reached operations under OpenAPI or Swagger `paths`, every authored template
 expression requires an exact, case-sensitive path parameter at the Path Item
 or operation level. Conversely, declared path parameters must name expressions
 in that path; a query parameter with the same name does not satisfy this rule.

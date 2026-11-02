@@ -444,7 +444,7 @@ public static partial class ApiOperationDocumentResolver
                 if (format != "Swagger/2.0" && header.Name.Equals("Content-Type", StringComparison.OrdinalIgnoreCase)) { continue; }
                 var headerPath = pointer + "/headers/" + Escape(header.Name);
                 var failure = format == "Swagger/2.0"
-                    ? ValidateSwaggerHeaderDeclaration(header.Value, headerPath, cancellationToken)
+                    ? ValidateSwaggerScalarDeclaration(header.Value, headerPath, "Header", false, false, cancellationToken)
                     : ValidateOpenApiHeaderDeclaration(header.Value, headerPath, format, cancellationToken);
                 if (failure is not null) { return failure; }
             }
@@ -471,8 +471,8 @@ public static partial class ApiOperationDocumentResolver
         return null;
     }
 
-    private static ApiOperationResolutionResult? ValidateSwaggerHeaderDeclaration(
-        JsonElement header, string pointer, CancellationToken cancellationToken)
+    private static ApiOperationResolutionResult? ValidateSwaggerScalarDeclaration(
+        JsonElement header, string pointer, string kind, bool allowFile, bool allowMulti, CancellationToken cancellationToken)
     {
         var declaration = header;
         var path = pointer;
@@ -481,38 +481,41 @@ public static partial class ApiOperationDocumentResolver
             cancellationToken.ThrowIfCancellationRequested();
             if (declaration.ValueKind != JsonValueKind.Object)
             {
-                return InvalidHeader("Swagger headers and their items must be objects.", path);
+                return InvalidScalar("Swagger scalar declarations and their items must be objects.", path);
             }
             if (!declaration.TryGetProperty("type", out var type) || type.ValueKind != JsonValueKind.String ||
-                type.GetString() is not ("string" or "number" or "integer" or "boolean" or "array"))
+                !(type.GetString() is "string" or "number" or "integer" or "boolean" or "array" ||
+                    allowFile && path == pointer && type.GetString() == "file"))
             {
-                return InvalidHeader("Swagger headers and items require a primitive or array type.", path + "/type");
+                return InvalidScalar("Swagger scalar declarations require a native primitive, array or applicable file type.", path + "/type");
             }
             if (path == pointer && declaration.TryGetProperty("description", out var description) &&
                 description.ValueKind != JsonValueKind.String)
             {
-                return InvalidHeader("A Swagger header description must be a string.", path + "/description");
+                return InvalidScalar("A Swagger scalar description must be a string.", path + "/description");
             }
             if (declaration.TryGetProperty("format", out var format) && format.ValueKind != JsonValueKind.String)
             {
-                return InvalidHeader("A Swagger header or item format must be a string.", path + "/format");
+                return InvalidScalar("A Swagger scalar format must be a string.", path + "/format");
             }
             if (declaration.TryGetProperty("collectionFormat", out var collection) &&
-                (collection.ValueKind != JsonValueKind.String || collection.GetString() is not ("csv" or "ssv" or "tsv" or "pipes")))
+                (collection.ValueKind != JsonValueKind.String ||
+                    !(collection.GetString() is "csv" or "ssv" or "tsv" or "pipes" ||
+                        allowMulti && path == pointer && collection.GetString() == "multi")))
             {
-                return InvalidHeader("Swagger header and item collectionFormat must be csv, ssv, tsv or pipes.", path + "/collectionFormat");
+                return InvalidScalar("Swagger collectionFormat must be native to the declaration's location.", path + "/collectionFormat");
             }
             if (!declaration.TryGetProperty("items", out var items))
             {
                 return type.GetString() == "array"
-                    ? InvalidHeader("A Swagger array header or item requires an Items Object.", path + "/items") : null;
+                    ? InvalidScalar("A Swagger array requires an Items Object.", path + "/items") : null;
             }
             declaration = items;
             path += "/items";
         }
 
-        static ApiOperationResolutionResult InvalidHeader(string message, string path) =>
-            Failure(ApiOperationResolutionStatus.Invalid, "document.header", message, path);
+        ApiOperationResolutionResult InvalidScalar(string message, string path) =>
+            Failure(ApiOperationResolutionStatus.Invalid, kind == "Header" ? "document.header" : "document.parameter", message, path);
     }
 
     private static ApiOperationResolutionResult? ValidateOpenApiMediaDeclarations(
@@ -839,6 +842,10 @@ public static partial class ApiOperationDocumentResolver
             }
             return null;
         }
+        if (format == "Swagger/2.0")
+        {
+            return ValidateSwaggerParameterDeclaration(parameter, pointer, cancellationToken);
+        }
         if (!parameter.TryGetProperty("name", out var name) || name.ValueKind != JsonValueKind.String)
         {
             return InvalidParameter("A Parameter Object requires a string name.", pointer + "/name");
@@ -882,10 +889,54 @@ public static partial class ApiOperationDocumentResolver
             Failure(ApiOperationResolutionStatus.Invalid, "document.parameter", message, path);
     }
 
+    private static ApiOperationResolutionResult? ValidateSwaggerParameterDeclaration(
+        JsonElement parameter, string pointer, CancellationToken cancellationToken)
+    {
+        if (!parameter.TryGetProperty("name", out var name) || name.ValueKind != JsonValueKind.String)
+        {
+            return InvalidParameter("A Swagger parameter requires a string name.", pointer + "/name");
+        }
+        if (!parameter.TryGetProperty("in", out var location) || location.ValueKind != JsonValueKind.String ||
+            location.GetString() is not ("query" or "header" or "path" or "formData" or "body"))
+        {
+            return InvalidParameter("A Swagger parameter requires a native location.", pointer + "/in");
+        }
+        foreach (var field in new[] { "description", "required" })
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (parameter.TryGetProperty(field, out var value) && !(field == "description"
+                ? value.ValueKind == JsonValueKind.String : value.ValueKind is JsonValueKind.True or JsonValueKind.False))
+            {
+                return InvalidParameter("Swagger parameter metadata must have its native JSON type.", pointer + "/" + field);
+            }
+        }
+        var nativeLocation = location.GetString()!;
+        if (nativeLocation == "path" && (!parameter.TryGetProperty("required", out var required) ||
+            required.ValueKind != JsonValueKind.True))
+        {
+            return InvalidParameter("A Swagger path parameter requires required to be true.", pointer + "/required");
+        }
+        if (nativeLocation == "body")
+        {
+            return !parameter.TryGetProperty("schema", out var schema) || schema.ValueKind != JsonValueKind.Object
+                ? InvalidParameter("A Swagger body parameter requires a Schema Object.", pointer + "/schema") : null;
+        }
+        if (parameter.TryGetProperty("allowEmptyValue", out var allowEmpty) &&
+            (nativeLocation is not ("query" or "formData") || allowEmpty.ValueKind is not (JsonValueKind.True or JsonValueKind.False)))
+        {
+            return InvalidParameter("Swagger allowEmptyValue requires a boolean on a query or formData parameter.", pointer + "/allowEmptyValue");
+        }
+        return ValidateSwaggerScalarDeclaration(parameter, pointer, "Parameter", nativeLocation == "formData",
+            nativeLocation is "query" or "formData", cancellationToken);
+
+        static ApiOperationResolutionResult InvalidParameter(string message, string path) =>
+            Failure(ApiOperationResolutionStatus.Invalid, "document.parameter", message, path);
+    }
+
     private static ApiOperationResolutionResult? ValidateOpenApiParameters(
         JsonElement owner, string pointer, string format, CancellationToken cancellationToken)
     {
-        if (format == "Swagger/2.0" || !owner.TryGetProperty("parameters", out var parameters)) { return null; }
+        if (!owner.TryGetProperty("parameters", out var parameters)) { return null; }
         if (parameters.ValueKind != JsonValueKind.Array)
         {
             return Failure(ApiOperationResolutionStatus.Invalid, "document.parameters",
@@ -899,7 +950,7 @@ public static partial class ApiOperationDocumentResolver
             var path = pointer + "/parameters/" + index;
             var failure = ValidateOpenApiParameterDeclaration(parameter, path, format, cancellationToken);
             if (failure is not null) { return failure; }
-            if (!parameter.TryGetProperty("$ref", out _) && !IsIgnoredOpenApiHeaderParameter(parameter) &&
+            if (!parameter.TryGetProperty("$ref", out _) && (format == "Swagger/2.0" || !IsIgnoredOpenApiHeaderParameter(parameter)) &&
                 !names.Add((parameter.GetProperty("in").GetString()!, parameter.GetProperty("name").GetString()!)))
             {
                 return DuplicateParameter(path);
@@ -917,7 +968,6 @@ public static partial class ApiOperationDocumentResolver
         string pathTemplate, ReferenceTarget? pathOwner, ReferenceTarget operation,
         ReferenceContext references, CancellationToken cancellationToken)
     {
-        if (references.Format == "Swagger/2.0") { return null; }
         var templates = new HashSet<string>(StringComparer.Ordinal);
         foreach (Match match in PathTemplateExpression().Matches(pathTemplate))
         {
@@ -926,6 +976,8 @@ public static partial class ApiOperationDocumentResolver
             templates.Add(match.Value[1..^1]);
         }
         var declared = new HashSet<string>(StringComparer.Ordinal);
+        var effective = references.Format == "Swagger/2.0"
+            ? new Dictionary<(string, string), ReferenceTarget>() : null;
         foreach (var owner in new[] { pathOwner, operation })
         {
             if (owner is null || !owner.Value.TryGetProperty("parameters", out var parameters)) { continue; }
@@ -937,6 +989,10 @@ public static partial class ApiOperationDocumentResolver
                     references, ValidateOpenApiParameterDeclaration, "parameter", cancellationToken).ConfigureAwait(false);
                 if (resolution.Failure is not null) { return resolution.Failure; }
                 var target = resolution.Target!;
+                if (effective is not null)
+                {
+                    effective[(target.Value.GetProperty("in").GetString()!, target.Value.GetProperty("name").GetString()!)] = target;
+                }
                 if (target.Value.GetProperty("in").GetString() == "path")
                 {
                     var name = target.Value.GetProperty("name").GetString()!;
@@ -956,14 +1012,60 @@ public static partial class ApiOperationDocumentResolver
                 "Each authored path expression requires a path parameter at the Path Item or operation level.",
                 operation.Pointer + "/parameters");
         }
-        return null;
+        return effective is null ? null : ValidateSwaggerEffectivePayload(effective.Values, operation, references, cancellationToken);
+    }
+
+    private static ApiOperationResolutionResult? ValidateSwaggerEffectivePayload(
+        IEnumerable<ReferenceTarget> parameters, ReferenceTarget operation, ReferenceContext references,
+        CancellationToken cancellationToken)
+    {
+        var bodies = 0;
+        var hasForm = false;
+        foreach (var parameter in parameters)
+        {
+            references.Work(parameter.Pointer);
+            var location = parameter.Value.GetProperty("in").GetString();
+            if (location == "body") { bodies++; }
+            if (location == "formData") { hasForm = true; }
+        }
+        if (bodies > 1 || bodies != 0 && hasForm)
+        {
+            return Failure(ApiOperationResolutionStatus.Invalid, "document.parameters",
+                "Swagger permits at most one body parameter and forbids combining body and formData parameters.",
+                operation.Pointer + "/parameters");
+        }
+        if (!hasForm) { return null; }
+        var transportFailure = ValidateSwaggerTransportDeclarations(operation.Value, operation.Pointer, cancellationToken);
+        if (transportFailure is not null) { return transportFailure; }
+        var consumes = operation.Value.TryGetProperty("consumes", out var local) ? local :
+            references.Root.Root.TryGetProperty("consumes", out var inherited) ? inherited : default;
+        if (consumes.ValueKind == JsonValueKind.Array && consumes.GetArrayLength() > 0)
+        {
+            var valid = true;
+            foreach (var media in consumes.EnumerateArray())
+            {
+                references.Work(operation.Pointer + "/consumes");
+                var name = media.GetString()!.Split(';', 2)[0].Trim();
+                if (!name.Equals("multipart/form-data", StringComparison.OrdinalIgnoreCase) &&
+                    !name.Equals("application/x-www-form-urlencoded", StringComparison.OrdinalIgnoreCase))
+                {
+                    valid = false;
+                    break;
+                }
+            }
+            if (valid) { return null; }
+        }
+        return Failure(ApiOperationResolutionStatus.Invalid, "document.parameters",
+            "Swagger formData parameters require effective form media types in consumes.", operation.Pointer + "/consumes");
     }
 
     private static async ValueTask<ApiOperationResolutionResult?> ValidateEffectiveOpenApiParametersAsync(
         JsonElement owner, ReferencedDocument source, string pointer, ReferenceContext references, CancellationToken cancellationToken)
     {
-        if (references.Format == "Swagger/2.0" || !owner.TryGetProperty("parameters", out var parameters)) { return null; }
+        if (!owner.TryGetProperty("parameters", out var parameters)) { return null; }
         var names = new HashSet<(string, string)>();
+        var bodies = 0;
+        var hasForm = false;
         var index = 0;
         foreach (var parameter in parameters.EnumerateArray())
         {
@@ -972,11 +1074,24 @@ public static partial class ApiOperationDocumentResolver
                 ValidateOpenApiParameterDeclaration, "parameter", cancellationToken).ConfigureAwait(false);
             if (resolution.Failure is not null) { return resolution.Failure; }
             var target = resolution.Target!;
-            if (!IsIgnoredOpenApiHeaderParameter(target.Value))
+            if (references.Format == "Swagger/2.0" || !IsIgnoredOpenApiHeaderParameter(target.Value))
             {
                 if (!names.Add((target.Value.GetProperty("in").GetString()!, target.Value.GetProperty("name").GetString()!)))
                 {
                     return DuplicateParameter(path);
+                }
+                if (references.Format == "Swagger/2.0")
+                {
+                    var location = target.Value.GetProperty("in").GetString();
+                    if (location == "body") { bodies++; }
+                    if (location == "formData") { hasForm = true; }
+                    if (bodies > 1 || bodies != 0 && hasForm)
+                    {
+                        return Failure(ApiOperationResolutionStatus.Invalid, "document.parameters",
+                            "Swagger permits at most one body parameter and forbids combining body and formData parameters.", path);
+                    }
+                    index++;
+                    continue;
                 }
                 var failure = await ValidateEffectiveOpenApiExamplesAsync(target, references, cancellationToken).ConfigureAwait(false);
                 if (failure is not null) { return failure; }

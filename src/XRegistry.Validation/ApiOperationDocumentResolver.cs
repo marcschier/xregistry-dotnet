@@ -688,9 +688,11 @@ public static partial class ApiOperationDocumentResolver
                     var bodyFailure = ValidateOpenApiRequestBodyDeclaration(entry.Value, entryPath, format, cancellationToken);
                     if (bodyFailure is not null) { return bodyFailure; }
                 }
-                if (!swagger && collection.Name == "parameters")
+                if (collection.Name == "parameters")
                 {
-                    var parameterFailure = ValidateOpenApiParameterDeclaration(entry.Value, entryPath, format, cancellationToken);
+                    var parameterFailure = swagger
+                        ? ValidateSwaggerParameterDeclaration(entry.Value, entryPath, cancellationToken)
+                        : ValidateOpenApiParameterDeclaration(entry.Value, entryPath, format, cancellationToken);
                     if (parameterFailure is not null) { return parameterFailure; }
                 }
                 if (!swagger && collection.Name == "pathItems")
@@ -956,7 +958,7 @@ public static partial class ApiOperationDocumentResolver
             {
                 return inherited;
             }
-            if (references.Format != "Swagger/2.0" && parameterOwner is not null && inherited.ParameterOwner is not null)
+            if (parameterOwner is not null && inherited.ParameterOwner is not null)
             {
                 return PathItemResolution.Failed(Failure(ApiOperationResolutionStatus.Indeterminate,
                     "dependency.path_item_conflict",

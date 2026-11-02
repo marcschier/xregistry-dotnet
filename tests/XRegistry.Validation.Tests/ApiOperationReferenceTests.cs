@@ -11,6 +11,459 @@ namespace XRegistry.Validation.Tests;
 public class ApiOperationReferenceTests
 {
     [Test]
+    [Arguments(0)]
+    [Arguments(1)]
+    [Arguments(63)]
+    [Arguments(64)]
+    [Arguments(65)]
+    public async Task SwaggerParameterChainsHonorInclusiveDepthWithoutReplacingDeclarations(int links)
+    {
+        var document = new JsonObject { ["swagger"] = "2.0", ["paths"] = JsonNode.Parse("""
+            {"/items":{"get":{"operationId":"Target","parameters":[{"$ref":"#/P1"}]}}}
+            """) };
+        for (var index = 1; index < links; index++)
+        {
+            document["P" + index] = new JsonObject { ["$ref"] = "#/P" + (index + 1) };
+        }
+        document["P" + links] = JsonNode.Parse("""{"name":"p","in":"query","type":"integer"}""");
+        if (links == 0) { document["paths"]!["/items"]!["get"]!["parameters"]![0] = document["P0"]!.DeepClone(); }
+        foreach (var selector in new[] { "operations/Target", "/paths/~1items/get" })
+        {
+            var result = ApiOperationDocumentResolver.Resolve("Swagger/2.0", "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector));
+            await Assert.That(result.Status).IsEqualTo(links <= 64
+                ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Indeterminate);
+            if (links <= 64)
+            {
+                if (links != 0)
+                {
+                    await Assert.That(result.Operation.GetProperty("parameters")[0].GetProperty("$ref").GetString()).IsEqualTo("#/P1");
+                }
+                else { await Assert.That(result.Operation.GetProperty("parameters")[0].GetProperty("name").GetString()).IsEqualTo("p"); }
+            }
+            else
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("limit.reference_depth");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+        }
+    }
+
+    [Test]
+    public async Task SwaggerParameterFailuresPreventNamedSelectionButPreserveUnrelatedPointers()
+    {
+        foreach (var (target, status, code) in new (string?, ApiOperationResolutionStatus, string)[]
+        {
+            (null, ApiOperationResolutionStatus.Indeterminate, "dependency.unresolved"),
+            ("denied", ApiOperationResolutionStatus.Denied, "dependency.denied"),
+            ("not json", ApiOperationResolutionStatus.Invalid, "dependency.json"),
+            ("{}", ApiOperationResolutionStatus.Invalid, "dependency.pointer"),
+            ("""{"P":false}""", ApiOperationResolutionStatus.Invalid, "document.parameter"),
+            ("""{"P":{"$ref":"#/P"}}""", ApiOperationResolutionStatus.Indeterminate, "dependency.cycle")
+        })
+        {
+            var document = new JsonObject { ["swagger"] = "2.0", ["paths"] = JsonNode.Parse("""
+                {"/target":{"get":{"operationId":"Target"}},"/other":{"get":{"operationId":"Other",
+                "parameters":[{"$ref":"https://allowed.test/p#/P"}]}}}
+                """) };
+            foreach (var selector in new[] { "operations/Target", "operations/Missing", "/paths/~1target/get", "/paths/~1other/get" })
+            {
+                var local = selector == "/paths/~1target/get";
+                var calls = 0;
+                var result = await ApiOperationDocumentResolver.ResolveAsync("Swagger/2.0", "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                    resolveReference: (_, _) =>
+                    {
+                        calls++;
+                        if (target == "denied") { throw new UnauthorizedAccessException(); }
+                        if (target is null) { return ValueTask.FromResult<ReadOnlyMemory<byte>?>(null); }
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(target));
+                    });
+                await Assert.That(result.Status).IsEqualTo(local ? ApiOperationResolutionStatus.Selected : status);
+                await Assert.That(calls).IsEqualTo(local ? 0 : 1);
+                if (local) { await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("Target"); }
+                else
+                {
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                }
+            }
+        }
+    }
+
+    [Test]
+    public async Task SwaggerParametersRejectReferenceOnlyReusableDefinitionsAndUndefinedPathItemMerges()
+    {
+        foreach (var repeated in new[] { false, true })
+        {
+            var document = new JsonObject { ["swagger"] = "2.0", ["paths"] = JsonNode.Parse("""
+                {"/items":{"$ref":"#/P","parameters":[{"name":"p","in":"query","type":"string"}]}}
+                """), ["P"] = JsonNode.Parse("""
+                {"get":{"operationId":"Target"},"parameters":[{"name":"q","in":"query","type":"integer"}]}
+                """) };
+            if (repeated) { document["P"]!["parameters"]![0]!["name"] = "p"; }
+            var result = ApiOperationDocumentResolver.Resolve("Swagger/2.0", "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"));
+            await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("dependency.path_item_conflict");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/paths/~1items/parameters");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+        var reusable = """
+            {"swagger":"2.0","parameters":{"Unused":{"$ref":"https://must-not-load.test/p"}},
+            "paths":{"/items":{"get":{"operationId":"Target"}}}}
+            """;
+        var calls = 0;
+        var invalid = await ApiOperationDocumentResolver.ResolveAsync("Swagger/2.0", "application/json",
+            System.Text.Encoding.UTF8.GetBytes(reusable), ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+            resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+        await Assert.That(invalid.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+        await Assert.That(invalid.Diagnostic!.Code).IsEqualTo("document.parameter");
+        await Assert.That(invalid.Diagnostic.Path).IsEqualTo("$/parameters/Unused/name");
+        await Assert.That(invalid.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task SwaggerParametersRetainAuthoredPathAndPayloadContextAcrossRetrievedPathItems()
+    {
+        foreach (var valid in new[] { true, false, true })
+        {
+            var document = new JsonObject { ["swagger"] = "2.0", ["consumes"] = new JsonArray("multipart/form-data"),
+                ["paths"] = JsonNode.Parse("""{"/items/{p}":{"$ref":"https://allowed.test/paths/p#/P"}}""") };
+            var calls = new List<string>();
+            var result = await ApiOperationDocumentResolver.ResolveAsync("Swagger/2.0", "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+                resolveReference: (uri, _) =>
+                {
+                    calls.Add(uri);
+                    var json = uri switch
+                    {
+                        "https://allowed.test/paths/p" => """
+                            {"P":{"parameters":[{"$ref":"../parameters/p#/P"}],
+                            "post":{"operationId":"Target","parameters":[{"name":"upload","in":"formData","type":"file"}]}}}
+                            """,
+                        "https://allowed.test/parameters/p" => valid
+                            ? """{"P":{"name":"p","in":"path","required":true,"type":"integer"}}"""
+                            : """{"P":{"name":"P","in":"path","required":true,"type":"integer"}}""",
+                        _ => throw new UnauthorizedAccessException()
+                    };
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(json));
+                });
+            await Assert.That(result.Status).IsEqualTo(valid
+                ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+            await Assert.That(string.Join("|", calls)).IsEqualTo("https://allowed.test/paths/p|https://allowed.test/parameters/p");
+            if (valid)
+            {
+                await Assert.That(result.Operation.GetProperty("parameters").GetArrayLength()).IsEqualTo(1);
+                await Assert.That(result.Operation.GetProperty("parameters")[0].GetProperty("name").GetString()).IsEqualTo("upload");
+            }
+            else
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.path_parameter");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo("$/P/name");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+        }
+    }
+
+    [Test]
+    public async Task SwaggerParametersRejectMalformedNativeDeclarationsAcrossReachedAndReusableLocations()
+    {
+        foreach (var (json, suffix) in new (string, string)[]
+        {
+            ("null", ""), ("[]", ""), ("{}", "/name"), ("""{"name":false}""", "/name"),
+            ("""{"name":"p"}""", "/in"), ("""{"name":"p","in":false}""", "/in"),
+            ("""{"name":"p","in":"cookie"}""", "/in"), ("""{"name":"p","in":"Query"}""", "/in"),
+            ("""{"name":"p","in":"query","type":"string","description":false}""", "/description"),
+            ("""{"name":"p","in":"query","type":"string","required":null}""", "/required"),
+            ("""{"name":"p","in":"path","type":"string"}""", "/required"),
+            ("""{"name":"p","in":"path","type":"string","required":false}""", "/required"),
+            ("""{"name":"p","in":"body"}""", "/schema"),
+            ("""{"name":"p","in":"body","schema":false}""", "/schema"),
+            ("""{"name":"p","in":"body","schema":[]}""", "/schema"),
+            ("""{"name":"p","in":"query"}""", "/type"),
+            ("""{"name":"p","in":"query","type":"object"}""", "/type"),
+            ("""{"name":"p","in":"query","type":"file"}""", "/type"),
+            ("""{"name":"p","in":"header","type":"file"}""", "/type"),
+            ("""{"name":"p","in":"query","type":"array"}""", "/items"),
+            ("""{"name":"p","in":"query","type":"array","items":{"type":"file"}}""", "/items/type"),
+            ("""{"name":"p","in":"query","type":"array","items":{"type":"integer","collectionFormat":"multi"}}""", "/items/collectionFormat"),
+            ("""{"name":"p","in":"header","type":"array","items":{"type":"string"},"collectionFormat":"multi"}""", "/collectionFormat"),
+            ("""{"name":"p","in":"query","type":"string","allowEmptyValue":null}""", "/allowEmptyValue"),
+            ("""{"name":"p","in":"header","type":"string","allowEmptyValue":false}""", "/allowEmptyValue"),
+            ("""{"$ref":null}""", "/$ref"), ("""{"$ref":"bad path"}""", "/$ref")
+        })
+        {
+            foreach (var location in new[] { "operation", "path", "reusable", "remote" })
+            {
+                if (location == "reusable" && json.StartsWith("""{"$ref":""", StringComparison.Ordinal)) { continue; }
+                var parameter = JsonNode.Parse(json);
+                var operation = new JsonObject { ["operationId"] = "Target" };
+                var pathItem = new JsonObject { ["get"] = operation };
+                var document = new JsonObject { ["swagger"] = "2.0",
+                    ["paths"] = new JsonObject { ["/items"] = pathItem } };
+                var expectedPath = "$/paths/~1items/get/parameters/0" + suffix;
+                if (location == "path")
+                {
+                    pathItem["parameters"] = new JsonArray(parameter?.DeepClone());
+                    expectedPath = "$/paths/~1items/parameters/0" + suffix;
+                }
+                else if (location == "reusable")
+                {
+                    document["parameters"] = new JsonObject { ["Unused"] = parameter?.DeepClone() };
+                    expectedPath = "$/parameters/Unused" + suffix;
+                }
+                else
+                {
+                    operation["parameters"] = new JsonArray(location == "remote"
+                        ? new JsonObject { ["$ref"] = "https://allowed.test/p#/P" } : parameter?.DeepClone());
+                    if (location == "remote") { expectedPath = "$/P" + suffix; }
+                }
+                var calls = 0;
+                var result = await ApiOperationDocumentResolver.ResolveAsync("Swagger/2.0", "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+                    resolveReference: (uri, _) =>
+                    {
+                        calls++;
+                        if (uri != "https://allowed.test/p") { throw new UnauthorizedAccessException(); }
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(
+                            new JsonObject { ["P"] = parameter?.DeepClone() }.ToJsonString()));
+                    });
+                await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo(location == "reusable" && parameter is not JsonObject
+                    ? "document.component_value" : "document.parameter");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo(expectedPath);
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                await Assert.That(calls).IsEqualTo(location == "remote" ? 1 : 0);
+            }
+        }
+    }
+
+    [Test]
+    public async Task SwaggerParametersPreserveNativeLocationsTypesCollectionsAndOpaqueSchemaContent()
+    {
+        foreach (var location in new[] { "query", "header", "path", "formData", "body" })
+        {
+            foreach (var type in new[] { "string", "number", "integer", "boolean", "array", "file" })
+            {
+                if (type == "file" && location != "formData") { continue; }
+                foreach (var collection in new[] { "csv", "ssv", "tsv", "pipes", "multi" })
+                {
+                    if (collection == "multi" && location is not ("query" or "formData")) { continue; }
+                    var parameter = new JsonObject { ["name"] = "p", ["in"] = location,
+                        ["required"] = location == "path", ["description"] = "",
+                        ["x-private"] = new JsonObject { ["$ref"] = "https://must-not-load.test/private" } };
+                    if (location == "body")
+                    {
+                        parameter["schema"] = new JsonObject { ["$ref"] = "https://must-not-load.test/schema" };
+                    }
+                    else
+                    {
+                        parameter["type"] = type;
+                        parameter["format"] = "vendor-format";
+                        parameter["collectionFormat"] = collection;
+                        if (location is "query" or "formData") { parameter["allowEmptyValue"] = false; }
+                        if (type == "array") { parameter["items"] = new JsonObject { ["type"] = "array",
+                            ["items"] = new JsonObject { ["type"] = "string" } }; }
+                        parameter["examples"] = new JsonObject { ["non-native"] =
+                            new JsonObject { ["$ref"] = "https://must-not-load.test/example" } };
+                    }
+                    var operation = new JsonObject { ["operationId"] = "Target", ["parameters"] = new JsonArray(parameter) };
+                    var document = new JsonObject { ["swagger"] = "2.0",
+                        ["consumes"] = new JsonArray("multipart/form-data"),
+                        ["paths"] = new JsonObject { [location == "path" ? "/items/{p}" : "/items"] =
+                            new JsonObject { ["post"] = operation.DeepClone() } } };
+                    var calls = 0;
+                    var result = await ApiOperationDocumentResolver.ResolveAsync("Swagger/2.0", "application/json",
+                        System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                        ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+                        resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+                    await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+                    await Assert.That(JsonNode.DeepEquals(operation, JsonNode.Parse(result.Operation.GetRawText()))).IsTrue();
+                    await Assert.That(calls).IsEqualTo(0);
+                }
+            }
+        }
+    }
+
+    [Test]
+    public async Task SwaggerParameterReferencesResolveContainingBasesCacheAndRestoredTargets()
+    {
+        foreach (var valid in new[] { true, false, true })
+        {
+            var document = new JsonObject { ["swagger"] = "2.0", ["paths"] = JsonNode.Parse("""
+                {"/items":{"$ref":"https://allowed.test/paths/p#/P"}}
+                """), ["parameters"] = JsonNode.Parse("""
+                {"Unused":{"name":"unused","in":"body","schema":{"$ref":"https://must-not-load.test/schema"}}}
+                """) };
+            var calls = new List<string>();
+            var result = await ApiOperationDocumentResolver.ResolveAsync("Swagger/2.0", "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+                resolveReference: (uri, _) =>
+                {
+                    calls.Add(uri);
+                    var json = uri switch
+                    {
+                        "https://allowed.test/paths/p" => """
+                            {"P":{"parameters":[{"$ref":"../parameters/p#/P"}],
+                            "get":{"operationId":"Target","parameters":[{"$ref":"../parameters/p#/P","name":false,"in":false}]}}}
+                            """,
+                        "https://allowed.test/parameters/p" => """{"P":{"$ref":"next#/P"}}""",
+                        "https://allowed.test/parameters/next" => valid
+                            ? """{"P":{"name":"p","in":"query","type":"integer"}}"""
+                            : """{"P":{"name":"p","in":"query","type":"object"}}""",
+                        _ => throw new UnauthorizedAccessException()
+                    };
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(json));
+                });
+            await Assert.That(result.Status).IsEqualTo(valid
+                ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+            await Assert.That(string.Join("|", calls)).IsEqualTo(
+                "https://allowed.test/paths/p|https://allowed.test/parameters/p|https://allowed.test/parameters/next");
+            if (valid)
+            {
+                await Assert.That(result.Operation.GetProperty("parameters")[0].GetProperty("$ref").GetString())
+                    .IsEqualTo("../parameters/p#/P");
+                await Assert.That(result.Operation.GetProperty("parameters")[0].GetProperty("name").GetBoolean()).IsFalse();
+            }
+            else
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.parameter");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo("$/P/type");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+        }
+    }
+
+    [Test]
+    public async Task SwaggerParameterListsEnforceUniquenessAndPayloadExclusionWithoutRemovingInheritedEntries()
+    {
+        foreach (var (pathParameters, operationParameters, valid) in new (string, string, bool)[]
+        {
+            ("[]", "false", false),
+            ("[]", """[{"name":"p","in":"query","type":"string"},{"name":"p","in":"query","type":"integer"}]""", false),
+            ("[]", """[{"$ref":"#/Q"},{"$ref":"#/Q"}]""", false),
+            ("[]", """[{"name":"Accept","in":"header","type":"string"},{"name":"Accept","in":"header","type":"string"}]""", false),
+            ("""[{"name":"a","in":"body","schema":{}}]""", """[{"name":"b","in":"body","schema":{}}]""", false),
+            ("[]", """[{"name":"a","in":"body","schema":{}},{"name":"b","in":"body","schema":{}}]""", false),
+            ("""[{"name":"a","in":"body","schema":{}}]""", """[{"name":"p","in":"formData","type":"string"}]""", false),
+            ("""[{"name":"p","in":"formData","type":"string"}]""", """[{"name":"a","in":"body","schema":{}}]""", false),
+            ("[]", """[{"name":"a","in":"body","schema":{}},{"name":"p","in":"formData","type":"string"}]""", false),
+            ("""[{"name":"a","in":"body","schema":{}}]""", """[{"name":"a","in":"body","schema":{"type":"string"}}]""", true),
+            ("""[{"$ref":"#/Q"}]""", """[{"name":"p","in":"query","type":"integer"}]""", true),
+            ("""[{"$ref":"#/Q"}]""", "[]", true),
+            ("[]", """[{"name":"p","in":"query","type":"string"},{"name":"P","in":"query","type":"string"},{"name":"p","in":"header","type":"string"}]""", true)
+        })
+        {
+            var operation = new JsonObject { ["operationId"] = "Target", ["parameters"] = JsonNode.Parse(operationParameters) };
+            var document = new JsonObject { ["swagger"] = "2.0", ["consumes"] = new JsonArray("multipart/form-data"),
+                ["Q"] = JsonNode.Parse("""{"name":"p","in":"query","type":"string"}"""),
+                ["paths"] = new JsonObject { ["/items"] = new JsonObject {
+                    ["parameters"] = JsonNode.Parse(pathParameters), ["post"] = operation.DeepClone() } } };
+            foreach (var selector in new[] { "operations/Target", "/paths/~1items/post" })
+            {
+                var result = ApiOperationDocumentResolver.Resolve("Swagger/2.0", "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector));
+                await Assert.That(result.Status).IsEqualTo(valid
+                    ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+                if (valid) { await Assert.That(JsonNode.DeepEquals(operation, JsonNode.Parse(result.Operation.GetRawText()))).IsTrue(); }
+                else
+                {
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.parameters");
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                }
+            }
+        }
+    }
+
+    [Test]
+    public async Task SwaggerParameterFormPayloadsRequireEffectiveFormConsumesAndHonorOperationOverride()
+    {
+        foreach (var type in new[] { "string", "file" })
+        {
+            foreach (var (rootConsumes, operationConsumes, valid) in new (string?, string?, bool)[]
+            {
+                (null, null, false), ("[]", null, false),
+                ("""["application/json"]""", null, false),
+                ("""["multipart/form-data","application/json"]""", null, false),
+                ("""["multipart/form-data"]""", null, true),
+                ("""["application/x-www-form-urlencoded","multipart/form-data"]""", null, true),
+                ("""["application/json"]""", """["multipart/form-data"]""", true),
+                ("""["multipart/form-data"]""", "[]", false),
+                ("""["multipart/form-data"]""", """["application/json"]""", false),
+                (null, """["APPLICATION/X-WWW-FORM-URLENCODED; charset=UTF-8"]""", true)
+            })
+            {
+                var operation = new JsonObject { ["operationId"] = "Target",
+                    ["parameters"] = new JsonArray(new JsonObject { ["name"] = "p", ["in"] = "formData", ["type"] = type }) };
+                if (operationConsumes is not null) { operation["consumes"] = JsonNode.Parse(operationConsumes); }
+                var document = new JsonObject { ["swagger"] = "2.0",
+                    ["paths"] = new JsonObject { ["/items"] = new JsonObject { ["post"] = operation.DeepClone() } } };
+                if (rootConsumes is not null) { document["consumes"] = JsonNode.Parse(rootConsumes); }
+                var result = ApiOperationDocumentResolver.Resolve("Swagger/2.0", "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"));
+                await Assert.That(result.Status).IsEqualTo(valid
+                    ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+                if (valid) { await Assert.That(JsonNode.DeepEquals(operation, JsonNode.Parse(result.Operation.GetRawText()))).IsTrue(); }
+                else
+                {
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.parameters");
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                }
+            }
+        }
+    }
+
+    [Test]
+    public async Task SwaggerParametersRequireExactAuthoredPathCorrespondenceAndRetainPointerLocality()
+    {
+        foreach (var (pathParameters, operationParameters, valid) in new (string, string, bool)[]
+        {
+            ("[]", "[]", false),
+            ("""[{"name":"p","in":"query","type":"string"}]""", "[]", false),
+            ("""[{"name":"P","in":"path","required":true,"type":"string"}]""", "[]", false),
+            ("""[{"name":"p","in":"path","required":true,"type":"string"}]""", "[]", true),
+            ("[]", """[{"name":"p","in":"path","required":true,"type":"integer"}]""", true),
+            ("""[{"name":"p","in":"path","required":true,"type":"string"}]""",
+                """[{"name":"p","in":"path","required":true,"type":"integer"}]""", true)
+        })
+        {
+            var operation = new JsonObject { ["operationId"] = "Other", ["parameters"] = JsonNode.Parse(operationParameters) };
+            var document = new JsonObject { ["swagger"] = "2.0",
+                ["paths"] = new JsonObject {
+                    ["/target"] = JsonNode.Parse("""{"get":{"operationId":"Target"}}"""),
+                    ["/items/{p}/{p}"] = new JsonObject { ["parameters"] = JsonNode.Parse(pathParameters), ["get"] = operation.DeepClone() } } };
+            foreach (var selector in new[] { "operations/Target", "/paths/~1target/get", "/paths/~1items~1%7Bp%7D~1%7Bp%7D/get" })
+            {
+                var local = selector == "/paths/~1target/get";
+                var result = ApiOperationDocumentResolver.Resolve("Swagger/2.0", "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector));
+                await Assert.That(result.Status).IsEqualTo(valid || local
+                    ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+                if (!valid && !local)
+                {
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.path_parameter");
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                }
+                else if (!local && selector != "operations/Target")
+                {
+                    await Assert.That(JsonNode.DeepEquals(operation, JsonNode.Parse(result.Operation.GetRawText()))).IsTrue();
+                }
+            }
+        }
+    }
+
+    [Test]
     public async Task SwaggerHeaderDeclarationsRequireNativeTypesItemsAndMetadataAcrossResponseLocations()
     {
         foreach (var (json, suffix) in new (string, string)[]
@@ -6172,7 +6625,8 @@ public class ApiOperationReferenceTests
     public async Task SwaggerDoesNotInheritOpenApiTemplateHierarchyRestrictions()
     {
         var document = """
-            {"swagger":"2.0","paths":{"/pets/{id}":{"get":{"operationId":"Target"}},"/pets/{name}":{}}}
+            {"swagger":"2.0","paths":{"/pets/{id}":{"parameters":[{"name":"id","in":"path","required":true,"type":"string"}],
+            "get":{"operationId":"Target"}},"/pets/{name}":{}}}
             """u8.ToArray();
         foreach (var selector in new[] { "operations/Target", "/paths/~1pets~1%7Bid%7D/get" })
         {
@@ -6204,6 +6658,11 @@ public class ApiOperationReferenceTests
             ["x-template/{id}"] = new JsonObject { ["/pets/{name}"] = true }
         };
         var document = new JsonObject { [versionField] = version, ["paths"] = paths };
+        if (format == "Swagger/2.0")
+        {
+            paths["/pets/{id}"]!["parameters"]![0]!.AsObject().Remove("schema");
+            paths["/pets/{id}"]!["parameters"]![0]!["type"] = "string";
+        }
         foreach (var selector in new[] { "operations/Target", "/paths/~1pets~1%7Bid%7D/get" })
         {
             var result = ApiOperationDocumentResolver.Resolve(format, "application/json",
@@ -6275,6 +6734,9 @@ public class ApiOperationReferenceTests
                         ? new JsonObject { ["type"] = "basic", ["x-private"] = new JsonObject { ["$ref"] = "https://not-acquired.test/unused" } }
                         : collection == "responses"
                         ? new JsonObject { ["description"] = "", ["x-private"] = new JsonObject { ["$ref"] = "https://not-acquired.test/unused" } }
+                        : collection == "parameters"
+                        ? new JsonObject { ["name"] = "p", ["in"] = "query", ["type"] = "string",
+                            ["x-private"] = new JsonObject { ["$ref"] = "https://not-acquired.test/unused" } }
                         : new JsonObject { ["$ref"] = "https://not-acquired.test/unused", ["opaque"] = false }
                 };
             }
