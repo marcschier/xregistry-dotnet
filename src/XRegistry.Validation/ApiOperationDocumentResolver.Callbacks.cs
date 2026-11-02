@@ -494,37 +494,62 @@ public static partial class ApiOperationDocumentResolver
         foreach (var entry in responses.EnumerateObject())
         {
             if (entry.Name.StartsWith("x-", StringComparison.Ordinal)) { continue; }
-            var response = entry.Value;
-            var document = source;
-            var responsePointer = pointer + "/responses/" + Escape(entry.Name);
-            var active = new HashSet<string>(StringComparer.Ordinal);
-            while (true)
+            var resolution = await ResolveHttpDeclarationAsync(
+                new ReferenceTarget(source, entry.Value, pointer + "/responses/" + Escape(entry.Name)),
+                references, static (value, path, format, token) =>
+                    ValidateHttpResponseDeclaration(value, path, format, allowReference: true, token),
+                "response", cancellationToken).ConfigureAwait(false);
+            if (resolution.Failure is not null) { return resolution.Failure; }
+            if (references.Format == "Swagger/2.0") { continue; }
+            var response = resolution.Target!;
+            if (!response.Value.TryGetProperty("content", out var content)) { continue; }
+            foreach (var media in content.EnumerateObject())
             {
-                references.Work(responsePointer);
-                var failure = ValidateHttpResponseDeclaration(response, responsePointer, references.Format,
-                    allowReference: true, cancellationToken);
-                if (failure is not null) { return failure; }
-                if (!response.TryGetProperty("$ref", out var reference)) { break; }
-                if (!active.Add(document.Identity + "#" + responsePointer))
+                var mediaPointer = response.Pointer + "/content/" + Escape(media.Name);
+                references.Work(mediaPointer);
+                if (!media.Value.TryGetProperty("examples", out var examples)) { continue; }
+                foreach (var example in examples.EnumerateObject())
                 {
-                    return Failure(ApiOperationResolutionStatus.Indeterminate, "dependency.cycle",
-                        "A response reference cycle prevents operation selection.", responsePointer + "/$ref");
+                    var target = await ResolveHttpDeclarationAsync(
+                        new ReferenceTarget(response.Document, example.Value, mediaPointer + "/examples/" + Escape(example.Name)),
+                        references, ValidateOpenApiExampleDeclaration, "example", cancellationToken).ConfigureAwait(false);
+                    if (target.Failure is not null) { return target.Failure; }
                 }
-                if (active.Count > Capabilities.MaxReferenceDepth)
-                {
-                    return Failure(ApiOperationResolutionStatus.Indeterminate, "limit.reference_depth",
-                        "The response reference-chain depth limit was exceeded.", responsePointer + "/$ref");
-                }
-                var target = await references.ResolveAsync(document, reference.GetString()!, responsePointer + "/$ref",
-                    cancellationToken).ConfigureAwait(false);
-                if (target.Failure is not null) { return target.Failure; }
-                var resolved = target.Target!;
-                response = resolved.Value;
-                document = resolved.Document;
-                responsePointer = resolved.Pointer;
             }
         }
         return null;
+    }
+
+    private static async ValueTask<ReferenceTargetResolution> ResolveHttpDeclarationAsync(
+        ReferenceTarget location, ReferenceContext references,
+        Func<JsonElement, string, string, CancellationToken, ApiOperationResolutionResult?> validate,
+        string kind, CancellationToken cancellationToken)
+    {
+        var active = new HashSet<string>(StringComparer.Ordinal);
+        while (true)
+        {
+            references.Work(location.Pointer);
+            var failure = validate(location.Value, location.Pointer, references.Format, cancellationToken);
+            if (failure is not null) { return ReferenceTargetResolution.Failed(failure); }
+            if (!location.Value.TryGetProperty("$ref", out var reference))
+            {
+                return ReferenceTargetResolution.Succeeded(location);
+            }
+            if (!active.Add(location.Document.Identity + "#" + location.Pointer))
+            {
+                return ReferenceTargetResolution.Failed(Failure(ApiOperationResolutionStatus.Indeterminate, "dependency.cycle",
+                    $"A {kind} reference cycle prevents operation selection.", location.Pointer + "/$ref"));
+            }
+            if (active.Count > Capabilities.MaxReferenceDepth)
+            {
+                return ReferenceTargetResolution.Failed(Failure(ApiOperationResolutionStatus.Indeterminate, "limit.reference_depth",
+                    $"The {kind} reference-chain depth limit was exceeded.", location.Pointer + "/$ref"));
+            }
+            var target = await references.ResolveAsync(location.Document, reference.GetString()!, location.Pointer + "/$ref",
+                cancellationToken).ConfigureAwait(false);
+            if (target.Failure is not null) { return target; }
+            location = target.Target!;
+        }
     }
 
     private static ApiOperationResolutionResult? ValidateHttpDocumentationShapes(JsonElement value, string pointer)
