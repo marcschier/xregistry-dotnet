@@ -114,6 +114,85 @@ public class PublicationReadClientTests
     }
 
     [Test]
+    [Arguments(false, "http", "ftp://publisher.example.test", "", "", "/endpoint")]
+    [Arguments(true, "http", "https://publisher.example.test?tenant=blue", "", "", "/endpoint")]
+    [Arguments(false, "http", "https://publisher.example.test#root", "", "", "/endpoint")]
+    [Arguments(false, "git", "http://git.example.test/captures.git", "", "", "/endpoint")]
+    [Arguments(true, "git", "https://git.example.test/captures.git", "path", "../escape", "/parameters/path")]
+    [Arguments(false, "oci", "https://registry.example.test/captures", "", "", "/endpoint")]
+    [Arguments(true, "oci", "oci://registry.example.test/Captures", "", "", "/endpoint")]
+    [Arguments(false, "file", "https://publisher.example.test/captured", "layout", "oci-layout", "/endpoint")]
+    [Arguments(true, "file", "file:///D:/captured", "layout", "unknown", "/parameters/layout")]
+    [Arguments(false, "file", "file:///D:/captured", "layout", "document-tree", "/parameters/reference")]
+    public async Task SelectedBindingSyntaxRejectsBeforeResolverInvocation(
+        bool channelHead, string kind, string endpoint, string parameter, string value, string errorPath)
+    {
+        var fixture = Fixture.Create();
+        var parameters = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (kind == "git")
+        {
+            parameters["revision"] = new string('a', 40);
+        }
+        else if (kind is "oci" or "file")
+        {
+            parameters["reference"] = "sha256:" + new string('a', 64);
+        }
+        if (parameter.Length != 0)
+        {
+            parameters[parameter] = value;
+        }
+        var access = new PublicationRegistryAccess(kind, endpoint, parameters);
+        if (channelHead)
+        {
+            fixture.ChannelMetadata = fixture.ChannelMetadata with
+            {
+                Head = fixture.ManifestDescriptor with
+                {
+                    Reference = fixture.ManifestDescriptor.Reference with { Registry = access }
+                }
+            };
+        }
+        var calls = 0;
+        var binding = fixture.Binding();
+        var client = new PublicationReadClient((_, _) =>
+        {
+            calls++;
+            return ValueTask.FromResult<IPublicationReadBinding>(binding);
+        });
+
+        var error = await Assert.That(async () =>
+                await client.OpenChannelAsync(channelHead ? Access : access, ChannelResource))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected selected binding syntax rejection.");
+
+        await Assert.That(error.Code).IsEqualTo("invalid_binding");
+        await Assert.That(error.Path).IsEqualTo("/reference/registry" + errorPath);
+        await Assert.That(calls).IsEqualTo(channelHead ? 1 : 0);
+        await Assert.That(binding.OpenedVersions.Count).IsZero();
+    }
+
+    [Test]
+    public async Task SelectedFileDocumentTreePreservesLayoutWithoutInventingAReference()
+    {
+        var fixture = Fixture.Create();
+        var access = new PublicationRegistryAccess("file", "file:///D:/captured",
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["layout"] = "document-tree" });
+        var calls = new List<PublicationRegistryAccess>();
+        var client = new PublicationReadClient((selected, _) =>
+        {
+            calls.Add(selected);
+            return ValueTask.FromResult<IPublicationReadBinding>(fixture.Binding(selected));
+        });
+
+        var snapshot = await client.OpenChannelAsync(access, ChannelResource);
+
+        await Assert.That(calls.Count).IsEqualTo(3);
+        await Assert.That(calls[0].Parameters.Count).IsEqualTo(1);
+        await Assert.That(calls[0].Parameters["layout"]).IsEqualTo("document-tree");
+        await Assert.That(snapshot.OpenRecord.Channel!.Registry.Parameters.ContainsKey("reference")).IsFalse();
+        await Assert.That(snapshot.GetExactManifestBytes().SequenceEqual(fixture.ManifestBytes)).IsTrue();
+    }
+
+    [Test]
     public async Task ExtensionBindingParametersRemainOpaqueToTheGenericPublicationReader()
     {
         var fixture = Fixture.Create();
