@@ -210,6 +210,11 @@ in the compiled Model, including collections with no observed instances. Missing
 mappings or a document/metadata-only mapping that contradicts the Model report
 `unsupported_operation`; the source does not defer these checks until an entity
 is requested. An empty Model requires no collection mappings.
+An absent Model FileType, malformed Model JSON or Model compilation failure also
+reports `unsupported_operation`, retaining the original failure and diagnostic.
+Transport, access, integrity, budget and capture failures, cancellation and
+other malformed native operations retain their own outcomes; these failures do
+not establish that the Model is unsupported.
 The source does not provide API views
 because the binding exposes no retrievable Core API URL. Metadata-only
 `MetadataResourceType` Resources with `hasdocument=false` and `maxversions=1`

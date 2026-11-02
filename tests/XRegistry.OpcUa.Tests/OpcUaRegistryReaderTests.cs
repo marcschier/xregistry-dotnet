@@ -1286,6 +1286,101 @@ public class OpcUaRegistryReaderTests
     }
 
     [Test]
+    [Arguments("missing")]
+    [Arguments("wrong-type")]
+    [Arguments("malformed-json")]
+    [Arguments("invalid-model")]
+    public async Task FederationBootstrapReportsMissingOrUnusableModelAsUnsupported(string state)
+    {
+        var session = SourceSession(state switch
+        {
+            "malformed-json" => "{",
+            "invalid-model" => """{"groups":{"teams":{"singular":42}}}""",
+            _ => TestModel
+        });
+        if (state is "missing" or "wrong-type")
+        {
+            session.BrowsePages[File] = new([
+                new([SpecVersionRef()]),
+                new([VariableRef("RegistryId"), VariableRef("SpecVersion"), VariableRef("Xid"),
+                    VariableRef("Epoch"), VariableRef("CreatedAt"), VariableRef("ModifiedAt")]),
+                state == "missing" ? new([]) : new([TypedObjectRef("Model", new NodeId("WrongModel", 1),
+                    new NodeId("NotFileType", 1))])
+            ]);
+        }
+
+        var error = await Assert.ThrowsAsync<FederationException>(
+            async () => await OpenSource(session));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.UnsupportedOperation);
+        await Assert.That(error.InnerException is FederationException).IsTrue();
+        await Assert.That(session.OpenedFiles.Any(node => node.IdentifierAsString == "Capabilities")).IsFalse();
+        await Assert.That(session.BrowsedNodes.Contains(GroupNode)).IsFalse();
+        if (state is "malformed-json" or "invalid-model")
+        {
+            await Assert.That(session.Closed).IsEqualTo(1);
+        }
+    }
+
+    [Test]
+    public async Task FederationBootstrapRetainsMissingModelReadAndCleanupDiagnostics()
+    {
+        var failure = new FederationException(FederationErrorCode.NotFound,
+            "The selected Model disappeared.", "Original native diagnostic.");
+        var cleanup = new IOException("Synthetic close failure.");
+        var session = SourceSession(readFailure: failure);
+        session.CloseFailure = cleanup;
+
+        var error = await Assert.ThrowsAsync<FederationException>(
+            async () => await OpenSource(session));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.UnsupportedOperation);
+        await Assert.That(error.Diagnostic).IsEqualTo("Original native diagnostic.");
+        await Assert.That(ReferenceEquals(error.InnerException, failure)).IsTrue();
+        await Assert.That(ReferenceEquals(failure.Data["OpcUa.FileCloseFailure"], cleanup)).IsTrue();
+        await Assert.That(session.Closed).IsEqualTo(1);
+        await Assert.That(NodeIdTrace(session.OpenedFiles)).IsEqualTo("Model");
+    }
+
+    [Test]
+    [Arguments(FederationErrorCode.Unavailable)]
+    [Arguments(FederationErrorCode.PolicyDenied)]
+    [Arguments(FederationErrorCode.IntegrityError)]
+    [Arguments(FederationErrorCode.LimitExceeded)]
+    [Arguments(FederationErrorCode.InconsistentSnapshot)]
+    [Arguments(FederationErrorCode.InvalidPackage)]
+    [Arguments(FederationErrorCode.Ambiguous)]
+    public async Task FederationBootstrapDoesNotReclassifyModelReadFailure(FederationErrorCode code)
+    {
+        var failure = new FederationException(code, "Synthetic native failure.", "Retained diagnostic.");
+        var session = SourceSession(readFailure: failure);
+
+        var error = await Assert.ThrowsAsync<FederationException>(
+            async () => await OpenSource(session));
+
+        await Assert.That(ReferenceEquals(error, failure)).IsTrue();
+        await Assert.That(error!.Diagnostic).IsEqualTo("Retained diagnostic.");
+        await Assert.That(session.Closed).IsEqualTo(1);
+        await Assert.That(NodeIdTrace(session.OpenedFiles)).IsEqualTo("Model");
+    }
+
+    [Test]
+    public async Task FederationBootstrapDoesNotReclassifyModelReadCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var failure = new OperationCanceledException(cancellation.Token);
+        var session = SourceSession(readFailure: failure);
+
+        var error = await Assert.ThrowsAsync<OperationCanceledException>(
+            async () => await OpenSource(session));
+
+        await Assert.That(ReferenceEquals(error, failure)).IsTrue();
+        await Assert.That(error!.CancellationToken).IsEqualTo(cancellation.Token);
+        await Assert.That(session.Closed).IsEqualTo(1);
+    }
+
+    [Test]
     public async Task FederationBootstrapRejectsNonRegistryRootBeforeOpeningDocuments()
     {
         var session = SourceSession(isRegistry: false);
@@ -2308,9 +2403,10 @@ public class OpcUaRegistryReaderTests
         return reader;
     }
 
-    private static FakeSession SourceSession(string model = TestModel, bool isRegistry = true)
+    private static FakeSession SourceSession(string model = TestModel, bool isRegistry = true,
+        Exception? readFailure = null)
     {
-        var session = new FakeSession { IsRegistry = isRegistry };
+        var session = new FakeSession { IsRegistry = isRegistry, ReadFailure = readFailure };
         session.Chunks.AddRange([
             System.Text.Encoding.UTF8.GetBytes(model), Array.Empty<byte>(),
             System.Text.Encoding.UTF8.GetBytes("""{"flags":["doc"]}"""), Array.Empty<byte>()

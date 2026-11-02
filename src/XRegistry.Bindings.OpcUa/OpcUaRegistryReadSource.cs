@@ -146,14 +146,14 @@ public sealed class OpcUaRegistryReadSource : IFederationReadSource
 
         _ = await reader.VerifyRegistryRootAsync(registryRoot, cancellationToken).ConfigureAwait(false);
         var registry = await reader.ReadRegistryPropertiesAsync(registryRoot, cancellationToken).ConfigureAwait(false);
-        using var modelDocument = await reader.ReadModelAsync(registryRoot, cancellationToken).ConfigureAwait(false);
-        var model = reader.CompileModelDefinition(modelDocument.RootElement);
+        var (model, modelDocument) = await ReadUsableModelAsync(reader, registryRoot, cancellationToken)
+            .ConfigureAwait(false);
         using var capabilitiesDocument = await reader.ReadCapabilitiesAsync(registryRoot, cancellationToken)
             .ConfigureAwait(false);
         var capabilities = capabilitiesDocument.RootElement.Clone();
         _ = FederationCapabilities.GetResolutionOwner(capabilities);
         var source = new OpcUaRegistryReadSource(reader, registryRoot, context, types, model,
-            modelDocument.RootElement, capabilities, registry.GetProperty("specversion").GetString()!);
+            modelDocument, capabilities, registry.GetProperty("specversion").GetString()!);
         foreach (var group in model.Groups)
         {
             _ = source.GroupType(group.Key);
@@ -163,6 +163,24 @@ public sealed class OpcUaRegistryReadSource : IFederationReadSource
             }
         }
         return source;
+    }
+
+    private static async ValueTask<(RegistryModel Model, JsonElement Document)> ReadUsableModelAsync(
+        OpcUaRegistryReader reader, NodeId registryRoot, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var document = await reader.ReadModelAsync(registryRoot, cancellationToken).ConfigureAwait(false);
+            return (reader.CompileModelDefinition(document.RootElement), document.RootElement.Clone());
+        }
+        catch (FederationException exception) when (exception.Code == FederationErrorCode.NotFound ||
+            exception.Code == FederationErrorCode.InvalidPackage &&
+            exception.InnerException is JsonException or RegistryException)
+        {
+            throw new FederationException(FederationErrorCode.UnsupportedOperation,
+                "The selected Registry has no usable Model for native federation.",
+                exception.Diagnostic, exception);
+        }
     }
 
     /// <summary>
