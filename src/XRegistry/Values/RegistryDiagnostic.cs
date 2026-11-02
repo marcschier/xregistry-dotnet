@@ -10,7 +10,7 @@ namespace XRegistry;
 public sealed record RegistryDiagnostic(string Code, string Path, string Message);
 
 /// <summary>An invalid registry value or model, with a machine-readable diagnostic.</summary>
-public sealed class RegistryException : FormatException
+public class RegistryException : FormatException
 {
     /// <summary>Creates a failure with its structured diagnostic and optional underlying parsing error.</summary>
     public RegistryException(RegistryDiagnostic diagnostic, Exception? innerException = null)

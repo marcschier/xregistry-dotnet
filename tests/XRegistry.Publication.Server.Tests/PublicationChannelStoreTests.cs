@@ -20,6 +20,35 @@ public class PublicationChannelStoreTests
         "https://publisher.example.test", new Dictionary<string, string>(StringComparer.Ordinal));
 
     [Test]
+    public async Task PublishRejectsAGroupInsteadOfTreatingItAsAChannel()
+    {
+        var fixture = CreateFixture();
+        var persistence = new InMemoryRegistryPersistence();
+        var store = new PublicationChannelStore(persistence, StoreRegistry);
+        using var before = await persistence.ReadSnapshotAsync();
+
+        var error = await Assert.That(async () =>
+                await store.PublishAsync("/groups/team", fixture.ManifestBytes, fixture.Objects, 0))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected Group rejection.");
+
+        await Assert.That(error.Code).IsEqualTo("invalid_channel_resource");
+        using var after = await persistence.ReadSnapshotAsync();
+        await Assert.That(after.Generation).IsEqualTo(before.Generation);
+    }
+
+    [Test]
+    public async Task OpenChannelRejectsASnapshotResourceInsteadOfTreatingItAsAChannel()
+    {
+        var store = new PublicationChannelStore(new InMemoryRegistryPersistence(), StoreRegistry);
+
+        var error = await Assert.That(async () =>
+                await store.OpenChannelAsync("/publications/team/snapshots/snapshot"))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected non-channel rejection.");
+
+        await Assert.That(error.Code).IsEqualTo("invalid_channel_resource");
+    }
+
+    [Test]
     public async Task SourceSnapshotWithoutMandatoryProvenanceCannotChangeAPublishedChannelOrPersistence()
     {
         var fixture = CreateFixture();
@@ -75,11 +104,78 @@ public class PublicationChannelStoreTests
             })
             .Throws<PublicationChannelConflictException>()
             ?? throw new InvalidOperationException("Expected an epoch conflict.");
+        await Assert.That(conflict.Diagnostic.Code).IsEqualTo("mismatched_epoch");
+        await Assert.That(conflict.Diagnostic.Path).IsEqualTo(Channel);
         await Assert.That(conflict.ExpectedEpoch).IsEqualTo(new System.Numerics.BigInteger(0));
         await Assert.That(conflict.ActualEpoch).IsEqualTo(new System.Numerics.BigInteger(1));
+        var errorArguments = conflict.Data["xregistry.args"] as IReadOnlyDictionary<string, string>;
+        await Assert.That(errorArguments).IsNotNull();
+        var arguments = errorArguments ?? throw new InvalidOperationException("Expected Core mismatch arguments.");
+        await Assert.That(arguments["bad_epoch"]).IsEqualTo("0");
+        await Assert.That(arguments["epoch"]).IsEqualTo("1");
 
         var opened = await store.OpenChannelAsync(Channel);
         await Assert.That(opened.Channel!.Epoch).IsEqualTo(new System.Numerics.BigInteger(1));
+        await Assert.That(opened.Snapshot.Digest).IsEqualTo(first.Snapshot.Digest);
+    }
+
+    [Test]
+    public async Task NonzeroEpochForAnUncreatedChannelMismatchesAgainstEpochZero()
+    {
+        var fixture = CreateFixture();
+        var persistence = new InMemoryRegistryPersistence();
+        var store = new PublicationChannelStore(persistence, StoreRegistry);
+
+        var conflict = await Assert.That(async () =>
+                await store.PublishAsync(Channel, fixture.ManifestBytes, fixture.Objects, 1))
+            .Throws<PublicationChannelConflictException>()
+            ?? throw new InvalidOperationException("Expected an epoch conflict.");
+
+        await Assert.That(conflict.Diagnostic.Code).IsEqualTo("mismatched_epoch");
+        await Assert.That(conflict.ActualEpoch).IsNull();
+        var errorArguments = conflict.Data["xregistry.args"] as IReadOnlyDictionary<string, string>;
+        var arguments = errorArguments ?? throw new InvalidOperationException("Expected Core mismatch arguments.");
+        await Assert.That(arguments["bad_epoch"]).IsEqualTo("1");
+        await Assert.That(arguments["epoch"]).IsEqualTo("0");
+        using var snapshot = await persistence.ReadSnapshotAsync();
+        await Assert.That(snapshot.Generation).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task ConcurrentPublishersWithTheSameEpochProduceOneUpdateAndOneCoreMismatch()
+    {
+        var fixture = CreateFixture();
+        var persistence = new InMemoryRegistryPersistence();
+        var initialStore = new PublicationChannelStore(persistence, StoreRegistry);
+        var first = await initialStore.PublishAsync(Channel, fixture.ManifestBytes, fixture.Objects, 0);
+        var firstEpoch = first.Channel!.Epoch;
+        var barrier = new SnapshotBarrierPersistence(persistence, 2);
+        var concurrentStore = new PublicationChannelStore(barrier, StoreRegistry);
+
+        async Task<PublicationChannelConflictException?> TryPublishAsync()
+        {
+            try
+            {
+                await concurrentStore.PublishAsync(Channel, fixture.ManifestBytes, fixture.Objects,
+                    firstEpoch);
+                return null;
+            }
+            catch (PublicationChannelConflictException conflict)
+            {
+                return conflict;
+            }
+        }
+
+        var outcomes = await Task.WhenAll(TryPublishAsync(), TryPublishAsync());
+
+        await Assert.That(outcomes.Count(static conflict => conflict is null)).IsEqualTo(1);
+        var conflict = outcomes.SingleOrDefault(static conflict => conflict is not null)
+            ?? throw new InvalidOperationException("Expected one concurrent epoch conflict.");
+        await Assert.That(conflict.Diagnostic.Code).IsEqualTo("mismatched_epoch");
+        await Assert.That(conflict.ExpectedEpoch).IsEqualTo(firstEpoch);
+        await Assert.That(conflict.ActualEpoch).IsEqualTo(firstEpoch + 1);
+        var opened = await initialStore.OpenChannelAsync(Channel);
+        await Assert.That(opened.Channel!.Epoch).IsEqualTo(firstEpoch + 1);
         await Assert.That(opened.Snapshot.Digest).IsEqualTo(first.Snapshot.Digest);
     }
 
@@ -125,6 +221,21 @@ public class PublicationChannelStoreTests
         var opened = await store.OpenChannelAsync(Channel);
         await Assert.That(opened.Channel!.Epoch).IsEqualTo(new System.Numerics.BigInteger(1));
         await Assert.That(opened.Snapshot.Digest).IsEqualTo(first.Snapshot.Digest);
+    }
+
+    [Test]
+    public async Task PublishAllowsReusingAnExistingVersionWhenItsBytesMatch()
+    {
+        var fixture = CreateFixture();
+        var persistence = new InMemoryRegistryPersistence();
+        var store = new PublicationChannelStore(persistence, StoreRegistry);
+        var first = await store.PublishAsync(Channel, fixture.ManifestBytes, fixture.Objects, 0);
+
+        var second = await store.PublishAsync(Channel, fixture.ManifestBytes, fixture.Objects, first.Channel!.Epoch);
+
+        await Assert.That(second.Channel!.Epoch).IsEqualTo(new System.Numerics.BigInteger(2));
+        var bundle = await store.ReplayOfflineBundleAsync(Channel);
+        await Assert.That(bundle.GetExactManifestBytes().SequenceEqual(fixture.ManifestBytes)).IsTrue();
     }
 
     [Test]
@@ -374,4 +485,35 @@ public class PublicationChannelStoreTests
 
     private sealed record Fixture(byte[] ManifestBytes, PublicationManifest Manifest,
         IReadOnlyList<PublicationStoredObject> Objects);
+
+    private sealed class SnapshotBarrierPersistence(IRegistryPersistence inner, int synchronizedReads)
+        : IRegistryPersistence
+    {
+        private readonly TaskCompletionSource<bool> _snapshotsCaptured =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _readCount;
+
+        public bool IsReadOnly => inner.IsReadOnly;
+
+        public async ValueTask<IRegistrySnapshot> ReadSnapshotAsync(CancellationToken cancellationToken = default)
+        {
+            var snapshot = await inner.ReadSnapshotAsync(cancellationToken);
+            var readNumber = Interlocked.Increment(ref _readCount);
+            if (readNumber <= synchronizedReads)
+            {
+                if (readNumber == synchronizedReads)
+                {
+                    _snapshotsCaptured.TrySetResult(true);
+                }
+
+                await _snapshotsCaptured.Task.WaitAsync(cancellationToken);
+            }
+
+            return snapshot;
+        }
+
+        public ValueTask<IRegistryCommit> PrepareAsync(long expectedGeneration,
+            IReadOnlyList<RegistryMutation> mutations, CancellationToken cancellationToken = default) =>
+            inner.PrepareAsync(expectedGeneration, mutations, cancellationToken);
+    }
 }

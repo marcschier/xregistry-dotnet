@@ -544,6 +544,45 @@ public class PublicationReadClientTests
     }
 
     [Test]
+    public async Task OpenChannelDoesNotRetryAnUnavailableExactVersionThroughAnotherBinding()
+    {
+        var fixture = Fixture.Create();
+        fixture.Objects.Remove(fixture.ManifestDescriptor.Reference.Version);
+        var binding = fixture.Binding();
+        var resolverCalls = 0;
+        var client = new PublicationReadClient((_, _) =>
+        {
+            resolverCalls++;
+            return ValueTask.FromResult<IPublicationReadBinding>(binding);
+        });
+
+        await Assert.That(async () => await client.OpenChannelAsync(Access, ChannelResource))
+            .Throws<KeyNotFoundException>();
+
+        await Assert.That(binding.ChannelReadCount).IsEqualTo(1);
+        await Assert.That(binding.OpenedVersions.SequenceEqual(
+            [fixture.ManifestDescriptor.Reference.Version])).IsTrue();
+        await Assert.That(resolverCalls).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task OpenChannelDoesNotRetryWhenCallerPolicyDeniesBindingAccess()
+    {
+        var resolverCalls = 0;
+        var client = new PublicationReadClient((_, _) =>
+        {
+            resolverCalls++;
+            return ValueTask.FromException<IPublicationReadBinding>(
+                new UnauthorizedAccessException("The caller denied this Registry."));
+        });
+
+        await Assert.That(async () => await client.OpenChannelAsync(Access, ChannelResource))
+            .Throws<UnauthorizedAccessException>();
+
+        await Assert.That(resolverCalls).IsEqualTo(1);
+    }
+
+    [Test]
     public async Task OpenRecordReopensPinnedDescriptorsWithoutReadingItsChannel()
     {
         var fixture = Fixture.Create();

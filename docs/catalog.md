@@ -168,6 +168,9 @@ byte size and SHA-256 before commit, rejects a changed object at an existing
 reference, and commits new objects with the channel-head update in one
 `IRegistryPersistence` batch. A channel update must supply the current epoch;
 the publication scope remains fixed after channel creation.
+An epoch mismatch raises `PublicationChannelConflictException` with Core's
+`mismatched_epoch` diagnostic and both epoch values. A channel that has not
+been created has comparison epoch zero.
 
 Manifest and open-record parsers interpret byte sizes and channel epochs as
 exact, non-negative integer values under Core's numeric rules. Decimal and
@@ -208,6 +211,14 @@ referenced object. OPC UA access requires a host-bearing endpoint without a
 query or fragment and a non-empty `registryroot`; optional `applicationuri`
 and `transportprofileuri` values must be absolute URIs. The adapter still
 validates the selected transport and portable NodeId grammar.
+
+`XRegistry.Bindings.OpcUa` does not provide a built-in `IPublicationReadBinding`.
+The generic `PublicationReadClient` accepts a caller-supplied binding resolver,
+but this repository does not implement an OPC UA mapping for the structured
+`head` value in Resource Meta. Under the working draft, an adapter that cannot
+represent Meta extensions or obtain a coherent head must report the operation
+as unsupported or inconsistent rather than substitute the default Version or
+a live view.
 
 A `source-snapshot` manifest must declare at least one included mandatory
 extension. Missing or empty `requiredExtensions` rejects before a channel

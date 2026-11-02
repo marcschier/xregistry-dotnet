@@ -145,6 +145,34 @@ public class PublicationManifestTests
     }
 
     [Test]
+    public async Task ManifestRetainsParentReferenceToAnotherRegistry()
+    {
+        var json = JsonNode.Parse(ValidManifest)!.AsObject();
+        json["parent"] = new JsonObject
+        {
+            ["reference"] = new JsonObject
+            {
+                ["registry"] = new JsonObject
+                {
+                    ["binding"] = "http",
+                    ["endpoint"] = "https://origin.example.test"
+                },
+                ["version"] = "/publications/team/snapshots/parent/versions/manifest"
+            },
+            ["digest"] = "sha256:" + new string('b', 64),
+            ["size"] = 37
+        };
+        var bytes = Encoding.UTF8.GetBytes(json.ToJsonString());
+
+        var manifest = PublicationManifest.Parse(bytes);
+
+        await Assert.That(manifest.Parent!.Reference.Registry.Endpoint).IsEqualTo("https://origin.example.test");
+        await Assert.That(manifest.Parent.Reference.Version)
+            .IsEqualTo("/publications/team/snapshots/parent/versions/manifest");
+        await Assert.That(manifest.GetExactBytes().SequenceEqual(bytes)).IsTrue();
+    }
+
+    [Test]
     [Arguments("/reference")]
     [Arguments("/digest")]
     [Arguments("/size")]
@@ -507,6 +535,9 @@ public class PublicationManifestTests
         await Assert.That(manifest.Completeness).IsEqualTo("offline-complete");
         await Assert.That(manifest.Documents.Count).IsEqualTo(1);
         await Assert.That(manifest.Documents[0].ViewVersion).IsEqualTo("/sets/manual/documents/intro/versions/7");
+        await Assert.That(manifest.Documents[0].OriginRegistry).IsEqualTo("https://author.example.test/registry");
+        await Assert.That(manifest.Documents[0].OriginVersion).IsEqualTo("/sets/manual/documents/intro/versions/7");
+        await Assert.That(manifest.Documents[0].Base).IsEqualTo("https://author.example.test/manual/intro.txt");
         await Assert.That(manifest.Documents[0].Content.Reference.Registry.Binding).IsEqualTo("http");
         await Assert.That(manifest.Extensions["urn:example:manifest-extension"].Reference.Registry.Binding).IsEqualTo("opcua");
         await Assert.That(manifest.RequiredExtensions.SequenceEqual(["urn:example:manifest-extension"])).IsTrue();

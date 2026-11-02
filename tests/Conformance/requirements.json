@@ -134426,9 +134426,13 @@
       ],
       "text": "The key words \"MUST\", \"MUST NOT\", \"REQUIRED\", \"SHOULD\", \"SHOULD NOT\", \"MAY\", and \"OPTIONAL\" are interpreted as described in [RFC2119](https://www.rfc-editor.org/rfc/rfc2119).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "informative",
+        "note": "Defines interpretation of normative keywords; it adds no Publication operation or independently testable behavior.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -134457,13 +134461,21 @@
       ],
       "text": "Channel names and snapshot IDs are not document Version IDs. Groups remain organizational containers. A Group that holds channel or snapshot Resources MUST NOT be used or interpreted as a channel, a snapshot or a compatibility declaration.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Groups remain organizational containers. Publication operations accept only channel Resource XIDs; the client rejects a Group before binding acquisition and the store validates channel paths before reading or mutating state. Snapshot identity comes from the manifest digest, and this implementation assigns no Group compatibility semantics.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "OpenChannelRejectsANonChannelResourceBeforeOpeningABinding",
+          "PublishRejectsAGroupInsteadOfTreatingItAsAChannel",
+          "OpenChannelRejectsASnapshotResourceInsteadOfTreatingItAsAChannel"
+        ],
         "nativeEvidence": []
       }
     },
@@ -134490,9 +134502,12 @@
       ],
       "text": "Loading the model does not enforce publication immutability, conditional head updates, retention, digest identity or authorization. A publication adapter, such as a server module or storage layer in front of a Core store, MUST enforce those behaviors. A Core-only store MUST NOT advertise publication support merely because it loaded the model. Public APIs MAY be read-only.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The requirement assigns these guarantees to the publication adapter, not model loading or a Core-only store. This repository's channel store enforces conditional updates and exact object identity, but exposes no authorization integration or publication-capability advertisement; durable retention depends on the supplied persistence implementation. The full adapter obligation remains pending.",
+        "roles": [
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -134522,9 +134537,12 @@
       ],
       "text": "The [model](model.json) defines `channels`, `snapshots` and `objects`, with singular names `channel`, `snapshot` and `object`. It places them in an example organizational Group type, `publications`, whose singular name is `publication`. The sample channel `stable` belongs to the Group `team`, at `https://publisher.example.test/publications/team/channels/stable`. A deployment MAY import these Resource types into its existing organizational Group types using Core [`ximportresources`](../../core/model.md#reuse-of-resource-definitions). It MUST preserve the shared Resource definitions. Group IDs identify neither channels nor publication scopes.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The packaged Publication model defines the channel, snapshot and object Resources under the publications Group, and the model test checks core document/version properties. Deployment-specific ximportresources composition and preservation of shared Resource definitions remain unproven; Group IDs are not Publication scopes or channel identities.",
+        "roles": [
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -134553,13 +134571,19 @@
       ],
       "text": "An object Resource in the example uses the explicit Version ID `content`; its document media type depends on the captured content. A publisher MAY reuse existing exact Versions instead of copying their bytes, provided the adapter ensures their immutability and retention. Changed captured bytes need another object identity; `registry-capture` is not an overwrite target for every release.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The example's `content` Version ID is not a global naming rule. The optional reuse behavior accepts an existing exact reference when its bytes match; the adapter rejects rebinding that reference to changed bytes, preserving immutable identity.",
+        "roles": [
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "PublishAllowsReusingAnExistingVersionWhenItsBytesMatch",
+          "AReferenceCannotBeReboundToDifferentBytes"
+        ],
         "nativeEvidence": []
       }
     },
@@ -134584,13 +134608,19 @@
       ],
       "text": "A manifest MAY reference a manifest in another authorized Registry. Forks do not require copies of its document revisions.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The optional `parent` descriptor can retain an exact Version reference in another Registry. Offline replay uses only the current manifest's required objects and does not resolve or copy the parent; access policy applies only if a caller chooses to dereference it.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ManifestRetainsParentReferenceToAnotherRegistry",
+          "OfflineReplayDoesNotRequireOrReturnParentManifestBytes"
+        ],
         "nativeEvidence": []
       }
     },
@@ -134706,13 +134736,18 @@
       ],
       "text": "- `version` is an exact Version XID in that Registry. A consumer MUST NOT substitute a Resource's default Version or interpret a NodeId as the XID.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The reader passes each descriptor's exact Version XID to the selected binding; the binding contract exposes no default-Version or NodeId substitution path. Descriptor parsing also rejects URL-only references.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "OpenChannelReadsOneCoherentMetaAndSelectsExactBindingsAndVersions",
+          "DescriptorsRejectUrlOnlyObjectsRatherThanInventingVersionReferences"
+        ],
         "nativeEvidence": []
       }
     },
@@ -134774,13 +134809,20 @@
       ],
       "text": "The referenced Version MUST serve the stored document bytes, not a fresh serialization of entity metadata. This applies to Registry JSON and JSON manifests as well as binary documents. Snapshot manifests, captured Registry JSON, captured domain bytes and extension documents MUST be stored as Version documents.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The reader consumes Version document streams and verifies their exact declared size and digest. The server persists supplied bytes as Version documents; offline replay returns the retained object bytes without serializing entity metadata.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "OpenChannelReadsOneCoherentMetaAndSelectsExactBindingsAndVersions",
+          "OfflineReplayReturnsEveryReferencedObjectByteForByte"
+        ],
         "nativeEvidence": []
       }
     },
@@ -134886,13 +134928,20 @@
       ],
       "text": "An unsupported binding, unavailable Version, denied destination or failed integrity check MUST fail the read explicitly. A consumer MUST NOT retry through another binding, a live export or a newer channel head as automatic repair. Authorization and trust are supplied under caller policy, not by the descriptor.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The reader uses only the selected binding and exact Version. Unsupported syntax rejects before acquisition, resolver-denied access and unavailable Versions propagate, and size or digest failures reject without reopening channel metadata or selecting an alternative.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SelectedBindingSyntaxRejectsBeforeResolverInvocation",
+          "OpenChannelDoesNotRetryAnUnavailableExactVersionThroughAnotherBinding",
+          "OpenChannelDoesNotRetryWhenCallerPolicyDeniesBindingAccess",
+          "OpenChannelRejectsShortLongAndDigestMismatchedDescriptorBodies"
+        ],
         "nativeEvidence": []
       }
     },
@@ -134917,13 +134966,20 @@
       ],
       "text": "| `parent` | OPTIONAL descriptor of the preparation predecessor. |",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The parent descriptor is optional: manifests without it parse, while a present descriptor retains its exact Version reference. Snapshot opening and offline replay do not require resolving the predecessor.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ParsesManifestAndRetainsItsExactBytes",
+          "ManifestRetainsParentReferenceToAnotherRegistry",
+          "OfflineReplayDoesNotRequireOrReturnParentManifestBytes"
+        ],
         "nativeEvidence": []
       }
     },
@@ -134948,13 +135004,19 @@
       ],
       "text": "| `extensions` | OPTIONAL URI-keyed domain closure and provenance descriptors. |",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The parser accepts manifests without `extensions` and exposes an empty collection; included descriptors remain available by URI without assigning extension vocabulary.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "NonAtomicCaptureClassesDoNotRequireAnInventedProvenanceExtension",
+          "CaptureClassesPreserveIncludedMandatoryExtensionsWithoutInventingTheirVocabulary"
+        ],
         "nativeEvidence": []
       }
     },
@@ -134979,13 +135041,20 @@
       ],
       "text": "| `requiredExtensions` | OPTIONAL extension URIs needed for interpretation. |",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The parser accepts omission as an empty list and retains included entries. Whether a domain profile requires an extension and its validation remains the responsibility of that profile; the generic reader rejects unsupported mandatory semantics.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "NonAtomicCaptureClassesDoNotRequireAnInventedProvenanceExtension",
+          "CaptureClassesPreserveIncludedMandatoryExtensionsWithoutInventingTheirVocabulary",
+          "OpenChannelRejectsUnsupportedRequiredExtensionsBeforeReadingRegistry"
+        ],
         "nativeEvidence": []
       }
     },
@@ -135011,13 +135080,21 @@
       ],
       "text": "Consumers MUST verify the exact size and SHA-256 of every descriptor they use. Manifest identity covers exact UTF-8 bytes, not parsed JSON equality. Whitespace changes can produce another ID. Producers SHOULD use deterministic serialization. This format does not canonicalize arbitrary domain documents.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Readers verify exact byte count and SHA-256 and derive Snapshot identity from received UTF-8 bytes without JSON normalization. The library has no manifest serializer; deterministic producer serialization remains caller-owned and is not claimed.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "VerifiesExactSizeAndDigestOfReferencedBytes",
+          "ParsesManifestAndRetainsItsExactBytes",
+          "DescriptorSizesUseExactUnsignedIntegerValuesWithoutRewritingManifestBytes",
+          "OpenChannelRejectsShortLongAndDigestMismatchedDescriptorBodies"
+        ],
         "nativeEvidence": []
       }
     },
@@ -135084,9 +135161,12 @@
       ],
       "text": "Every `requiredExtensions` entry MUST identify an included extension. Unlisted extensions are OPTIONAL to generic readers. A caller requesting a domain profile still requires that profile's extension and validation.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The parser requires each listed URI to have a descriptor; generic reads reject unsupported mandatory semantics and leave unlisted descriptors optional. No domain-profile registry or validator is wired into PublicationReadClient, so profile-specific extension requirements remain pending.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -135115,9 +135195,12 @@
       ],
       "text": "The Registry descriptor covers the model, available model source and captured metadata. Registry JSON MUST use Core [document view](../../core/spec.md#doc-flag). It MUST contain a complete internal graph and sufficient model material, including immutable model includes, as specified by Federation. Its enabled capabilities MUST describe the captured view rather than the source server's write capabilities.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The generic parser checks and retains the Registry byte descriptor but does not parse the Registry graph, verify immutable model includes, or derive captured capabilities. The store and read client therefore cannot establish this requirement without the missing full Registry-view validation layer.",
+        "roles": [
+          "producer",
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -135147,13 +135230,19 @@
       ],
       "text": "When a view is served from another location, the origin fields preserve the document's source identity and `base` preserves the base for its relative references. View Version XIDs MUST be unique, including under Core's case-insensitive uniqueness rules. The association MUST NOT change the document's authored identifiers.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The parser preserves originRegistry, originVersion, base and viewVersion as supplied. It rejects duplicate view Version entity identities using Core Resource identity while retaining case-sensitive Version IDs.",
+        "roles": [
+          "producer",
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ParsesManifestAndRetainsItsExactBytes",
+          "EnforcesEntityIdentityUniquenessButKeepsVersionIdsCaseSensitive"
+        ],
         "nativeEvidence": []
       }
     },
@@ -135180,13 +135269,20 @@
       ],
       "text": "An offline-complete manifest MUST supply every declared document in its scope, except aliases whose Core document operation resolves to another included Resource. Linked snapshots MAY reference exact Versions in another Registry, but MUST NOT claim bytes omitted from their offline package are offline available. An authored external link remains domain content. If its bytes are captured by this publication, the publisher stores them as a Version document too. Metadata-only types do not acquire documents by appearing in a manifest. Domain bytes MUST be captured through raw reads or byte-preserving Core [binary representation](../../core/spec.md#binary-flag), not JSON parsing and reserialization.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The store requires each distinct descriptor for offline-complete publication, preserves exact bytes and does not fetch external links. It does not interpret the captured Core graph, resolve document aliases, or read source Documents itself; those producer obligations remain pending beyond the manifest and byte-store layer.",
+        "roles": [
+          "producer",
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "OfflineCompletePublicationRequiresAllReferencedBytesBeforeCommit",
+          "LinkedPublicationCannotBeReplayedAsAnOfflineBundle",
+          "OfflineReplayReturnsEveryReferencedObjectByteForByte"
+        ],
         "nativeEvidence": []
       }
     },
@@ -135211,13 +135307,19 @@
       ],
       "text": "A change to the model, captured metadata, document selection or extensions changes the manifest's checked graph and therefore its ID. A parent records preparation history only; it establishes neither compatibility nor numeric order and defines no merge algorithm. Reading a snapshot MUST NOT require reading its parent.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Snapshot identity hashes exact manifest bytes. Parent is retained as a descriptor only; the channel store's required-content set excludes it and offline replay does not read or return parent bytes.",
+        "roles": [
+          "producer",
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ManifestRetainsParentReferenceToAnotherRegistry",
+          "OfflineReplayDoesNotRequireOrReturnParentManifestBytes"
+        ],
         "nativeEvidence": []
       }
     },
@@ -135282,13 +135384,20 @@
       ],
       "text": "The classification does not weaken the output's immutability or internal completeness. A consumer requiring atomic source capture MUST reject `live-observation`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The manifest exposes capture classification, and the generic client/package reader reject mandatory extension semantics they do not implement. There is no consumer policy API or implementation of the provenance extension needed to accept source-snapshot evidence; atomic-capture selection remains pending.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "CaptureClassesPreserveIncludedMandatoryExtensionsWithoutInventingTheirVocabulary",
+          "OpenChannelRejectsUnsupportedRequiredExtensionsBeforeReadingRegistry",
+          "OpenRecordRejectsUnsupportedRequiredExtensionsWithoutResolvingSources",
+          "OfflineReplayRejectsUnknownMandatoryExtensionsBeforeReadingRegistryOrDomainObjects"
+        ],
         "nativeEvidence": []
       }
     },
@@ -135313,13 +135422,21 @@
       ],
       "text": "The manifest and necessary content are written before the head update; they become part of the channel's published state only when selected by `head`. An authorized publisher MUST perform these steps:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The channel store validates the manifest and supplied objects before one atomic persistence commit, but there is no built-in publisher adapter to read the channel Meta, authorize a writer, acquire source Versions or validate the complete Core graph. The end-to-end publishing sequence remains pending.",
+        "roles": [
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "PublishRetainsExactBytesAndAdvancesTheChannelEpoch",
+          "SourceSnapshotWithoutMandatoryProvenanceCannotChangeAPublishedChannelOrPersistence",
+          "OfflineCompletePublicationRequiresAllReferencedBytesBeforeCommit",
+          "ConcurrentPublishersWithTheSameEpochProduceOneUpdateAndOneCoreMismatch"
+        ],
         "nativeEvidence": []
       }
     },
@@ -135344,13 +135461,17 @@
       ],
       "text": "- `scope` MUST equal the new manifest's scope.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The store takes scope from the manifest on creation and rejects a later manifest with a different scope before updating the channel.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ScopeCannotChangeAfterChannelCreation"
+        ],
         "nativeEvidence": []
       }
     },
@@ -135375,9 +135496,11 @@
       ],
       "text": "- `head` MUST have no separate default-Version alias maintained as a second authority. Core defaults on the channel's metadata-only Version are not publication selection.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The current store persists one snapshot descriptor as selection state, but it does not expose a Core Publication Channel Resource or prove the required Meta/default-Version behavior. A Core channel adapter remains pending.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -135406,13 +135529,20 @@
       ],
       "text": "- The adapter MUST validate the new head before making it visible.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The store validates the manifest descriptor, required content, sizes and digests before its atomic commit. It does not validate the captured Registry's complete Core graph or integrate an adapter that exposes the head.",
+        "roles": [
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "PublishRetainsExactBytesAndAdvancesTheChannelEpoch",
+          "OfflineCompletePublicationRequiresAllReferencedBytesBeforeCommit",
+          "AReferenceCannotBeReboundToDifferentBytes"
+        ],
         "nativeEvidence": []
       }
     },
@@ -135437,13 +135567,19 @@
       ],
       "text": "- A stale epoch MUST preserve the old head and return Core's [`mismatched_epoch`](../../core/spec.md#mismatched_epoch).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The store preserves the existing head and now raises a RegistryException with Core's mismatched_epoch diagnostic and bad_epoch/epoch substitutions. No built-in Publication HTTP or OPC UA write adapter is present, so adapter response behavior remains pending.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "StaleEpochIsRejectedWithoutMovingTheChannelHead",
+          "NonzeroEpochForAnUncreatedChannelMismatchesAgainstEpochZero",
+          "ConcurrentPublishersWithTheSameEpochProduceOneUpdateAndOneCoreMismatch"
+        ],
         "nativeEvidence": []
       }
     },
@@ -135468,13 +135604,18 @@
       ],
       "text": "- Unconditional channel-head updates MUST be rejected by the adapter.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "PublishAsync always requires an expected epoch, but no built-in Core channel adapter exists to reject an unconditional HTTP or OPC UA head update. Adapter behavior remains pending.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "StaleEpochIsRejectedWithoutMovingTheChannelHead",
+          "ConcurrentPublishersWithTheSameEpochProduceOneUpdateAndOneCoreMismatch"
+        ],
         "nativeEvidence": []
       }
     },
@@ -135499,13 +135640,17 @@
       ],
       "text": "- An implementation lacking atomic compare-and-update MUST NOT offer writes.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The store writes only through IRegistryPersistence.PrepareAsync/CommitAsync, whose contract requires an atomic expected-generation check. Concurrent publishers using the same channel epoch produce one commit and one mismatch. There is no separate adapter capability negotiation to assess.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ConcurrentPublishersWithTheSameEpochProduceOneUpdateAndOneCoreMismatch"
+        ],
         "nativeEvidence": []
       }
     },
@@ -135562,13 +135707,19 @@
       ],
       "text": "An authorized reader opens a channel by reading its Meta once, verifying the manifest at `head`, and establishing the immutable context described in [Open Context and Discovery](#open-context-and-discovery). Every subsequent read and page request uses that selected snapshot. It MUST NOT reread the channel to fill missing members. Refresh is a new open operation.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The generic reader reads channel Meta once, pins the selected manifest and exact descriptors, and reopens an open record without rereading the channel. Refresh remains a separate OpenChannelAsync call.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "OpenChannelReadsOneCoherentMetaAndSelectsExactBindingsAndVersions",
+          "OpenRecordReopensPinnedDescriptorsWithoutReadingItsChannel",
+          "PinnedDocumentAndExtensionReadsDoNotRereadChannelMetadata"
+        ],
         "nativeEvidence": []
       }
     },
@@ -135675,13 +135826,18 @@
       ],
       "text": "An open record is transport and access context. It is neither a new Core entity nor a replacement for `self`. The record supplies the information needed to retrieve the manifest and captured Registry JSON Version document. It MUST be available to the caller rather than kept only in logs. Library and native bindings MUST return the equivalent schema-defined record or report unsupported publication-context access.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The generic Publication library returns the schema-defined open record to its caller and validates it against the exact manifest. No native binding exposes Publication context; the OPC UA access path remains pending.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "ValidatesTheOpenRecordAgainstItsExactManifestAndChannelHead",
+          "OpenRecordReopensPinnedDescriptorsWithoutReadingItsChannel"
+        ],
         "nativeEvidence": []
       }
     },
@@ -135706,9 +135862,12 @@
       ],
       "text": "For OPC UA, the caller reads `scope`, the complete `head` and `MetaEpoch` on the selected channel Resource through the binding's Meta representation. The adapter MUST return a coherent selection: a mixed head or a head paired with another update's epoch is not an open result. The reader then resolves the retained references through the selected bindings. The open record is returned as caller-visible context; no HTTP Link, standard UA context node or new companion Method is implied.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The generic binding contract requires one coherent channel Meta read, but XRegistry.Bindings.OpcUa has no IPublicationReadBinding implementation. OPC UA channel Meta selection and caller-visible open context remain pending.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -135737,9 +135896,11 @@
       ],
       "text": "An adapter offering UA publication writes MUST atomically replace the complete head under the expected Meta epoch and enforce this extension's validation and retention rules. A native Meta extension update can be used only when it provides those guarantees. Separate UA Property writes or a batch of Write requests do not establish atomicity. Otherwise publication writes MUST be reported as unsupported; native read support does not imply write support.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "There is no OPC UA Publication write adapter or atomic Meta extension mapping in this repository. Do not emulate it with separate Property or Write operations; OPC UA Publication writes remain unsupported.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",

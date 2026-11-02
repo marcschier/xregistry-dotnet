@@ -130,15 +130,22 @@ public sealed class PublicationBundle
     }
 }
 
-/// <summary>A known channel epoch conflict; the attempted publication was not committed.</summary>
-public sealed class PublicationChannelConflictException : InvalidOperationException
+/// <summary>A Core epoch mismatch; the attempted publication was not committed.</summary>
+public sealed class PublicationChannelConflictException : RegistryException
 {
     /// <summary>Creates a conflict for the selected channel.</summary>
-    public PublicationChannelConflictException(BigInteger expectedEpoch, BigInteger? actualEpoch)
-        : base("The publication channel epoch changed.")
+    public PublicationChannelConflictException(string channelResource, BigInteger expectedEpoch,
+        BigInteger? actualEpoch)
+        : base(new RegistryDiagnostic("mismatched_epoch", channelResource,
+            "The supplied epoch does not match the current publication channel epoch."))
     {
         ExpectedEpoch = expectedEpoch;
         ActualEpoch = actualEpoch;
+        Data["xregistry.args"] = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["bad_epoch"] = expectedEpoch.ToString(CultureInfo.InvariantCulture),
+            ["epoch"] = (actualEpoch ?? BigInteger.Zero).ToString(CultureInfo.InvariantCulture)
+        };
     }
 
     /// <summary>Gets the epoch supplied by the caller.</summary>
@@ -207,7 +214,7 @@ public sealed class PublicationChannelStore
         {
             if (expectedEpoch != BigInteger.Zero)
             {
-                throw new PublicationChannelConflictException(expectedEpoch, null);
+                throw new PublicationChannelConflictException(channelResource, expectedEpoch, null);
             }
         }
         else
@@ -220,7 +227,7 @@ public sealed class PublicationChannelStore
 
             if (current.Epoch != expectedEpoch)
             {
-                throw new PublicationChannelConflictException(expectedEpoch, current.Epoch);
+                throw new PublicationChannelConflictException(channelResource, expectedEpoch, current.Epoch);
             }
         }
 
@@ -265,7 +272,7 @@ public sealed class PublicationChannelStore
         {
             using var latest = await _persistence.ReadSnapshotAsync(cancellationToken).ConfigureAwait(false);
             var actual = ReadChannel(latest.Find(channelKey), channelResource)?.Epoch;
-            throw new PublicationChannelConflictException(expectedEpoch, actual);
+            throw new PublicationChannelConflictException(channelResource, expectedEpoch, actual);
         }
 
         return CreateOpenRecord(channelResource, manifest, snapshotDescriptor, nextEpoch);
