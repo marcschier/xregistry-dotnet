@@ -13,6 +13,100 @@ public class ApiOperationReferenceTests
     [Test]
     [Arguments("OpenAPI/3.0", "3.0.4")]
     [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiResponseContentKeysRejectMalformedMediaRangesAcrossResponseLocations(string format, string version)
+    {
+        foreach (var key in new[] { "", "json", "/json", "application/", "*/json", "text/plain,application/json",
+            "application/json; charset", "application/json; charset=", "application/json; =utf-8",
+            "application/json; charset=\"unterminated", "application/has space", "application/json\r\nX: y",
+            "text/plain;", "text/plain; charset=utf-8;", "text/plain;; charset=utf-8", "text /plain", "text/ plain",
+            "text/plain; charset =utf-8", "text/plain; charset= utf-8",
+            "text/plain; note=\"\u0100\"", "text/plain; note=\"\u0001\"" })
+        {
+            foreach (var location in new[] { "inline", "unused", "remote" })
+            {
+                foreach (var selector in new[] { "operations/Target", "operations/Missing", "/paths/~1items/get" })
+                {
+                    var response = new JsonObject { ["description"] = "",
+                        ["content"] = new JsonObject { [key] = new JsonObject() } };
+                    var document = new JsonObject { ["openapi"] = version,
+                        ["paths"] = JsonNode.Parse("""{"/items":{"get":{"operationId":"Target"}}}""") };
+                    var path = "$/paths/~1items/get/responses/200";
+                    if (location == "unused")
+                    {
+                        document["components"] = new JsonObject { ["responses"] = new JsonObject { ["Unused"] = response.DeepClone() } };
+                        path = "$/components/responses/Unused";
+                    }
+                    else
+                    {
+                        document["paths"]!["/items"]!["get"]!["responses"] = new JsonObject
+                        { ["200"] = location == "inline" ? response.DeepClone()
+                            : JsonNode.Parse("""{"$ref":"https://allowed.test/response#/Ok"}""") };
+                        if (location == "remote") { path = "$/Ok"; }
+                    }
+                    var calls = 0;
+                    var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                        System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                        ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                        resolveReference: (_, _) =>
+                        {
+                            calls++;
+                            return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(
+                                new JsonObject { ["Ok"] = response.DeepClone() }.ToJsonString()));
+                        });
+                    await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.response_media");
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo(
+                        path + "/content/" + key.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal));
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                    await Assert.That(calls).IsEqualTo(location == "remote" ? 1 : 0);
+                }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiResponseContentKeysPreserveRangesParametersAndRestoration(string format, string version)
+    {
+        foreach (var valid in new[] { true, false, true })
+        {
+            var content = new JsonObject();
+            foreach (var key in new[] { "*/*", "text/*", "text/plain", "application/problem+json",
+                "Application/JSON; charset=utf-8", "text/*; charset=\"utf-8\"", "text/plain; note=\"\"",
+                "application/json; profile=\"https://example.test/a;b\"", "text/plain; note=\"a;\\\"b\"",
+                "text/plain\t;\tcharset=utf-8", "text/plain; note=\"[]\u00e9\"" })
+            {
+                content[key] = new JsonObject();
+            }
+            if (!valid) { content["*/json"] = new JsonObject(); }
+            var operation = new JsonObject { ["operationId"] = "Target", ["responses"] = new JsonObject
+                { ["200"] = new JsonObject { ["description"] = "", ["content"] = content } } };
+            var document = new JsonObject { ["openapi"] = version,
+                ["paths"] = new JsonObject { ["/items"] = new JsonObject { ["get"] = operation.DeepClone() } } };
+            var calls = 0;
+            var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+                resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+            await Assert.That(result.Status).IsEqualTo(valid
+                ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+            await Assert.That(calls).IsEqualTo(0);
+            if (valid)
+            {
+                await Assert.That(JsonNode.DeepEquals(operation, JsonNode.Parse(result.Operation.GetRawText()))).IsTrue();
+            }
+            else
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.response_media");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
     public async Task OpenApiExampleReferencesResolveContainingBasesCacheAndRestoredTargets(string format, string version)
     {
         foreach (var valid in new[] { true, false, true })

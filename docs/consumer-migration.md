@@ -639,6 +639,13 @@ JSON value but cannot coexist with `examples`, even when its value is null.
 These checks apply to inline responses, unused reusable responses and resolved
 response targets. Selection preserves authored declarations without retrieving
 schema addresses or external example values.
+Response content keys require media-type or media-range syntax, including
+`type/*` and `*/*`. Parameters require values and accept HTTP tokens or quoted
+strings with quoted-pair escapes; a trailing parameter separator is invalid.
+A wildcard type cannot name a concrete subtype. Keys retain authored casing
+and parameter spelling, and overlapping ranges remain declarations rather than
+runtime response negotiation. These checks do not change the separate concrete
+media-type rules for Swagger `consumes`/`produces` or Smithy declarations.
 Response-media examples and root reusable examples require Example or Reference
 Objects. Inline Example Objects permit optional string `summary` and
 `description`, an arbitrary JSON `value`, or a string URI reference in
@@ -658,7 +665,7 @@ Callback ancestors and unrelated operations retain the named-versus-pointer
 traversal rules above. Unused reusable example references remain inactive;
 selection retains authored references and does not retrieve `externalValue`
 addresses. Parameter examples, format-specific response-presence requirements,
-content-key syntax, nested header/encoding/link validation and response schema
+nested header/encoding/link validation and response schema
 evaluation remain unverified.
 Root and reached HTTP operation `externalDocs` values must be objects with a
 string `url` and, when present, a string `description`. An External

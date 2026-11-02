@@ -400,6 +400,10 @@ public static partial class ApiOperationDocumentResolver
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var path = pointer + "/content/" + Escape(media.Name);
+                if (!IsResponseMediaRange(media.Name))
+                {
+                    return InvalidMedia("A response content key must be a media type or media range.", path);
+                }
                 var declaration = media.Value;
                 if (declaration.ValueKind != JsonValueKind.Object)
                 {
@@ -443,6 +447,25 @@ public static partial class ApiOperationDocumentResolver
 
     private static ApiOperationResolutionResult InvalidHttpResponse(string message, string pointer) =>
         Failure(ApiOperationResolutionStatus.Invalid, "document.responses", message, pointer);
+
+    private static bool IsResponseMediaRange(string value)
+    {
+        if (!ResponseMediaRangeSyntax().IsMatch(value) ||
+            !System.Net.Http.Headers.MediaTypeHeaderValue.TryParse(value, out var mediaType) ||
+            mediaType.MediaType is not { } name ||
+            mediaType.Parameters.Any(static parameter => string.IsNullOrEmpty(parameter.Value)))
+        {
+            return false;
+        }
+        var slash = name.IndexOf('/');
+        return slash > 0 && slash < name.Length - 1 &&
+            (name.AsSpan(0, slash) is not "*" || name.AsSpan(slash + 1) is "*");
+    }
+
+    [GeneratedRegex(
+        """\A[ \t]*[!#$%&'*+.^_`|~0-9A-Za-z-]+/[!#$%&'*+.^_`|~0-9A-Za-z-]+(?:[ \t]*;[ \t]*[!#$%&'*+.^_`|~0-9A-Za-z-]+=(?:[!#$%&'*+.^_`|~0-9A-Za-z-]+|"(?:[\t !#-\[\]-~\u0080-\u00ff]|\\[\t \x21-\x7e\u0080-\u00ff])*"))*[ \t]*\z""",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
+    private static partial Regex ResponseMediaRangeSyntax();
 
     private static ApiOperationResolutionResult? ValidateOpenApiExampleDeclaration(
         JsonElement example, string pointer, string format, CancellationToken cancellationToken)
