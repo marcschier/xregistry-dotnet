@@ -693,6 +693,11 @@ public static partial class ApiOperationDocumentResolver
                     var parameterFailure = ValidateOpenApiParameterDeclaration(entry.Value, entryPath, format, cancellationToken);
                     if (parameterFailure is not null) { return parameterFailure; }
                 }
+                if (!swagger && collection.Name == "pathItems")
+                {
+                    var pathFailure = ValidateOpenApiPathItemMetadata(entry.Value, entryPath, format, cancellationToken);
+                    if (pathFailure is not null) { return pathFailure; }
+                }
             }
         }
         return null;
@@ -898,6 +903,8 @@ public static partial class ApiOperationDocumentResolver
                 "A Path Item reference target must be an object.", sourcePointer));
         }
 
+        var metadataFailure = ValidateOpenApiPathItemMetadata(pathItem, sourcePointer, references.Format, cancellationToken);
+        if (metadataFailure is not null) { return PathItemResolution.Failed(metadataFailure); }
         var serverFailure = ValidateOpenApiServers(pathItem, sourcePointer, references.Format, cancellationToken);
         if (serverFailure is not null) { return PathItemResolution.Failed(serverFailure); }
         var parameterFailure = ValidateOpenApiParameters(pathItem, sourcePointer, references.Format, cancellationToken);
@@ -1111,6 +1118,8 @@ public static partial class ApiOperationDocumentResolver
             cancellationToken.ThrowIfCancellationRequested();
             if (pathItem.ValueKind == JsonValueKind.Object)
             {
+                var pathMetadataFailure = ValidateOpenApiPathItemMetadata(pathItem, pathPointer, format, cancellationToken);
+                if (pathMetadataFailure is not null) { return pathMetadataFailure; }
                 var pathServerFailure = ValidateOpenApiServers(pathItem, pathPointer, format, cancellationToken);
                 if (pathServerFailure is not null) { return pathServerFailure; }
             }

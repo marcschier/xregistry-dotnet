@@ -8,6 +8,29 @@ namespace XRegistry.Validation;
 
 public static partial class ApiOperationDocumentResolver
 {
+    private static ApiOperationResolutionResult? ValidateOpenApiPathItemMetadata(
+        JsonElement pathItem, string pointer, string format, CancellationToken cancellationToken)
+    {
+        if (format == "Swagger/2.0") { return null; }
+        foreach (var field in new[] { "summary", "description", "$ref" })
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!pathItem.TryGetProperty(field, out var value)) { continue; }
+            if (value.ValueKind != JsonValueKind.String)
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid,
+                    field == "$ref" ? "dependency.path_item" : "document.path_item",
+                    "Path Item metadata requires strings.", pointer + "/" + field);
+            }
+            if (field == "$ref" && !IsHttpMetadataUriReference(value.GetString()!))
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid, "dependency.uri",
+                    "A Path Item $ref requires a URI reference.", pointer + "/$ref");
+            }
+        }
+        return null;
+    }
+
     private static async ValueTask<ApiOperationResolutionResult?> CollectOperationMatchesAsync(
         OperationLocation location, string operationId, bool includeCallbacks, List<OperationLocation> matches,
         Dictionary<string, int> operationCounts, ReferenceContext references, ValidationContext budget,

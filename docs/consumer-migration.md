@@ -610,6 +610,16 @@ and tags need not be unique. A malformed unrelated operation prevents named
 selection but does not invalidate a pointer to another operation. Extension
 contents remain opaque. These checks do not establish complete Operation
 Object validation.
+Reached OpenAPI Path Items require string `summary` and `description` values
+when present, and `$ref` must be a string URI reference. These are Path Item
+fields, not version-dependent Reference Object siblings. Checks apply to named
+traversal, retrieved Path Items, callback ancestors and the selected inline
+pointer path. OpenAPI 3.1 webhooks follow the same rules; root reusable Path
+Items receive metadata checks even when unused, without retrieving references.
+Unrelated operations retain pointer locality. Valid declarations remain
+unchanged, and pointers still do not traverse Path Item references. Swagger's
+non-native summary/description fields remain uninterpreted. These checks do
+not define precedence for fields duplicated across a Path Item reference.
 OpenAPI Request Body Objects require a `content` map; an empty map remains
 permitted. Optional `description` and `required` fields must be strings and
 booleans, respectively. Content entries receive the shared Media Type Object
