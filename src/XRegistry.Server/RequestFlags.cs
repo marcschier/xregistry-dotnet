@@ -36,7 +36,7 @@ internal sealed class RequestFlags
             }
 
             if (capabilities is not null &&
-                (parameter.Key is "binary" or "collections" or "doc" or "epoch" or "filter" or "ignore" or "inline" or "setdefaultversionid" or "sort" or "specversion" &&
+                (parameter.Key is "binary" or "collections" or "doc" or "epoch" or "filter" or "ignore" or "inline" or "limit" or "setdefaultversionid" or "sort" or "specversion" &&
                     !capabilities.Flags.Contains(parameter.Key) || parameter.Key == "limit" && !capabilities.Pagination))
             {
                 continue;
@@ -85,19 +85,39 @@ internal sealed class RequestFlags
                     flags.Sort = parameter.Value;
                     break;
                 case "limit":
-                    if (operation.Action is not (RegistryAction.Read or RegistryAction.Head) ||
-                        operation.Path.Kind is not (RegistryPathKind.GroupCollection or RegistryPathKind.ResourceCollection or RegistryPathKind.VersionCollection) ||
-                        !ulong.TryParse(parameter.Value, NumberStyles.None, CultureInfo.InvariantCulture, out var limit) || limit == 0)
+                    if (operation.Action is not (RegistryAction.Read or RegistryAction.Head))
                     {
                         throw ServerErrors.With("bad_flag", operation.Path.EscapedPath, "limit requires a positive UInt64 on an initial collection read.", ("flag", "limit"));
+                    }
+
+                    if (operation.Path.Kind is not (RegistryPathKind.GroupCollection or RegistryPathKind.ResourceCollection or RegistryPathKind.VersionCollection))
+                    {
+                        throw ServerErrors.Create("pagination_noncollection", operation.Path.EscapedPath,
+                            "Can't use pagination on a non-collection result set.");
+                    }
+
+                    if (!ulong.TryParse(parameter.Value, NumberStyles.None, CultureInfo.InvariantCulture, out var limit) || limit == 0)
+                    {
+                        throw ServerErrors.With("bad_flag", operation.Path.EscapedPath,
+                            "limit requires a positive UInt64 on an initial collection read.", ("flag", "limit"));
                     }
 
                     flags.Limit = limit;
                     break;
                 case "cursor":
-                    if (operation.Action is not (RegistryAction.Read or RegistryAction.Head) ||
-                        operation.Path.Kind is not (RegistryPathKind.GroupCollection or RegistryPathKind.ResourceCollection or RegistryPathKind.VersionCollection) ||
-                        operation.Parameters.Count != 1 || string.IsNullOrEmpty(parameter.Value))
+                    if (operation.Action is not (RegistryAction.Read or RegistryAction.Head))
+                    {
+                        throw ServerErrors.Create("bad_cursor", operation.Path.EscapedPath,
+                            "A continuation must use its opaque URL without added or modified parameters.");
+                    }
+
+                    if (operation.Path.Kind is not (RegistryPathKind.GroupCollection or RegistryPathKind.ResourceCollection or RegistryPathKind.VersionCollection))
+                    {
+                        throw ServerErrors.Create("pagination_noncollection", operation.Path.EscapedPath,
+                            "Can't use pagination on a non-collection result set.");
+                    }
+
+                    if (operation.Parameters.Count != 1 || string.IsNullOrEmpty(parameter.Value))
                     {
                         throw ServerErrors.Create("bad_cursor", operation.Path.EscapedPath, "A continuation must use its opaque URL without added or modified parameters.");
                     }

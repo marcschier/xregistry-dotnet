@@ -17,7 +17,10 @@ public class RegistrySharedQueryHttpTests
             {"groups":{"workspaces":{"singular":"workspace","resources":{"schemas":{"singular":"schema",
               "attributes":{"rank":{"type":"decimal"}}}}}}}
             """));
-        await using var host = await HttpTests.TestHost.StartAsync(model: model, httpOptions: new() { MountPath = "/registry" });
+        await using var host = await HttpTests.TestHost.StartAsync(model: model,
+            httpOptions: new() { MountPath = "/registry" }, allowCapabilityUpdates: true);
+        using var pagination = await host.Client.PatchAsync("/registry/capabilities", Json("""{"pagination":true}"""));
+        await Assert.That(pagination.StatusCode).IsEqualTo(HttpStatusCode.OK);
         using var first = await host.Client.PutAsync("/registry/workspaces/g%3Aone/schemas/r$details",
             Json("""{"rank":9007199254740993,"contenttype":"text/plain","schema":"x"}"""));
         await Assert.That(first.StatusCode).IsEqualTo(HttpStatusCode.Created);

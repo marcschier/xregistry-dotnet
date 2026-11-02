@@ -43,9 +43,12 @@ public class RegistryQueryHttpTests
         var model = RegistryModel.Compile(RegistryJson.Parse("""
             {"groups":{"things":{"singular":"thing","resources":{"items":{"singular":"item","hasdocument":false}}}}}
             """));
-        await using var host = await HttpTests.TestHost.StartAsync(model: model, httpOptions: new() { MountPath = "/registry" });
+        await using var host = await HttpTests.TestHost.StartAsync(model: model, httpOptions: new() { MountPath = "/registry" },
+            allowCapabilityUpdates: true);
         using var created = await host.Client.PostAsync("/registry/things/g%40one/items", Json("""{"a":{},"b":{}}"""));
         await Assert.That(created.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var pagination = await host.Client.PatchAsync("/registry/capabilities", Json("""{"pagination":true}"""));
+        await Assert.That(pagination.StatusCode).IsEqualTo(HttpStatusCode.OK);
         using var first = await host.Client.GetAsync("/registry/things/g%40one/items?limit=1");
         var next = Links(first)["next"].Target;
         await Assert.That(next.AbsoluteUri.StartsWith("https://public.example/registry/things/g%40one/items?cursor=", StringComparison.Ordinal)).IsTrue();
@@ -226,13 +229,17 @@ public class RegistryQueryHttpTests
                 RegistryId = "query-http",
                 PublicRoot = new Uri("https://public.example/registry"),
                 Model = model,
+                AllowCapabilityUpdates = true,
                 TimeProvider = clock ?? TimeProvider.System,
                 QueryLimits = queryLimits ?? new()
             }, new InMemoryRegistryPersistence(), policy ?? new());
             application.MapXRegistry(engine, new() { MountPath = "/registry" });
             await application.StartAsync();
             var address = application.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
-            return new(application, new HttpClient { BaseAddress = new Uri(address) });
+            var client = new HttpClient { BaseAddress = new Uri(address) };
+            using var pagination = await client.PatchAsync("/registry/capabilities", Json("""{"pagination":true}"""));
+            await Assert.That(pagination.StatusCode).IsEqualTo(HttpStatusCode.OK);
+            return new(application, client);
         }
 
         internal async Task Seed()

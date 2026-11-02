@@ -124,6 +124,7 @@ public class RegistryShortSelfTests
         var engine = MutableEngine(store);
         await Send(engine, RegistryAction.Post, "/teams", """{"a":{},"b":{}}""");
         await Send(engine, RegistryAction.Patch, "/capabilities", """{"shortself":true}""");
+        await Send(engine, RegistryAction.Patch, "/capabilities", """{"pagination":true}""");
         var first = await Send(engine, RegistryAction.Read, "/teams", null, new KeyValuePair<string, string?>("limit", "1"));
         await Assert.That(first.Metadata!.RootElement.GetProperty("a").TryGetProperty("shortself", out _)).IsTrue();
         var other = MutableEngine(store);

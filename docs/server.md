@@ -282,9 +282,12 @@ scan of relevant constrained collections, not a claimed constant-time
 persistent reverse index. Existing operation/working-set limits still apply.
 
 Supported flags are `binary`, `collections`, `doc`, `epoch`, `filter`, `ignore`,
-`inline`, `setdefaultversionid`, `sort`, and `specversion`. Inline supports model-relative
-collection paths and terminal wildcards. Export applies document-view pointers
-and omits duplicated default-Version attributes. Doc Version output omits
+`inline`, `setdefaultversionid`, `sort`, and `specversion`. `limit` is also
+offered for this server's pagination feature. Capability updates add `limit`
+to `flags` when `pagination` is true and remove it when `pagination` is false.
+Inline supports model-relative collection paths and terminal wildcards. Export
+applies document-view pointers and omits duplicated default-Version attributes.
+Doc Version output omits
 `formatvalidated`, `compatibilityvalidated` and their dependent reason fields;
 ordinary API metadata retains false validation flags and their reasons.
 Collections-only Registry/Group output contains only collection maps (and any
@@ -533,9 +536,10 @@ workstream.
 Filtering and sorting operate on authorized logical metadata before response
 projection. They do not select which entities a write mutates. A failed
 write-response preparation still rejects the complete mutation as before.
-The default capability profile includes `filter`, `sort`, and pagination.
-When capability editing is enabled, runtime behavior follows the enabled values,
-not the larger offered choice set.
+The default capability profile enables `filter` and `sort` and sets
+`pagination` to `false`. A host can enable pagination only when capability
+editing is enabled. `capabilitiesoffered` describes supported choices; request
+processing follows the enabled profile.
 
 Within one `filter` value, comma-separated expressions are ANDed. Repeated
 `filter` parameters are ORed. AND intersects matching subtrees, rather than
@@ -1250,11 +1254,10 @@ silently substitute a malformed standardized problem or an empty success.
 The frozen prose has a few local inconsistencies: HTTP capability update text
 links unknown keys to generic `capability_error`, while Core's more specific
 update rules require `capability_unknown`; the implementation uses the specific
-Core rule. Inline prose names both `inline_noninlineable` and `bad_inline` for
-non-inlineable attributes; known non-inlineable names use the specific former
-code, while unknown/malformed paths use `bad_inline`. The `server_busy` catalog
-has numeric status 503 with an inconsistent reason phrase; HTTP uses numeric
-503 and the normal server reason phrase.
+Core rule. Both unknown and non-inlineable inline selectors return Core
+`bad_inline`. The `server_busy` catalog has numeric status 503 with an
+inconsistent reason phrase; HTTP uses numeric 503 and the normal server reason
+phrase.
 
 This is bounded error-contract closure, not an all-condition conformance claim.
 All 66 catalog definitions are represented, but not all 66 have independent

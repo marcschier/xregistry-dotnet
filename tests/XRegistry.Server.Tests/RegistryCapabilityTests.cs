@@ -16,18 +16,29 @@ public class RegistryCapabilityTests
     {
         var store = new InMemoryRegistryPersistence();
         var engine = MutableEngine(store);
+        var initial = (await Send(engine, RegistryAction.Read, "/capabilities")).Metadata!.RootElement;
+        await Assert.That(initial.GetProperty("pagination").GetBoolean()).IsFalse();
+        await Assert.That(initial.GetProperty("flags").EnumerateArray().Select(static item => item.GetString()!))
+            .DoesNotContain("limit", StringComparer.Ordinal);
         await Send(engine, RegistryAction.Post, "/teams", """{"a":{},"b":{}}""");
-        var changed = await Send(engine, RegistryAction.Patch, "/capabilities", """{"pagination":false}""");
-        await Assert.That(changed.Metadata!.RootElement.GetProperty("pagination").GetBoolean()).IsFalse();
-        var all = await Send(engine, RegistryAction.Read, "/teams", null, new KeyValuePair<string, string?>("limit", "1"));
-        await Assert.That(all.Metadata!.RootElement.EnumerateObject().Count()).IsEqualTo(2);
-        await Assert.That(all.Page).IsNull();
-        var restarted = MutableEngine(store);
-        await Assert.That((await Send(restarted, RegistryAction.Read, "/capabilities")).Metadata!.RootElement.GetProperty("pagination").GetBoolean()).IsFalse();
-        await Send(restarted, RegistryAction.Patch, "/capabilities", """{"pagination":true}""");
-        var first = await Send(restarted, RegistryAction.Read, "/teams", null, new KeyValuePair<string, string?>("limit", "1"));
+        var changed = await Send(engine, RegistryAction.Patch, "/capabilities", """{"pagination":true}""");
+        await Assert.That(changed.Metadata!.RootElement.GetProperty("pagination").GetBoolean()).IsTrue();
+        await Assert.That(changed.Metadata.RootElement.GetProperty("flags").EnumerateArray()
+            .Select(static item => item.GetString()!)).Contains("limit", StringComparer.Ordinal);
+        var first = await Send(engine, RegistryAction.Read, "/teams", null, new KeyValuePair<string, string?>("limit", "1"));
         await Assert.That(first.Metadata!.RootElement.EnumerateObject().Count()).IsEqualTo(1);
         await Assert.That(first.Page!.TotalCount).IsEqualTo(2UL);
+        var restarted = MutableEngine(store);
+        var restoredCapabilities = (await Send(restarted, RegistryAction.Read, "/capabilities")).Metadata!.RootElement;
+        await Assert.That(restoredCapabilities.GetProperty("pagination").GetBoolean()).IsTrue();
+        await Assert.That(restoredCapabilities.GetProperty("flags").EnumerateArray()
+            .Select(static item => item.GetString()!)).Contains("limit", StringComparer.Ordinal);
+        var disabled = await Send(restarted, RegistryAction.Patch, "/capabilities", """{"pagination":false}""");
+        await Assert.That(disabled.Metadata!.RootElement.GetProperty("flags").EnumerateArray()
+            .Select(static item => item.GetString()!)).DoesNotContain("limit", StringComparer.Ordinal);
+        var all = await Send(restarted, RegistryAction.Read, "/teams", null, new KeyValuePair<string, string?>("limit", "1"));
+        await Assert.That(all.Metadata!.RootElement.EnumerateObject().Count()).IsEqualTo(2);
+        await Assert.That(all.Page).IsNull();
     }
 
     [Test]
@@ -39,10 +50,31 @@ public class RegistryCapabilityTests
         await Assert.That(string.Join(',', caps.GetProperty("flags").EnumerateArray().Select(static item => item.GetString()))).IsEqualTo("filter");
         await Send(engine, RegistryAction.Replace, "/capabilities", """{"flags":["*"]}""");
         caps = (await Send(engine, RegistryAction.Read, "/capabilities")).Metadata!.RootElement;
-        await Assert.That(caps.GetProperty("pagination").GetBoolean()).IsTrue();
+        await Assert.That(caps.GetProperty("pagination").GetBoolean()).IsFalse();
         await Assert.That(caps.GetProperty("flags").EnumerateArray().Select(static item => item.GetString()!))
             .IsEquivalentTo(["binary", "collections", "doc", "epoch", "filter", "ignore", "inline",
                 "setdefaultversionid", "sort", "specversion"], StringComparer.Ordinal);
+    }
+
+    [Test]
+    public async Task PaginationValueNormalizesTheLimitFlagAcrossCapabilityUpdates()
+    {
+        var engine = MutableEngine();
+        await Send(engine, RegistryAction.Patch, "/capabilities", """{"flags":["filter"],"pagination":true}""");
+        var enabled = (await Send(engine, RegistryAction.Read, "/capabilities")).Metadata!.RootElement;
+        await Assert.That(enabled.GetProperty("pagination").GetBoolean()).IsTrue();
+        await Assert.That(enabled.GetProperty("flags").EnumerateArray().Select(static item => item.GetString()!))
+            .IsEquivalentTo(["filter", "limit"], StringComparer.Ordinal);
+
+        await Send(engine, RegistryAction.Patch, "/capabilities", """{"flags":["limit"],"pagination":false}""");
+        var disabled = (await Send(engine, RegistryAction.Read, "/capabilities")).Metadata!.RootElement;
+        await Assert.That(disabled.GetProperty("pagination").GetBoolean()).IsFalse();
+        await Assert.That(disabled.GetProperty("flags").EnumerateArray()).IsEmpty();
+
+        await Send(engine, RegistryAction.Patch, "/capabilities", """{"pagination":true}""");
+        var restored = (await Send(engine, RegistryAction.Read, "/capabilities")).Metadata!.RootElement;
+        await Assert.That(restored.GetProperty("flags").EnumerateArray().Select(static item => item.GetString()!))
+            .IsEquivalentTo(["limit"], StringComparer.Ordinal);
     }
 
     [Test]
@@ -110,16 +142,16 @@ public class RegistryCapabilityTests
         await ExpectCode(() => Send(engine, RegistryAction.Patch, "/", """
             {"capabilities":{"pagination":false},"teams":{"a":{},"b":{"notdefined":1}}}
             """), "unknown_attribute");
-        await Assert.That((await Send(engine, RegistryAction.Read, "/capabilities")).Metadata!.RootElement.GetProperty("pagination").GetBoolean()).IsTrue();
+        await Assert.That((await Send(engine, RegistryAction.Read, "/capabilities")).Metadata!.RootElement.GetProperty("pagination").GetBoolean()).IsFalse();
         await Assert.That((await Send(engine, RegistryAction.Read, "/")).Metadata!.RootElement.GetProperty("teamscount").GetInt32()).IsEqualTo(0);
-        var accepted = await Send(engine, RegistryAction.Patch, "/", """{"capabilities":{"pagination":false},"teams":{"a":{}}}""");
+        var accepted = await Send(engine, RegistryAction.Patch, "/", """{"capabilities":{"pagination":true},"teams":{"a":{}}}""");
         var events = (await engine.ReadEventBatchesAsync(Writer())).Single().Events.RootElement.EnumerateArray().ToArray();
         await Assert.That(events.Count(static item => item.GetProperty("type").GetString() == "io.xregistry.capabilities.updated")).IsEqualTo(1);
         await Assert.That(events.Count(static item => item.GetProperty("type").GetString() == "io.xregistry.registry.updated")).IsEqualTo(1);
         await Assert.That(events.All(item => item.GetProperty("xregcorrelationid").GetString() == accepted.CorrelationId)).IsTrue();
         await Assert.That(events.Single(static item => item.GetProperty("type").GetString() == "io.xregistry.capabilities.updated")
             .GetProperty("data").GetProperty("changed").EnumerateArray().Select(static item => item.GetString()!).ToArray())
-            .IsEquivalentTo(["pagination"], StringComparer.Ordinal);
+            .IsEquivalentTo(["flags", "pagination"], StringComparer.Ordinal);
         await Assert.That(events.Single(static item => item.GetProperty("type").GetString() == "io.xregistry.registry.updated")
             .GetProperty("data").GetProperty("changed").EnumerateArray().Select(static item => item.GetString()!).ToArray())
             .IsEquivalentTo(["epoch", "modifiedat", "capabilities", "teams", "teamscount"], StringComparer.Ordinal);
@@ -152,6 +184,8 @@ public class RegistryCapabilityTests
         var engine = MutableEngine();
         var offered = (await Send(engine, RegistryAction.Read, "/capabilitiesoffered")).Metadata!.RootElement;
         await Assert.That(offered.GetProperty("pagination").GetProperty("enum").GetArrayLength()).IsEqualTo(2);
+        await Assert.That(offered.GetProperty("flags").GetProperty("enum").EnumerateArray()
+            .Select(static item => item.GetString()!)).Contains("limit", StringComparer.Ordinal);
         await Assert.That(offered.GetProperty("shortself").GetProperty("enum").GetArrayLength()).IsEqualTo(2);
         await Assert.That(offered.GetProperty("available").GetProperty("attributes").GetProperty("model")
             .GetProperty("attributes").GetProperty("mutable").GetProperty("enum")[0].GetBoolean()).IsFalse();
@@ -233,7 +267,7 @@ public class RegistryCapabilityTests
     {
         var engine = MutableEngine(authorization: new DenyCapabilities());
         await ExpectCode(() => Send(engine, RegistryAction.Patch, "/", """{"capabilities":{"pagination":false},"name":"not written"}"""), "forbidden");
-        await Assert.That((await Send(engine, RegistryAction.Read, "/capabilities")).Metadata!.RootElement.GetProperty("pagination").GetBoolean()).IsTrue();
+        await Assert.That((await Send(engine, RegistryAction.Read, "/capabilities")).Metadata!.RootElement.GetProperty("pagination").GetBoolean()).IsFalse();
         await Assert.That((await Send(engine, RegistryAction.Read, "/")).Metadata!.RootElement.GetProperty("epoch").GetInt32()).IsEqualTo(0);
     }
 
@@ -260,7 +294,7 @@ public class RegistryCapabilityTests
     {
         var engine = MutableEngine(limits: new() { MaxEntityOperations = 50 });
         await ExpectCode(() => Send(engine, RegistryAction.Patch, "/capabilities", """{"pagination":false}"""), "operation_limit");
-        await Assert.That((await Send(engine, RegistryAction.Read, "/capabilities")).Metadata!.RootElement.GetProperty("pagination").GetBoolean()).IsTrue();
+        await Assert.That((await Send(engine, RegistryAction.Read, "/capabilities")).Metadata!.RootElement.GetProperty("pagination").GetBoolean()).IsFalse();
         await Assert.That((await engine.ReadEventBatchesAsync(Writer(), limit: 1)).Count).IsEqualTo(0);
     }
     internal static RegistryEngine MutableEngine(IRegistryPersistence? persistence = null, RegistryModel? model = null,

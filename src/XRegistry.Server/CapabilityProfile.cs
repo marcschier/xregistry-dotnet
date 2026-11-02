@@ -78,9 +78,13 @@ internal sealed class CapabilityProfile
         }
 
         var offered = defaults.RootElement;
+        var flagChoices = offered.GetProperty("flags").EnumerateArray()
+            .Select(static item => item.GetString()!).Append("limit").ToArray();
         foreach (var name in new[] { "flags", "formats", "ignores", "mutable", "specversions", "versionmodes" })
         {
-            result[name] = NormalizeList(result[name], offered.GetProperty(name), name, Spend);
+            result[name] = name == "flags"
+                ? NormalizeList(result[name], flagChoices, name, Spend)
+                : NormalizeList(result[name], offered.GetProperty(name), name, Spend);
         }
 
         RequireMember(result["specversions"]!.AsArray(), "1.0-rc4", "specversions");
@@ -95,6 +99,25 @@ internal sealed class CapabilityProfile
             if (name == "shortself" && enabled && !shortSelfSupported)
             {
                 throw Error("capability_error", "The configured PublicRoot cannot support a dollar-free shortself URL.");
+            }
+        }
+
+        var flags = result["flags"]!.AsArray();
+        if (result["pagination"]!.GetValue<bool>())
+        {
+            if (!flags.Any(static flag => string.Equals(flag!.GetValue<string>(), "limit", StringComparison.OrdinalIgnoreCase)))
+            {
+                flags.Add((JsonNode?)JsonValue.Create("limit"));
+            }
+        }
+        else
+        {
+            for (var index = flags.Count - 1; index >= 0; index--)
+            {
+                if (string.Equals(flags[index]!.GetValue<string>(), "limit", StringComparison.OrdinalIgnoreCase))
+                {
+                    flags.RemoveAt(index);
+                }
             }
         }
 
@@ -178,41 +201,45 @@ internal sealed class CapabilityProfile
 
     private static JsonArray NormalizeList(JsonNode? value, JsonElement offered, string name, Action<int> spend)
     {
+        return NormalizeList(value, offered.EnumerateArray().Select(static item => item.GetString()!).ToArray(), name, spend);
+    }
+
+    private static JsonArray NormalizeList(JsonNode? value, string[] offered, string name, Action<int> spend)
+    {
         spend((value as JsonArray)?.Count ?? 1);
         if (value is not JsonArray array || array.Any(static item => item is not JsonValue scalar || !scalar.TryGetValue<string>(out _)))
         {
-            throw ValueError(name, value, string.Join(", ", offered.EnumerateArray().Select(static item => item.GetString())),
+            throw ValueError(name, value, string.Join(", ", offered),
                 "The capability must be an array of strings.");
         }
 
         var supplied = array.Select(static item => item!.GetValue<string>()).ToArray();
         if (supplied.Contains("*", StringComparer.Ordinal))
         {
-            spend(offered.GetArrayLength());
+            spend(offered.Length);
             if (supplied.Length != 1)
             {
                 throw Error("capability_wildcard", "A capability wildcard cannot be combined with other values.", ("field", name));
             }
 
-            return JsonNode.Parse(offered.GetRawText())!.AsArray();
+            return new JsonArray(offered.Select(static item => (JsonNode?)JsonValue.Create(item)).ToArray());
         }
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var result = new JsonArray();
         foreach (var item in supplied)
         {
-            spend(offered.GetArrayLength() + 1);
-            var canonical = offered.EnumerateArray().Select(static choice => choice.GetString()!)
-                .FirstOrDefault(choice => string.Equals(choice, item, StringComparison.OrdinalIgnoreCase));
+            spend(offered.Length + 1);
+            var canonical = offered.FirstOrDefault(choice => string.Equals(choice, item, StringComparison.OrdinalIgnoreCase));
             if (canonical is null)
             {
-                throw ValueError(name, JsonValue.Create(item), string.Join(", ", offered.EnumerateArray().Select(static choice => choice.GetString())),
+                throw ValueError(name, JsonValue.Create(item), string.Join(", ", offered),
                     "The capability value is not offered.");
             }
 
             if (!seen.Add(canonical))
             {
-                throw ValueError(name, JsonValue.Create(item), string.Join(", ", offered.EnumerateArray().Select(static choice => choice.GetString())),
+                throw ValueError(name, JsonValue.Create(item), string.Join(", ", offered),
                     "Capability values must be case-insensitively unique.");
             }
 

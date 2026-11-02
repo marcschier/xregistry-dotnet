@@ -48,7 +48,6 @@ public class RegistryCollectionIndexTests
         await Send(engine, RegistryAction.Post, "/dirs/g/records/r", "{}");
         var retained = await Send(engine, RegistryAction.Read, "/dirs/g/records/r/versions");
         await Assert.That(Ids(retained)).IsEqualTo("2,3");
-        await Assert.That(retained.Page!.TotalCount).IsEqualTo(2UL);
         await Assert.That(retained.Metadata!.RootElement.GetProperty("2").GetProperty("ancestorid").GetString()).IsEqualTo("2");
         await Send(engine, RegistryAction.Patch, "/dirs/g/records/r/meta", """{"defaultversionid":"3"}""");
         await Send(engine, RegistryAction.Delete, "/dirs/g/records/r/versions", """{"3":{}}""");

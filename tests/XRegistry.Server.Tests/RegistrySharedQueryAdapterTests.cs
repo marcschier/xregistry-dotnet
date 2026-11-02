@@ -14,7 +14,7 @@ public class RegistrySharedQueryAdapterTests
     [Test]
     public async Task LocalQueryAdapterBuildsDefaultAndMetaFactsBeforeDocumentViewProjection()
     {
-        var engine = Create(QueryModel);
+        var engine = await Seed();
         await Send(engine, RegistryAction.Replace, "/fleets/g/items/r", """{"rank":9007199254740993}""");
         await Send(engine, RegistryAction.Post, "/fleets/g/items/r", """{"versionid":"2","rank":0}""");
         await Send(engine, RegistryAction.Patch, "/fleets/g/items/r/meta", """{"defaultversionid":"1"}""");
@@ -40,7 +40,9 @@ public class RegistrySharedQueryAdapterTests
     public async Task LocalDanglingAliasQueryDoesNotInterpretDeniedMetaAsMissingNull(string filter)
     {
         var policy = new RegistryPaginationQueryTests.QueryPolicy();
-        var engine = Create(QueryModel, policy: policy);
+        var engine = RegistryCapabilityTests.MutableEngine(
+            model: RegistryModel.Compile(RegistryJson.Parse(QueryModel)), authorization: policy);
+        await Send(engine, RegistryAction.Patch, "/capabilities", """{"pagination":true}""");
         await Send(engine, RegistryAction.Replace, "/fleets/g/items/alias",
             """{"meta":{"xref":"/fleets/other/items/missing"}}""");
         policy.Revoked.Add("/fleets/g/items/alias/meta");
@@ -86,9 +88,11 @@ public class RegistrySharedQueryAdapterTests
             RegistryId = "deadline",
             PublicRoot = new Uri("https://registry.example/catalog"),
             Model = RegistryModel.Compile(RegistryJson.Parse(QueryModel)),
+            AllowCapabilityUpdates = true,
             QueryLimits = new() { MaxDuration = duration },
             TimeProvider = clock
         }, persistence, new PermitPolicy());
+        await Send(engine, RegistryAction.Patch, "/capabilities", """{"pagination":true}""");
         await Send(engine, RegistryAction.Replace, "/fleets/g/docs/r$details",
             """{"contenttype":"text/plain","doc":"hello"}""");
         persistence.DelayReads = true;

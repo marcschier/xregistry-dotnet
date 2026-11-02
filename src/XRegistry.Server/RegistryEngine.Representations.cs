@@ -29,7 +29,7 @@ public sealed partial class RegistryEngine
             ["compatibilities"] = CompatibilityCapabilities(),
             ["ignores"] = new JsonArray(RequestFlags.IgnoreValues.Select(static value => (JsonNode?)JsonValue.Create(value)).ToArray()),
             ["mutable"] = new JsonArray(),
-            ["pagination"] = true,
+            ["pagination"] = false,
             ["shortself"] = false,
             ["specversions"] = JsonNode.Parse("""["1.0-rc4"]"""),
             ["versionmodes"] = JsonNode.Parse("""["manual","createdat","modifiedat","semver"]""")
@@ -58,6 +58,7 @@ public sealed partial class RegistryEngine
             result[property.Key] = Offer(property.Value!);
         }
 
+        result["flags"]!["enum"]!.AsArray().Add((JsonNode?)JsonValue.Create("limit"));
         result["pagination"]!["enum"] = JsonNode.Parse("[false,true]");
         result["shortself"]!["enum"] = JsonNode.Parse(SupportsShortSelf ? "[false,true]" : "[false]");
         if (!IsReadOnly)
@@ -623,7 +624,7 @@ public sealed partial class RegistryEngine
                     };
                     if (leaf && definitions?.ContainsKey(name) == true)
                     {
-                        throw ServerErrors.With("inline_noninlineable", path.EscapedPath, "The named attribute is not inlineable.", ("name", expression));
+                        throw ServerErrors.With("bad_inline", path.EscapedPath, "The named attribute is not inlineable.", ("value", expression));
                     }
 
                     throw ServerErrors.With("bad_inline", path.EscapedPath, "An inline path is unknown or is not an inlineable attribute.", ("value", expression));

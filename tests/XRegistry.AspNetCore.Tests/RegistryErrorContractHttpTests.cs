@@ -68,13 +68,24 @@ public class RegistryErrorContractHttpTests
         """{"value":"","error_detail":"A sort projection is required"}""")]
     [Arguments("GET", "/teams?limit=0", null, 400, "bad_flag", "spec.md",
         "The specified flag (limit) is not allowed in this context: /teams.", "/teams", """{"flag":"limit"}""")]
+    [Arguments("GET", "/?limit=1", null, 400, "pagination_noncollection", "spec.md",
+        "Can't use pagination on a non-collection result set. Query path: /.", "/", "{}")]
+    [Arguments("GET", "/?cursor=opaque-arbitrary-token", null, 400, "pagination_noncollection", "spec.md",
+        "Can't use pagination on a non-collection result set. Query path: /.", "/", "{}")]
     [Arguments("GET", "/?sort=name", null, 400, "sort_noncollection", "spec.md",
         "Can't sort on a non-collection result set. Query path: /.", "/", "{}")]
     [Arguments("GET", "/?ignore=epoch", null, 400, "bad_ignore", "spec.md",
         "For \"/\", an error was found in \"ignore\" value (epoch): ignore only applies to write operations.", "/",
         """{"value":"epoch","error_detail":"ignore only applies to write operations"}""")]
-    [Arguments("GET", "/?inline=name", null, 400, "inline_noninlineable", "spec.md",
-        "Attempting to inline a non-inlineable attribute (name) on: /.", "/", """{"name":"name"}""")]
+    [Arguments("GET", "/?inline=missing", null, 400, "bad_inline", "spec.md",
+        "For \"/\", an error was found in \"inline\" value (missing): An inline path is unknown or is not an inlineable attribute.", "/",
+        """{"value":"missing","error_detail":"An inline path is unknown or is not an inlineable attribute"}""")]
+    [Arguments("GET", "/?inline=name", null, 400, "bad_inline", "spec.md",
+        "For \"/\", an error was found in \"inline\" value (name): The named attribute is not inlineable.", "/",
+        """{"value":"name","error_detail":"The named attribute is not inlineable"}""")]
+    [Arguments("GET", "/?inline=teams.name", null, 400, "bad_inline", "spec.md",
+        "For \"/\", an error was found in \"inline\" value (teams.name): The named attribute is not inlineable.", "/",
+        """{"value":"teams.name","error_detail":"The named attribute is not inlineable"}""")]
     [Arguments("GET", "/teams$details", null, 400, "bad_details", "spec.md",
         "Use of \"$details\" in this context is not allowed: /teams$details.", "/teams$details", "{}")]
     [Arguments("GET", "/teams/-bad", null, 400, "malformed_id", "spec.md",
@@ -87,7 +98,8 @@ public class RegistryErrorContractHttpTests
     public async Task RouteBodyAndFlagErrorsUseIndependentFrozenWireVectors(string method, string path, string? content,
         int status, string code, string document, string title, string subject, string arguments)
     {
-        await using var host = await HttpTests.TestHost.StartAsync();
+        await using var host = await HttpTests.TestHost.StartAsync(allowCapabilityUpdates: true);
+        await EnablePagination(host);
         using var request = new HttpRequestMessage(new HttpMethod(method), path);
         if (content is not null)
         {
@@ -101,6 +113,73 @@ public class RegistryErrorContractHttpTests
         {
             await Assert.That(string.Join(", ", response.Content.Headers.Allow))
                 .IsEqualTo(path == "/" ? "GET, HEAD, OPTIONS, PUT, PATCH, POST" : "GET, HEAD, OPTIONS, PUT, POST, DELETE");
+        }
+    }
+
+    [Test]
+    [Arguments("limit=1", "bad_flag")]
+    [Arguments("cursor=opaque-arbitrary-token", "bad_cursor")]
+    public async Task WriteOperationsKeepPaginationFlagsAsOperationErrors(string query, string code)
+    {
+        await using var host = await HttpTests.TestHost.StartAsync(allowCapabilityUpdates: true);
+        await EnablePagination(host);
+        using var request = new HttpRequestMessage(HttpMethod.Put, "/teams/g?" + query)
+        {
+            Content = new StringContent("{}", Encoding.UTF8, "application/json")
+        };
+        using var response = await host.Client.SendAsync(request);
+
+        if (code == "bad_flag")
+        {
+            await AssertProblem(response, 400, "bad_flag", "spec.md",
+                "The specified flag (limit) is not allowed in this context: /teams/g.", "/teams/g",
+                """{"flag":"limit"}""");
+        }
+        else
+        {
+            await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.BadRequest);
+            await Assert.That(response.Content.Headers.ContentType!.MediaType).IsEqualTo("application/problem+json");
+            var problem = RegistryJson.Parse(await response.Content.ReadAsByteArrayAsync()).RootElement;
+            await Assert.That(problem.GetProperty("type").GetString()).IsEqualTo("urn:xregistry-dotnet:problem:bad_cursor");
+            await Assert.That(problem.GetProperty("code").GetString()).IsEqualTo("bad_cursor");
+            await Assert.That(problem.GetProperty("title").GetString())
+                .IsEqualTo("The requested page cursor is not valid for this request.");
+            await Assert.That(problem.GetProperty("subject").GetString()).IsEqualTo("/teams/g");
+            await Assert.That(problem.GetProperty("status").GetInt32()).IsEqualTo(400);
+            await Assert.That(problem.TryGetProperty("args", out _)).IsFalse();
+        }
+
+        await Assert.That(response.Headers.Contains("xRegistry-xregcorrelationid")).IsFalse();
+    }
+
+    [Test]
+    public async Task NoncollectionPaginationErrorsAlsoApplyToHeadWithoutAResponseBody()
+    {
+        await using var host = await HttpTests.TestHost.StartAsync(allowCapabilityUpdates: true);
+        await EnablePagination(host);
+        using var response = await host.Client.SendAsync(new(HttpMethod.Head, "/?limit=1"));
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.BadRequest);
+        await Assert.That(response.Headers.Contains("xRegistry-xregcorrelationid")).IsFalse();
+        await Assert.That(await response.Content.ReadAsByteArrayAsync()).IsEmpty();
+    }
+
+    [Test]
+    public async Task DisabledPaginationAndInlineFlagsIgnoreTheirQueryValues()
+    {
+        await using var host = await HttpTests.TestHost.StartAsync(allowCapabilityUpdates: true);
+        using var changed = await host.Client.PatchAsync("/capabilities",
+            new StringContent("""{"flags":["filter"],"pagination":false}""", Encoding.UTF8, "application/json"));
+        await Assert.That(changed.StatusCode).IsEqualTo(HttpStatusCode.OK);
+
+        using var baselineResponse = await host.Client.GetAsync("/");
+        await Assert.That(baselineResponse.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        var baseline = await baselineResponse.Content.ReadAsStringAsync();
+        foreach (var query in new[] { "limit=1", "limit=not-a-number", "inline=missing", "inline=name" })
+        {
+            using var response = await host.Client.GetAsync("/?" + query);
+            await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
+            await Assert.That(await response.Content.ReadAsStringAsync()).IsEqualTo(baseline);
         }
     }
 
@@ -409,6 +488,13 @@ public class RegistryErrorContractHttpTests
         await Assert.That(actual).IsEquivalentTo(expected.EnumerateObject().Select(Pair).ToArray(), StringComparer.Ordinal);
         await Assert.That(response.Headers.GetValues("Link").Single()).IsEqualTo("<https://public.example/registry>;rel=xregistry-root");
         static string Pair(JsonProperty property) => property.Name + "=" + property.Value.GetString();
+    }
+
+    private static async Task EnablePagination(HttpTests.TestHost host)
+    {
+        using var response = await host.Client.PatchAsync("/capabilities",
+            new StringContent("""{"pagination":true}""", Encoding.UTF8, "application/json"));
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
     }
 
     private sealed class Permit : IRegistryAuthorizationPolicy

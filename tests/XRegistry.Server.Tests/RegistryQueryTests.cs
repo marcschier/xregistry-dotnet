@@ -334,12 +334,13 @@ public class RegistryQueryTests
     [Test]
     public async Task CapabilitiesAdvertiseOnlyTheImplementedQueryAndExistingProfiles()
     {
-        var engine = await Seed();
+        var engine = await Seed(allowCapabilityUpdates: false);
         var capabilities = (await Send(engine, RegistryAction.Read, "/capabilities")).Metadata!.RootElement;
         var flags = capabilities.GetProperty("flags").EnumerateArray().Select(static value => value.GetString()).ToArray();
         await Assert.That(flags.Contains("filter", StringComparer.Ordinal)).IsTrue();
         await Assert.That(flags.Contains("sort", StringComparer.Ordinal)).IsTrue();
-        await Assert.That(capabilities.GetProperty("pagination").GetBoolean()).IsTrue();
+        await Assert.That(flags.Contains("limit", StringComparer.Ordinal)).IsFalse();
+        await Assert.That(capabilities.GetProperty("pagination").GetBoolean()).IsFalse();
         await Assert.That(capabilities.GetProperty("shortself").GetBoolean()).IsFalse();
         await Assert.That(capabilities.GetProperty("available").GetProperty("capabilities").GetProperty("mutable").GetBoolean()).IsFalse();
     }
@@ -352,9 +353,16 @@ public class RegistryQueryTests
         await Assert.That(Ids(result.Metadata!.RootElement)).IsEquivalentTo(["a", "b", "c", "d"], StringComparer.Ordinal);
         await Assert.That(result.Page!.TotalCount).IsEqualTo(4UL);
     }
-    internal static async Task<RegistryEngine> Seed()
+    internal static async Task<RegistryEngine> Seed(bool allowCapabilityUpdates = true)
     {
-        var engine = Create(QueryModel);
+        var engine = allowCapabilityUpdates
+            ? RegistryCapabilityTests.MutableEngine(model: RegistryModel.Compile(RegistryJson.Parse(QueryModel)))
+            : Create(QueryModel);
+        if (allowCapabilityUpdates)
+        {
+            await Send(engine, RegistryAction.Patch, "/capabilities", """{"pagination":true}""");
+        }
+
         await Send(engine, RegistryAction.Replace, "/", """
             {"name":"registry","fleets":{
               "a":{"name":"Alpha","rank":2,"active":false,"labels":{"stage":"prod"},"items":{

@@ -66687,13 +66687,19 @@
       ],
       "text": "- When not specified, the default value MUST be `false` and the pagination related flags SHOULD NOT appear in the `flags` capability.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The server's default profile sets pagination to false and omits the pagination-specific `limit` flag. Capability updates retain that value when `pagination` is omitted; explicit enablement adds `limit`.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CapabilityChangesArePersistedAndDrivePaginationRatherThanOnlyAdvertisingIt",
+          "CapabilityPatchReplacesWholeMembersAndPutResetsOmittedDefaults",
+          "PaginationValueNormalizesTheLimitFlagAcrossCapabilityUpdates"
+        ],
         "nativeEvidence": []
       }
     },
@@ -66718,13 +66724,18 @@
       ],
       "text": "- When set to `true`, the pagination related flags SHOULD appear in the `flags` capability.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The HTTP binding uses `limit` for pagination. The server offers that value and includes it in `flags` whenever pagination is enabled.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "PaginationValueNormalizesTheLimitFlagAcrossCapabilityUpdates",
+          "OfferedChoicesPreserveImmutableModelAndHostControlledCapabilityMutability"
+        ],
         "nativeEvidence": []
       }
     },
@@ -66749,13 +66760,18 @@
       ],
       "text": "- During an update of the capabilities, if the `flags` and `pagination` capabilities are inconsistent, then the `pagination` capability value SHOULD result in changing the `flags` capability as needed to make them consistent.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Capability updates make `pagination` authoritative: true adds `limit` and false removes it, including when both values are supplied inconsistently in one update.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "PaginationValueNormalizesTheLimitFlagAcrossCapabilityUpdates",
+          "RootCapabilityAndNestedEntityChangesRollBackTogetherAndEmitOneInteraction"
+        ],
         "nativeEvidence": []
       }
     },
@@ -66780,13 +66796,21 @@
       ],
       "text": "- Use of a pagination type of feature on a non-collection result MUST generate an error ([pagination_noncollection](#pagination_noncollection)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The active Core clause requires recognized pagination on non-collection reads to return pagination_noncollection. Direct engine and HTTP GET/HEAD tests cover limit and cursor; disabled pagination and write-operation tests preserve their separate behavior.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "PaginationFlagsOnRootReadsUseNoncollectionDiagnostics",
+          "RouteBodyAndFlagErrorsUseIndependentFrozenWireVectors",
+          "NoncollectionPaginationErrorsAlsoApplyToHeadWithoutAResponseBody",
+          "WriteOperationsKeepTheirPaginationFlagDiagnostics",
+          "DisabledPaginationAndInlineCapabilitiesSkipTheirValidation"
+        ],
         "nativeEvidence": []
       }
     },
@@ -76821,13 +76845,19 @@
       ],
       "text": "A request to inline an unknown, or non-inlineable, attribute MUST generate an error ([bad_inline](#bad_inline)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The active Core clause consolidates unknown and non-inlineable selectors under bad_inline, replacing the older separate error code. Direct engine and HTTP tests cover both selector classes; disabled inline handling remains ignored.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "InlineFailuresUseBadInlineAndRetainTheCompleteExpression",
+          "RouteBodyAndFlagErrorsUseIndependentFrozenWireVectors",
+          "DisabledPaginationAndInlineCapabilitiesSkipTheirValidation"
+        ],
         "nativeEvidence": []
       }
     },

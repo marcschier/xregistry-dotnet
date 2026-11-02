@@ -211,7 +211,8 @@ public class RegistryPaginationQueryTests
         await Send(engine, RegistryAction.Patch, "/fleets/a/items/x", """{"name":"after"}""");
         var reads = persistence.Reads;
         var retained = await Follow(engine, firstLink);
-        await Assert.That(persistence.Reads).IsEqualTo(reads);
+        await Assert.That(persistence.Reads).IsEqualTo(reads + 1);
+        await Assert.That(persistence.OpenSnapshots).IsEqualTo(0);
         await Assert.That(retained.Metadata!.RootElement.GetProperty("a").GetProperty("items").GetProperty("x")
             .GetProperty("versions").GetProperty("1").GetProperty("name").GetString()).IsEqualTo("before");
     }
@@ -438,9 +439,11 @@ public class RegistryPaginationQueryTests
             RegistryId = "queries",
             PublicRoot = new Uri("https://registry.example/catalog"),
             Model = RegistryModel.Compile(RegistryJson.Parse(QueryModel)),
+            AllowCapabilityUpdates = true,
             QueryLimits = limits,
             TimeProvider = clock ?? TimeProvider.System
         }, persistence ?? new InMemoryRegistryPersistence(), policy ?? new PermitPolicy());
+        await Send(engine, RegistryAction.Patch, "/capabilities", """{"pagination":true}""");
         await Send(engine, RegistryAction.Replace, "/", """
             {"fleets":{"a":{"name":"Alpha","rank":2},"b":{"name":"Beta","rank":10},
               "c":{"name":"Gamma","rank":30},"d":{"name":"Delta"}}}
