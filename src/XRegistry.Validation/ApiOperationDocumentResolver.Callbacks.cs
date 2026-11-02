@@ -1475,12 +1475,12 @@ public static partial class ApiOperationDocumentResolver
             return InvalidTarget("Linked operation callbacks must be an object.", target.Pointer + "/callbacks");
         }
         string? httpMethod = null;
+        references.Work(target.Pointer);
+        var tokens = target.Pointer == "$" ? [] : target.Pointer[2..].Split('/')
+            .Select(static token => token.Replace("~1", "/", StringComparison.Ordinal)
+                .Replace("~0", "~", StringComparison.Ordinal)).ToArray();
         if (references.Format == "OpenAPI/3.0" && target.Value.TryGetProperty("requestBody", out _))
         {
-            references.Work(target.Pointer);
-            var tokens = target.Pointer == "$" ? [] : target.Pointer[2..].Split('/')
-                .Select(static token => token.Replace("~1", "/", StringComparison.Ordinal)
-                    .Replace("~0", "~", StringComparison.Ordinal)).ToArray();
             if (ValidateHttpOperationPointer(references.Format, tokens, out _) is not null)
             {
                 return Failure(ApiOperationResolutionStatus.Indeterminate, "document.link_operation_method",
@@ -1503,6 +1503,18 @@ public static partial class ApiOperationDocumentResolver
         var parameterFailure = await ValidateEffectiveOpenApiParametersAsync(target.Value, target.Document, target.Pointer,
             references, cancellationToken).ConfigureAwait(false);
         if (parameterFailure is not null) { return parameterFailure; }
+        if (tokens.Length == 3 && tokens[0] == "paths" &&
+            ValidateHttpOperationPointer(references.Format, tokens, out _) is null)
+        {
+            var pathPointer = target.Pointer[..target.Pointer.LastIndexOf('/')];
+            var pathItem = target.Document.Root.GetProperty("paths").GetProperty(tokens[1]);
+            var pathResolution = await ResolvePathItemAsync(pathItem, target.Document, pathPointer, references,
+                new(StringComparer.Ordinal), true, cancellationToken).ConfigureAwait(false);
+            if (pathResolution.Failure is not null) { return pathResolution.Failure; }
+            var pathFailure = await ValidateOpenApiPathParameterCorrespondenceAsync(tokens[1],
+                pathResolution.ParameterOwner, target, references, cancellationToken).ConfigureAwait(false);
+            if (pathFailure is not null) { return pathFailure; }
+        }
         var bodyFailure = await ValidateEffectiveOpenApiRequestBodyAsync(target, httpMethod, references,
             cancellationToken).ConfigureAwait(false);
         if (bodyFailure is not null) { return bodyFailure; }

@@ -923,6 +923,17 @@ recurse through the linked-operation graph. Detached path parameters receive
 native declaration checks without inventing a URL path or a Path Item
 parameter inheritance context. Source operations and opaque example payloads
 remain authored data.
+When a linked target has an explicit `paths/{path}/{method}` location, admission
+resolves that containing Path Item through the existing bounded validator.
+Path Item metadata, servers and inherited parameter declarations receive their
+existing checks. Each template expression must have a matching Path Item or
+operation parameter, and path parameters cannot name absent expressions.
+Operation-level overrides remain permitted; duplicate entries within either
+list are invalid. Path Item references retain containing-document bases,
+shared acquisition and existing conflict diagnostics rather than combining
+undefined declarations. JSON Pointer tokens are decoded once. Detached and
+reusable targets do not supply a concrete path template, and admission does
+not search for mounts or infer an invocation URL.
 Linked targets also use the selected entry-document security policy. Explicit
 Security Requirement names must identify schemes in the selected API root,
 not substitute declarations in the document holding the target operation.

@@ -13,6 +13,211 @@ public class ApiOperationReferenceTests
     [Test]
     [Arguments("OpenAPI/3.0", "3.0.4")]
     [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiLinkedPathsDecodeAuthoredTokensOnceWithoutInferringDetachedMounts(string format, string version)
+    {
+        foreach (var location in new[] { "path", "detached", "reusable" })
+        {
+            const string path = "/things/~1%{id}";
+            var token = path.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal);
+            var pointer = location switch
+            {
+                "path" => "/paths/" + Uri.EscapeDataString(token) + "/get",
+                "reusable" => "/components/pathItems/P/get",
+                _ => "/O"
+            };
+            var source = new JsonObject
+            {
+                ["openapi"] = version,
+                ["paths"] = JsonNode.Parse("""
+                    {"/source":{"get":{"operationId":"Target","responses":{"200":{"description":"","links":{"next":{}}}}}}}
+                    """)
+            };
+            source["paths"]!["/source"]!["get"]!["responses"]!["200"]!["links"]!["next"]!["operationRef"] =
+                "https://allowed.test/api#" + pointer;
+            var calls = 0;
+            var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(source.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#/paths/~1source/get"),
+                resolveReference: (uri, _) =>
+                {
+                    if (uri != "https://allowed.test/api") { throw new UnauthorizedAccessException(); }
+                    calls++;
+                    var operation = JsonNode.Parse("""
+                        {"parameters":[{"name":"id","in":"path","required":true,"schema":{"type":"string"}}],
+                        "responses":{"200":{"description":""}}}
+                        """)!;
+                    var target = location switch
+                    {
+                        "path" => new JsonObject { ["paths"] = new JsonObject { [path] = new JsonObject { ["get"] = operation } } },
+                        "reusable" => new JsonObject { ["components"] = new JsonObject
+                            { ["pathItems"] = new JsonObject { ["P"] = new JsonObject { ["get"] = operation } } } },
+                        _ => new JsonObject { ["O"] = operation }
+                    };
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(target.ToJsonString()));
+                });
+            await Assert.That(calls).IsEqualTo(1);
+            await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+            await Assert.That(JsonNode.DeepEquals(source["paths"]!["/source"]!["get"],
+                JsonNode.Parse(result.Operation.GetRawText()))).IsTrue();
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiLinkedPathsApplyInheritedParametersAndExactTemplateNames(string format, string version)
+    {
+        foreach (var kind in new[] { "inherited", "local", "override", "missing", "extra", "duplicate" })
+        {
+            var document = new JsonObject
+            {
+                ["openapi"] = version,
+                ["paths"] = JsonNode.Parse("""
+                    {"/source":{"get":{"operationId":"Target","responses":{"200":{"description":"","links":{
+                    "next":{"operationRef":"https://allowed.test/api#/paths/~1things~1%7Bid%7D/get"}}}}}}}
+                    """)
+            };
+            var calls = new List<string>();
+            var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#/paths/~1source/get"),
+                resolveReference: (uri, _) =>
+                {
+                    calls.Add(uri);
+                    if (uri == "https://allowed.test/parameters")
+                    {
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(
+                            """{"P":{"name":"id","in":"path","required":true,"schema":{"type":"string"}}}"""));
+                    }
+                    if (uri != "https://allowed.test/api") { throw new UnauthorizedAccessException(); }
+                    var target = JsonNode.Parse("""
+                        {"paths":{"/things/{id}":{"get":{"responses":{"200":{"description":""}}}}}}
+                        """)!;
+                    var item = target["paths"]!["/things/{id}"]!;
+                    var parameters = JsonNode.Parse("""[{"$ref":"parameters#/P"}]""")!;
+                    if (kind is "local" or "override") { item["get"]!["parameters"] = parameters; }
+                    else if (kind != "missing") { item["parameters"] = parameters; }
+                    if (kind == "override")
+                    {
+                        item["parameters"] = JsonNode.Parse("""
+                            [{"name":"id","in":"path","required":true,"schema":{"type":"integer"}}]
+                            """);
+                    }
+                    if (kind == "extra")
+                    {
+                        item["get"]!["parameters"] = JsonNode.Parse("""
+                            [{"name":"other","in":"path","required":true,"schema":{"type":"string"}}]
+                            """);
+                    }
+                    if (kind == "duplicate") { parameters.AsArray().Add(JsonNode.Parse("""{"$ref":"parameters#/P"}""")); }
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(target.ToJsonString()));
+                });
+            await Assert.That(string.Join("|", calls)).IsEqualTo(kind == "missing"
+                ? "https://allowed.test/api" : "https://allowed.test/api|https://allowed.test/parameters");
+            var valid = kind is "inherited" or "local" or "override";
+            await Assert.That(result.Status).IsEqualTo(valid
+                ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+            if (!valid)
+            {
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo(kind == "duplicate"
+                    ? "document.parameters" : "document.path_parameter");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo(kind switch
+                {
+                    "missing" => "$/paths/~1things~1{id}/get/parameters",
+                    "extra" => "$/paths/~1things~1{id}/get/parameters/0/name",
+                    _ => "$/paths/~1things~1{id}/parameters/1"
+                });
+            }
+            else
+            {
+                await Assert.That(JsonNode.DeepEquals(document["paths"]!["/source"]!["get"],
+                    JsonNode.Parse(result.Operation.GetRawText()))).IsTrue();
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiLinkedPathItemReferencesRetainBasesAndRejectConflictingMounts(string format, string version)
+    {
+        foreach (var kind in new[] { "valid", "missing", "conflict", "parameters", "server", "cycle" })
+        {
+            var document = new JsonObject
+            {
+                ["openapi"] = version,
+                ["paths"] = JsonNode.Parse("""
+                    {"/source":{"get":{"operationId":"Target","responses":{"200":{"description":"","links":{
+                    "first":{"operationRef":"https://allowed.test/api#/paths/~1things~1%7Bid%7D/get"},
+                    "second":{"operationRef":"https://allowed.test/api#/paths/~1things~1%7Bid%7D/get"}}}}}}}
+                    """)
+            };
+            var calls = new List<string>();
+            var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+                resolveReference: (uri, _) =>
+                {
+                    calls.Add(uri);
+                    if (uri == "https://allowed.test/api")
+                    {
+                        var target = JsonNode.Parse("""
+                            {"paths":{"/things/{id}":{"$ref":"items/base#/P","get":{"responses":{"200":{"description":""}}}}}}
+                            """)!;
+                        if (kind == "parameters") { target["paths"]!["/things/{id}"]!["parameters"] = new JsonArray(); }
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(target.ToJsonString()));
+                    }
+                    if (uri == "https://allowed.test/parameters/id")
+                    {
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(
+                            """{"P":{"name":"id","in":"path","required":true,"schema":{"type":"string"}}}"""));
+                    }
+                    if (uri != "https://allowed.test/items/base") { throw new UnauthorizedAccessException(); }
+                    if (kind == "missing") { return ValueTask.FromResult<ReadOnlyMemory<byte>?>(null); }
+                    var json = kind switch
+                    {
+                        "conflict" => """{"P":{"get":{"responses":{"200":{"description":""}}}}}""",
+                        "cycle" => """{"P":{"$ref":"#/P"}}""",
+                        "server" => """{"P":{"servers":[{"url":false}]}}""",
+                        _ => """{"P":{"parameters":[{"$ref":"../parameters/id#/P"}]}}"""
+                    };
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(json));
+                });
+            await Assert.That(string.Join("|", calls)).IsEqualTo(kind is "valid" or "parameters"
+                ? "https://allowed.test/api|https://allowed.test/items/base|https://allowed.test/parameters/id"
+                : "https://allowed.test/api|https://allowed.test/items/base");
+            await Assert.That(result.Status).IsEqualTo(kind switch
+            {
+                "valid" => ApiOperationResolutionStatus.Selected,
+                "server" => ApiOperationResolutionStatus.Invalid,
+                _ => ApiOperationResolutionStatus.Indeterminate
+            });
+            if (kind != "valid")
+            {
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo(kind switch
+                {
+                    "missing" => "dependency.unresolved",
+                    "server" => "document.servers",
+                    "cycle" => "dependency.cycle",
+                    _ => "dependency.path_item_conflict"
+                });
+                await Assert.That(result.Diagnostic.Path).IsEqualTo(kind switch
+                {
+                    "missing" => "$/paths/~1things~1{id}/$ref",
+                    "parameters" => "$/paths/~1things~1{id}/parameters",
+                    "conflict" => "$/paths/~1things~1{id}/get",
+                    "server" => "$/P/servers/0/url",
+                    _ => "$/P/$ref"
+                });
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
     public async Task OpenApiLinkedCallbacksDoNotCreateEntryOperationIdMembership(string format, string version)
     {
         foreach (var selector in new[] { "operations/Target", "/paths/~1target/get" })
