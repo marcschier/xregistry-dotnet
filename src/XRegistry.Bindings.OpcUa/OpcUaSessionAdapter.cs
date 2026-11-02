@@ -120,15 +120,17 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
     {
         var definitions = await BrowseOnce(node, BrowseDirection.Forward, ReferenceTypeIds.HasTypeDefinition,
             cancellationToken).ConfigureAwait(false);
-        foreach (var definition in definitions)
+        if (definitions.Count == 0)
         {
-            if (await IsTypeOrSubtypeAsync(Local(definition.NodeId), registryType, cancellationToken)
-                .ConfigureAwait(false))
-            {
-                return true;
-            }
+            return false;
         }
-        return false;
+        if (definitions.Count != 1 || definitions[0].NodeClass != NodeClass.ObjectType)
+        {
+            throw new FederationException(FederationErrorCode.InvalidPackage,
+                "The OPC UA Registry root must have one ObjectType TypeDefinition.");
+        }
+        return await IsTypeOrSubtypeAsync(Local(definitions[0].NodeId), registryType, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -158,6 +160,11 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
             {
                 throw new FederationException(FederationErrorCode.InvalidPackage,
                     "An OPC UA ObjectType has competing supertypes.");
+            }
+            if (parents[0].NodeClass != NodeClass.ObjectType)
+            {
+                throw new FederationException(FederationErrorCode.InvalidPackage,
+                    "The OPC UA ObjectType hierarchy contains a non-ObjectType supertype.");
             }
             current = Local(parents[0].NodeId);
         }
@@ -607,7 +614,7 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
         var namespaces = namespaceUris ?? throw new FederationException(FederationErrorCode.InvalidPackage,
             "The Server NamespaceArray must be read before Browse results are interpreted.");
         var node = ExpandedNodeId.ToNodeId(id, namespaces, updateNamespaceTable: false);
-        return node is { IsNull: false }
+        return node is { IsNull: false } && node.NamespaceIndex < namespaces.Count
             ? node
             : throw new FederationException(FederationErrorCode.NotFound,
                 "A Browse result refers to a namespace or server that cannot be mapped in this Session.");

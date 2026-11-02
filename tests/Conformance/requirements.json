@@ -139652,20 +139652,23 @@
       "text": "To address the root, the resolver reads the target Server's `NamespaceArray`, finds the exact namespace URI and constructs a Session-local NodeId using its index. It MUST verify that this node is the selected `RegistryType` or a permitted subtype. It MUST NOT select the first Registry found at the endpoint.",
       "review": {
         "status": "reviewed",
-        "note": "Direct target evidence remaps the same portable root across namespace reorderings, rejects case-changed/missing namespaces and leaves NamespaceTables unchanged. Reader verification retains only the selected root and rejects non-Registry roots; the adapter traverses type ancestry. Direct adapter subtype, competing-root and malformed-type workflow evidence is still incomplete, so the compound root-admission obligation remains pending.",
+        "note": "Direct target evidence remaps the same portable root across namespace reorderings, rejects case-changed/missing namespaces and leaves NamespaceTables unchanged. Reader verification retains only the advertised root and rejects non-Registry roots. Direct adapter tests now traverse only that root's RegistryType/ObjectType subtype chain, accept direct RegistryType and one/31 subtype edges, and reject competing/non-ObjectType definitions, absent or unrelated ancestry, competing/non-ObjectType supertypes, cycles, unmappable namespace indexes and the 32-edge boundary. The red-capable malformed-definition cases exposed admission by any matching type and an unchecked local namespace index; those mechanisms are corrected. This is bounded client root admission, not complete native server conformance or execution qualification.",
         "roles": [
           "client"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "PortableRegistryRootRemapsEachSessionAndRequiresExactNamespaceIdentity",
           "MissingNamespaceIsNotSubstitutedWithNamespaceZero",
           "VerifyRootAsyncResolvesAdvertisedRootUsingSessionNamespaceArray",
           "RootThatIsNotARegistryIsNotFoundNeverSubstituted",
           "VerifyRegistryRootAsyncReturnsTheExactRegistryNodeId",
-          "VerifyRegistryRootAsyncRejectsNullOrNonRegistryRoot"
+          "VerifyRegistryRootAsyncRejectsNullOrNonRegistryRoot",
+          "RegistryAdmissionUsesOnlyTheSelectedRootAndPermittedObjectTypeChain",
+          "RegistryAdmissionRejectsCompetingOrNonObjectTypeDefinitions",
+          "RegistryAdmissionRejectsMissingUnrelatedOrMalformedTypeHierarchy"
         ],
         "nativeEvidence": []
       }

@@ -323,6 +323,151 @@ public class OpcUaSessionAdapterTests
         await Assert.That(error!.CancellationToken).IsEqualTo(cancellation.Token);
     }
 
+    [Test]
+    [Arguments(0)]
+    [Arguments(1)]
+    [Arguments(31)]
+    public async Task RegistryAdmissionUsesOnlyTheSelectedRootAndPermittedObjectTypeChain(int depth)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        await adapter.ReadNamespaceArrayAsync(CancellationToken.None);
+        var root = new NodeId("SelectedRoot", 1);
+        var registryType = new NodeId("RegistryType", 1);
+        var requests = new List<BrowseDescription>();
+        proxy.BrowseResultFactory = request =>
+        {
+            requests.Add(request);
+            if (request.NodeId == root)
+            {
+                return new BrowseResult
+                {
+                    References = [TypeReference(depth == 0 ? registryType : new NodeId("Domain0", 1))]
+                };
+            }
+            for (var index = 0; index < depth; index++)
+            {
+                if (request.NodeId == new NodeId($"Domain{index}", 1))
+                {
+                    return new BrowseResult
+                    {
+                        References = [TypeReference(index + 1 == depth
+                            ? registryType
+                            : new NodeId($"Domain{index + 1}", 1))]
+                    };
+                }
+            }
+            throw new InvalidOperationException("Admission browsed outside the selected root's type hierarchy.");
+        };
+
+        var admitted = await adapter.IsRegistryNodeAsync(root, CancellationToken.None);
+
+        await Assert.That(admitted).IsTrue();
+        await Assert.That(requests.Count).IsEqualTo(depth + 1);
+        await Assert.That(requests[0].NodeId).IsEqualTo(root);
+        await Assert.That(requests[0].ReferenceTypeId).IsEqualTo(ReferenceTypeIds.HasTypeDefinition);
+        await Assert.That(requests[0].BrowseDirection).IsEqualTo(BrowseDirection.Forward);
+        foreach (var request in requests.Skip(1))
+        {
+            await Assert.That(request.ReferenceTypeId).IsEqualTo(ReferenceTypeIds.HasSubtype);
+            await Assert.That(request.BrowseDirection).IsEqualTo(BrowseDirection.Inverse);
+        }
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task RegistryAdmissionRejectsCompetingOrNonObjectTypeDefinitions(bool competing)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        await adapter.ReadNamespaceArrayAsync(CancellationToken.None);
+        var valid = TypeReference(new NodeId("RegistryType", 1));
+        proxy.BrowseResultFactory = _ => new BrowseResult
+        {
+            References = competing
+                ? [valid, TypeReference(new NodeId("OtherType", 1))]
+                : [new ReferenceDescription { NodeId = valid.NodeId, NodeClass = NodeClass.DataType }]
+        };
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.IsRegistryNodeAsync(new NodeId("SelectedRoot", 1), CancellationToken.None));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    [Arguments("absent")]
+    [Arguments("unrelated")]
+    [Arguments("competing-parents")]
+    [Arguments("cycle")]
+    [Arguments("non-object-parent")]
+    [Arguments("unmapped")]
+    [Arguments("depth")]
+    public async Task RegistryAdmissionRejectsMissingUnrelatedOrMalformedTypeHierarchy(string shape)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        await adapter.ReadNamespaceArrayAsync(CancellationToken.None);
+        var root = new NodeId("SelectedRoot", 1);
+        var parentDepth = 0;
+        proxy.BrowseResultFactory = request =>
+        {
+            if (request.NodeId == root)
+            {
+                return new BrowseResult
+                {
+                    References = shape switch
+                    {
+                        "absent" => [],
+                        "unmapped" => [TypeReference(new NodeId("Domain", 9))],
+                        _ => [TypeReference(new NodeId("Domain0", 1))]
+                    }
+                };
+            }
+            return new BrowseResult
+            {
+                References = shape switch
+                {
+                    "unrelated" => [],
+                    "competing-parents" =>
+                        [TypeReference(new NodeId("RegistryType", 1)), TypeReference(new NodeId("Other", 1))],
+                    "cycle" => [TypeReference(new NodeId("Domain0", 1))],
+                    "non-object-parent" => [new ReferenceDescription
+                    {
+                        NodeId = new ExpandedNodeId(new NodeId("RegistryType", 1)),
+                        NodeClass = NodeClass.DataType
+                    }],
+                    "depth" => [TypeReference(new NodeId($"Domain{++parentDepth}", 1))],
+                    _ => throw new InvalidOperationException("Unexpected hierarchy Browse.")
+                }
+            };
+        };
+
+        if (shape is "absent" or "unrelated")
+        {
+            await Assert.That(await adapter.IsRegistryNodeAsync(root, CancellationToken.None)).IsFalse();
+        }
+        else
+        {
+            var error = await Assert.ThrowsAsync<FederationException>(async () =>
+                await adapter.IsRegistryNodeAsync(root, CancellationToken.None));
+            await Assert.That(error!.Code).IsEqualTo(shape switch
+            {
+                "unmapped" => FederationErrorCode.NotFound,
+                "depth" => FederationErrorCode.LimitExceeded,
+                _ => FederationErrorCode.InvalidPackage
+            });
+            if (shape == "depth")
+            {
+                await Assert.That(parentDepth).IsEqualTo(32);
+            }
+        }
+    }
+
+    private static ReferenceDescription TypeReference(NodeId node) => new()
+    {
+        NodeId = new ExpandedNodeId(node),
+        NodeClass = NodeClass.ObjectType
+    };
+
     private static async Task InvokeOperation(OpcUaSessionAdapter adapter, string operation)
     {
         var node = new NodeId("Metadata", 1);
@@ -506,6 +651,7 @@ public class OpcUaSessionAdapterTests
         public List<byte[]> ReleasedContinuations { get; } = [];
         public Exception? ServiceFailure { get; set; }
         public bool FailAsynchronously { get; set; }
+        public Func<BrowseDescription, BrowseResult>? BrowseResultFactory { get; set; }
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
@@ -599,7 +745,7 @@ public class OpcUaSessionAdapterTests
             {
                 ResponseHeader = Header,
                 DiagnosticInfos = Diagnostics,
-                Results = [new BrowseResult
+                Results = [BrowseResultFactory?.Invoke(nodes[0]) ?? new BrowseResult
                 {
                     References = [dataType],
                     StatusCode = BrowseStatus,

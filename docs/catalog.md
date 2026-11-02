@@ -110,6 +110,13 @@ as JSON. `OpcUaSessionConnection` discovers endpoints and opens a Session only
 after caller policy selects one; it maps the advertised root through the
 Session's `NamespaceArray` and verifies the root and Core version.
 
+Root admission requires one ObjectType TypeDefinition and follows only that
+definition's ObjectType supertypes. Competing definitions or supertypes,
+cycles and non-ObjectType parents are rejected; an absent or unrelated
+definition does not identify a Registry. A returned NodeId whose namespace
+index is outside the Session's table is not treated as resolved. The ancestry
+budget includes the starting type: 31 subtype edges are permitted, 32 are not.
+
 `OpcUaSessionConnection.OpenAsync` and `OpcUaFederationTarget.SelectEndpoint`
 require an `isSupportedTransportProfile` predicate in addition to endpoint
 permission. The caller identifies the profiles its installed transports support;
