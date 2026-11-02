@@ -901,10 +901,21 @@ public sealed class OpcUaRegistryReadSource : IFederationReadSource
         var document = await _reader.ReadResourceDocumentAsync(groupNode, XidOf(parts[..2]),
             parts[2], parts[3], binding.ResourceType, versionId,
             binding.ResourceVersionsType, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        var afterVersion = await _reader.ReadResourcePropertiesAsync(groupNode, XidOf(parts[..2]),
+            parts[2], parts[3], binding.ResourceType, versionId,
+            binding.ResourceVersionsType, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!JsonNode.DeepEquals(JsonNode.Parse(selected.GetRawText()), JsonNode.Parse(afterVersion.GetRawText())))
+        {
+            throw new FederationException(FederationErrorCode.InconsistentSnapshot,
+                "The selected Version changed while reading its document.");
+        }
         if (parts.Length == 4)
         {
             var after = await _reader.ReadResourceMetaPropertiesAsync(groupNode, XidOf(parts[..2]),
                 parts[2], parts[3], binding.ResourceType, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             if (!JsonNode.DeepEquals(JsonNode.Parse(meta.GetRawText()), JsonNode.Parse(after.GetRawText())))
             {
                 throw new FederationException(FederationErrorCode.InconsistentSnapshot,

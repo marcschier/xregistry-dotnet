@@ -198,7 +198,20 @@ exact Version views. It returns Registry Model and Capabilities, complete
 collection snapshots and selector results, with local JSON Pointers rebased to
 each returned view. Document reads return exact local FileType bytes or an
 unfetched external ExpandedNodeId descriptor; the source does not fetch remote
-content. `OpcUaRegistryWriter` writes scalar Properties; calls create,
+content.
+
+After local document Read and Close succeed, the source rereads the selected
+Version's entity Properties, including Epoch and ContentType, and compares
+them with the values obtained before file access. Changed Properties report
+`inconsistent_snapshot` instead of returning bytes with outdated metadata.
+Default selection also rechecks Resource Meta; an exact Version read does not
+depend on later changes to the default. Cancellation during Close or either
+recheck prevents a document result. File and recheck failures retain their
+original outcomes. These observations do not establish reliable Size,
+an immutable revision pin or a Registry-wide transaction; generic
+`ReadFileAsync` remains a bounded byte read.
+
+`OpcUaRegistryWriter` writes scalar Properties; calls create,
 get-or-create, delete and attribute Methods; and replaces model-declared
 Resource documents through FileTransfer. It supports both entity `Labels` and
 Resource Meta `MetaLabels`. Document writes are bounded, start at position

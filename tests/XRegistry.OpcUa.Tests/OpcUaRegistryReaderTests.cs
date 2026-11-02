@@ -1707,7 +1707,9 @@ public class OpcUaRegistryReaderTests
     }
 
     [Test]
-    public async Task FederationDocumentReadReturnsExactLocalVersionBytes()
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task FederationDocumentReadReturnsExactLocalVersionBytes(bool exact)
     {
         const string model =
             """{"groups":{"teams":{"singular":"team","resources":{"schemas":{"singular":"schema","hasdocument":true}}}}}""";
@@ -1719,7 +1721,7 @@ public class OpcUaRegistryReaderTests
         var source = await OpenSource(session);
 
         var result = await source.ReadAsync(new(FederationOperation.Document,
-            "/teams/team-a/schemas/schema-a"));
+            exact ? "/teams/team-a/schemas/schema-a/versions/v1" : "/teams/team-a/schemas/schema-a"));
 
         await Assert.That(result.SelectedXid)
             .IsEqualTo("/teams/team-a/schemas/schema-a/versions/v1");
@@ -1729,6 +1731,232 @@ public class OpcUaRegistryReaderTests
         var actual = new byte[expected.Length];
         await stream.ReadExactlyAsync(actual);
         await Assert.That(actual).IsEquivalentTo(expected);
+        await Assert.That(NodeIdTrace(session.ClosedFiles)).IsEqualTo("Model|Capabilities|schema-a-default-v1");
+        await Assert.That(session.JsonValueReads.Count(node => node.IdentifierAsString == "version:Epoch"))
+            .IsEqualTo(4);
+    }
+
+    [Test]
+    [Arguments(false, "Epoch")]
+    [Arguments(true, "Epoch")]
+    [Arguments(false, "Name")]
+    [Arguments(true, "Name")]
+    [Arguments(false, "ContentType")]
+    [Arguments(true, "ContentType")]
+    [Arguments(false, "Format")]
+    [Arguments(true, "Format")]
+    [Arguments(false, "ModifiedAt")]
+    [Arguments(true, "ModifiedAt")]
+    public async Task FederationDocumentReadRejectsSelectedVersionChangesBeforeReturningBytes(
+        bool exact, string property)
+    {
+        foreach (var phase in new[] { "chunk", "eof", "close" })
+        {
+            var session = SourceSession();
+            ConfigureResourceAddressSpace(session);
+            session.BrowsePages[GroupNode] = new([GroupPropertiesPage(), ResourceReferencePage()]);
+            session.Chunks.AddRange([new byte[] { 1, 2 }, Array.Empty<byte>()]);
+            var source = await OpenSource(session);
+            var changed = property switch
+            {
+                "Epoch" => Value("5", BuiltInType.UInt32),
+                "Name" => Value("\"updated name\"", BuiltInType.String),
+                "ContentType" => Value("\"application/octet-stream\"", BuiltInType.String),
+                "Format" => Value("\"binary\"", BuiltInType.String),
+                _ => Value("\"2026-01-02T00:00:00Z\"", BuiltInType.DateTime)
+            };
+            var reads = 0;
+            session.AfterRead = () =>
+            {
+                reads++;
+                if (phase == "chunk" && reads == 1 || phase == "eof" && reads == 2)
+                {
+                    session.JsonValues["version:" + property] = changed;
+                }
+            };
+            session.AfterClose = () =>
+            {
+                if (phase == "close")
+                {
+                    session.JsonValues["version:" + property] = changed;
+                }
+            };
+
+            var failure = await Assert.ThrowsAsync<FederationException>(async () =>
+                await source.ReadAsync(new(FederationOperation.Document, exact
+                    ? "/teams/team-a/schemas/schema-a/versions/v1" : "/teams/team-a/schemas/schema-a")));
+
+            await Assert.That(failure!.Code).IsEqualTo(FederationErrorCode.InconsistentSnapshot);
+            await Assert.That(failure.Message).IsEqualTo("The selected Version changed while reading its document.");
+            await Assert.That(reads).IsEqualTo(2);
+            await Assert.That(NodeIdTrace(session.ClosedFiles)).IsEqualTo("Model|Capabilities|schema-a-default-v1");
+            await Assert.That(session.CloseToken.CanBeCanceled).IsFalse();
+        }
+    }
+
+    [Test]
+    [Arguments(false, "MetaEpoch")]
+    [Arguments(true, "MetaEpoch")]
+    [Arguments(false, "VersionId")]
+    [Arguments(true, "VersionId")]
+    public async Task FederationDocumentReadRechecksDefaultMetaOnlyForDefaultSelection(bool exact, string property)
+    {
+        var session = SourceSession();
+        ConfigureResourceAddressSpace(session);
+        session.BrowsePages[GroupNode] = new([GroupPropertiesPage(), ResourceReferencePage()]);
+        session.Chunks.AddRange([new byte[] { 1, 2 }, Array.Empty<byte>()]);
+        var source = await OpenSource(session);
+        session.AfterClose = () => session.JsonValues["logical:" + property] = property == "MetaEpoch"
+            ? Value("4", BuiltInType.UInt32) : Value("\"v2\"", BuiltInType.String);
+
+        if (exact)
+        {
+            var result = await source.ReadAsync(new(FederationOperation.Document,
+                "/teams/team-a/schemas/schema-a/versions/v1"));
+            await Assert.That(result.SelectedXid).IsEqualTo("/teams/team-a/schemas/schema-a/versions/v1");
+            await Assert.That(result.Document!.Length).IsEqualTo(2);
+        }
+        else
+        {
+            var failure = await Assert.ThrowsAsync<FederationException>(async () =>
+                await source.ReadAsync(new(FederationOperation.Document, "/teams/team-a/schemas/schema-a")));
+            await Assert.That(failure!.Code).IsEqualTo(FederationErrorCode.InconsistentSnapshot);
+            await Assert.That(failure.Message).IsEqualTo(
+                "Resource Meta changed while selecting and reading the default Version document.");
+        }
+        await Assert.That(NodeIdTrace(session.ClosedFiles)).IsEqualTo("Model|Capabilities|schema-a-default-v1");
+    }
+
+    [Test]
+    [Arguments(false, false)]
+    [Arguments(true, false)]
+    [Arguments(false, true)]
+    [Arguments(true, true)]
+    public async Task FederationDocumentReadPreservesVersionRecheckFailureOrCancellation(bool exact, bool cancelled)
+    {
+        var session = SourceSession();
+        ConfigureResourceAddressSpace(session);
+        session.BrowsePages[GroupNode] = new([GroupPropertiesPage(), ResourceReferencePage()]);
+        session.Chunks.AddRange([new byte[] { 1, 2 }, Array.Empty<byte>()]);
+        var source = await OpenSource(session);
+        using var cancellation = new CancellationTokenSource();
+        var native = new ServiceResultException(StatusCodes.BadNoCommunication);
+        var failure = new FederationException(FederationErrorCode.Unavailable, "Version recheck failed.",
+            innerException: native);
+        var attempted = false;
+        session.AfterClose = () => session.BeforeJsonRead = node =>
+        {
+            if (node.IdentifierAsString == "version:Epoch")
+            {
+                attempted = true;
+                if (cancelled)
+                {
+                    cancellation.Cancel();
+                    throw new OperationCanceledException(cancellation.Token);
+                }
+                throw failure;
+            }
+        };
+        var request = new FederationReadRequest(FederationOperation.Document, exact
+            ? "/teams/team-a/schemas/schema-a/versions/v1" : "/teams/team-a/schemas/schema-a");
+        if (cancelled)
+        {
+            var error = await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+                await source.ReadAsync(request, cancellation.Token));
+            await Assert.That(error!.CancellationToken).IsEqualTo(cancellation.Token);
+        }
+        else
+        {
+            var error = await Assert.ThrowsAsync<FederationException>(async () =>
+                await source.ReadAsync(request, cancellation.Token));
+            await Assert.That(ReferenceEquals(error, failure)).IsTrue();
+            await Assert.That(ReferenceEquals(error!.InnerException, native)).IsTrue();
+        }
+        await Assert.That(attempted).IsTrue();
+        await Assert.That(NodeIdTrace(session.ClosedFiles)).IsEqualTo("Model|Capabilities|schema-a-default-v1");
+        await Assert.That(session.CloseToken.CanBeCanceled).IsFalse();
+    }
+
+    [Test]
+    [Arguments(false, "close")]
+    [Arguments(true, "close")]
+    [Arguments(false, "version")]
+    [Arguments(true, "version")]
+    [Arguments(false, "meta")]
+    public async Task FederationDocumentReadDoesNotReturnBytesAfterCancellationDuringCaptureRechecks(
+        bool exact, string phase)
+    {
+        var session = SourceSession();
+        ConfigureResourceAddressSpace(session);
+        session.BrowsePages[GroupNode] = new([GroupPropertiesPage(), ResourceReferencePage()]);
+        session.Chunks.AddRange([new byte[] { 1, 2 }, Array.Empty<byte>()]);
+        var source = await OpenSource(session);
+        using var cancellation = new CancellationTokenSource();
+        session.AfterClose = () =>
+        {
+            if (phase == "close")
+            {
+                cancellation.Cancel();
+            }
+            else
+            {
+                session.BeforeJsonRead = node =>
+                {
+                    if (node.IdentifierAsString == (phase == "version" ? "version:ContentType" : "logical:MetaEpoch"))
+                    {
+                        cancellation.Cancel();
+                    }
+                };
+            }
+        };
+
+        var error = await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+            await source.ReadAsync(new(FederationOperation.Document, exact
+                ? "/teams/team-a/schemas/schema-a/versions/v1" : "/teams/team-a/schemas/schema-a"),
+                cancellation.Token));
+
+        await Assert.That(error!.CancellationToken).IsEqualTo(cancellation.Token);
+        await Assert.That(NodeIdTrace(session.ClosedFiles)).IsEqualTo("Model|Capabilities|schema-a-default-v1");
+        await Assert.That(session.CloseToken.CanBeCanceled).IsFalse();
+        if (phase == "close")
+        {
+            await Assert.That(session.JsonValueReads.Count(node => node.IdentifierAsString == "version:Epoch"))
+                .IsEqualTo(3);
+        }
+    }
+
+    [Test]
+    [Arguments(false, false)]
+    [Arguments(true, false)]
+    [Arguments(false, true)]
+    [Arguments(true, true)]
+    public async Task FederationDocumentReadDoesNotMaskFileReadOrCloseFailureWithVersionRecheck(
+        bool exact, bool closeFailure)
+    {
+        var session = SourceSession();
+        ConfigureResourceAddressSpace(session);
+        session.BrowsePages[GroupNode] = new([GroupPropertiesPage(), ResourceReferencePage()]);
+        session.Chunks.AddRange([new byte[] { 1, 2 }, Array.Empty<byte>()]);
+        var source = await OpenSource(session);
+        var original = new FederationException(FederationErrorCode.Unavailable, "File operation failed.");
+        if (closeFailure)
+        {
+            session.CloseFailure = original;
+        }
+        else
+        {
+            session.ReadFailure = original;
+        }
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await source.ReadAsync(new(FederationOperation.Document, exact
+                ? "/teams/team-a/schemas/schema-a/versions/v1" : "/teams/team-a/schemas/schema-a")));
+
+        await Assert.That(ReferenceEquals(error, original)).IsTrue();
+        await Assert.That(session.JsonValueReads.Count(node => node.IdentifierAsString == "version:Epoch"))
+            .IsEqualTo(3);
+        await Assert.That(NodeIdTrace(session.ClosedFiles)).IsEqualTo("Model|Capabilities|schema-a-default-v1");
+        await Assert.That(session.CloseToken.CanBeCanceled).IsFalse();
     }
 
     [Test]
@@ -3771,7 +3999,7 @@ public class OpcUaRegistryReaderTests
         public IReadOnlyList<string> NamespaceArray { get; init; } =
             ["http://opcfoundation.org/UA/", "urn:xregistry"];
         public Dictionary<string, IReadOnlyList<Variant>> MethodOutputs { get; } = new(StringComparer.Ordinal);
-        public Exception? ReadFailure { get; init; }
+        public Exception? ReadFailure { get; set; }
         public Exception? WriteFailure { get; init; }
         public Exception? WriteValueFailure { get; init; }
         public Exception? MethodFailure { get; init; }
@@ -3782,7 +4010,9 @@ public class OpcUaRegistryReaderTests
         public bool IsRegistry { get; init; } = true;
         public bool AdvanceMetadataRevisionOnOpen { get; set; }
         public Action? AfterOpen { get; set; }
-        public Action? AfterRead { get; init; }
+        public Action? AfterRead { get; set; }
+        public Action<NodeId>? BeforeJsonRead { get; set; }
+        public List<NodeId> JsonValueReads { get; } = [];
         public Action? AfterPosition { get; set; }
         public Action? AfterWrite { get; set; }
         public Action? AfterClose { get; set; }
@@ -3949,6 +4179,8 @@ public class OpcUaRegistryReaderTests
             new(StringValues.TryGetValue(variable.IdentifierAsString, out var value) ? value : SpecVersion);
         public ValueTask<OpcUaJsonValue> ReadJsonValueAsync(NodeId variable, CancellationToken cancellationToken)
         {
+            JsonValueReads.Add(variable);
+            BeforeJsonRead?.Invoke(variable);
             if (Opened > Closed)
             {
                 PropertyReadsWhileFileOpen.Add((variable.IdentifierAsString, LastOpenedFile));
