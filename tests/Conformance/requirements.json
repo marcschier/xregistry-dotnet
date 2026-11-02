@@ -135975,9 +135975,11 @@
       ],
       "text": "A moving channel endpoint MAY redirect to that snapshot-specific root. If it serves a response directly, navigation, pagination and the context link MUST remain bound to the selected snapshot. A service unable to supply this guarantee MUST report live behavior, not publication conformance. The extension does not change ordinary non-publication HTTP endpoints.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The repository exposes a projection for an already opened snapshot, not a moving channel endpoint that redirects or serves a newly selected view. It therefore does not implement this optional endpoint behavior or its navigation/page binding contract.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -136006,9 +136008,12 @@
       ],
       "text": "A pin-aware consumer MUST obtain and validate the open record and manifest before claiming a pinned result. In an HTTP projection, snapshot-specific API `self` and navigation URLs MUST be retrievable Core URLs. Native projections use their binding's addressing and selected context. Source identities remain in the manifest associations. Contexts are not inferred from equal XIDs or root epochs.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "PublicationReadClient validates the selected channel Meta, manifest and exact descriptors, and OpenRecordAsync reopens pinned references without rereading the channel. The HTTP projection is per snapshot, but the caller supplies the backend; the mapper cannot prove that its self, navigation and pagination URLs identify the same captured Registry view.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -136037,9 +136042,11 @@
       ],
       "text": "Export remains a binding operation over the selected view. For HTTP, Core [`GET /export`](../../core/http.md#get-export) remains the [document-view](../../core/spec.md#doc-flag) and inlining operation. On a publication root it MUST serialize only the already selected snapshot. Native bindings use their own export operations; this extension does not require them to issue HTTP requests.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Core HTTP owns GET /export and its document-view behavior. MapPublicationSnapshot requires a read-only backend, but backend construction from the manifest Registry bytes and matching model remains the caller\u2019s responsibility; no integration test proves export is bound to that captured view.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -136068,9 +136075,13 @@
       ],
       "text": "A publisher MAY also expose the exact captured Registry JSON Version document. API serialization and exported JSON can have different bytes from the stored Registry descriptor while representing the same captured graph. Only the descriptor representation is checked with that descriptor's digest.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "PublicationOpenedSnapshot exposes the exact captured Registry bytes to a reader. No HTTP publisher endpoint exposes the captured Registry JSON Version document separately from Core API serialization; the draft states this as an optional capability.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -136139,13 +136150,13 @@
       "text": "Paths use `/` between nonempty segments of ASCII letters, digits, underscores and hyphens, and end in a file name with one extension. Absolute paths, `.`/`..`, backslashes and percent encodings are prohibited. Readers MUST enforce resolved containment, including symbolic links, and apply byte and traversal limits before reading.",
       "review": {
         "status": "reviewed",
-        "note": "Package parsing enforces the portable ASCII path grammar, and replay checks resolved containment, symbolic links, object counts, traversal depth, individual bytes and aggregate bytes. Caller JSON limits now remain in effect for the captured manifest, including immediately adjacent numeric boundaries and relaxed exponent budgets, without a second parse under defaults. Concurrent path replacement between containment checking and file opening is not yet guarded or tested, so the complete containment obligation remains pending.",
+        "note": "Package parsing enforces the portable ASCII path grammar and replay opens each path component relative to retained directory handles without following symbolic links or reparse points. It also checks object counts, traversal depth, individual bytes and aggregate bytes; caller JSON limits remain in effect for the captured manifest. Tests reject a link inserted after the package root is opened and exercise path and byte-limit boundaries. Linux behavior is implemented but has no native evidence in this ledger.",
         "roles": [
           "client"
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "PackageRejectsTraversalAndDuplicateEquivalentReferences",
           "PackageRejectsSymbolicLinksThatResolveOutsideItsDirectory",
@@ -136330,9 +136341,12 @@
       ],
       "text": "A publication consumer MUST verify that any alternate Registry API or package represents the model, metadata and byte associations fixed by the manifest. An unchecked assertion that two endpoints share a Registry ID is insufficient. Binding-specific Git commits, OCI digests and Snapshot IDs remain distinct. A binding without a checked mapping to the manifest MUST NOT claim that ID.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The package reader checks mapped bytes against manifest descriptors, but it does not validate the full Core model, metadata identity or document-association graph of an alternate Registry API. The snapshot projection likewise relies on caller-supplied backend provenance.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -136399,9 +136413,11 @@
       ],
       "text": "Federation MAY discover publication roots through existing HTTP advertisements, or serve checked packages through its other bindings. No new advertisement parameter is added. Existing bindings retain their own format and version rules. A publication reader can use the manifest and Registry descriptors directly without pretending to implement a native package binding.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The HTTP snapshot projection serves a context relation, but this repository has no Publication-root discovery, advertisement or Federation binding integration. No new advertisement parameter or native Publication layout is implemented.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -136430,9 +136446,13 @@
       ],
       "text": "When several sources form a view, each selected immutable source context, the interpreted view model and the exact composition policy MUST be captured to claim reproducible composition. The `sources` array records each source's snapshot and selected Registry access context. Policy and model records use checked extension descriptors. Their semantics MUST be supported by the producer or consumer that reconstructs the composition. A materialized producer-resolved snapshot can instead be consumed directly under its own complete Registry descriptor.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Open records preserve the supplied sources array, while OpenRecordAsync reads only the top-level pinned manifest and Registry. The store emits no composed sources or composition policy, and it cannot verify the model or source contexts used to build a view.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -136461,9 +136481,12 @@
       ],
       "text": "Independently pinned sources do not establish one simultaneous capture. Federation precedence selects whole Resources, not compatible Versions or substitute channel heads. Source failures MUST retain Federation's no-silent-fallback behavior. Publication writes remain outside Federation.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The generic reader does not reconstruct or compose independent source snapshots, so it makes no simultaneous-capture claim. Federation precedence, whole-Resource selection and failure behavior remain outside the Publication store and reader.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -136493,9 +136516,13 @@
       ],
       "text": "Generic completeness covers declared xRegistry content. It does not cover arbitrary links embedded in that content. A domain profile MAY define closure extensions that bind source Version and reference locations to exact target revisions. It MUST identify the recognized reference kinds, source bases, target identities, mandatory validation and handling of cycles and external dependencies.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Generic completeness validates declared Registry, document and extension descriptors; it does not traverse arbitrary embedded links. A domain closure profile is not implemented, and the W25 source-classification and projection-vocabulary decisions remain unresolved.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -136524,9 +136551,12 @@
       ],
       "text": "For a profile that defines a closure extension, the producer MUST identify the entry documents from which the closure is evaluated. It MUST determine references from those documents and their transitive dependencies; the list of bindings alone is not evidence that the closure is complete. Each external reference occurrence in that closure MUST have exactly one binding to an exact target Version. A binding MUST identify its source Version and reference location using the profile's defined rules.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "No closure profile identifies entry documents or derives their transitive references. The W25 decisions about source classification, occurrence/operator representation and projection source mapping are prerequisites; no semantics are inferred by the generic parser.",
+        "roles": [
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -136556,9 +136586,12 @@
       ],
       "text": "Each entry, source Version and target Version MUST be represented by a document association in the captured Registry view. Bindings MUST be unique under the profile's binding key, MUST match the source bytes and MUST cover the complete reachable closure from the entries. A consumer MUST reject missing, duplicate, inconsistent or unreachable bindings and MUST NOT replace a bound target with a live or newer Version. The profile MUST define how a consumer determines that a target satisfies the reference and the caller's acceptance requirements.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The manifest parser validates declared document associations, but the repository has no profile-defined binding set that maps every closure entry and source/target Version or proves complete reachability. This depends on the unresolved W25 closure contract.",
+        "roles": [
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -136588,9 +136621,13 @@
       ],
       "text": "Each binding's target MUST identify one exact Version XID in the captured Registry view. The captured Registry model determines that Version's Resource kind; a consumer MUST NOT infer the kind from the XID text or the binding's operator alone. The domain profile MUST define how the source occurrence's identity and expected kind match the target. If a consumer cannot establish that match from the captured content and the profile's rules, it MUST reject the binding rather than resolve the reference against a live Registry.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact Version descriptors are selected and checked, but no closure binding identifies target occurrences or maps them through captured Registry metadata to a Resource kind. This remains blocked on the W25 target-mapping and projection-vocabulary decisions.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -136619,9 +136656,12 @@
       ],
       "text": "Consumers requesting such a profile MUST reject absent or unsupported closure data. Exact selection and compatibility validation are separate operations. A snapshot fixes what to evaluate. It does not waive an authored floor, compatibility selector or caller acceptance policy.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The generic reader rejects every required extension it cannot interpret before reading captured Registry or domain objects. It has no caller profile request or compatibility evaluator, so absent profile-specific closure and authored-floor checks are not implemented.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -136652,9 +136692,13 @@
       ],
       "text": "One document revision MAY appear in several snapshots and channels. A channel name such as `stable` or `preview` does not establish a compatibility class. When a selected channel head is incompatible with a constrained request, that request MUST fail. Readers MUST NOT search older snapshots for a compatible result. Raw exact retrieval remains distinct from validated consumption.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The store permits immutable document Versions to appear in multiple snapshots and does not infer a compatibility class from channel names. It selects exact heads only; profile compatibility checks for constrained channel requests are not implemented and remain dependent on the W27 admission contract.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -136683,9 +136727,13 @@
       ],
       "text": "- **Retention and deletion.** Retain objects reachable from current heads and retained snapshots. Emergency revocation or deletion can make pins unavailable and MUST be reported explicitly.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The store retains published objects and does not implement garbage collection or emergency deletion. Readers report missing or invalid required bytes rather than substituting another object, but deployment retention, revocation and deletion-history policy are not implemented here.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -136753,9 +136801,12 @@
       ],
       "text": "Access authorization and retention are deployment policy. Integrity does not grant access or authenticate a publisher. Readers MUST apply Federation's destination, credential, traversal and byte-limit policies. Model or schema validation alone cannot authorize publication.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The HTTP snapshot context endpoint uses Core read authorization and the generic reader validates endpoints and byte limits, but destination authorization, credentials and traversal budgets are not integrated with Federation policy. Integrity checks do not authenticate a publisher.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
