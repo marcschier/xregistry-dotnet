@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace XRegistry.Validation;
 
@@ -363,12 +364,10 @@ public static partial class ApiOperationDocumentResolver
                         "Swagger host and basePath declarations must be strings.", "$/" + field);
                 }
                 var text = address.GetString()!;
-                if (text.AsSpan().IndexOfAny('{', '}') >= 0 ||
-                    field == "basePath" && !text.StartsWith('/') ||
-                    field == "host" && text.AsSpan().IndexOfAny("/\\?#@".AsSpan()) >= 0)
+                if (field == "basePath" ? !SwaggerBasePath().IsMatch(text) : !IsSwaggerHost(text))
                 {
                     return Failure(ApiOperationResolutionStatus.Invalid, "document.swagger_endpoint",
-                        "Swagger host must contain only a host and optional port; basePath must start with '/'; neither supports templates.",
+                        "Swagger host must contain a URI host and optional decimal port; basePath must be a slash-prefixed URI path without templates.",
                         "$/" + field);
                 }
             }
@@ -405,6 +404,34 @@ public static partial class ApiOperationDocumentResolver
         }
         return null;
     }
+
+    private static bool IsSwaggerHost(string text)
+    {
+        if (!text.StartsWith('[')) { return SwaggerRegisteredHost().IsMatch(text); }
+        var end = text.IndexOf(']');
+        if (end < 0 || end + 1 < text.Length &&
+            (text[end + 1] != ':' || text.AsSpan(end + 2).ContainsAnyExcept("0123456789".AsSpan())))
+        {
+            return false;
+        }
+        var literal = text.AsSpan(1, end - 1);
+        if (SwaggerFutureIpLiteral().IsMatch(literal)) { return true; }
+        return !literal.ContainsAnyExcept("0123456789ABCDEFabcdef:.".AsSpan()) &&
+            System.Net.IPAddress.TryParse(literal, out var address) &&
+            address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6;
+    }
+
+    [GeneratedRegex(@"\A(?:[A-Za-z0-9._~!$&'()*+,;=-]|%[A-Fa-f0-9]{2})+(?::[0-9]*)?\z",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
+    private static partial Regex SwaggerRegisteredHost();
+
+    [GeneratedRegex(@"\A[vV][A-Fa-f0-9]+\.[A-Za-z0-9._~!$&'()*+,;=:-]+\z",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
+    private static partial Regex SwaggerFutureIpLiteral();
+
+    [GeneratedRegex(@"\A/(?:[A-Za-z0-9._~!$&'()*+,;=:@/-]|%[A-Fa-f0-9]{2})*\z",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking)]
+    private static partial Regex SwaggerBasePath();
 
     private static ApiOperationResolutionResult? ValidateHttpRootTags(JsonElement root, CancellationToken cancellationToken)
     {

@@ -578,13 +578,20 @@ This does not check media-type registration, application support or full RFC
 qualification.
 Swagger root `host` and `basePath` declarations must be strings and cannot
 contain unescaped template braces. A present `basePath` must start with `/`.
-The `host` check rejects scheme/path separators, user information, query and
-fragment delimiters; ports and bracketed IP addresses remain authored data.
+The `host` check accepts nonempty RFC 3986 registered names and bracketed IPv6
+or IPvFuture literals, followed by an optional decimal port. It rejects
+scheme/path separators, user information, query and fragment delimiters,
+malformed percent escapes and unencoded non-ASCII characters. Port syntax does
+not impose a transport-specific range: empty ports and values above 65,535
+remain permitted. Base paths admit URI path characters and valid percent
+escapes, without query or fragment components; encoded braces remain data.
 These checks precede selection and dependency acquisition. Selection does not
 construct an endpoint, normalize path segments or infer omitted deployment
 fields. Operation-level fields and retrieved Path Item fragments do not inherit
 these root-only checks, and OpenAPI does not inherit Swagger deployment fields.
-Complete host/port grammar and base-path URI syntax remain unverified.
+Scoped IPv6 zone identifiers are outside this RFC 3986 grammar and are rejected.
+DNS registration, percent-encoded UTF-8 semantics, deployment reachability and
+complete RFC qualification remain unverified.
 Named operation lookup checks uniqueness of every encountered `operationId`,
 not only the requested name. Repeated unrelated IDs report `Invalid` rather
 than returning an earlier match or `NotFound`; repeated requested IDs retain
