@@ -140621,6 +140621,7 @@
           "SdkServiceFailureMapsOutcomeAndRetainsOriginalException",
           "SdkCancellationRemainsCancellationInsteadOfNativeFailure",
           "BrowsePageBudgetRetainsReleaseFailureOnLimitError",
+          "InternalBrowsePageBudgetRetainsReleaseFailureOnLimitError",
           "DiscoveryMapsServiceFailureAndRetainsOriginalException",
           "DiscoveryRetainsFailedBrowseAndEveryContinuationCleanupDiagnostic",
           "DiscoveryRejectsNonGoodServiceDespiteGoodOperation"

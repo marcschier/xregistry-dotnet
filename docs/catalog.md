@@ -116,6 +116,10 @@ page succeeds. If that page still has a continuation, the reader reports
 `limit_exceeded` before requesting another page and attempts to release the
 outstanding continuation. A release failure remains attached to the limit
 error. This budget is separate from the returned-reference limit.
+`OpcUaSessionAdapter` applies its own `maxBrowsePages` budget, also defaulting
+to 10,000, to internal type, encoding and Method discovery. These internal
+enumerations do not pass through the reader's budget. They count empty pages,
+permit exact-limit completion and retain release failures on the limit error.
 
 Root admission requires one ObjectType TypeDefinition and follows only that
 definition's ObjectType supertypes. Competing definitions or supertypes,

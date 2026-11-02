@@ -672,13 +672,92 @@ public class OpcUaSessionAdapterTests
             async () => await adapter.MapExternalNodeIdAsync(expandedNodeId, CancellationToken.None));
     }
 
-    private static (OpcUaSessionAdapter Adapter, SessionProxy Proxy) CreateAdapter()
+    [Test]
+    [Arguments(1)]
+    [Arguments(2)]
+    [Arguments(3)]
+    public async Task InternalBrowsePageBudgetRejectsBeforeRequestingExcessPage(int limit)
+    {
+        var (adapter, proxy) = CreateAdapter(maxBrowsePages: limit);
+        proxy.BrowseResultFactory = _ => new BrowseResult
+        {
+            ContinuationPoint = new ByteString(new byte[] { 1 })
+        };
+        proxy.NextBrowseContinuation = [1];
+        proxy.ContinuedPagesRemaining = limit - 1;
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.IsRegistryNodeAsync(new NodeId("root", 1), CancellationToken.None));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        await Assert.That(error.Message).IsEqualTo("The OPC UA Browse result exceeds the page budget.");
+        await Assert.That(proxy.NextBrowseCount).IsEqualTo(limit - 1);
+        await Assert.That(proxy.ReleasedContinuations.Single()).IsEquivalentTo(new byte[] { 1 });
+    }
+
+    [Test]
+    [Arguments(1)]
+    [Arguments(2)]
+    [Arguments(3)]
+    public async Task InternalBrowsePageBudgetPermitsExactLimitCompletion(int limit)
+    {
+        var (adapter, proxy) = CreateAdapter(maxBrowsePages: limit);
+        proxy.BrowseResultFactory = _ => new BrowseResult
+        {
+            ContinuationPoint = limit == 1 ? default : new ByteString(new byte[] { 1 })
+        };
+        proxy.NextBrowseContinuation = [1];
+        proxy.ContinuedPagesRemaining = limit - 2;
+
+        var found = await adapter.IsRegistryNodeAsync(new NodeId("root", 1), CancellationToken.None);
+
+        await Assert.That(found).IsFalse();
+        await Assert.That(proxy.NextBrowseCount).IsEqualTo(limit - 1);
+        await Assert.That(proxy.ReleasedContinuations.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(0)]
+    [Arguments(-1)]
+    public async Task InternalBrowsePageBudgetMustBePositive(int limit)
+    {
+        var error = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () =>
+        {
+            _ = CreateAdapter(maxBrowsePages: limit);
+            await Task.CompletedTask;
+        });
+
+        await Assert.That(error!.ParamName).IsEqualTo("maxBrowsePages");
+    }
+
+    [Test]
+    public async Task InternalBrowsePageBudgetRetainsReleaseFailureOnLimitError()
+    {
+        var (adapter, proxy) = CreateAdapter(maxBrowsePages: 1);
+        proxy.BrowseContinuation = [1];
+        proxy.ReleaseStatus = StatusCodes.BadUserAccessDenied;
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.IsRegistryNodeAsync(new NodeId("root", 1), CancellationToken.None));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        var cleanup = error.Data["OpcUa.ContinuationReleaseFailure"] as FederationException;
+        await Assert.That(cleanup).IsNotNull();
+        await Assert.That(cleanup!.Code).IsEqualTo(FederationErrorCode.PolicyDenied);
+        await Assert.That((cleanup.InnerException as ServiceResultException)!.StatusCode)
+            .IsEqualTo(StatusCodes.BadUserAccessDenied);
+        await Assert.That(proxy.NextBrowseCount).IsEqualTo(0);
+        await Assert.That(proxy.ReleasedContinuations.Single()).IsEquivalentTo(new byte[] { 1 });
+    }
+
+    private static (OpcUaSessionAdapter Adapter, SessionProxy Proxy) CreateAdapter(int maxBrowsePages = 10_000)
     {
         var session = DispatchProxy.Create<ISessionClient, SessionProxy>();
         var proxy = (SessionProxy)(object)session;
         proxy.ServerArray = s_serverUris;
         proxy.NamespaceArray = s_externalNamespaceUris;
-        return (new OpcUaSessionAdapter(session, new NodeId("RegistryType", 1)), proxy);
+        return (new OpcUaSessionAdapter(session, new NodeId("RegistryType", 1),
+            maxBrowsePages: maxBrowsePages), proxy);
     }
 
     public class SessionProxy : DispatchProxy
@@ -703,6 +782,8 @@ public class OpcUaSessionAdapterTests
         public Exception? ServiceFailure { get; set; }
         public bool FailAsynchronously { get; set; }
         public Func<BrowseDescription, BrowseResult>? BrowseResultFactory { get; set; }
+        public int? ContinuedPagesRemaining { get; set; }
+        public int NextBrowseCount { get; private set; }
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
@@ -811,6 +892,19 @@ public class OpcUaSessionAdapterTests
             {
                 ReleasedContinuations.Add(continuations[0].ToArray());
             }
+            else
+            {
+                NextBrowseCount++;
+            }
+            var continuation = NextBrowseContinuation ?? BrowseContinuation;
+            if (!release && ContinuedPagesRemaining is { } remaining)
+            {
+                ContinuedPagesRemaining = remaining - 1;
+                if (remaining <= 0)
+                {
+                    continuation = [];
+                }
+            }
             return new(new BrowseNextResponse
             {
                 ResponseHeader = Header,
@@ -818,7 +912,7 @@ public class OpcUaSessionAdapterTests
                 Results = [new BrowseResult
                 {
                     StatusCode = release ? ReleaseStatus : NextBrowseStatus ?? BrowseStatus,
-                    ContinuationPoint = release ? default : new ByteString(NextBrowseContinuation ?? BrowseContinuation)
+                    ContinuationPoint = release ? default : new ByteString(continuation)
                 }]
             });
         }

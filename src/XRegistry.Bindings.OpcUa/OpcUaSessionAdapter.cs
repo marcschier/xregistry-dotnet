@@ -20,16 +20,20 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
     private readonly ISessionClient session;
     private readonly NodeId registryType;
     private readonly uint maxReferencesPerNode;
+    private readonly int maxBrowsePages;
     private NamespaceTable? namespaceUris;
 
     /// <summary>Creates an adapter; <paramref name="registryType"/> is the server's RegistryType NodeId.</summary>
-    public OpcUaSessionAdapter(ISessionClient session, NodeId registryType, uint maxReferencesPerNode = 1000)
+    public OpcUaSessionAdapter(ISessionClient session, NodeId registryType, uint maxReferencesPerNode = 1000,
+        int maxBrowsePages = 10_000)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentOutOfRangeException.ThrowIfZero(maxReferencesPerNode);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxBrowsePages);
         this.session = session;
         this.registryType = registryType;
         this.maxReferencesPerNode = maxReferencesPerNode;
+        this.maxBrowsePages = maxBrowsePages;
     }
 
     /// <inheritdoc />
@@ -423,6 +427,7 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
             maxReferencesPerNode, [Describe(node, direction, referenceType)], cancellationToken)).ConfigureAwait(false);
         var page = await CheckedBrowseAsync(response.Results, response.DiagnosticInfos,
             response.ResponseHeader).ConfigureAwait(false);
+        var pages = 1;
         while (true)
         {
             var continuation = page.ContinuationPoint.Length == 0 ? null : page.ContinuationPoint.ToArray();
@@ -439,10 +444,16 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
                     return references;
                 }
                 cancellationToken.ThrowIfCancellationRequested();
+                if (pages >= maxBrowsePages)
+                {
+                    throw new FederationException(FederationErrorCode.LimitExceeded,
+                        "The OPC UA Browse result exceeds the page budget.");
+                }
                 var next = await InvokeAsync(() => session.BrowseNextAsync(new RequestHeader(), false,
                     [new ByteString(continuation)], cancellationToken)).ConfigureAwait(false);
                 page = await CheckedBrowseAsync(next.Results, next.DiagnosticInfos,
                     next.ResponseHeader, continuation).ConfigureAwait(false);
+                pages++;
             }
             catch (Exception exception) when (continuation is not null)
             {
