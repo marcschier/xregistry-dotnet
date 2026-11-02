@@ -631,9 +631,16 @@ share the existing cache. Each target receives response-declaration checks, and
 cycles, denied or unavailable dependencies, malformed targets and reference-depth
 limits prevent partial selection. Unused reusable response references remain
 inactive. Selection retains authored reference strings and does not copy resolved
-responses into operations. Format-specific response-presence requirements,
-nested header/media/link validation and response schema evaluation remain
-unverified.
+responses into operations.
+OpenAPI response `content` entries must be Media Type Objects. Present `schema`
+values must be objects, with boolean schemas also permitted in OpenAPI 3.1.
+Present `examples` and `encoding` values must be objects; `example` accepts any
+JSON value but cannot coexist with `examples`, even when its value is null.
+These checks apply to inline responses, unused reusable responses and resolved
+response targets. Selection preserves authored declarations without retrieving
+schema or example addresses. Format-specific response-presence requirements,
+content-key syntax, nested header/example/encoding/link validation and response
+schema evaluation remain unverified.
 Root and reached HTTP operation `externalDocs` values must be objects with a
 string `url` and, when present, a string `description`. An External
 Documentation Object is not a Reference Object: a `$ref` alone cannot replace

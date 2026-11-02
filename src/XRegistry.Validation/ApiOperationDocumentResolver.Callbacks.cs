@@ -394,7 +394,41 @@ public static partial class ApiOperationDocumentResolver
                 return InvalidHttpResponse("A Response Object structured field must be an object.", pointer + "/" + field);
             }
         }
+        if (format != "Swagger/2.0" && response.TryGetProperty("content", out var content))
+        {
+            foreach (var media in content.EnumerateObject())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var path = pointer + "/content/" + Escape(media.Name);
+                var declaration = media.Value;
+                if (declaration.ValueKind != JsonValueKind.Object)
+                {
+                    return InvalidMedia("Response content entries must be Media Type Objects.", path);
+                }
+                if (declaration.TryGetProperty("schema", out var schema) &&
+                    schema.ValueKind != JsonValueKind.Object &&
+                    !(format == "OpenAPI/3.1" && schema.ValueKind is JsonValueKind.True or JsonValueKind.False))
+                {
+                    return InvalidMedia("A media schema must be a Schema Object or, in OpenAPI 3.1, a boolean.", path + "/schema");
+                }
+                foreach (var field in new[] { "examples", "encoding" })
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (declaration.TryGetProperty(field, out var value) && value.ValueKind != JsonValueKind.Object)
+                    {
+                        return InvalidMedia("Media examples and encoding declarations must be objects.", path + "/" + field);
+                    }
+                }
+                if (declaration.TryGetProperty("example", out _) && declaration.TryGetProperty("examples", out _))
+                {
+                    return InvalidMedia("Media example and examples are mutually exclusive.", path + "/examples");
+                }
+            }
+        }
         return null;
+
+        static ApiOperationResolutionResult InvalidMedia(string message, string path) =>
+            Failure(ApiOperationResolutionStatus.Invalid, "document.response_media", message, path);
     }
 
     private static ApiOperationResolutionResult InvalidHttpResponse(string message, string pointer) =>
