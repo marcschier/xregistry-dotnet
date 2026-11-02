@@ -114,6 +114,14 @@ attached to the original cancellation under `OpcUa.FileCloseFailure`.
 When a completed read is followed by a failed Close, an already classified
 federation error retains its original code, diagnostic and cause. An
 unclassified Close exception reports `unavailable`.
+Read lengths are capped by both the configured chunk size and remaining
+capture budget. At the exact byte limit, the reader requests one byte only to
+distinguish EOF from an oversized document; a nonempty response rejects the
+capture with `limit_exceeded`, and that byte is not accepted. Empty documents
+still pass through Open, Read and Close. The adapter rejects nonpositive Read
+lengths before any native operation, and both reader and adapter reject a
+response larger than its request. Read failures still attempt an uncancelled
+Close and retain a cleanup failure on the original error.
 The Session adapter discovers each FileTransfer Method on the selected Object
 and calls its returned NodeId, rather than a standard FileType declaration ID.
 It requires one Method with the requested namespace-zero BrowseName, completes

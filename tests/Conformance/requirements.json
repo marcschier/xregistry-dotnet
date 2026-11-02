@@ -137145,13 +137145,24 @@
       ],
       "text": "4. Continue after a short, nonempty Read. Part 20 permits fewer bytes than requested. An empty ByteString indicates end-of-file. A known, reliable `Size` can also establish the total, but a premature end or a size change MUST invalidate a complete-capture claim. Unknown size requires an end-of-file observation. A successful zero-byte file still has an Open/Read/Close lifecycle.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The selected EOF and Size obligations were reviewed with the complete FileTransfer procedure. ReadFileAsync continues after short chunks and requires an empty chunk before returning captured bytes, including zero-byte documents. Request lengths now respect chunk size and remaining capture capacity; at the exact byte limit a positive one-byte probe distinguishes EOF from excess content without accepting another byte. Both adapter and reader reject chunks larger than their request, and the adapter rejects nonpositive request lengths before native operations. Reader errors retain uncancelled Close behavior and any cleanup failure. Before-limit, exact-limit and excess-content cases verify exact requested lengths; separate cases cover short/empty/native responses and malformed chunks. Reliable Size admission, changes during capture and complete Version/default/epoch consistency evidence remain pending, so this compound requirement is not marked implemented.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "FileReadContinuesPastShortReadsUntilAnEmptyChunkThenCloses",
+          "FileReadRequestsOnlyRemainingBudgetAndProbesExactLimitForEof",
+          "FileReadRejectsChunkLargerThanRequestAndRetainsCloseFailure",
+          "FileReadRespectsChunkCapBeforeRemainingBudgetAndEofProbe",
+          "FileTransferReadRejectsNonpositiveLengthBeforeNativeOperations",
+          "FileTransferReadEnforcesRequestedLengthAndPreservesShortOrEmptyChunks",
+          "OversizedFileFailsWithLimitAndStillCloses",
+          "WriterWritesPropertiesDeleteAndFileDocumentsOnARealServer"
+        ],
         "nativeEvidence": []
       }
     },

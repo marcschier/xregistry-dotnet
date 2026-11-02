@@ -437,6 +437,49 @@ public class OpcUaSessionAdapterTests
     }
 
     [Test]
+    [Arguments(0)]
+    [Arguments(-1)]
+    [Arguments(int.MinValue)]
+    public async Task FileTransferReadRejectsNonpositiveLengthBeforeNativeOperations(int length)
+    {
+        var (adapter, proxy) = CreateAdapter();
+
+        var failure = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () =>
+            await adapter.ReadAsync(new NodeId("File", 1), 7, length, CancellationToken.None));
+
+        await Assert.That(failure!.ParamName).IsEqualTo("length");
+        await Assert.That(proxy.NativeOperationCount).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(0, 1)]
+    [Arguments(1, 1)]
+    [Arguments(2, 1)]
+    [Arguments(2, 2)]
+    [Arguments(2, int.MaxValue)]
+    public async Task FileTransferReadEnforcesRequestedLengthAndPreservesShortOrEmptyChunks(int returned, int length)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        proxy.ReadMethodBytes = Enumerable.Range(0, returned).Select(value => (byte)value).ToArray();
+
+        if (returned > length)
+        {
+            var failure = await Assert.ThrowsAsync<FederationException>(async () =>
+                await adapter.ReadAsync(new NodeId("File", 1), 7, length, CancellationToken.None));
+            await Assert.That(failure!.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+            await Assert.That(failure.Message).Contains("more bytes than requested");
+        }
+        else
+        {
+            var bytes = await adapter.ReadAsync(new NodeId("File", 1), 7, length, CancellationToken.None);
+            await Assert.That(bytes).IsEquivalentTo(proxy.ReadMethodBytes);
+        }
+        var call = proxy.MethodCalls.Single();
+        await Assert.That(call.MethodId).IsEqualTo(new NodeId("Actual.Read", 1));
+        await Assert.That(call.InputArguments[1].TryGetValue(out int requested) && requested == length).IsTrue();
+    }
+
+    [Test]
     [Arguments(MessageSecurityMode.None)]
     [Arguments(MessageSecurityMode.Sign)]
     [Arguments(MessageSecurityMode.Invalid)]
@@ -1859,6 +1902,7 @@ public class OpcUaSessionAdapterTests
         public Action? AfterBrowse { get; set; }
         public Action? AfterBrowseNext { get; set; }
         public Action? AfterCall { get; set; }
+        public byte[] ReadMethodBytes { get; set; } = [1, 2];
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
@@ -1923,7 +1967,7 @@ public class OpcUaSessionAdapterTests
                         {
                             StatusCode = CallStatus,
                             OutputArguments = call.MethodId.IdentifierAsString == "Actual.Read"
-                                ? [new Variant(new ByteString(new byte[] { 1, 2 }))]
+                                ? [new Variant(new ByteString(ReadMethodBytes))]
                                 : [new Variant(7u)],
                             InputArgumentResults = ArgumentResults,
                             InputArgumentDiagnosticInfos = Diagnostics

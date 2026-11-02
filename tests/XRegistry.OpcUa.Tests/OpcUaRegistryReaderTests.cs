@@ -38,6 +38,107 @@ public class OpcUaRegistryReaderTests
     }
 
     [Test]
+    [Arguments(0)]
+    [Arguments(3)]
+    [Arguments(4)]
+    [Arguments(5)]
+    public async Task FileReadRequestsOnlyRemainingBudgetAndProbesExactLimitForEof(int size)
+    {
+        var session = new FakeSession();
+        if (size > 0)
+        {
+            session.Chunks.Add(Enumerable.Range(1, Math.Min(size, 3)).Select(value => (byte)value).ToArray());
+        }
+        if (size >= 4)
+        {
+            session.Chunks.Add([4]);
+        }
+        if (size == 5)
+        {
+            session.Chunks.Add([5]);
+        }
+        session.Chunks.Add([]);
+        var reader = await ValidatedReader(session, maxBytes: 4, chunkSize: 64);
+
+        if (size <= 4)
+        {
+            var bytes = await reader.ReadFileAsync(File);
+            await Assert.That(bytes).IsEquivalentTo(
+                Enumerable.Range(1, size).Select(value => (byte)value).ToArray());
+        }
+        else
+        {
+            var failure = await Assert.ThrowsAsync<FederationException>(async () => await reader.ReadFileAsync(File));
+            await Assert.That(failure!.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+            await Assert.That(session.Chunks.Count).IsEqualTo(1);
+        }
+        var expectedLengths = size switch
+        {
+            0 => new[] { 4 },
+            3 => new[] { 4, 1 },
+            _ => new[] { 4, 1, 1 }
+        };
+        await Assert.That(session.FileReadLengths).IsEquivalentTo(expectedLengths);
+        await Assert.That(session.Opened).IsEqualTo(1);
+        await Assert.That(session.Closed).IsEqualTo(1);
+        await Assert.That(session.CloseToken.CanBeCanceled).IsFalse();
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task FileReadRejectsChunkLargerThanRequestAndRetainsCloseFailure(bool closeFails)
+    {
+        var closeFailure = new IOException("Synthetic Close failure.");
+        var session = new FakeSession
+        {
+            Chunks = { new byte[] { 1, 2, 3 }, Array.Empty<byte>() },
+            CloseFailure = closeFails ? closeFailure : null
+        };
+        var reader = await ValidatedReader(session, maxBytes: 100, chunkSize: 2);
+
+        var failure = await Assert.ThrowsAsync<FederationException>(async () => await reader.ReadFileAsync(File));
+
+        await Assert.That(failure!.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(failure.Message).Contains("more bytes than requested");
+        await Assert.That(session.FileReadLengths.Single()).IsEqualTo(2);
+        await Assert.That(session.Chunks.Count).IsEqualTo(1);
+        await Assert.That(session.Closed).IsEqualTo(1);
+        await Assert.That(session.CloseToken.CanBeCanceled).IsFalse();
+        await Assert.That(failure.Data.Contains("OpcUa.FileCloseFailure")).IsEqualTo(closeFails);
+        if (closeFails)
+        {
+            await Assert.That(ReferenceEquals(failure.Data["OpcUa.FileCloseFailure"], closeFailure)).IsTrue();
+        }
+    }
+
+    [Test]
+    [Arguments(1)]
+    [Arguments(2)]
+    [Arguments(3)]
+    public async Task FileReadRespectsChunkCapBeforeRemainingBudgetAndEofProbe(int chunkSize)
+    {
+        var contents = new byte[] { 1, 2, 3, 4, 5 };
+        var session = new FakeSession();
+        session.Chunks.AddRange(contents.Chunk(chunkSize));
+        session.Chunks.Add([]);
+        var reader = await ValidatedReader(session, maxBytes: contents.Length, chunkSize: chunkSize);
+
+        var bytes = await reader.ReadFileAsync(File);
+
+        await Assert.That(bytes).IsEquivalentTo(contents);
+        var expectedLengths = chunkSize switch
+        {
+            1 => new[] { 1, 1, 1, 1, 1, 1 },
+            2 => new[] { 2, 2, 1, 1 },
+            _ => new[] { 3, 2, 1 }
+        };
+        await Assert.That(session.FileReadLengths).IsEquivalentTo(expectedLengths);
+        await Assert.That(session.Closed).IsEqualTo(1);
+        await Assert.That(session.Chunks.Count).IsEqualTo(0);
+    }
+
+    [Test]
     public async Task CancelledFileReadDoesNotOpenHandle()
     {
         var session = new FakeSession { Chunks = { Array.Empty<byte>() } };
@@ -3345,9 +3446,10 @@ public class OpcUaRegistryReaderTests
             GroupNode, "/teams/team-a", "schemas", "schema-a", ResourceType);
     }
 
-    private static async ValueTask<OpcUaRegistryReader> ValidatedReader(FakeSession session, int maxBytes = 64 * 1024 * 1024)
+    private static async ValueTask<OpcUaRegistryReader> ValidatedReader(FakeSession session,
+        int maxBytes = 64 * 1024 * 1024, int chunkSize = 64 * 1024)
     {
-        var reader = new OpcUaRegistryReader(session, maxBytes);
+        var reader = new OpcUaRegistryReader(session, maxBytes, chunkSize);
         session.Pages.Enqueue(new([SpecVersionRef()]));
         await reader.ReadSpecVersionAsync(File, _ => true);
         return reader;
@@ -3359,8 +3461,9 @@ public class OpcUaRegistryReaderTests
         var reader = new OpcUaRegistryReader(session, maxBytes, chunkSize);
         session.Pages.Enqueue(new([SpecVersionRef()]));
         session.Pages.Enqueue(new([FileRef("Model")]));
-        session.Chunks.Insert(0, System.Text.Encoding.UTF8.GetBytes(model));
-        session.Chunks.Insert(1, Array.Empty<byte>());
+        var modelChunks = System.Text.Encoding.UTF8.GetBytes(model).Chunk(Math.Min(maxBytes, chunkSize)).ToList();
+        modelChunks.Add([]);
+        session.Chunks.InsertRange(0, modelChunks);
         await reader.ReadSpecVersionAsync(File, _ => true);
         _ = await reader.ReadModelDefinitionAsync(File);
         return reader;
@@ -3630,6 +3733,7 @@ public class OpcUaRegistryReaderTests
         public List<NodeId> ClosedFiles { get; } = [];
         public List<(string Property, NodeId File)> PropertyReadsWhileFileOpen { get; } = [];
         public List<(NodeId File, uint Handle)> FileReadHandles { get; } = [];
+        public List<int> FileReadLengths { get; } = [];
         public List<(NodeId File, uint Handle)> FileClosedHandles { get; } = [];
         public uint LastClosedHandle { get; private set; }
         private Dictionary<string, OpcUaJsonValue>? metadataPropertySnapshot;
@@ -3705,6 +3809,7 @@ public class OpcUaRegistryReaderTests
         {
             FileReads++;
             FileReadHandles.Add((file, handle));
+            FileReadLengths.Add(length);
             if (ReadFailure is not null)
             {
                 throw ReadFailure;

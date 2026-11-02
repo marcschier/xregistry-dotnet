@@ -238,11 +238,20 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
     /// <inheritdoc />
     public async ValueTask<byte[]> ReadAsync(NodeId file, uint handle, int length, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(length);
         var output = await CallFileMethodAsync(file, BrowseNames.Read, [new Variant(handle), new Variant(length)],
             mutation: false, cancellationToken).ConfigureAwait(false);
-        return output.Count == 1 && output[0].TryGetValue(out ByteString data)
-            ? data.ToArray()
-            : throw new FederationException(FederationErrorCode.InvalidPackage, "FileType Read returned no data.");
+        if (output.Count != 1 || !output[0].TryGetValue(out ByteString data))
+        {
+            throw new FederationException(FederationErrorCode.InvalidPackage, "FileType Read returned no data.");
+        }
+        if (data.Length > length)
+        {
+            throw new FederationException(FederationErrorCode.InvalidPackage,
+                "The FileType Read returned more bytes than requested.");
+        }
+        return data.ToArray();
     }
 
     /// <inheritdoc />

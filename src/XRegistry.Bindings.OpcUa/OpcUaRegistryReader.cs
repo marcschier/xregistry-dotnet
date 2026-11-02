@@ -216,7 +216,8 @@ public sealed class OpcUaRegistryReader
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var chunk = await session.ReadAsync(file, handle, chunkSize, cancellationToken).ConfigureAwait(false);
+                var length = Math.Min(chunkSize, Math.Max(1, maxBytes - (int)buffer.Length));
+                var chunk = await session.ReadAsync(file, handle, length, cancellationToken).ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
                 if (chunk.Length == 0)
                 {
@@ -226,6 +227,11 @@ public sealed class OpcUaRegistryReader
                 {
                     throw new FederationException(FederationErrorCode.LimitExceeded,
                         "The file exceeds the byte budget.");
+                }
+                if (chunk.Length > length)
+                {
+                    throw new FederationException(FederationErrorCode.InvalidPackage,
+                        "The FileType Read returned more bytes than requested.");
                 }
                 buffer.Write(chunk);
             }
