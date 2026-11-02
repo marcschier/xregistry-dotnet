@@ -11,6 +11,184 @@ namespace XRegistry.Validation.Tests;
 public class ApiOperationReferenceTests
 {
     [Test]
+    public async Task SwaggerResponseExamplesRequireMediaKeysInEffectiveProducesWithoutRewritingValues()
+    {
+        foreach (var (root, local, key, valid) in new (string?, string?, string, bool)[]
+        {
+            (null, null, "application/json", false),
+            ("[]", null, "application/json", false),
+            ("""["application/json"]""", null, "application/json", true),
+            ("""["application/json","text/plain"]""", null, "text/plain", true),
+            ("""["application/json"]""", """["text/plain"]""", "application/json", false),
+            ("""["application/json"]""", """["text/plain"]""", "text/plain", true),
+            ("""["application/json"]""", "[]", "application/json", false),
+            (null, """["application/json"]""", "application/json", true),
+            ("""["Application/JSON"]""", null, "Application/JSON", true),
+            ("""["Application/JSON"]""", null, "application/json", false),
+            ("""["text/plain; charset=utf-8"]""", null, "text/plain; charset=utf-8", true),
+            ("""["text/plain; charset=utf-8"]""", null, "text/plain", false),
+            ("""["application/json"]""", null, "*/*", false),
+            ("""["application/json"]""", null, "bad", false),
+            ("""["application/json"]""", null, "x-example", false)
+        })
+        {
+            var response = new JsonObject { ["description"] = "",
+                ["examples"] = new JsonObject { [key] = JsonNode.Parse("""{"$ref":"https://must-not-load.test/data","x":[null,1]}""") } };
+            var operation = new JsonObject { ["operationId"] = "Target",
+                ["responses"] = new JsonObject { ["200"] = response } };
+            if (local is not null) { operation["produces"] = JsonNode.Parse(local); }
+            var document = new JsonObject { ["swagger"] = "2.0",
+                ["paths"] = new JsonObject { ["/target"] = new JsonObject { ["get"] = operation.DeepClone() } } };
+            if (root is not null) { document["produces"] = JsonNode.Parse(root); }
+            foreach (var selector in new[] { "operations/Target", "/paths/~1target/get" })
+            {
+                var calls = 0;
+                var result = await ApiOperationDocumentResolver.ResolveAsync("Swagger/2.0", "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                    resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+                await Assert.That(calls).IsEqualTo(0);
+                await Assert.That(result.Status).IsEqualTo(valid
+                    ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+                if (valid) { await Assert.That(JsonNode.DeepEquals(operation, JsonNode.Parse(result.Operation.GetRawText()))).IsTrue(); }
+                else
+                {
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.response_example");
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo("$/paths/~1target/get/responses/200/examples/" +
+                        key.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal));
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                }
+            }
+        }
+    }
+
+    [Test]
+    public async Task SwaggerResponseExamplesValidateUnusedKeysButBindReusableResponsesToEachUsingOperation()
+    {
+        foreach (var used in new[] { true, false })
+        {
+            foreach (var valid in new[] { true, false, true })
+            {
+                var key = valid || used ? "application/json" : "not-media";
+                var document = new JsonObject { ["swagger"] = "2.0",
+                    ["responses"] = new JsonObject { ["Shared"] = new JsonObject { ["description"] = "",
+                        ["examples"] = new JsonObject { [key] = null } } },
+                    ["paths"] = JsonNode.Parse("""
+                        {"/first":{"get":{"operationId":"Target","produces":["application/json"]}},
+                        "/second":{"get":{"operationId":"Other","produces":["text/plain"]}}}
+                        """) };
+                if (used)
+                {
+                    foreach (var path in new[] { "/first", "/second" })
+                    {
+                        document["paths"]![path]!["get"]!["responses"] =
+                            JsonNode.Parse("""{"200":{"$ref":"#/responses/Shared"}}""");
+                    }
+                    if (valid) { document["paths"]!["/second"]!["get"]!["produces"] = JsonNode.Parse("""["application/json"]"""); }
+                }
+                foreach (var selector in new[] { "operations/Target", "/paths/~1first/get" })
+                {
+                    var local = used && selector == "/paths/~1first/get";
+                    var result = ApiOperationDocumentResolver.Resolve("Swagger/2.0", "application/json",
+                        System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                        ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector));
+                    await Assert.That(result.Status).IsEqualTo(valid || local
+                        ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+                    if (valid || local) { await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("Target"); }
+                    else
+                    {
+                        await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.response_example");
+                        await Assert.That(result.Diagnostic.Path).IsEqualTo("$/responses/Shared/examples/" +
+                            (used ? "application~1json" : "not-media"));
+                        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                    }
+                }
+            }
+        }
+    }
+
+    [Test]
+    public async Task SwaggerResponseExamplesUseOperationProducesAcrossRetrievedResponsesAndPathItems()
+    {
+        foreach (var remotePath in new[] { true, false })
+        {
+            foreach (var valid in new[] { true, false, true })
+            {
+                var document = new JsonObject { ["swagger"] = "2.0", ["produces"] = JsonNode.Parse("""["application/json"]"""),
+                    ["paths"] = JsonNode.Parse(remotePath
+                        ? """{"/target":{"$ref":"https://allowed.test/path#/P"}}"""
+                        : """{"/target":{"get":{"operationId":"Target","produces":["application/json"],"responses":{"200":{"$ref":"https://allowed.test/response#/R"}}}}}""") };
+                var operation = JsonNode.Parse("""
+                    {"operationId":"Target","produces":["application/json"],"responses":{"200":{"$ref":"response#/R"}}}
+                    """)!.AsObject();
+                if (!valid)
+                {
+                    if (remotePath) { operation["produces"] = new JsonArray(); }
+                    else { document["paths"]!["/target"]!["get"]!["produces"] = new JsonArray(); }
+                }
+                var calls = new List<string>();
+                var result = await ApiOperationDocumentResolver.ResolveAsync("Swagger/2.0", "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+                    resolveReference: (uri, _) =>
+                    {
+                        calls.Add(uri);
+                        var json = uri switch
+                        {
+                            "https://allowed.test/path" => new JsonObject { ["P"] = new JsonObject { ["get"] = operation.DeepClone() },
+                                ["produces"] = JsonNode.Parse("""["text/plain"]""") }.ToJsonString(),
+                            "https://allowed.test/response" => """
+                                {"produces":["text/plain"],"R":{"description":"","examples":{"application/json":{"$ref":"https://must-not-load.test/value"}}}}
+                                """,
+                            _ => throw new UnauthorizedAccessException()
+                        };
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(json));
+                    });
+                await Assert.That(string.Join("|", calls)).IsEqualTo(remotePath
+                    ? "https://allowed.test/path|https://allowed.test/response" : "https://allowed.test/response");
+                await Assert.That(result.Status).IsEqualTo(valid
+                    ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+                if (valid)
+                {
+                    await Assert.That(result.Operation.GetProperty("responses").GetProperty("200").GetProperty("$ref").GetString())
+                        .IsEqualTo(remotePath ? "response#/R" : "https://allowed.test/response#/R");
+                }
+                else
+                {
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.response_example");
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo("$/R/examples/application~1json");
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                }
+            }
+        }
+    }
+
+    [Test]
+    public async Task SwaggerResponseExamplesAllowEmptyMapsAndOpaqueValuesWithoutInventingProduces()
+    {
+        foreach (var json in new[] { "null", "true", "1", "\"$request.body#/id\"", "[]",
+            """{"$ref":"https://must-not-load.test/value"}""" })
+        {
+            foreach (var empty in new[] { true, false })
+            {
+                var response = new JsonObject { ["description"] = "", ["examples"] = empty
+                    ? new JsonObject() : new JsonObject { ["application/json"] = JsonNode.Parse(json) } };
+                var operation = new JsonObject { ["operationId"] = "Target",
+                    ["responses"] = new JsonObject { ["200"] = response } };
+                if (!empty) { operation["produces"] = JsonNode.Parse("""["application/json"]"""); }
+                var document = new JsonObject { ["swagger"] = "2.0",
+                    ["paths"] = new JsonObject { ["/target"] = new JsonObject { ["get"] = operation.DeepClone() } } };
+                var result = await ApiOperationDocumentResolver.ResolveAsync("Swagger/2.0", "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+                    resolveReference: (_, _) => throw new UnauthorizedAccessException());
+                await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+                await Assert.That(JsonNode.DeepEquals(operation, JsonNode.Parse(result.Operation.GetRawText()))).IsTrue();
+            }
+        }
+    }
+
+    [Test]
     public async Task SwaggerScalarEnumsUseDraft4ValueEqualityRatherThanTokenOrFloatingPointEquality()
     {
         foreach (var header in new[] { true, false })

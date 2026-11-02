@@ -757,6 +757,18 @@ Checks reach unused reusable declarations and retrieved targets without
 rewriting authored values. Pattern syntax and runtime constraint evaluation
 remain unverified; contradictory bounds are not rejected merely because they
 describe an unsatisfiable domain.
+Swagger response example keys require concrete media types. For a reached
+operation, each key must occur in the effective `produces` array: the operation
+array replaces the root array, including an empty array that clears inherited
+values. Membership compares authored strings without case or parameter
+normalization. A shared response is checked against each operation that uses
+it, including references to responses or Path Items in other documents; those
+documents do not replace the API root's inherited `produces` declaration.
+Unused reusable responses receive key-syntax checks without inventing an
+operation context. Empty example maps remain valid without `produces`.
+Example values retain arbitrary JSON, including null and reference-looking
+objects, without acquisition or runtime-expression evaluation. Selection
+preserves authored response references and does not insert media declarations.
 Swagger enum values must be unique under Draft4 JSON value equality. Numbers
 compare by exact mathematical value, so `1` and `1.0` are equal even though only
 the first token satisfies an integer declaration. Object member order does not

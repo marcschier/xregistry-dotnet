@@ -449,6 +449,19 @@ public static partial class ApiOperationDocumentResolver
                 if (failure is not null) { return failure; }
             }
         }
+        if (format == "Swagger/2.0" && response.TryGetProperty("examples", out var examples))
+        {
+            foreach (var example in examples.EnumerateObject())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!IsDeclaredMediaType(example.Name))
+                {
+                    return Failure(ApiOperationResolutionStatus.Invalid, "document.response_example",
+                        "A Swagger response example key must be a concrete media type.",
+                        pointer + "/examples/" + Escape(example.Name));
+                }
+            }
+        }
         if (format != "Swagger/2.0" && response.TryGetProperty("links", out var links))
         {
             foreach (var link in links.EnumerateObject())
@@ -1394,6 +1407,9 @@ public static partial class ApiOperationDocumentResolver
             {
                 var enumFailure = ValidateSwaggerResponseEnums(resolution.Target!.Value, resolution.Target.Pointer, references.Budget);
                 if (enumFailure is not null) { return enumFailure; }
+                var exampleFailure = ValidateSwaggerResponseExampleProduces(resolution.Target, operation, pointer, references,
+                    cancellationToken);
+                if (exampleFailure is not null) { return exampleFailure; }
                 continue;
             }
             var response = resolution.Target!;
@@ -1411,6 +1427,37 @@ public static partial class ApiOperationDocumentResolver
             }
             var failure = await ValidateEffectiveOpenApiContentAsync(response, references, cancellationToken).ConfigureAwait(false);
             if (failure is not null) { return failure; }
+        }
+        return null;
+    }
+
+    private static ApiOperationResolutionResult? ValidateSwaggerResponseExampleProduces(
+        ReferenceTarget response, JsonElement operation, string operationPointer, ReferenceContext references,
+        CancellationToken cancellationToken)
+    {
+        if (!response.Value.TryGetProperty("examples", out var examples) || !examples.EnumerateObject().Any()) { return null; }
+        var failure = ValidateSwaggerTransportDeclarations(operation, operationPointer, cancellationToken);
+        if (failure is not null) { return failure; }
+        var produces = operation.TryGetProperty("produces", out var local) ? local :
+            references.Root.Root.TryGetProperty("produces", out var inherited) ? inherited : default;
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        if (produces.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var media in produces.EnumerateArray())
+            {
+                references.Work(operationPointer + "/produces");
+                names.Add(media.GetString()!);
+            }
+        }
+        foreach (var example in examples.EnumerateObject())
+        {
+            var path = response.Pointer + "/examples/" + Escape(example.Name);
+            references.Work(path);
+            if (!names.Contains(example.Name))
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid, "document.response_example",
+                    "A Swagger response example key must be one of the operation's effective produces values.", path);
+            }
         }
         return null;
     }
