@@ -934,6 +934,16 @@ shared acquisition and existing conflict diagnostics rather than combining
 undefined declarations. JSON Pointer tokens are decoded once. Detached and
 reusable targets do not supply a concrete path template, and admission does
 not search for mounts or infer an invocation URL.
+Supported reusable Path Item, webhook and callback operation locations also
+identify their immediate containing Path Item. Admission validates that Path
+Item's metadata, servers and parameter dependencies through the same bounded
+resolver, including nested callback locations. Ancestor maps must be objects;
+an array index cannot substitute for a map entry name. Missing dependencies
+and malformed parent declarations prevent selection with their existing
+diagnostic paths. These locations do not establish concrete URL templates, so
+inherited path parameters receive declaration checks without fabricated
+template correspondence. Detached operations outside supported locations
+retain their existing local checks.
 Linked targets also use the selected entry-document security policy. Explicit
 Security Requirement names must identify schemes in the selected API root,
 not substitute declarations in the document holding the target operation.

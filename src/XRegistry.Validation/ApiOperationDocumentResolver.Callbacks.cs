@@ -1479,9 +1479,10 @@ public static partial class ApiOperationDocumentResolver
         var tokens = target.Pointer == "$" ? [] : target.Pointer[2..].Split('/')
             .Select(static token => token.Replace("~1", "/", StringComparison.Ordinal)
                 .Replace("~0", "~", StringComparison.Ordinal)).ToArray();
+        var supportedLocation = ValidateHttpOperationPointer(references.Format, tokens, out _) is null;
         if (references.Format == "OpenAPI/3.0" && target.Value.TryGetProperty("requestBody", out _))
         {
-            if (ValidateHttpOperationPointer(references.Format, tokens, out _) is not null)
+            if (!supportedLocation)
             {
                 return Failure(ApiOperationResolutionStatus.Indeterminate, "document.link_operation_method",
                     "OpenAPI 3.0 linked request-body admission requires an HTTP method from a supported operation location.",
@@ -1503,17 +1504,31 @@ public static partial class ApiOperationDocumentResolver
         var parameterFailure = await ValidateEffectiveOpenApiParametersAsync(target.Value, target.Document, target.Pointer,
             references, cancellationToken).ConfigureAwait(false);
         if (parameterFailure is not null) { return parameterFailure; }
-        if (tokens.Length == 3 && tokens[0] == "paths" &&
-            ValidateHttpOperationPointer(references.Format, tokens, out _) is null)
+        if (supportedLocation)
         {
             var pathPointer = target.Pointer[..target.Pointer.LastIndexOf('/')];
-            var pathItem = target.Document.Root.GetProperty("paths").GetProperty(tokens[1]);
+            var pathItem = target.Document.Root;
+            var ancestorPointer = "$";
+            foreach (var token in tokens[..^1])
+            {
+                references.Work(ancestorPointer);
+                if (pathItem.ValueKind != JsonValueKind.Object)
+                {
+                    return InvalidTarget("A supported linked operation location requires object-valued ancestors.",
+                        ancestorPointer);
+                }
+                pathItem = pathItem.GetProperty(token);
+                ancestorPointer += "/" + Escape(token);
+            }
             var pathResolution = await ResolvePathItemAsync(pathItem, target.Document, pathPointer, references,
                 new(StringComparer.Ordinal), true, cancellationToken).ConfigureAwait(false);
             if (pathResolution.Failure is not null) { return pathResolution.Failure; }
-            var pathFailure = await ValidateOpenApiPathParameterCorrespondenceAsync(tokens[1],
-                pathResolution.ParameterOwner, target, references, cancellationToken).ConfigureAwait(false);
-            if (pathFailure is not null) { return pathFailure; }
+            if (tokens.Length == 3 && tokens[0] == "paths")
+            {
+                var pathFailure = await ValidateOpenApiPathParameterCorrespondenceAsync(tokens[1],
+                    pathResolution.ParameterOwner, target, references, cancellationToken).ConfigureAwait(false);
+                if (pathFailure is not null) { return pathFailure; }
+            }
         }
         var bodyFailure = await ValidateEffectiveOpenApiRequestBodyAsync(target, httpMethod, references,
             cancellationToken).ConfigureAwait(false);
