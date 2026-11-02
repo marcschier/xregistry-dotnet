@@ -1428,12 +1428,58 @@ public static partial class ApiOperationDocumentResolver
                         references.Work(target.Target.Pointer);
                         references.OperationIdLinks.Add(target.Target);
                     }
+                    else
+                    {
+                        var linkFailure = await ValidateOpenApiLinkOperationRefAsync(target.Target, references,
+                            cancellationToken).ConfigureAwait(false);
+                        if (linkFailure is not null) { return linkFailure; }
+                    }
                 }
             }
             var failure = await ValidateEffectiveOpenApiContentAsync(response, references, cancellationToken).ConfigureAwait(false);
             if (failure is not null) { return failure; }
         }
         return null;
+    }
+
+    private static async ValueTask<ApiOperationResolutionResult?> ValidateOpenApiLinkOperationRefAsync(
+        ReferenceTarget link, ReferenceContext references, CancellationToken cancellationToken)
+    {
+        var resolution = await references.ResolveAsync(link.Document,
+            link.Value.GetProperty("operationRef").GetString()!, link.Pointer + "/operationRef",
+            cancellationToken).ConfigureAwait(false);
+        if (resolution.Failure is not null) { return resolution.Failure; }
+        var target = resolution.Target!;
+        if (target.Value.ValueKind != JsonValueKind.Object)
+        {
+            return InvalidTarget("A Link operationRef must point to an Operation Object.", target.Pointer);
+        }
+        foreach (var field in target.Value.EnumerateObject())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            references.Work(target.Pointer + "/" + Escape(field.Name));
+            if (!field.Name.StartsWith("x-", StringComparison.Ordinal) &&
+                field.Name is not ("tags" or "summary" or "description" or "externalDocs" or "operationId" or
+                    "parameters" or "requestBody" or "responses" or "callbacks" or "deprecated" or "security" or "servers"))
+            {
+                return InvalidTarget("A Link operationRef target must use Operation Object fields or specification extensions.",
+                    target.Pointer + "/" + Escape(field.Name));
+            }
+        }
+        if (references.Format == "OpenAPI/3.0" && !target.Value.TryGetProperty("responses", out _))
+        {
+            return InvalidTarget("An OpenAPI 3.0 linked Operation Object requires responses.", target.Pointer + "/responses");
+        }
+        if (target.Value.TryGetProperty("callbacks", out var callbacks) && callbacks.ValueKind != JsonValueKind.Object)
+        {
+            return InvalidTarget("Linked operation callbacks must be an object.", target.Pointer + "/callbacks");
+        }
+        var metadataFailure = ValidateHttpOperationMetadata(target.Value, target.Pointer, references.Format, null,
+            cancellationToken);
+        return metadataFailure ?? ValidateOpenApiServers(target.Value, target.Pointer, references.Format, cancellationToken);
+
+        static ApiOperationResolutionResult InvalidTarget(string message, string path) =>
+            Failure(ApiOperationResolutionStatus.Invalid, "document.link_operation_ref", message, path);
     }
 
     private static ApiOperationResolutionResult? ValidateSwaggerResponseExampleProduces(

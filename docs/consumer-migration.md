@@ -876,9 +876,25 @@ dependencies through the caller-supplied resolver, using the existing shared
 cache and budgets. Missing, denied or malformed dependencies prevent partial
 selection. Unrelated paths in documents acquired only for Link or response
 declarations do not become operation occurrences. Pointers without reached
-`operationId` links retain local traversal. `operationRef` target resolution and
-runtime-expression evaluation remain unverified; operation selection never
-invokes linked operations.
+`operationId` links retain local traversal.
+Reached `operationRef` links resolve from the containing Link document through
+the caller-supplied resolver and the same acquisition cache and budgets.
+Fragment-only references remain document-local; relative document references
+require an absolute containing-document URI. A reference can select a JSON
+Pointer target or a whole document containing an Operation Object. Non-object
+targets, Reference Objects and fields outside the Operation Object vocabulary
+or `x-` extensions are invalid. OpenAPI 3.0 targets require responses; OpenAPI
+3.1 targets can omit them. Present native metadata, response and parameter
+declarations, callback-map types and servers receive bounded shape checks.
+Acquisition failures report the authored link's `operationRef`; malformed
+targets report the resolved target's path. Selected operations retain their
+authored links and response references.
+Target admission does not recursively follow the target's response links or
+other declaration references, establish an invocation URL for multiply mounted
+Path Items, evaluate schemas or runtime expressions, or invoke the operation.
+OpenAPI 3.0 request-body applicability remains unverified when a target lacks
+HTTP-method context. Unused reusable Link references remain inactive. These
+checks do not qualify the complete linked description.
 Root and reached HTTP operation `externalDocs` values must be objects with a
 string `url` and, when present, a string `description`. An External
 Documentation Object is not a Reference Object: a `$ref` alone cannot replace

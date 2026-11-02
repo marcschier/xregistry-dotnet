@@ -1392,7 +1392,7 @@ public static partial class ApiOperationDocumentResolver
                 {
                     _ = SchemaJson.DecodeFragment(reference[(fragmentAt + 1)..], path, "dependency.pointer", _budget);
                 }
-                if (reference.StartsWith('#'))
+                if (reference.Length == 0 || reference.StartsWith('#'))
                 {
                     if (source.Uri is null)
                     {
