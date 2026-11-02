@@ -136898,13 +136898,23 @@
       ],
       "text": "The owning `GroupType` provides Resource creation and update. For each Resource key, the preferred one-shot operation is `GetOrCreateResource(ResourceId, VersionId, RequestFileOpen)` on `GroupType`. It returns the exact Version NodeId and `AssignedVersionId`, with `Created = false` for an existing Version or `Created = true` for a new one. If `RequestFileOpen = true`, the returned write handle is pinned to that exact Version and MAY be used immediately.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The selected creation contract was read with the operation table and exact-Version ownership rules. Both public resource creation Methods preserve returned NodeId, assigned Version identifier and handle, and GetOrCreate preserves Created. Empty assigned identifiers and substitutions for an explicit requested Version now reject as invalid_package using ordinal comparison. Empty input still permits server assignment. Rejected outputs with an identifiable requested handle trigger uncancelled Close without writes; cleanup failure remains attached to the output error. Direct cases cover both Methods and malformed count, Version type and Created output. The real writer test exercises returned handles. Complete server selection, exact-Version metadata/NodeId agreement, creation atomicity and concurrent outcomes remain pending.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "WriterCreateAndGetOrCreatePreserveOutputsAndValidateTypes",
+          "WriterCreateAndGetOrCreateRejectMalformedOutputs",
+          "ResourceCreationRejectsEmptyOrContradictoryAssignedVersion",
+          "ResourceCreationPreservesAssignedOrExplicitVersionIdentity",
+          "ResourceCreationClosesRequestedHandleWhenOutputsAreRejected",
+          "WriterWritesPropertiesDeleteAndFileDocumentsOnARealServer"
+        ],
         "nativeEvidence": []
       }
     },
@@ -136929,13 +136939,20 @@
       ],
       "text": "For a new Resource, the logical Resource, `Versions` component and first Version commit atomically in one xRegistry operation. To create a Version of an existing Resource, the client supplies its `ResourceId` and a new or server-assigned `VersionId`. When an existing `(ResourceId, VersionId)` MUST cause failure, the client uses strict `CreateResource(ResourceId, VersionId, RequestFileOpen)`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The selected strict-creation procedure was read with the GetOrCreate contract and replacement rules. CreateResourceAsync calls only CreateResource; it does not substitute GetOrCreate after a native failure. The writer preserves explicit Version input and sends an empty string for null or empty server-assigned input. Both creation Methods now reject empty or contradictory assigned identifiers and retain valid exact results. This is client Method/result evidence, not proof that a server atomically creates the logical Resource, Versions component and first exact Version or rejects every duplicate exact pair. Server state, concurrency and complete orchestration remain pending.",
+        "roles": [
+          "client",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "WriterCreateAndGetOrCreatePreserveOutputsAndValidateTypes",
+          "ResourceCreationPreservesAssignedOrExplicitVersionIdentity",
+          "ResourceCreationRejectsEmptyOrContradictoryAssignedVersion"
+        ],
         "nativeEvidence": []
       }
     },

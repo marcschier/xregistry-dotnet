@@ -2771,6 +2771,145 @@ public class OpcUaRegistryReaderTests
     }
 
     [Test]
+    [Arguments(false, null, "")]
+    [Arguments(true, null, "")]
+    [Arguments(false, "", "")]
+    [Arguments(true, "", "")]
+    [Arguments(false, "v1", "v2")]
+    [Arguments(true, "v1", "v2")]
+    [Arguments(false, "v1", "V1")]
+    [Arguments(true, "v1", "V1")]
+    public async Task ResourceCreationRejectsEmptyOrContradictoryAssignedVersion(
+        bool getOrCreate, string? requestedVersion, string assignedVersion)
+    {
+        var (session, writer) = await WriterForResource();
+        var method = getOrCreate ? "GetOrCreateResource" : "CreateResource";
+        session.MethodOutputs[method] = getOrCreate
+            ? [new Variant(VersionTwoNode), new Variant(assignedVersion), new Variant(0u), new Variant(false)]
+            : [new Variant(VersionTwoNode), new Variant(assignedVersion), new Variant(0u)];
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+        {
+            if (getOrCreate)
+            {
+                _ = await writer.GetOrCreateResourceAsync(GroupNode, "schema-a", requestedVersion);
+            }
+            else
+            {
+                _ = await writer.CreateResourceAsync(GroupNode, "schema-a", requestedVersion);
+            }
+        });
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(session.MethodCalls.Single().Method).IsEqualTo(method);
+        await Assert.That(session.MethodCalls.Single().Target).IsEqualTo(GroupNode);
+        await Assert.That(session.Opened).IsEqualTo(1);
+        await Assert.That(session.Closed).IsEqualTo(1);
+        await Assert.That(session.WrittenChunks.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(false, "version", false)]
+    [Arguments(true, "version", false)]
+    [Arguments(false, "version", true)]
+    [Arguments(true, "version", true)]
+    [Arguments(false, "count", false)]
+    [Arguments(true, "count", false)]
+    [Arguments(false, "count", true)]
+    [Arguments(true, "count", true)]
+    [Arguments(false, "type", false)]
+    [Arguments(true, "type", false)]
+    [Arguments(true, "created", false)]
+    [Arguments(true, "created", true)]
+    [Arguments(true, "missing", false)]
+    [Arguments(true, "missing", true)]
+    public async Task ResourceCreationClosesRequestedHandleWhenOutputsAreRejected(
+        bool getOrCreate, string malformed, bool closeFails)
+    {
+        var (session, writer) = await WriterForResource();
+        var closeFailure = closeFails ? new InvalidOperationException("close") : null;
+        session.CloseFailure = closeFailure;
+        var method = getOrCreate ? "GetOrCreateResource" : "CreateResource";
+        var outputs = new List<Variant>
+        {
+            new(VersionTwoNode),
+            malformed == "type" ? new Variant(42u) : new Variant(malformed == "version" ? "v2" : "v1"),
+            new(42u)
+        };
+        if (getOrCreate && malformed != "missing")
+        {
+            outputs.Add(malformed == "created" ? new Variant("not-a-bool") : new Variant(true));
+        }
+        if (malformed == "count")
+        {
+            outputs.Add(new Variant("unexpected"));
+        }
+        session.MethodOutputs[method] = outputs;
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+        {
+            if (getOrCreate)
+            {
+                _ = await writer.GetOrCreateResourceAsync(GroupNode, "schema-a", "v1", true);
+            }
+            else
+            {
+                _ = await writer.CreateResourceAsync(GroupNode, "schema-a", "v1", true);
+            }
+        });
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(session.Closed).IsEqualTo(2);
+        await Assert.That(session.LastClosedHandle).IsEqualTo(42u);
+        await Assert.That(session.ClosedFiles.Last()).IsEqualTo(VersionTwoNode);
+        await Assert.That(session.CloseToken.CanBeCanceled).IsFalse();
+        await Assert.That(ReferenceEquals(error.Data["OpcUa.FileCloseFailure"], closeFailure)).IsTrue();
+        await Assert.That(session.Opened).IsEqualTo(1);
+        await Assert.That(session.PositionedFiles.Count).IsEqualTo(0);
+        await Assert.That(session.WrittenChunks.Count).IsEqualTo(0);
+        await Assert.That(session.MethodCalls.Single().Method).IsEqualTo(method);
+    }
+
+    [Test]
+    [Arguments(false, null, "server-assigned")]
+    [Arguments(true, null, "server-assigned")]
+    [Arguments(false, "", "server-assigned")]
+    [Arguments(true, "", "server-assigned")]
+    [Arguments(false, "v1", "v1")]
+    [Arguments(true, "v1", "v1")]
+    public async Task ResourceCreationPreservesAssignedOrExplicitVersionIdentity(
+        bool getOrCreate, string? requestedVersion, string assignedVersion)
+    {
+        var (session, writer) = await WriterForResource();
+        var method = getOrCreate ? "GetOrCreateResource" : "CreateResource";
+        session.MethodOutputs[method] = getOrCreate
+            ? [new Variant(VersionTwoNode), new Variant(assignedVersion), new Variant(0u), new Variant(true)]
+            : [new Variant(VersionTwoNode), new Variant(assignedVersion), new Variant(0u)];
+
+        if (getOrCreate)
+        {
+            var result = await writer.GetOrCreateResourceAsync(GroupNode, "schema-a", requestedVersion);
+            await Assert.That(result.ResourceNode).IsEqualTo(VersionTwoNode);
+            await Assert.That(result.VersionId).IsEqualTo(assignedVersion);
+            await Assert.That(result.FileHandle).IsEqualTo(0u);
+            await Assert.That(result.Created).IsTrue();
+        }
+        else
+        {
+            var result = await writer.CreateResourceAsync(GroupNode, "schema-a", requestedVersion);
+            await Assert.That(result.ResourceNode).IsEqualTo(VersionTwoNode);
+            await Assert.That(result.VersionId).IsEqualTo(assignedVersion);
+            await Assert.That(result.FileHandle).IsEqualTo(0u);
+        }
+        var call = session.MethodCalls.Single();
+        await Assert.That(call.Method).IsEqualTo(method);
+        await Assert.That(call.Target).IsEqualTo(GroupNode);
+        await Assert.That(call.Arguments[1].TryGetValue(out string? inputVersion) &&
+            inputVersion == (requestedVersion ?? string.Empty)).IsTrue();
+        await Assert.That(call.Arguments[2].TryGetValue(out bool requestOpen) && !requestOpen).IsTrue();
+    }
+
+    [Test]
     public async Task GroupCreationRejectsMalformedMethodOutput()
     {
         var (session, writer) = await WriterForResource();

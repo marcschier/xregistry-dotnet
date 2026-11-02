@@ -165,6 +165,14 @@ get-or-create, delete and attribute Methods; and replaces model-declared
 Resource documents through FileTransfer. It supports both entity `Labels` and
 Resource Meta `MetaLabels`. Document writes are bounded, start at position
 zero, erase the prior contents and always attempt to close an opened handle.
+Resource creation results retain the exact Version NodeId and assigned Version
+identifier. Both creation Methods reject an empty assigned identifier or one
+that differs from an explicit requested Version, including case differences.
+If rejected outputs identify a requested file handle and its Object, the writer
+attempts an uncancelled Close without writing, retaining any cleanup failure
+on the output error. This validates the Method result, not the target's complete
+Version metadata or server-side creation semantics.
+
 Pre-cancelled replacements do not resolve or Open a file. After Open, the
 writer checks cancellation before positioning and after positioning or each
 Write, including the final chunk and empty replacements. It attempts Close

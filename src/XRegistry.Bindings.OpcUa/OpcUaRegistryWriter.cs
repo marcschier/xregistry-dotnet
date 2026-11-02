@@ -66,10 +66,9 @@ public sealed class OpcUaRegistryWriter
         var outputs = await session.CallMethodAsync(group, "CreateResource",
             [new Variant(resourceId), new Variant(versionId ?? string.Empty), new Variant(requestFileOpen)],
             cancellationToken).ConfigureAwait(false);
-        RequireOutputCount(outputs, 3, "CreateResource");
-        return new(ReadNodeIdOutput(outputs, 0, "CreateResource"),
-            ReadStringOutput(outputs, 1, "CreateResource"),
-            ReadUInt32Output(outputs, 2, "CreateResource"));
+        var result = await ReadResourceOutputsAsync(outputs, versionId, requestFileOpen, getOrCreate: false)
+            .ConfigureAwait(false);
+        return new(result.ResourceNode, result.VersionId, result.FileHandle);
     }
 
     /// <summary>Gets or creates a resource or version by calling GetOrCreateResource on its Group.</summary>
@@ -81,11 +80,35 @@ public sealed class OpcUaRegistryWriter
         var outputs = await session.CallMethodAsync(group, "GetOrCreateResource",
             [new Variant(resourceId), new Variant(versionId ?? string.Empty), new Variant(requestFileOpen)],
             cancellationToken).ConfigureAwait(false);
-        RequireOutputCount(outputs, 4, "GetOrCreateResource");
-        return new(ReadNodeIdOutput(outputs, 0, "GetOrCreateResource"),
-            ReadStringOutput(outputs, 1, "GetOrCreateResource"),
-            ReadUInt32Output(outputs, 2, "GetOrCreateResource"),
-            ReadBooleanOutput(outputs, 3, "GetOrCreateResource"));
+        return await ReadResourceOutputsAsync(outputs, versionId, requestFileOpen, getOrCreate: true)
+            .ConfigureAwait(false);
+    }
+
+    private async ValueTask<OpcUaResourceResolution> ReadResourceOutputsAsync(IReadOnlyList<Variant> outputs,
+        string? requestedVersion, bool requestFileOpen, bool getOrCreate)
+    {
+        var method = getOrCreate ? "GetOrCreateResource" : "CreateResource";
+        try
+        {
+            RequireOutputCount(outputs, getOrCreate ? 4 : 3, method);
+            var resource = ReadNodeIdOutput(outputs, 0, method);
+            var version = ReadStringOutput(outputs, 1, method);
+            if (version.Length == 0 || !string.IsNullOrEmpty(requestedVersion) &&
+                !string.Equals(version, requestedVersion, StringComparison.Ordinal))
+            {
+                throw new FederationException(FederationErrorCode.InvalidPackage,
+                    $"{method} returned an empty or contradictory assigned Version identifier.");
+            }
+            return new(resource, version, ReadUInt32Output(outputs, 2, method),
+                !getOrCreate || ReadBooleanOutput(outputs, 3, method));
+        }
+        catch (Exception failure) when (requestFileOpen && outputs.Count >= 3 &&
+            outputs[0].AsBoxedObject() is NodeId { IsNull: false } file &&
+            outputs[2].TryGetValue(out uint handle))
+        {
+            await CloseFileAsync(file, handle, failure).ConfigureAwait(false);
+            throw;
+        }
     }
 
     /// <summary>Deletes a Group, resource, or version with an optional expected Epoch.</summary>
@@ -331,8 +354,8 @@ public sealed class OpcUaRegistryWriter
 /// <summary>A Group returned by GetOrCreateGroup.</summary>
 public sealed record OpcUaGroupResolution(NodeId GroupNode, bool Created);
 
-/// <summary>A ResourceType node returned by CreateResource.</summary>
+/// <summary>An exact Version node and assigned identifier returned by CreateResource.</summary>
 public sealed record OpcUaResourceCreation(NodeId ResourceNode, string VersionId, uint FileHandle);
 
-/// <summary>A ResourceType node returned by GetOrCreateResource.</summary>
+/// <summary>An exact Version node and assigned identifier returned by GetOrCreateResource.</summary>
 public sealed record OpcUaResourceResolution(NodeId ResourceNode, string VersionId, uint FileHandle, bool Created);
