@@ -117,10 +117,10 @@ later cancellation; cleanup still uses an uncancelled token.
 When a completed read is followed by a failed Close, an already classified
 federation error retains its original code, diagnostic and cause. An
 unclassified Close exception reports `unavailable`.
-Read lengths are capped by both the configured chunk size and remaining
-capture budget. At the exact byte limit, the reader requests one byte only to
-distinguish EOF from an oversized document; a nonempty response rejects the
-capture with `limit_exceeded`, and that byte is not accepted. Empty documents
+Read lengths are capped by the configured chunk size, advertised buffer limit
+and remaining capture budget. At the exact byte limit, the reader requests one
+byte only to distinguish EOF from an oversized document; a nonempty response
+rejects the capture with `limit_exceeded`, and that byte is not accepted. Empty documents
 still pass through Open, Read and Close. The adapter rejects nonpositive Read
 lengths before any native operation, and both reader and adapter reject a
 response larger than its request. Read failures still attempt an uncancelled
@@ -135,6 +135,18 @@ that disagrees with the captured length, reports `inconsistent_snapshot`.
 Unknown Size still requires EOF, and a known zero retains the complete
 Open/Read/Close sequence. Size failures after Open attempt uncancelled Close
 and preserve any cleanup error.
+Before acquiring a handle, shared reads and replacement writes obtain the
+optional namespace-zero UInt32 `MaxByteStringLength` Property on the selected
+FileType Object. A file declaration overrides the ServerCapabilities
+declaration; only an absent Property permits server fallback, and absence on
+both retains the configured chunk size. Present but ambiguous, remote,
+wrong-kind or incorrectly typed Properties and native read errors reject the
+transfer. A declared zero rejects before Open because no positive request fits
+that limit; it is not interpreted as unlimited. The effective chunk size is the
+smaller of the declaration and configured size, including for the final partial
+Write. Creation-time handles still close before replacement preflight, so a
+limit acquisition failure does not leak or reopen that handle. These checks do
+not yet derive a buffer limit from transport-negotiated message sizes.
 FileTransfer Method results must match their Part 20 signatures: Open returns
 one UInt32 handle, Read returns one ByteString, and Write, SetPosition and Close
 return no output arguments. Unexpected output counts or types report

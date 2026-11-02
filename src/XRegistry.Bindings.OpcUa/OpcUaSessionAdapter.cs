@@ -413,28 +413,12 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
             _ = await ReadNamespaceArrayAsync(cancellationToken).ConfigureAwait(false);
         }
         RequireFileSession(sourceSession);
-        var properties = await BrowseOnce(file, BrowseDirection.Forward, ReferenceTypeIds.HasProperty,
-            cancellationToken, sourceSession).ConfigureAwait(false);
-        RequireFileSession(sourceSession);
-        cancellationToken.ThrowIfCancellationRequested();
-        var matches = properties.Where(property =>
-            property.BrowseName.NamespaceIndex == 0 && property.BrowseName.Name == BrowseNames.Size).ToArray();
-        if (matches.Length != 1)
-        {
-            throw new FederationException(matches.Length == 0
-                ? FederationErrorCode.NotFound : FederationErrorCode.Ambiguous,
-                "The FileType must expose exactly one namespace-zero Size Property.");
-        }
-        var property = matches[0];
-        if (property.NodeClass != NodeClass.Variable || property.NodeId.ServerIndex != 0)
-        {
-            throw new FederationException(FederationErrorCode.InvalidPackage,
-                "FileType Size must be a local Variable.");
-        }
+        var property = await FindFilePropertyAsync(file, BrowseNames.Size, optional: false,
+            sourceSession, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         RequireFileSession(sourceSession);
         var response = await InvokeAsync(() => session.ReadAsync(new RequestHeader(), 0, TimestampsToReturn.Neither,
-            [new ReadValueId { NodeId = Local(property.NodeId), AttributeId = Attributes.Value }],
+            [new ReadValueId { NodeId = property!.Value, AttributeId = Attributes.Value }],
             cancellationToken)).ConfigureAwait(false);
         RequireFileSession(sourceSession);
         cancellationToken.ThrowIfCancellationRequested();
@@ -449,6 +433,69 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
             ? size
             : throw new FederationException(FederationErrorCode.InvalidPackage,
                 "FileType Size is not a UInt64.");
+    }
+
+    /// <inheritdoc />
+    public async ValueTask<uint?> ReadFileMaxByteStringLengthAsync(NodeId file, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var sourceSession = session.SessionId;
+        if (namespaceUris is null)
+        {
+            _ = await ReadNamespaceArrayAsync(cancellationToken).ConfigureAwait(false);
+        }
+        RequireFileSession(sourceSession);
+        var property = await FindFilePropertyAsync(file, BrowseNames.MaxByteStringLength, optional: true,
+            sourceSession, cancellationToken).ConfigureAwait(false);
+        property ??= await FindFilePropertyAsync(ObjectIds.Server_ServerCapabilities,
+            BrowseNames.MaxByteStringLength, optional: true, sourceSession, cancellationToken).ConfigureAwait(false);
+        if (property is null)
+        {
+            return null;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        RequireFileSession(sourceSession);
+        var response = await InvokeAsync(() => session.ReadAsync(new RequestHeader(), 0, TimestampsToReturn.Neither,
+            [new ReadValueId { NodeId = property.Value, AttributeId = Attributes.Value }],
+            cancellationToken)).ConfigureAwait(false);
+        RequireFileSession(sourceSession);
+        cancellationToken.ThrowIfCancellationRequested();
+        var result = Single(response.Results, static result => result.StatusCode,
+            response.DiagnosticInfos, response.ResponseHeader);
+        return result.WrappedValue.TryGetValue(out uint maximum)
+            ? maximum
+            : throw new FederationException(FederationErrorCode.InvalidPackage,
+                "MaxByteStringLength is not a UInt32.");
+    }
+
+    private async ValueTask<NodeId?> FindFilePropertyAsync(NodeId owner, string name, bool optional,
+        NodeId sourceSession, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        RequireFileSession(sourceSession);
+        var properties = await BrowseOnce(owner, BrowseDirection.Forward, ReferenceTypeIds.HasProperty,
+            cancellationToken, sourceSession).ConfigureAwait(false);
+        RequireFileSession(sourceSession);
+        cancellationToken.ThrowIfCancellationRequested();
+        var matches = properties.Where(property =>
+            property.BrowseName.NamespaceIndex == 0 && property.BrowseName.Name == name).ToArray();
+        if (matches.Length == 0 && optional)
+        {
+            return null;
+        }
+        if (matches.Length != 1)
+        {
+            throw new FederationException(matches.Length == 0
+                ? FederationErrorCode.NotFound : FederationErrorCode.Ambiguous,
+                $"The selected Object must expose exactly one namespace-zero {name} Property.");
+        }
+        var property = matches[0];
+        if (property.NodeClass != NodeClass.Variable || property.NodeId.ServerIndex != 0)
+        {
+            throw new FederationException(FederationErrorCode.InvalidPackage,
+                $"{name} must be a local Variable.");
+        }
+        return Local(property.NodeId);
     }
 
     /// <inheritdoc />

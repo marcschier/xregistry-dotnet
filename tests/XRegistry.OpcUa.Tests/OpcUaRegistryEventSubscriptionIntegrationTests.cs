@@ -510,13 +510,13 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
         try
         {
             var eof = await connection.Adapter.ReadAsync(
-                server.DocumentFile, appendedReadHandle, 64, cancellation.Token);
+                server.DocumentFile, appendedReadHandle, 3, cancellation.Token);
             await Assert.That(eof.Length).IsEqualTo(0);
             await connection.Adapter.SetPositionAsync(server.DocumentFile, appendedReadHandle, 0,
                 cancellation.Token);
             var contents = await connection.Adapter.ReadAsync(
-                server.DocumentFile, appendedReadHandle, 64, cancellation.Token);
-            await Assert.That(contents).IsEquivalentTo(InitialWritableDocument);
+                server.DocumentFile, appendedReadHandle, 3, cancellation.Token);
+            await Assert.That(contents).IsEquivalentTo(InitialWritableDocument.Take(3));
         }
         finally
         {
@@ -1366,6 +1366,15 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
                 value = new Variant((ulong)documentContents[resourceId].Length);
                 return ServiceResult.Good;
             };
+            file.MaxByteStringLength = PropertyState<uint>.With<VariantBuilder>(file, 3u);
+            file.MaxByteStringLength.NodeId = new NodeId(node.IdentifierAsString + ".MaxByteStringLength", NamespaceIndex);
+            file.MaxByteStringLength.BrowseName = new QualifiedName(BrowseNames.MaxByteStringLength);
+            file.MaxByteStringLength.DisplayName = new LocalizedText(BrowseNames.MaxByteStringLength);
+            file.MaxByteStringLength.ReferenceTypeId = ReferenceTypeIds.HasProperty;
+            file.MaxByteStringLength.DataType = DataTypeIds.UInt32;
+            file.MaxByteStringLength.ValueRank = ValueRanks.Scalar;
+            file.MaxByteStringLength.AccessLevel = AccessLevels.CurrentRead;
+            file.MaxByteStringLength.UserAccessLevel = AccessLevels.CurrentRead;
             file.Open = new OpenMethodState(file)
             {
                 Executable = true,
@@ -1400,6 +1409,10 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
                     }
 
                     var bytes = data.ToArray();
+                    if (bytes.Length > 3)
+                    {
+                        return new ServiceResult(StatusCodes.BadEncodingLimitsExceeded);
+                    }
                     stream.Write(bytes, 0, bytes.Length);
                     return ServiceResult.Good;
                 },
@@ -1415,7 +1428,7 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
                 OnCall = (ISystemContext _, MethodState _, NodeId _, uint handle, int length,
                     ref ByteString data) =>
                 {
-                    if (!openFiles.TryGetValue(handle, out var stream) || !stream.CanRead || length <= 0)
+                    if (!openFiles.TryGetValue(handle, out var stream) || !stream.CanRead || length <= 0 || length > 3)
                     {
                         return new ServiceResult(StatusCodes.BadInvalidState);
                     }

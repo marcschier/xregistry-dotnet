@@ -37,6 +37,8 @@ public interface IOpcUaRegistrySession
     ValueTask<OpcUaBrowsePage> BrowseNextAsync(byte[] continuationPoint, bool release, CancellationToken cancellationToken);
     /// <summary>Reads FileType Size as UInt64; null means the server reports Bad_NotSupported.</summary>
     ValueTask<ulong?> ReadFileSizeAsync(NodeId file, CancellationToken cancellationToken);
+    /// <summary>Reads the FileType buffer limit, or the ServerCapabilities limit when absent; null means neither is declared.</summary>
+    ValueTask<uint?> ReadFileMaxByteStringLengthAsync(NodeId file, CancellationToken cancellationToken);
     /// <summary>Calls FileType Open and returns the file handle.</summary>
     ValueTask<uint> OpenAsync(NodeId file, byte mode, CancellationToken cancellationToken);
     /// <summary>Calls FileType Read; an empty result is end of file and a short read is not.</summary>
@@ -212,6 +214,7 @@ public sealed class OpcUaRegistryReader
             throw new FederationException(FederationErrorCode.LimitExceeded,
                 "The reported file Size exceeds the byte budget.");
         }
+        var readChunkSize = await FileChunkSizeAsync(file, cancellationToken).ConfigureAwait(false);
         var handle = await session.OpenAsync(file, ReadMode, cancellationToken).ConfigureAwait(false);
         using var buffer = new MemoryStream();
         Exception? failure = null;
@@ -225,7 +228,7 @@ public sealed class OpcUaRegistryReader
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var length = Math.Min(chunkSize, Math.Max(1, maxBytes - (int)buffer.Length));
+                var length = Math.Min(readChunkSize, Math.Max(1, maxBytes - (int)buffer.Length));
                 var chunk = await session.ReadAsync(file, handle, length, cancellationToken).ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
                 if (chunk.Length == 0)
@@ -676,7 +679,17 @@ public sealed class OpcUaRegistryReader
 
     internal IOpcUaRegistrySession Session => session;
     internal int MaxBytes => maxBytes;
-    internal int ChunkSize => chunkSize;
+    internal async ValueTask<int> FileChunkSizeAsync(NodeId file, CancellationToken cancellationToken)
+    {
+        var limit = await session.ReadFileMaxByteStringLengthAsync(file, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (limit == 0)
+        {
+            throw new FederationException(FederationErrorCode.UnsupportedOperation,
+                "The advertised FileType buffer limit does not permit a positive-length transfer.");
+        }
+        return limit is { } maximum ? (int)Math.Min((uint)chunkSize, maximum) : chunkSize;
+    }
     internal void EnsureSpecVersionValidatedForWrite() => EnsureSpecVersionValidated();
 
     internal async ValueTask<NodeId> ResolveResourceDocumentAsync(NodeId groupNode, string groupXid,

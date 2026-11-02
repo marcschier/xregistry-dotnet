@@ -491,6 +491,8 @@ public class OpcUaTrustedProviderLeaseTests
             new(values[variable]);
         public int OpenCount { get; private set; }
         public ValueTask<ulong?> ReadFileSizeAsync(NodeId file, CancellationToken cancellationToken) => new((ulong?)null);
+        public ValueTask<uint?> ReadFileMaxByteStringLengthAsync(NodeId file, CancellationToken cancellationToken) =>
+            new((uint?)null);
         public ValueTask<uint> OpenAsync(NodeId file, byte mode, CancellationToken cancellationToken)
         {
             OpenCount++;

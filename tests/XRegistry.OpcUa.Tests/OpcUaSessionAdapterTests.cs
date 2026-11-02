@@ -13,6 +13,317 @@ namespace XRegistry.OpcUa.Tests;
 public class OpcUaSessionAdapterTests
 {
     [Test]
+    [Arguments(false, 0u)]
+    [Arguments(true, 0u)]
+    [Arguments(false, 1u)]
+    [Arguments(true, 1u)]
+    [Arguments(false, uint.MaxValue)]
+    [Arguments(true, uint.MaxValue)]
+    public async Task FileBufferLimitUsesFileOverrideOrActualServerProperty(bool serverLimit, uint limit)
+    {
+        var (adapter, proxy) = await BufferLimitAdapter(serverLimit);
+        proxy.ReadValue = new Variant(limit);
+        proxy.Endpoint = new EndpointDescription { SecurityMode = MessageSecurityMode.None };
+
+        var result = await adapter.ReadFileMaxByteStringLengthAsync(new NodeId("File", 1), CancellationToken.None);
+
+        await Assert.That(result).IsEqualTo((uint?)limit);
+        await Assert.That(proxy.BrowseRequests.Count).IsEqualTo(serverLimit ? 2 : 1);
+        await Assert.That(proxy.BrowseRequests[0].NodeId).IsEqualTo(new NodeId("File", 1));
+        if (serverLimit)
+        {
+            await Assert.That(proxy.BrowseRequests[1].NodeId).IsEqualTo(ObjectIds.Server_ServerCapabilities);
+        }
+        await Assert.That(proxy.ReadRequests[^1].NodeId)
+            .IsEqualTo(new NodeId(serverLimit ? "Server.Limit" : "File.Limit", 1));
+        await Assert.That(proxy.ReadRequests[^1].AttributeId).IsEqualTo(Attributes.Value);
+        await Assert.That(proxy.MethodCalls.Count).IsEqualTo(0);
+        await Assert.That(proxy.EndpointReads).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task FileBufferLimitAbsentOnFileAndServerReturnsNoDeclaredLimitWithoutReadingValue()
+    {
+        var (adapter, proxy) = await BufferLimitAdapter(serverLimit: true);
+        proxy.BrowseResultFactory = _ => new BrowseResult();
+        var before = proxy.ReadCount;
+
+        var result = await adapter.ReadFileMaxByteStringLengthAsync(new NodeId("File", 1), CancellationToken.None);
+
+        await Assert.That(result).IsNull();
+        await Assert.That(proxy.ReadCount).IsEqualTo(before);
+        await Assert.That(proxy.BrowseRequests.Count).IsEqualTo(2);
+    }
+
+    [Test]
+    [Arguments(false, "not-supported")]
+    [Arguments(true, "not-supported")]
+    [Arguments(false, "denied")]
+    [Arguments(true, "denied")]
+    [Arguments(false, "uncertain")]
+    [Arguments(true, "uncertain")]
+    public async Task FileBufferLimitErrorsDoNotBecomeMissingOrUseAnotherLimit(bool serverLimit, string status)
+    {
+        var (adapter, proxy) = await BufferLimitAdapter(serverLimit);
+        proxy.ReadValue = new Variant(3u);
+        proxy.ReadStatus = status switch
+        {
+            "not-supported" => StatusCodes.BadNotSupported,
+            "denied" => StatusCodes.BadUserAccessDenied,
+            _ => StatusCodes.Uncertain
+        };
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.ReadFileMaxByteStringLengthAsync(new NodeId("File", 1), CancellationToken.None));
+
+        await Assert.That(error!.Code).IsEqualTo(status switch
+        {
+            "not-supported" => FederationErrorCode.UnsupportedOperation,
+            "denied" => FederationErrorCode.PolicyDenied,
+            _ => FederationErrorCode.Unavailable
+        });
+        await Assert.That(error.InnerException is ServiceResultException).IsTrue();
+        await Assert.That(proxy.BrowseRequests.Count).IsEqualTo(serverLimit ? 2 : 1);
+    }
+
+    [Test]
+    [Arguments(false, "ulong")]
+    [Arguments(true, "ulong")]
+    [Arguments(false, "signed")]
+    [Arguments(true, "signed")]
+    [Arguments(false, "array")]
+    [Arguments(true, "array")]
+    [Arguments(false, "null")]
+    [Arguments(true, "null")]
+    public async Task FileBufferLimitRejectsNonUInt32ScalarValues(bool serverLimit, string kind)
+    {
+        var (adapter, proxy) = await BufferLimitAdapter(serverLimit);
+        proxy.ReadValue = kind switch
+        {
+            "ulong" => new Variant(3UL),
+            "signed" => new Variant(3),
+            "array" => Variant.From(new uint[] { 3 }),
+            _ => Variant.Null
+        };
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.ReadFileMaxByteStringLengthAsync(new NodeId("File", 1), CancellationToken.None));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(proxy.BrowseRequests.Count).IsEqualTo(serverLimit ? 2 : 1);
+    }
+
+    [Test]
+    [Arguments(false, "duplicate")]
+    [Arguments(true, "duplicate")]
+    [Arguments(false, "remote")]
+    [Arguments(true, "remote")]
+    [Arguments(false, "class")]
+    [Arguments(true, "class")]
+    public async Task FileBufferLimitRejectsMalformedDeclarationBeforeValueOrFallback(bool serverLimit, string kind)
+    {
+        var (adapter, proxy) = await BufferLimitAdapter(serverLimit);
+        var before = proxy.ReadCount;
+        var property = BufferLimitReference("Limit");
+        if (kind == "remote") property.NodeId = new ExpandedNodeId(new NodeId("Limit", 1), null, 2u);
+        if (kind == "class") property.NodeClass = NodeClass.Method;
+        proxy.BrowseResultFactory = request => serverLimit && request.NodeId != ObjectIds.Server_ServerCapabilities
+            ? new BrowseResult()
+            : new BrowseResult { References = kind == "duplicate" ? [property, property] : [property] };
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.ReadFileMaxByteStringLengthAsync(new NodeId("File", 1), CancellationToken.None));
+
+        await Assert.That(error!.Code).IsEqualTo(kind == "duplicate"
+            ? FederationErrorCode.Ambiguous : FederationErrorCode.InvalidPackage);
+        await Assert.That(proxy.ReadCount).IsEqualTo(before);
+        await Assert.That(proxy.BrowseRequests.Count).IsEqualTo(serverLimit ? 2 : 1);
+    }
+
+    [Test]
+    [Arguments(false, false)]
+    [Arguments(true, false)]
+    [Arguments(false, true)]
+    [Arguments(true, true)]
+    public async Task FileBufferLimitRejectsCancellationOrSessionChangeAfterRead(bool serverLimit, bool cancelled)
+    {
+        var (adapter, proxy) = await BufferLimitAdapter(serverLimit);
+        proxy.ReadValue = new Variant(3u);
+        using var cancellation = new CancellationTokenSource();
+        proxy.AfterRead = () =>
+        {
+            if (cancelled) cancellation.Cancel();
+            else proxy.SessionId = new NodeId("Replacement", 0);
+        };
+        if (cancelled)
+        {
+            var error = await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+                await adapter.ReadFileMaxByteStringLengthAsync(new NodeId("File", 1), cancellation.Token));
+            await Assert.That(error!.CancellationToken).IsEqualTo(cancellation.Token);
+        }
+        else
+        {
+            var error = await Assert.ThrowsAsync<FederationException>(async () =>
+                await adapter.ReadFileMaxByteStringLengthAsync(new NodeId("File", 1), cancellation.Token));
+            await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.Unavailable);
+        }
+        await Assert.That(proxy.MethodCalls.Count).IsEqualTo(0);
+    }
+
+    private static ReferenceDescription BufferLimitReference(string id) => new()
+    {
+        NodeId = new ExpandedNodeId(new NodeId(id, 1)),
+        BrowseName = new QualifiedName(BrowseNames.MaxByteStringLength),
+        NodeClass = NodeClass.Variable
+    };
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task FileBufferLimitRetainsServiceErrorsAndAcceptsGoodSubcodes(bool serviceError)
+    {
+        var (adapter, proxy) = await BufferLimitAdapter(serverLimit: false);
+        proxy.ReadValue = new Variant(3u);
+        proxy.ReadStatus = StatusCodes.GoodClamped;
+        if (serviceError)
+        {
+            proxy.Header.ServiceResult = StatusCodes.BadNotSupported;
+            var error = await Assert.ThrowsAsync<FederationException>(async () =>
+                await adapter.ReadFileMaxByteStringLengthAsync(new NodeId("File", 1), CancellationToken.None));
+            await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.UnsupportedOperation);
+            await Assert.That(error.InnerException is ServiceResultException).IsTrue();
+        }
+        else
+        {
+            var limit = await adapter.ReadFileMaxByteStringLengthAsync(new NodeId("File", 1), CancellationToken.None);
+            await Assert.That(limit).IsEqualTo((uint?)3);
+        }
+        await Assert.That(proxy.BrowseRequests.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    [Arguments(1, false)]
+    [Arguments(2, false)]
+    [Arguments(2, true)]
+    public async Task FileBufferLimitCompletesDiscoveryBeforeChoosingOrFallingBack(int maxPages, bool duplicate)
+    {
+        var (adapter, proxy) = CreateAdapter(maxPages);
+        _ = await adapter.ReadNamespaceArrayAsync(CancellationToken.None);
+        proxy.ReadValue = new Variant(3u);
+        byte[] continuation = [1];
+        proxy.BrowseResultFactory = _ => new BrowseResult
+        {
+            ContinuationPoint = new ByteString(continuation),
+            References = duplicate ? [BufferLimitReference("Earlier.Limit")] : []
+        };
+        proxy.NextBrowseReferences = [BufferLimitReference("File.Limit")];
+        proxy.NextBrowseContinuation = [];
+        var before = proxy.ReadCount;
+        if (maxPages == 1 || duplicate)
+        {
+            var error = await Assert.ThrowsAsync<FederationException>(async () =>
+                await adapter.ReadFileMaxByteStringLengthAsync(new NodeId("File", 1), CancellationToken.None));
+            await Assert.That(error!.Code).IsEqualTo(duplicate
+                ? FederationErrorCode.Ambiguous : FederationErrorCode.LimitExceeded);
+            await Assert.That(proxy.ReadCount).IsEqualTo(before);
+            await Assert.That(proxy.ReleasedContinuations.Count).IsEqualTo(maxPages == 1 ? 1 : 0);
+        }
+        else
+        {
+            var limit = await adapter.ReadFileMaxByteStringLengthAsync(new NodeId("File", 1), CancellationToken.None);
+            await Assert.That(limit).IsEqualTo((uint?)3);
+            await Assert.That(proxy.ReadRequests[^1].NodeId).IsEqualTo(new NodeId("File.Limit", 1));
+        }
+        await Assert.That(proxy.BrowseRequests.Count).IsEqualTo(1);
+        await Assert.That(proxy.NextBrowseCount).IsEqualTo(maxPages == 1 ? 0 : 1);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task FileBufferLimitIgnoresOtherNamespacesAndCaseInsteadOfOverridingServer(bool wrongCase)
+    {
+        var (adapter, proxy) = await BufferLimitAdapter(serverLimit: true);
+        var unrelated = BufferLimitReference("Unrelated");
+        unrelated.BrowseName = wrongCase ? new QualifiedName("maxbytestringlength")
+            : new QualifiedName(BrowseNames.MaxByteStringLength, 1);
+        proxy.BrowseResultFactory = request => new BrowseResult
+        {
+            References = [request.NodeId == ObjectIds.Server_ServerCapabilities
+                ? BufferLimitReference("Server.Limit") : unrelated]
+        };
+        proxy.ReadValue = new Variant(2u);
+
+        var limit = await adapter.ReadFileMaxByteStringLengthAsync(new NodeId("File", 1), CancellationToken.None);
+
+        await Assert.That(limit).IsEqualTo((uint?)2);
+        await Assert.That(proxy.BrowseRequests.Count).IsEqualTo(2);
+        await Assert.That(proxy.ReadRequests[^1].NodeId).IsEqualTo(new NodeId("Server.Limit", 1));
+    }
+
+    [Test]
+    [Arguments("before", false)]
+    [Arguments("bootstrap", false)]
+    [Arguments("file", false)]
+    [Arguments("server", false)]
+    [Arguments("bootstrap", true)]
+    [Arguments("file", true)]
+    [Arguments("server", true)]
+    public async Task FileBufferLimitStopsDiscoveryAfterCancellationOrSessionChange(string phase, bool changedSession)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        using var cancellation = new CancellationTokenSource();
+        Action interrupt = () =>
+        {
+            if (changedSession) proxy.SessionId = new NodeId("Replacement", 0);
+            else cancellation.Cancel();
+        };
+        if (phase != "bootstrap")
+        {
+            _ = await adapter.ReadNamespaceArrayAsync(CancellationToken.None);
+        }
+        proxy.BrowseResultFactory = _ => new BrowseResult();
+        proxy.AfterRead = phase == "bootstrap" ? interrupt : null;
+        proxy.AfterBrowse = () =>
+        {
+            if (phase == "file" && proxy.BrowseRequests.Count == 1 ||
+                phase == "server" && proxy.BrowseRequests.Count == 2) interrupt();
+        };
+        if (phase == "before") cancellation.Cancel();
+        var before = proxy.ReadCount;
+        if (changedSession)
+        {
+            var error = await Assert.ThrowsAsync<FederationException>(async () =>
+                await adapter.ReadFileMaxByteStringLengthAsync(new NodeId("File", 1), cancellation.Token));
+            await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.Unavailable);
+        }
+        else
+        {
+            var error = await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+                await adapter.ReadFileMaxByteStringLengthAsync(new NodeId("File", 1), cancellation.Token));
+            await Assert.That(error!.CancellationToken).IsEqualTo(cancellation.Token);
+        }
+        await Assert.That(proxy.ReadCount).IsEqualTo(before + (phase == "bootstrap" ? 1 : 0));
+        await Assert.That(proxy.BrowseRequests.Count).IsEqualTo(phase switch
+        {
+            "before" or "bootstrap" => 0,
+            "file" => 1,
+            _ => 2
+        });
+    }
+
+    private static async ValueTask<(OpcUaSessionAdapter Adapter, SessionProxy Proxy)> BufferLimitAdapter(bool serverLimit)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        _ = await adapter.ReadNamespaceArrayAsync(CancellationToken.None);
+        proxy.BrowseResultFactory = request => serverLimit && request.NodeId != ObjectIds.Server_ServerCapabilities
+            ? new BrowseResult()
+            : new BrowseResult
+            {
+                References = [BufferLimitReference(serverLimit ? "Server.Limit" : "File.Limit")]
+            };
+        return (adapter, proxy);
+    }
+
+    [Test]
     [Arguments(0UL)]
     [Arguments(1UL)]
     [Arguments(ulong.MaxValue)]

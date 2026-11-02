@@ -223,8 +223,9 @@ public sealed class OpcUaRegistryWriter
         {
             throw new FederationException(FederationErrorCode.LimitExceeded, "The document exceeds the byte budget.");
         }
+        var chunkSize = await reader.FileChunkSizeAsync(file, cancellationToken).ConfigureAwait(false);
         var handle = await session.OpenAsync(file, WriteAndEraseMode, cancellationToken).ConfigureAwait(false);
-        await WriteOpenFileAsync(file, handle, contents, cancellationToken).ConfigureAwait(false);
+        await WriteOpenFileAsync(file, handle, contents, chunkSize, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Closes a creation-time handle unchanged and reopens with truncation before replacing its document.</summary>
@@ -250,7 +251,7 @@ public sealed class OpcUaRegistryWriter
     }
 
     private async ValueTask WriteOpenFileAsync(NodeId file, uint handle, ReadOnlyMemory<byte> contents,
-        CancellationToken cancellationToken)
+        int chunkSize, CancellationToken cancellationToken)
     {
         Exception? failure = null;
         try
@@ -264,7 +265,7 @@ public sealed class OpcUaRegistryWriter
             cancellationToken.ThrowIfCancellationRequested();
             for (var offset = 0; offset < contents.Length;)
             {
-                var length = Math.Min(reader.ChunkSize, contents.Length - offset);
+                var length = Math.Min(chunkSize, contents.Length - offset);
                 var chunk = contents.Slice(offset, length).ToArray();
                 await session.WriteAsync(file, handle, chunk, cancellationToken).ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();

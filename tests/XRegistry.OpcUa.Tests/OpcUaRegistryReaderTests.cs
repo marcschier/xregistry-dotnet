@@ -25,6 +25,166 @@ public class OpcUaRegistryReaderTests
         """{"groups":{"teams":{"singular":"team","resources":{"schemas":{"singular":"schema"}}}}}""";
 
     [Test]
+    [Arguments(1u)]
+    [Arguments(2u)]
+    [Arguments(3u)]
+    [Arguments(4u)]
+    [Arguments(uint.MaxValue)]
+    public async Task FileTransfersApplyBufferLimitAlongsideChunkAndCaptureBudgets(uint limit)
+    {
+        var session = new FakeSession { FileBufferLimit = limit };
+        var reader = await ValidatedReader(session, maxBytes: 5, chunkSize: 4);
+        var effective = (int)Math.Min(4u, limit);
+        byte[] expected = [1, 2, 3, 4, 5];
+        session.Chunks.AddRange(expected.Chunk(effective));
+        session.Chunks.Add([]);
+
+        var bytes = await reader.ReadFileAsync(File);
+        var writer = new OpcUaRegistryWriter(reader);
+        await writer.ReplaceFileDocumentAsync(File, expected);
+
+        await Assert.That(Convert.ToHexString(bytes)).IsEqualTo("0102030405");
+        await Assert.That(session.FileReadLengths.All(length => length > 0 && length <= effective)).IsTrue();
+        await Assert.That(session.FileReadLengths[^1]).IsEqualTo(1);
+        await Assert.That(Convert.ToHexString(session.WrittenChunks.SelectMany(chunk => chunk).ToArray()))
+            .IsEqualTo("0102030405");
+        await Assert.That(string.Join("|", session.WrittenChunks.Select(chunk => chunk.Length)))
+            .IsEqualTo(string.Join("|", expected.Chunk(effective).Select(chunk => chunk.Length)));
+        await Assert.That(session.BufferLimitFiles).IsEquivalentTo(new[] { File, File });
+        await Assert.That(session.Closed).IsEqualTo(2);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task FileTransfersRetainConfiguredChunksWhenNoBufferLimitIsDeclared(bool write)
+    {
+        var session = new FakeSession();
+        var reader = await ValidatedReader(session, maxBytes: 10, chunkSize: 2);
+        byte[] expected = [1, 2, 3];
+        if (write)
+        {
+            await new OpcUaRegistryWriter(reader).ReplaceFileDocumentAsync(File, expected);
+            await Assert.That(string.Join("|", session.WrittenChunks.Select(chunk => chunk.Length))).IsEqualTo("2|1");
+            await Assert.That(Convert.ToHexString(session.WrittenChunks.SelectMany(chunk => chunk).ToArray()))
+                .IsEqualTo("010203");
+        }
+        else
+        {
+            session.Chunks.AddRange([new byte[] { 1, 2 }, new byte[] { 3 }, Array.Empty<byte>()]);
+            var bytes = await reader.ReadFileAsync(File);
+            await Assert.That(Convert.ToHexString(bytes)).IsEqualTo("010203");
+            await Assert.That(string.Join("|", session.FileReadLengths)).IsEqualTo("2|2|2");
+        }
+        await Assert.That(session.BufferLimitFiles.Single()).IsEqualTo(File);
+        await Assert.That(session.Opened).IsEqualTo(1);
+        await Assert.That(session.Closed).IsEqualTo(1);
+    }
+
+    [Test]
+    [Arguments(false, 0u)]
+    [Arguments(true, 0u)]
+    [Arguments(false, 1u)]
+    [Arguments(true, 1u)]
+    public async Task EmptyFileTransfersRequireUsableLimitAndRetainOpenCloseLifecycle(bool write, uint limit)
+    {
+        var session = new FakeSession { FileBufferLimit = limit };
+        var reader = await ValidatedReader(session);
+        session.FileSizes.Enqueue(0);
+        session.FileSizes.Enqueue(0);
+        session.Chunks.Add([]);
+        Func<Task> transfer = async () =>
+        {
+            if (write) await new OpcUaRegistryWriter(reader).ReplaceFileDocumentAsync(File, ReadOnlyMemory<byte>.Empty);
+            else await Assert.That((await reader.ReadFileAsync(File)).Length).IsEqualTo(0);
+        };
+        if (limit == 0)
+        {
+            var error = await Assert.ThrowsAsync<FederationException>(transfer);
+            await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.UnsupportedOperation);
+        }
+        else
+        {
+            await transfer();
+            if (!write) await Assert.That(session.FileReadLengths.Single()).IsEqualTo(1);
+        }
+        await Assert.That(session.Opened).IsEqualTo(limit == 0 ? 0 : 1);
+        await Assert.That(session.Closed).IsEqualTo(limit == 0 ? 0 : 1);
+        await Assert.That(session.WrittenChunks.Count).IsEqualTo(0);
+        await Assert.That(session.BufferLimitFiles.Single()).IsEqualTo(File);
+    }
+
+    [Test]
+    [Arguments(false, "zero")]
+    [Arguments(true, "zero")]
+    [Arguments(false, "error")]
+    [Arguments(true, "error")]
+    [Arguments(false, "cancel")]
+    [Arguments(true, "cancel")]
+    public async Task FileTransfersRejectUnusableBufferLimitsBeforeAcquiringHandles(bool write, string failureKind)
+    {
+        using var cancellation = new CancellationTokenSource();
+        var native = new FederationException(FederationErrorCode.PolicyDenied, "Limit read denied.");
+        var session = new FakeSession
+        {
+            FileBufferLimit = failureKind == "zero" ? 0u : 2u,
+            BufferLimitFailure = failureKind == "error" ? native : null,
+            AfterBufferLimitRead = failureKind == "cancel" ? cancellation.Cancel : null
+        };
+        var reader = await ValidatedReader(session);
+        Func<Task> transfer = async () =>
+        {
+            if (write)
+            {
+                await new OpcUaRegistryWriter(reader).ReplaceFileDocumentAsync(File, new byte[] { 1 }, cancellation.Token);
+            }
+            else
+            {
+                _ = await reader.ReadFileAsync(File, cancellation.Token);
+            }
+        };
+        if (failureKind == "cancel")
+        {
+            var error = await Assert.ThrowsAsync<OperationCanceledException>(transfer);
+            await Assert.That(error!.CancellationToken).IsEqualTo(cancellation.Token);
+        }
+        else
+        {
+            var error = await Assert.ThrowsAsync<FederationException>(transfer);
+            await Assert.That(error!.Code).IsEqualTo(failureKind == "zero"
+                ? FederationErrorCode.UnsupportedOperation : FederationErrorCode.PolicyDenied);
+            if (failureKind == "error")
+            {
+                await Assert.That(ReferenceEquals(error, native)).IsTrue();
+            }
+        }
+        await Assert.That(session.Opened).IsEqualTo(0);
+        await Assert.That(session.FileReads).IsEqualTo(0);
+        await Assert.That(session.WrittenChunks.Count).IsEqualTo(0);
+        await Assert.That(session.Closed).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task CreationHandleClosesBeforeLimitAcquisitionFailureWithoutReopening()
+    {
+        var session = new FakeSession();
+        var reader = await ValidatedReader(session);
+        var failure = new FederationException(FederationErrorCode.Unavailable, "Limit read failed.");
+        session.BufferLimitFailure = failure;
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await new OpcUaRegistryWriter(reader).CompleteCreatedResourceDocumentAsync(File, 42,
+                new byte[] { 1, 2 }));
+
+        await Assert.That(ReferenceEquals(error, failure)).IsTrue();
+        await Assert.That(session.LastClosedHandle).IsEqualTo(42u);
+        await Assert.That(session.CloseToken.CanBeCanceled).IsFalse();
+        await Assert.That(session.Opened).IsEqualTo(0);
+        await Assert.That(session.WrittenChunks.Count).IsEqualTo(0);
+        await Assert.That(session.Closed).IsEqualTo(1);
+    }
+
+    [Test]
     [Arguments(0)]
     [Arguments(3)]
     [Arguments(4)]
@@ -4262,6 +4422,16 @@ public class OpcUaRegistryReaderTests
         public List<(NodeId File, uint Handle)> FileReadHandles { get; } = [];
         public List<int> FileReadLengths { get; } = [];
         public Queue<ulong?> FileSizes { get; } = [];
+        public uint? FileBufferLimit { get; set; }
+        public Exception? BufferLimitFailure { get; set; }
+        public Action? AfterBufferLimitRead { get; set; }
+        public List<NodeId> BufferLimitFiles { get; } = [];
+        public ValueTask<uint?> ReadFileMaxByteStringLengthAsync(NodeId file, CancellationToken cancellationToken)
+        {
+            BufferLimitFiles.Add(file);
+            AfterBufferLimitRead?.Invoke();
+            return BufferLimitFailure is null ? new(FileBufferLimit) : throw BufferLimitFailure;
+        }
         public int FileSizeReads { get; private set; }
         public Action? AfterSizeRead { get; set; }
         public Exception? SizeFailure { get; set; }
