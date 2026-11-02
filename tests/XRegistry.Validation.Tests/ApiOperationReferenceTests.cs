@@ -11,6 +11,179 @@ namespace XRegistry.Validation.Tests;
 public class ApiOperationReferenceTests
 {
     [Test]
+    public async Task SwaggerScalarDefaultsRetainTypeOnlyScopeAndPointerLocalityWithoutInjectingDefaults()
+    {
+        foreach (var valid in new[] { true, false, true })
+        {
+            var document = new JsonObject { ["swagger"] = "2.0", ["paths"] = JsonNode.Parse("""
+                {"/target":{"get":{"operationId":"Target"}},"/other":{"get":{"operationId":"Other",
+                "parameters":[{"name":"p","in":"query","type":"integer","minimum":100,"default":1}],
+                "responses":{"200":{"description":"","headers":{"X":{"type":"string","pattern":"^a$","default":"b"}}}}}}}
+                """) };
+            if (!valid) { document["paths"]!["/other"]!["get"]!["parameters"]![0]!["default"] = "bad"; }
+            foreach (var selector in new[] { "operations/Target", "/paths/~1target/get", "/paths/~1other/get" })
+            {
+                var local = selector == "/paths/~1target/get";
+                var result = ApiOperationDocumentResolver.Resolve("Swagger/2.0", "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector));
+                await Assert.That(result.Status).IsEqualTo(valid || local
+                    ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+                if (!valid && !local)
+                {
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.parameter");
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo("$/paths/~1other/get/parameters/0/default");
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                }
+                else if (selector == "/paths/~1other/get")
+                {
+                    await Assert.That(result.Operation.GetProperty("parameters")[0].GetProperty("default").GetInt32()).IsEqualTo(1);
+                    await Assert.That(result.Operation.GetProperty("responses").GetProperty("200").GetProperty("headers")
+                        .GetProperty("X").GetProperty("default").GetString()).IsEqualTo("b");
+                }
+                else { await Assert.That(result.Operation.TryGetProperty("parameters", out _)).IsFalse(); }
+            }
+        }
+    }
+
+    [Test]
+    public async Task SwaggerScalarDefaultsRequireDeclaredPrimitiveAndNestedItemsTypes()
+    {
+        foreach (var header in new[] { true, false })
+        {
+            foreach (var (type, json, valid) in new (string, string, bool)[]
+            {
+                ("string", "\"\"", true), ("string", "\"hello\"", true), ("string", "1", false),
+                ("string", "null", false), ("boolean", "true", true), ("boolean", "false", true),
+                ("boolean", "0", false), ("boolean", "null", false),
+                ("number", "1e999", true), ("number", "-0.25", true), ("number", "\"1\"", false),
+                ("number", "null", false), ("integer", "1.0", true), ("integer", "100e-2", true),
+                ("integer", "-0", true), ("integer", "-1", true), ("integer", "1e999", true),
+                ("integer", "0.1", false), ("integer", "1e-999", false), ("integer", "null", false),
+                ("array", "[]", true), ("array", "[1,2.0,300e-2]", true), ("array", "[1,\"2\"]", false),
+                ("array", "[null]", false), ("array", "{}", false), ("array", "null", false)
+            })
+            {
+                var declaration = new JsonObject { ["type"] = type, ["default"] = JsonNode.Parse(json) };
+                if (type == "array") { declaration["items"] = new JsonObject { ["type"] = "integer" }; }
+                var operation = new JsonObject { ["operationId"] = "Target" };
+                if (header)
+                {
+                    operation["responses"] = new JsonObject { ["200"] = new JsonObject { ["description"] = "",
+                        ["headers"] = new JsonObject { ["X"] = declaration } } };
+                }
+                else
+                {
+                    declaration["name"] = "p"; declaration["in"] = "query";
+                    operation["parameters"] = new JsonArray(declaration);
+                }
+                var document = new JsonObject { ["swagger"] = "2.0",
+                    ["paths"] = new JsonObject { ["/items"] = new JsonObject { ["get"] = operation.DeepClone() } } };
+                foreach (var selector in new[] { "operations/Target", "/paths/~1items/get" })
+                {
+                    var result = ApiOperationDocumentResolver.Resolve("Swagger/2.0", "application/json",
+                        System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                        ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector));
+                    await Assert.That(result.Status).IsEqualTo(valid
+                        ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+                    if (valid) { await Assert.That(JsonNode.DeepEquals(operation, JsonNode.Parse(result.Operation.GetRawText()))).IsTrue(); }
+                    else
+                    {
+                        await Assert.That(result.Diagnostic!.Code).IsEqualTo(header ? "document.header" : "document.parameter");
+                        await Assert.That(result.Diagnostic.Path.StartsWith("$/paths/~1items/get/" +
+                            (header ? "responses/200/headers/X" : "parameters/0") + "/default", StringComparison.Ordinal)).IsTrue();
+                        await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                    }
+                }
+            }
+        }
+    }
+
+    [Test]
+    public async Task SwaggerScalarDefaultsCheckEachNestedDeclarationAndReportExactValueLocationsWithRestoration()
+    {
+        foreach (var (json, suffix) in new (string, string)[]
+        {
+            ("""{"type":"array","default":[[1,"bad"]],"items":{"type":"array","items":{"type":"integer"}}}""", "/default/0/1"),
+            ("""{"type":"array","items":{"type":"array","default":[1,null],"items":{"type":"number"}}}""", "/items/default/1"),
+            ("""{"type":"array","items":{"type":"array","items":{"type":"boolean","default":"bad"}}}""", "/items/items/default")
+        })
+        {
+            foreach (var valid in new[] { true, false, true })
+            {
+                var declaration = JsonNode.Parse(json)!.AsObject();
+                if (valid)
+                {
+                    if (suffix == "/default/0/1") { declaration["default"]![0]![1] = 2; }
+                    else if (suffix == "/items/default/1") { declaration["items"]!["default"]![1] = 2; }
+                    else { declaration["items"]!["items"]!["default"] = true; }
+                }
+                var document = new JsonObject { ["swagger"] = "2.0", ["paths"] = JsonNode.Parse("""
+                    {"/items":{"get":{"operationId":"Target","responses":{"200":{"$ref":"https://allowed.test/r#/R"}}}}}
+                    """) };
+                var calls = 0;
+                var result = await ApiOperationDocumentResolver.ResolveAsync("Swagger/2.0", "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+                    resolveReference: (uri, _) =>
+                    {
+                        calls++;
+                        if (uri != "https://allowed.test/r") { throw new UnauthorizedAccessException(); }
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(
+                            new JsonObject { ["R"] = new JsonObject { ["description"] = "",
+                                ["headers"] = new JsonObject { ["X"] = declaration.DeepClone() } } }.ToJsonString()));
+                    });
+                await Assert.That(result.Status).IsEqualTo(valid
+                    ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+                await Assert.That(calls).IsEqualTo(1);
+                if (valid) { await Assert.That(result.Operation.GetProperty("responses").GetProperty("200").GetProperty("$ref").GetString()).IsEqualTo("https://allowed.test/r#/R"); }
+                else
+                {
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.header");
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo("$/R/headers/X" + suffix);
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                }
+            }
+        }
+    }
+
+    [Test]
+    public async Task SwaggerScalarDefaultsBoundIntegerTokensAndDoNotInventFileDefaultRepresentation()
+    {
+        foreach (var length in new[] { 255, 256, 257 })
+        {
+            var document = new JsonObject { ["swagger"] = "2.0", ["paths"] = JsonNode.Parse("""
+                {"/items":{"get":{"operationId":"Target"}}}
+                """), ["parameters"] = new JsonObject { ["Unused"] = new JsonObject { ["name"] = "p",
+                    ["in"] = "query", ["type"] = "integer", ["default"] = JsonNode.Parse("1" + new string('0', length - 1)) } } };
+            var result = ApiOperationDocumentResolver.Resolve("Swagger/2.0", "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"));
+            await Assert.That(result.Status).IsEqualTo(length <= 256
+                ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Indeterminate);
+            if (length > 256)
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("limit.number");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo("$/parameters/Unused/default");
+            }
+        }
+        foreach (var json in new[] { "null", "\"file\"", "1", "{}", "[]" })
+        {
+            var document = new JsonObject { ["swagger"] = "2.0", ["paths"] = JsonNode.Parse("""
+                {"/items":{"post":{"operationId":"Target"}}}
+                """), ["parameters"] = new JsonObject { ["Unused"] = new JsonObject { ["name"] = "p",
+                    ["in"] = "formData", ["type"] = "file", ["default"] = JsonNode.Parse(json) } } };
+            var result = ApiOperationDocumentResolver.Resolve("Swagger/2.0", "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"));
+            await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Indeterminate);
+            await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.file_default");
+            await Assert.That(result.Diagnostic.Path).IsEqualTo("$/parameters/Unused/default");
+            await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        }
+    }
+
+    [Test]
     public async Task SwaggerScalarConstraintShapesReachReusableAndRetrievedTargetsWithRestoration()
     {
         foreach (var header in new[] { true, false })

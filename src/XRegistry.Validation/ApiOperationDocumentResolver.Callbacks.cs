@@ -548,7 +548,8 @@ public static partial class ApiOperationDocumentResolver
             if (!declaration.TryGetProperty("items", out var items))
             {
                 return type.GetString() == "array"
-                    ? InvalidScalar("A Swagger array requires an Items Object.", path + "/items") : null;
+                    ? InvalidScalar("A Swagger array requires an Items Object.", path + "/items")
+                    : ValidateSwaggerScalarDefaults(header, pointer, kind, cancellationToken);
             }
             declaration = items;
             path += "/items";
@@ -556,6 +557,62 @@ public static partial class ApiOperationDocumentResolver
 
         ApiOperationResolutionResult InvalidScalar(string message, string path) =>
             Failure(ApiOperationResolutionStatus.Invalid, kind == "Header" ? "document.header" : "document.parameter", message, path);
+    }
+
+    private static ApiOperationResolutionResult? ValidateSwaggerScalarDefaults(
+        JsonElement declaration, string pointer, string kind, CancellationToken cancellationToken)
+    {
+        var defaults = new Stack<(JsonElement Schema, JsonElement Value, string Pointer)>();
+        var schema = declaration;
+        var schemaPath = pointer;
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (schema.TryGetProperty("default", out var value)) { defaults.Push((schema, value, schemaPath + "/default")); }
+            if (!schema.TryGetProperty("items", out schema)) { break; }
+            schemaPath += "/items";
+        }
+        while (defaults.TryPop(out var item))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var type = item.Schema.GetProperty("type").GetString();
+            if (type == "file")
+            {
+                return Failure(ApiOperationResolutionStatus.Indeterminate, "document.file_default",
+                    "Swagger does not define a JSON representation for a file-typed default.", item.Pointer);
+            }
+            var valid = type switch
+            {
+                "string" => item.Value.ValueKind == JsonValueKind.String,
+                "boolean" => item.Value.ValueKind is JsonValueKind.True or JsonValueKind.False,
+                "number" or "integer" => item.Value.ValueKind == JsonValueKind.Number,
+                "array" => item.Value.ValueKind == JsonValueKind.Array,
+                _ => false
+            };
+            if (valid && type == "integer")
+            {
+                if (!JsonNumber.TryRead(item.Value, out var number))
+                {
+                    return Failure(ApiOperationResolutionStatus.Indeterminate, "limit.number",
+                        "Integer Swagger default tokens are limited to 256 source characters.", item.Pointer);
+                }
+                valid = number.IsInteger;
+            }
+            if (!valid)
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid, kind == "Header" ? "document.header" : "document.parameter",
+                    "A Swagger default must conform to its declared type and nested item types.", item.Pointer);
+            }
+            if (type != "array") { continue; }
+            var items = item.Schema.GetProperty("items");
+            for (var index = item.Value.GetArrayLength() - 1; index >= 0; index--)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                defaults.Push((items, item.Value[index], item.Pointer + "/" +
+                    index.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+            }
+        }
+        return null;
     }
 
     private static ApiOperationResolutionResult? ValidateOpenApiMediaDeclarations(

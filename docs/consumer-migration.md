@@ -694,8 +694,8 @@ types. Operation `consumes` overrides the root declaration, including an empty
 array that clears it. Unused reusable parameters require inline Parameter
 Objects; their body schemas and extension values do not trigger acquisition.
 Selected operations retain authored parameters without injecting inherited
-entries or defaults. Swagger schema evaluation, default-value compatibility
-and runtime serialization remain unverified.
+entries or defaults. Swagger body schema evaluation and runtime serialization
+remain unverified.
 For reached operations under OpenAPI or Swagger `paths`, every authored template
 expression requires an exact, case-sensitive path parameter at the Path Item
 or operation level. Conversely, declared path parameters must name expressions
@@ -754,9 +754,19 @@ exact values without conversion to floating point; numeric source tokens beyond
 `uniqueItems` is boolean, `pattern` is a string and `enum` is a nonempty array
 whose values remain opaque. Checks reach unused reusable declarations and
 retrieved targets without rewriting authored values. Enum uniqueness, pattern
-syntax, default-value compatibility and runtime constraint evaluation remain
+syntax and runtime constraint evaluation remain
 unverified; contradictory bounds are not rejected merely because they describe
 an unsatisfiable domain.
+Swagger scalar defaults must match their declared primitive type; array defaults
+must also match nested Items types. Each nested Items declaration receives its
+own default checks. Integer defaults use exact mathematical values, with the
+same 256-character token limit; number defaults do not require conversion to
+floating point. A file-typed default reports an indeterminate result because
+Swagger does not assign a JSON representation for that type. Errors identify
+the default or nested array value that fails its type check. These checks reach
+unused reusable declarations and retrieved targets, while pointers retain
+operation locality. Selection neither inserts default values nor evaluates
+them against numeric bounds, patterns, enums or other constraints.
 OpenAPI response `content` entries must be Media Type Objects. Present `schema`
 values must be objects, with boolean schemas also permitted in OpenAPI 3.1.
 Present `examples` and `encoding` values must be objects; `example` accepts any
