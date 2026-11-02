@@ -1016,6 +1016,10 @@ public static partial class ApiOperationDocumentResolver
         }
         if (IsIgnoredOpenApiHeaderParameter(parameter)) { return null; }
         var nativeLocation = location.GetString()!;
+        if (nativeLocation == "header" && !IsHttpToken(name.GetString()!.AsSpan()))
+        {
+            return InvalidHttpHeaderName(pointer + "/name");
+        }
         foreach (var field in new[] { "description", "required", "deprecated", "explode", "allowEmptyValue", "allowReserved", "style" })
         {
             cancellationToken.ThrowIfCancellationRequested();

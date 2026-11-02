@@ -983,6 +983,12 @@ permitted. Case-insensitive `Content-Type` entries retain their specified
 ignored behavior, and encoding headers on non-multipart bodies remain inactive.
 This check validates authored names without normalizing casing or changing the
 selected operation.
+OpenAPI header Parameter Object names use the same HTTP token grammar, including
+declarations reached through references and linked operations. Invalid names
+report `Invalid document.header_name` at the declaration's `name` field. The
+specified ignored `Accept`, `Content-Type` and `Authorization` header parameters
+remain ignored before other declaration checks, without fetching their examples.
+Query, cookie and path parameter names do not acquire header-name restrictions.
 For OpenAPI 3.1, an authored root `jsonSchemaDialect` must be a string
 containing a URI, not a relative URI reference. Invalid JSON types, relative
 values and malformed URI syntax report `Invalid document.schema_dialect` at

@@ -13,6 +13,112 @@ public class ApiOperationReferenceTests
     [Test]
     [Arguments("OpenAPI/3.0", "3.0.4")]
     [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiHeaderParameterNamesRejectNonTokensAcrossDeclarationAndReferenceLocations(string format, string version)
+    {
+        foreach (var name in new[] { "", "bad name", "bad:name", "bad/name", "bad\tname", "bad\r\nname", "caf\u00e9", "bad(name)", "bad@name" })
+        {
+            foreach (var location in new[] { "operation", "path", "component", "reference", "linked" })
+            {
+                var parameter = new JsonObject { ["name"] = name, ["in"] = "header", ["schema"] = new JsonObject() };
+                var operation = JsonNode.Parse("""{"operationId":"Target","responses":{"200":{"description":""}}}""")!;
+                var document = new JsonObject
+                {
+                    ["openapi"] = version,
+                    ["paths"] = new JsonObject { ["/source"] = new JsonObject { ["get"] = operation } }
+                };
+                var expectedPath = "$/paths/~1source/get/parameters/0/name";
+                if (location == "path")
+                {
+                    document["paths"]!["/source"]!["parameters"] = new JsonArray(parameter.DeepClone());
+                    expectedPath = "$/paths/~1source/parameters/0/name";
+                }
+                else if (location == "component")
+                {
+                    document["components"] = new JsonObject
+                    { ["parameters"] = new JsonObject { ["H"] = parameter.DeepClone() } };
+                    expectedPath = "$/components/parameters/H/name";
+                }
+                else if (location == "reference")
+                {
+                    operation["parameters"] = JsonNode.Parse("""[{"$ref":"https://allowed.test/parameter#/P"}]""");
+                    expectedPath = "$/P/name";
+                }
+                else if (location == "linked")
+                {
+                    operation["responses"]!["200"]!["links"] = JsonNode.Parse("""
+                        {"next":{"operationRef":"https://allowed.test/operation#/O"}}
+                        """);
+                    expectedPath = "$/O/parameters/0/name";
+                }
+                else { operation["parameters"] = new JsonArray(parameter.DeepClone()); }
+                foreach (var selector in new[] { "operations/Target", "/paths/~1source/get" })
+                {
+                    var calls = new List<string>();
+                    var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                        System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                        ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                        resolveReference: (uri, _) =>
+                        {
+                            calls.Add(uri);
+                            var target = uri switch
+                            {
+                                "https://allowed.test/parameter" => new JsonObject { ["P"] = parameter.DeepClone() },
+                                "https://allowed.test/operation" => new JsonObject { ["O"] = new JsonObject
+                                    { ["parameters"] = new JsonArray(parameter.DeepClone()),
+                                        ["responses"] = JsonNode.Parse("""{"200":{"description":""}}""") } },
+                                _ => throw new UnauthorizedAccessException()
+                            };
+                            return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(target.ToJsonString()));
+                        });
+                    await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.header_name");
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo(expectedPath);
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                    await Assert.That(string.Join("|", calls)).IsEqualTo(location switch
+                    {
+                        "reference" => "https://allowed.test/parameter",
+                        "linked" => "https://allowed.test/operation",
+                        _ => ""
+                    });
+                }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiHeaderParameterNameChecksKeepNativeLocationsAndIgnoredHeadersUnchanged(string format, string version)
+    {
+        var operation = JsonNode.Parse("""
+            {"operationId":"Target","parameters":[
+            {"name":"!#$%&'*+-.^_`|~012AZaz","in":"header","schema":{"type":"string"}},
+            {"name":"bad name","in":"query","schema":{}},
+            {"name":"bad/name","in":"cookie","schema":{}},
+            {"name":"id:part","in":"path","required":true,"schema":{}},
+            {"name":"aCcEpT","in":"header","schema":null},
+            {"name":"CONTENT-TYPE","in":"header","examples":{"ignored":{"$ref":"https://must-not-load.test/example"}}},
+            {"name":"Authorization","in":"header","required":"ignored"}]}
+            """)!;
+        var document = new JsonObject
+        {
+            ["openapi"] = version,
+            ["paths"] = new JsonObject { ["/source/{id:part}"] = new JsonObject { ["get"] = operation } }
+        };
+        foreach (var selector in new[] { "operations/Target", "/paths/~1source~1%7Bid:part%7D/get" })
+        {
+            var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                resolveReference: (_, _) => throw new InvalidOperationException("Ignored header metadata stays inactive."));
+            await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+            await Assert.That(JsonNode.DeepEquals(operation, JsonNode.Parse(result.Operation.GetRawText()))).IsTrue();
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
     public async Task OpenApiActiveHeaderMapNamesUseHttpTokenSyntax(string format, string version)
     {
         foreach (var name in new[] { "", "bad name", "bad:name", "bad/name", "bad\tname", "bad\r\nname", "caf\u00e9", "bad(name)", "bad@name" })
