@@ -138,12 +138,12 @@ public class OciDistributionTests
     public async Task AdvertisementUsesExactRepositoryAndReferenceGrammarAndRejectsUnknownParameters()
     {
         var profile = OciRepository.ParseProfile("""
-            {"name":"oci","endpoint":"oci://registry.example.org:5443/team/a__b/c--d","parameters":{"reference":"_release.1"}}
+            {"binding":"oci","endpoint":"oci://registry.example.org:5443/team/a__b/c--d","parameters":{"reference":"_release.1"}}
             """u8.ToArray());
         await Assert.That(profile.Repository.ManifestUri(profile.Reference).AbsoluteUri)
             .IsEqualTo("https://registry.example.org:5443/v2/team/a__b/c--d/manifests/_release.1");
         await Check.Error(() => Task.FromResult(OciRepository.ParseProfile("""
-            {"name":"oci","endpoint":"oci://registry.example.org/team/repo","parameters":{"reference":"release","unknown":true}}
+            {"binding":"oci","endpoint":"oci://registry.example.org/team/repo","parameters":{"reference":"release","unknown":true}}
             """u8.ToArray())), FederationErrorCode.UnsupportedOperation);
     }
 }

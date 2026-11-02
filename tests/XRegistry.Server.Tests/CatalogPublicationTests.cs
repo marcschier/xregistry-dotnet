@@ -49,16 +49,16 @@ public class CatalogPublicationTests
     [Arguments("""{"xregurl":"https://@registry.example/root"}""", """{"xregurl":"https://registry.example/root"}""", "/xregurl")]
     [Arguments("""{"registrytypes":["schema"]}""", """{"registrytypes":["urn:example:schema"]}""", "/registrytypes/0")]
     [Arguments("""{"registrytypes":[""]}""", """{"registrytypes":["urn:example:schema"]}""", "/registrytypes/0")]
-    [Arguments("""{"federationprofiles":[{"name":"","endpoint":"urn:example:catalog"}]}""",
-        """{"federationprofiles":[{"name":"future","endpoint":"urn:example:catalog"}]}""", "/federationprofiles/0/name")]
-    [Arguments("""{"federationprofiles":[{"name":"future","endpoint":"/relative"}]}""",
-        """{"federationprofiles":[{"name":"future","endpoint":"urn:example:catalog"}]}""", "/federationprofiles/0/endpoint")]
-    [Arguments("""{"federationprofiles":[{"name":"future","endpoint":"https://user@registry.example/root"}]}""",
-        """{"federationprofiles":[{"name":"future","endpoint":"https://registry.example/root"}]}""", "/federationprofiles/0/endpoint")]
-    [Arguments("""{"federationprofiles":[{"name":"future","endpoint":"https://@registry.example/root"}]}""",
-        """{"federationprofiles":[{"name":"future","endpoint":"https://registry.example/root"}]}""", "/federationprofiles/0/endpoint")]
-    [Arguments("""{"federationprofiles":[{"name":"future","endpoint":"urn:example:catalog","priority":0.5}]}""",
-        """{"federationprofiles":[{"name":"future","endpoint":"urn:example:catalog","priority":0}]}""", "/federationprofiles/0/priority")]
+    [Arguments("""{"federationprofiles":[{"binding":"","endpoint":"urn:example:catalog"}]}""",
+        """{"federationprofiles":[{"binding":"future","endpoint":"urn:example:catalog"}]}""", "/federationprofiles/0/binding")]
+    [Arguments("""{"federationprofiles":[{"binding":"future","endpoint":"/relative"}]}""",
+        """{"federationprofiles":[{"binding":"future","endpoint":"urn:example:catalog"}]}""", "/federationprofiles/0/endpoint")]
+    [Arguments("""{"federationprofiles":[{"binding":"future","endpoint":"https://user@registry.example/root"}]}""",
+        """{"federationprofiles":[{"binding":"future","endpoint":"https://registry.example/root"}]}""", "/federationprofiles/0/endpoint")]
+    [Arguments("""{"federationprofiles":[{"binding":"future","endpoint":"https://@registry.example/root"}]}""",
+        """{"federationprofiles":[{"binding":"future","endpoint":"https://registry.example/root"}]}""", "/federationprofiles/0/endpoint")]
+    [Arguments("""{"federationprofiles":[{"binding":"future","endpoint":"urn:example:catalog","priority":0.5}]}""",
+        """{"federationprofiles":[{"binding":"future","endpoint":"urn:example:catalog","priority":0}]}""", "/federationprofiles/0/priority")]
     [Arguments("""{"relationships":[{"type":"","target":"/categories/public/registries/future"}]}""",
         """{"relationships":[{"type":"future","target":"/categories/public/registries/future"}]}""", "/relationships/0/type")]
     [Arguments("""{"relationships":[{"type":"mirrors","target":"../future"}]}""",
@@ -110,14 +110,14 @@ public class CatalogPublicationTests
         var engine = Create(CatalogModelSource());
         var exception = await Assert.That(async () => await Send(engine, RegistryAction.Replace, Entry, $$"""
             {"xregurl":"https://registry.example/root",
-             "federationprofiles":[{"name":"http","endpoint":"{{different}}"}]}
+             "federationprofiles":[{"binding":"http","endpoint":"{{different}}"}]}
             """)).Throws<RegistryException>();
         await Assert.That(exception!.Diagnostic.Code).IsEqualTo("invalid_attribute");
         await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(0);
         var accepted = await Send(engine, RegistryAction.Replace, Entry, $$"""
             {"xregurl":"https://registry.example/root",
-             "federationprofiles":[{"name":"http","endpoint":"{{different}}","priority":9},
-               {"name":"http","endpoint":"https://registry.example/root","priority":3}]}
+             "federationprofiles":[{"binding":"http","endpoint":"{{different}}","priority":9},
+               {"binding":"http","endpoint":"https://registry.example/root","priority":3}]}
             """);
         var profiles = accepted.Metadata!.RootElement.GetProperty("federationprofiles");
         await Assert.That(profiles.GetArrayLength()).IsEqualTo(2);
@@ -131,10 +131,10 @@ public class CatalogPublicationTests
     [Arguments("""{"weburl":"about/registries"}""")]
     [Arguments("""{"labels":{},"registrytypes":[],"relationships":[],"federationprofiles":[]}""")]
     [Arguments("""{"authority":"organizations/team","registrytypes":["urn:example:model","urn:example:model"]}""")]
-    [Arguments("""{"authority":"x:a","registrytypes":["x:a"],"federationprofiles":[{"name":"future","endpoint":"x:a"}]}""")]
-    [Arguments("""{"federationprofiles":[{"name":"HTTP","endpoint":"urn:example:future","parameters":{"revision":false,"future":[1,{"nested":"data"}]}}]}""")]
+    [Arguments("""{"authority":"x:a","registrytypes":["x:a"],"federationprofiles":[{"binding":"future","endpoint":"x:a"}]}""")]
+    [Arguments("""{"federationprofiles":[{"binding":"HTTP","endpoint":"urn:example:future","parameters":{"revision":false,"future":[1,{"nested":"data"}]}}]}""")]
     [Arguments("""{"relationships":[{"type":"future","target":"/categories/missing/registries/missing","labels":{"note":""}}]}""")]
-    [Arguments("""{"extension":{"registrytypes":["schema"],"federationprofiles":[{"name":"","endpoint":"relative"}]},"federationprofiles":[{"name":" ","endpoint":"urn:example:extension"}],"relationships":[{"type":" ","target":"/categories/missing/registries/missing"}]}""")]
+    [Arguments("""{"extension":{"registrytypes":["schema"],"federationprofiles":[{"binding":"","endpoint":"relative"}]},"federationprofiles":[{"binding":" ","endpoint":"urn:example:extension"}],"relationships":[{"type":" ","target":"/categories/missing/registries/missing"}]}""")]
     public async Task BaseDescriptionsNeedNoResolvableAdvertisement(string metadata)
     {
         var engine = Create(CatalogModelSource());

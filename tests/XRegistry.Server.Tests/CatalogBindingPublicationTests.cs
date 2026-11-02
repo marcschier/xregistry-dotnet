@@ -120,7 +120,7 @@ public class CatalogBindingPublicationTests
         var created = await Send(engine, RegistryAction.Replace, Entry,
             Description(name, endpoint, """{"revision":false,"registryroot":[],"reference":{"opaque":true}}"""));
         var advertisement = created.Metadata!.RootElement.GetProperty("federationprofiles")[0];
-        await Assert.That(advertisement.GetProperty("name").GetString()).IsEqualTo(name);
+        await Assert.That(advertisement.GetProperty("binding").GetString()).IsEqualTo(name);
         await Assert.That(advertisement.GetProperty("endpoint").GetString()).IsEqualTo(endpoint);
         await Assert.That(advertisement.GetProperty("parameters").GetRawText())
             .IsEqualTo("""{"revision":false,"registryroot":[],"reference":{"opaque":true}}""");
@@ -158,7 +158,7 @@ public class CatalogBindingPublicationTests
 
     private static string Description(string name, string endpoint, string? parameters)
     {
-        var advertisement = new JsonObject { ["name"] = name, ["endpoint"] = endpoint, ["priority"] = 9 };
+        var advertisement = new JsonObject { ["binding"] = name, ["endpoint"] = endpoint, ["priority"] = 9 };
         if (parameters is not null)
         {
             advertisement["parameters"] = JsonNode.Parse(parameters);
@@ -166,7 +166,7 @@ public class CatalogBindingPublicationTests
         return new JsonObject
         {
             ["federationprofiles"] = new JsonArray(advertisement,
-                new JsonObject { ["name"] = "http", ["endpoint"] = "https://preferred.example/root" })
+                new JsonObject { ["binding"] = "http", ["endpoint"] = "https://preferred.example/root" })
         }.ToJsonString();
     }
 }

@@ -242,13 +242,13 @@ public class GitAdvertisementValidationTests
 
     private static CatalogDescription Description(RegistryJson? parameters)
     {
-        var git = new JsonObject { ["name"] = "git", ["endpoint"] = "https://repository.invalid/registry.git" };
+        var git = new JsonObject { ["binding"] = "git", ["endpoint"] = "https://repository.invalid/registry.git" };
         if (parameters is not null) { git["parameters"] = JsonNode.Parse(parameters.RootElement.GetRawText()); }
         return CatalogDescription.Parse(Encoding.UTF8.GetBytes(new JsonObject
         {
             ["federationprofiles"] = new JsonArray(git, new JsonObject
             {
-                ["name"] = "http",
+                ["binding"] = "http",
                 ["endpoint"] = "https://fallback.invalid",
                 ["priority"] = 9
             })

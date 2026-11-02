@@ -41,8 +41,23 @@ var model = RegistryModel.Compile(RegistryJson.Parse(modelSource.ToJsonString())
 
 ## Publication and consumption
 
+Catalog advertisements use `binding`, not `name`, as their required
+case-sensitive discriminator. The packaged Registry model is copied byte for
+byte from the selected `pr571-d757328e` artifact; `eng\sync_models.py --check`
+verifies that source selection. Both that model and the selected draft prose
+use `binding`. Historical source snapshots remain unchanged.
+
+```json
+{"federationprofiles":[{"binding":"http","endpoint":"https://registry.example/root"}]}
+```
+
+Consumers reject the historical `name` field rather than treating it as an
+alias. `CatalogAdvertisement.Name` is the C# accessor for the `binding` value;
+it does not change the wire field. Existing descriptions using `name` require
+an explicit metadata update before they can be consumed under these rules.
+
 `RegistryDomainRules.ValidateCatalogMetadata` checks a completed description
-Version, including every explicitly advertised, known HTTP/Git/File/OCI
+Version, including every explicitly advertised, known HTTP/Git/File/OCI/OPC UA
 binding's producer syntax. It accepts empty descriptions, website-only entries,
 and well-formed extension-only entries. It does not require a binding that any
 particular consumer supports.

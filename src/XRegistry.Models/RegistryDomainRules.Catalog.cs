@@ -63,7 +63,7 @@ public static partial class RegistryDomainRules
             {
                 ValidateCatalogBinding(profile, path);
             }
-            if (profile.GetProperty("name").GetString() == "http")
+            if (profile.GetProperty("binding").GetString() == "http")
             {
                 explicitHttp = true;
                 matchingHttp |= string.Equals(profile.GetProperty("endpoint").GetString(), httpRoot, StringComparison.Ordinal);
@@ -110,8 +110,8 @@ public static partial class RegistryDomainRules
 
     private static void ValidateCatalogCommonAdvertisement(JsonElement advertisement, string path, CancellationToken cancellationToken)
     {
-        CatalogFields(advertisement, path, "name", "endpoint", "priority", "parameters");
-        _ = CatalogRequiredText(advertisement, "name", path);
+        CatalogFields(advertisement, path, "binding", "endpoint", "priority", "parameters");
+        _ = CatalogRequiredText(advertisement, "binding", path);
         CatalogAbsoluteUri(CatalogRequiredText(advertisement, "endpoint", path), At(path, "endpoint"));
         if (advertisement.TryGetProperty("priority", out var priority))
         {

@@ -133,6 +133,15 @@ A packaged draft model is an implementation input, not a released requirement
 or conformance result. Its API validation and operation behavior still require
 separate implementation and tests.
 
+The Registry model uses a separately frozen successor artifact.
+`SUCCESSOR_MODELS` in `eng/sync_models.py` selects
+`pr571-d757328e/workingdrafts/models/registry/model.json` from the verified
+successor inventory rather than the historical correction chain. That model
+and its selected specification both define the advertisement discriminator as
+`binding`. A missing selected artifact rejects synchronization; it does not
+silently restore the historical `name` vocabulary. This selection does not
+rewrite either retained source or transfer earlier requirement evidence.
+
 Retained draft sources and packaged model resources disable Git text conversion.
 Their pinned hashes cover exact upstream bytes, including CRLF line endings
 where present. Tooling checks the retained files' Git attributes and staged blob

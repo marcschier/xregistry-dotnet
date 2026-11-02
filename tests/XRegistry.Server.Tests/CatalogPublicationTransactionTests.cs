@@ -16,7 +16,7 @@ public class CatalogPublicationTransactionTests
     private const string Entry = "/categories/public/registries/entry";
     private const string ValidHttp = """
         {"xregurl":"https://registry.example/root","labels":{"note":"retained"},
-         "federationprofiles":[{"name":"http","endpoint":"https://registry.example/root"}]}
+         "federationprofiles":[{"binding":"http","endpoint":"https://registry.example/root"}]}
         """;
 
     [Test]
@@ -31,7 +31,7 @@ public class CatalogPublicationTransactionTests
             """{"xregurl":"https://other.example/root","labels":{"note":"must-not-publish"}}"""), "invalid_attribute");
         await AssertUnchanged(engine, store, before);
         await ExpectCode(() => Send(engine, RegistryAction.Post, Entry,
-            """{"federationprofiles":[{"name":"git","endpoint":"https://git.example/repo","parameters":{"revision":"HEAD"}}]}"""),
+            """{"federationprofiles":[{"binding":"git","endpoint":"https://git.example/repo","parameters":{"revision":"HEAD"}}]}"""),
             "invalid_attribute");
         await AssertUnchanged(engine, store, before);
 
@@ -136,11 +136,11 @@ public class CatalogPublicationTransactionTests
         var engine = Create(model.ToJsonString());
         var accepted = await Send(engine, RegistryAction.Replace, Entry, """
             {"xregurl":"relative/root","registrytypes":["schema"],
-             "federationprofiles":[{"name":"","endpoint":"relative"}],
+             "federationprofiles":[{"binding":"","endpoint":"relative"}],
              "relationships":[{"type":"","target":"../entry"}]}
             """);
         await Assert.That(accepted.Metadata!.RootElement.GetProperty("xregurl").GetString()).IsEqualTo("relative/root");
-        await Assert.That(accepted.Metadata.RootElement.GetProperty("federationprofiles")[0].GetProperty("name").GetString()).IsEqualTo("");
+        await Assert.That(accepted.Metadata.RootElement.GetProperty("federationprofiles")[0].GetProperty("binding").GetString()).IsEqualTo("");
         await Assert.That(accepted.Metadata.RootElement.GetProperty("relationships")[0].GetProperty("target").GetString()).IsEqualTo("../entry");
     }
 
@@ -208,10 +208,10 @@ public class CatalogPublicationTransactionTests
                 {"weburl":"https://127.0.0.1:1/site","authority":"urn:example:untrusted",
                  "registrytypes":["https://127.0.0.1:1/model.json"],
                  "federationprofiles":[
-                  {"name":"http","endpoint":"https://127.0.0.1:1/root"},
-                  {"name":"git","endpoint":"https://127.0.0.1:1/repo","parameters":{"revision":"refs/heads/main"}},
-                  {"name":"file","endpoint":"file:///catalog-advertisement-not-acquired","parameters":{"layout":"document-tree"}},
-                  {"name":"oci","endpoint":"oci://127.0.0.1:1/team/repo","parameters":{"reference":"stable"}}],
+                  {"binding":"http","endpoint":"https://127.0.0.1:1/root"},
+                  {"binding":"git","endpoint":"https://127.0.0.1:1/repo","parameters":{"revision":"refs/heads/main"}},
+                  {"binding":"file","endpoint":"file:///catalog-advertisement-not-acquired","parameters":{"layout":"document-tree"}},
+                  {"binding":"oci","endpoint":"oci://127.0.0.1:1/team/repo","parameters":{"reference":"stable"}}],
                  "relationships":[{"type":"mirrors","target":"https://127.0.0.1:1/categories/missing/registries/missing"}]}
                 """)
         }, caller);

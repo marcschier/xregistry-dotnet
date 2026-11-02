@@ -31,6 +31,7 @@ MODELS = {
     "openusd": "workingdrafts/models/openusd/model.json",
 }
 DRAFT_MODELS = "eng/draft-models.json"
+SUCCESSOR_MODELS = {"registry": "pr571-d757328e"}
 
 
 def synchronize(root: Path, check: bool) -> int:
@@ -38,11 +39,19 @@ def synchronize(root: Path, check: bool) -> int:
     records = source_tool.source_records(lock)
     directory = root / "src" / "XRegistry.Models" / "Resources"
     expected: dict[str, bytes] = {}
+    successors = source_tool.successor_sources(root, lock)
     for name, path in {**MODELS, "LICENSE": "LICENSE"}.items():
         if path not in records:
             raise source_tool.SpecificationError(f"The pinned model is missing: {path}")
         filename = name if name == "LICENSE" else name + ".json"
         expected[filename], _ = source_tool.active_source(root, path, records)
+        if name in SUCCESSOR_MODELS:
+            source_id = SUCCESSOR_MODELS[name]
+            selected = next((entry for entry in successors
+                if entry["sourceId"] == source_id and entry["path"] == path and entry["kind"] == "artifact"), None)
+            if selected is None:
+                raise source_tool.SpecificationError(f"The selected successor model is missing: {source_id}/{path}")
+            expected[filename] = source_tool.contained(root, selected["file"]).read_bytes()
     draft_manifest = source_tool.read_json(source_tool.contained(root, DRAFT_MODELS))
     if (
         not isinstance(draft_manifest, dict)

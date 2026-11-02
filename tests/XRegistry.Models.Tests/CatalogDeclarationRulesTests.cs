@@ -33,11 +33,11 @@ public class CatalogDeclarationRulesTests
     }
 
     [Test]
-    [Arguments("""{"federationprofiles":[{"endpoint":"urn:example:catalog"}]}""", "/federationprofiles/0/name", "invalid_attribute")]
-    [Arguments("""{"federationprofiles":[{"name":"future"}]}""", "/federationprofiles/0/endpoint", "invalid_attribute")]
-    [Arguments("""{"federationprofiles":[{"name":"future","endpoint":"urn:example:catalog","extra":true}]}""", "/federationprofiles/0/extra", "unknown_attribute")]
+    [Arguments("""{"federationprofiles":[{"endpoint":"urn:example:catalog"}]}""", "/federationprofiles/0/binding", "invalid_attribute")]
+    [Arguments("""{"federationprofiles":[{"binding":"future"}]}""", "/federationprofiles/0/endpoint", "invalid_attribute")]
+    [Arguments("""{"federationprofiles":[{"binding":"future","endpoint":"urn:example:catalog","extra":true}]}""", "/federationprofiles/0/extra", "unknown_attribute")]
     [Arguments("""{"relationships":[{"type":"future","target":"/categories/a/registries/b","extra":true}]}""", "/relationships/0/extra", "unknown_attribute")]
-    [Arguments("""{"federationprofiles":[{"name":"future","endpoint":"urn:example:catalog","parameters":{"Bad":1}}]}""", "/federationprofiles/0/parameters/Bad", "invalid_attribute")]
+    [Arguments("""{"federationprofiles":[{"binding":"future","endpoint":"urn:example:catalog","parameters":{"Bad":1}}]}""", "/federationprofiles/0/parameters/Bad", "invalid_attribute")]
     [Arguments("""{"relationships":[{"type":"future","target":"/categories/a/registries/b","labels":{"Bad":""}}]}""", "/relationships/0/labels/Bad", "invalid_attribute")]
     [Arguments("""{"relationships":[{"type":"future","target":"/categories/a/registries/b$details"}]}""", "/relationships/0/target", "invalid_attribute")]
     public async Task CommonFieldsHaveExactCoreDiagnostics(string json, string path, string code)
@@ -55,7 +55,7 @@ public class CatalogDeclarationRulesTests
     public async Task CatalogPriorityRequiresAnUnsignedIntegerValue(string priority)
     {
         await Error(() => RegistryDomainRules.ValidateCatalogMetadata(RegistryJson.Parse($$"""
-            {"federationprofiles":[{"name":"future","endpoint":"urn:example:catalog","priority":{{priority}}}]}
+            {"federationprofiles":[{"binding":"future","endpoint":"urn:example:catalog","priority":{{priority}}}]}
             """).RootElement), "/federationprofiles/0/priority");
     }
 
@@ -63,7 +63,7 @@ public class CatalogDeclarationRulesTests
     public async Task PublicationAndConsumerValidationHaveDistinctBindingObligations()
     {
         var metadata = RegistryJson.Parse("""
-            {"federationprofiles":[{"name":"git","endpoint":"https://git.example/repo","parameters":{"future":true}}]}
+            {"federationprofiles":[{"binding":"git","endpoint":"https://git.example/repo","parameters":{"future":true}}]}
             """).RootElement;
         await Assert.That(() => RegistryDomainRules.ValidateCatalogDescription(metadata)).ThrowsNothing();
         await Error(() => RegistryDomainRules.ValidateCatalogMetadata(metadata), "/federationprofiles/0/parameters/revision");
@@ -344,7 +344,7 @@ public class CatalogDeclarationRulesTests
     private static System.Text.Json.JsonElement Advertisement(string name, string endpoint, string parameters) =>
         RegistryJson.Parse(new JsonObject
         {
-            ["name"] = name,
+            ["binding"] = name,
             ["endpoint"] = endpoint,
             ["parameters"] = JsonNode.Parse(parameters)
         }.ToJsonString()).RootElement;

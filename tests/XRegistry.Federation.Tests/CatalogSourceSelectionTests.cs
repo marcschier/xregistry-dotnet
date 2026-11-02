@@ -254,7 +254,7 @@ public class CatalogSourceSelectionTests
         });
         var root = new Uri(new Uri(app.Urls.Single()), "/mount/");
         var description = CatalogDescription.Parse(Encoding.UTF8.GetBytes(
-            $$$"""{"versionid":"catalog-v2","federationprofiles":[{"name":"http","endpoint":"{{{root}}}"}]}"""));
+            $$$"""{"versionid":"catalog-v2","federationprofiles":[{"binding":"http","endpoint":"{{{root}}}"}]}"""));
         var budget = new FederationReadBudget(new(maxSources: 2, maxRequests: 5));
         await using var lease = await CatalogSourceSelection.OpenAsync(description, Catalog, DescriptionXid,
             new(["http"]), async (advertisement, shared, token) =>
@@ -292,8 +292,8 @@ public class CatalogSourceSelectionTests
 
     private static CatalogDescription Description() => CatalogDescription.Parse(Encoding.UTF8.GetBytes("""
         {"versionid":"catalog-v2","registryid":"description-id","federationprofiles":[
-          {"name":"http","endpoint":"https://target.example/registry"},
-          {"name":"http","endpoint":"https://fallback.example/registry","priority":2}]}
+          {"binding":"http","endpoint":"https://target.example/registry"},
+          {"binding":"http","endpoint":"https://fallback.example/registry","priority":2}]}
         """));
 
     private sealed class Source : IFederationReadSource

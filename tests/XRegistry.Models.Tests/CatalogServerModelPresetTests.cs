@@ -10,6 +10,19 @@ namespace XRegistry.Models.Tests;
 public class CatalogServerModelPresetTests
 {
     [Test]
+    public async Task PackagedCatalogDiscriminatorMatchesSelectedRegistryDraft()
+    {
+        using var source = BuiltInRegistryModels.LoadSource(RegistryModelKind.Registry);
+        var attributes = source.RootElement.GetProperty("groups").GetProperty("categories").GetProperty("resources")
+            .GetProperty("registries").GetProperty("attributes").GetProperty("federationprofiles")
+            .GetProperty("item").GetProperty("attributes");
+        await Assert.That(attributes.GetProperty("binding").GetProperty("type").GetString()).IsEqualTo("string");
+        await Assert.That(attributes.GetProperty("binding").GetProperty("required").GetBoolean()).IsTrue();
+        await Assert.That(attributes.GetProperty("binding").GetProperty("strict").GetBoolean()).IsFalse();
+        await Assert.That(attributes.TryGetProperty("name", out _)).IsFalse();
+    }
+
+    [Test]
     [Arguments(false)]
     [Arguments(true)]
     public async Task ServerPresetsAnnotateOnlyTheExplicitCatalogResource(bool all)
@@ -66,11 +79,11 @@ public class CatalogServerModelPresetTests
     {
         using var before = BuiltInRegistryModels.OpenSource(RegistryModelKind.Registry);
         await Assert.That(Convert.ToHexString(SHA256.HashData(before)).ToLowerInvariant())
-            .IsEqualTo("afec5aeb7c2a3d435bdbdf7244f3e97bdb5ddb5c4679b6c418a6f7c643c22210");
+            .IsEqualTo("47bafa8618545f0f5bfb80f234117fed66f3008dddd11102c3cc406f46052b74");
         _ = all ? BuiltInRegistryModels.CompileAllForServer() : BuiltInRegistryModels.CompileForServer(RegistryModelKind.Registry);
         using var after = BuiltInRegistryModels.OpenSource(RegistryModelKind.Registry);
         await Assert.That(Convert.ToHexString(SHA256.HashData(after)).ToLowerInvariant())
-            .IsEqualTo("afec5aeb7c2a3d435bdbdf7244f3e97bdb5ddb5c4679b6c418a6f7c643c22210");
+            .IsEqualTo("47bafa8618545f0f5bfb80f234117fed66f3008dddd11102c3cc406f46052b74");
         using var source = BuiltInRegistryModels.LoadSource(RegistryModelKind.Registry);
         await Assert.That(source.RootElement.GetProperty("groups").GetProperty("categories").GetProperty("resources")
             .GetProperty("registries").TryGetProperty("modelcompatiblewith", out _)).IsFalse();

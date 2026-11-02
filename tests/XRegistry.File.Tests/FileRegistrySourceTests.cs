@@ -53,7 +53,7 @@ public class FileRegistrySourceTests
             {
                 ["federationprofiles"] = new System.Text.Json.Nodes.JsonArray(new System.Text.Json.Nodes.JsonObject
                 {
-                    ["name"] = "file",
+                    ["binding"] = "file",
                     ["endpoint"] = FileIntegrationFixture.Uri(root.FullName).AbsoluteUri,
                     ["parameters"] = new System.Text.Json.Nodes.JsonObject { ["layout"] = "oci-layout", ["reference"] = "offline" },
                 }),

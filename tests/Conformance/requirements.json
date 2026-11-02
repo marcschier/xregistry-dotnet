@@ -109651,8 +109651,8 @@
       ],
       "text": "This specification defines a Registry-of-Registries domain for xRegistry. Its catalog stores versioned descriptions of independently administered Registries and human-facing websites, with OPTIONAL federation advertisements. A Consumer can discover an entry without fetching or copying the contents it describes.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
+        "status": "informative",
+        "note": "Catalog scope permits descriptions and optional advertisements without acquiring targets. Complete catalog-on-catalog composition, policy and cycle workflows remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
         "roles": []
       },
       "implementation": {
@@ -109682,9 +109682,13 @@
       ],
       "text": "The catalog MAY advertise HTTP, OCI, Git, File, OPC UA or extension bindings. [Shared federation][Federation] defines the read operations and Registry context established after selection. A catalog does not have to implement those bindings, serve an HTTP facade for them, proxy their contents or provide a materialized view.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Catalog scope permits descriptions and optional advertisements without acquiring targets. Complete catalog-on-catalog composition, policy and cycle workflows remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -109713,9 +109717,13 @@
       ],
       "text": "A catalog's own `category` Groups and `registry` Resources MAY be federated using the shared federation rules and a compatible catalog model. The resulting view combines catalog descriptions; it does not combine the contents of every Registry they describe. A resolver still needs an initial access context and composition policy for the catalog view. An advertised Registry is not automatically added to that view, nor does its advertisement authorize another traversal. Federation policy and cycle limits continue to apply.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Catalog scope permits descriptions and optional advertisements without acquiring targets. Complete catalog-on-catalog composition, policy and cycle workflows remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -109753,8 +109761,8 @@
       ],
       "text": "The key words \"MUST\", \"MUST NOT\", \"REQUIRED\", \"SHALL\", \"SHALL NOT\", \"SHOULD\", \"SHOULD NOT\", \"RECOMMENDED\", \"MAY\", and \"OPTIONAL\" in this document are to be interpreted as described in [RFC 2119][RFC2119].",
       "review": {
-        "status": "unreviewed",
-        "note": "",
+        "status": "informative",
+        "note": "RFC 2119 notation defines interpretation, not a separately executable obligation. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
         "roles": []
       },
       "implementation": {
@@ -109784,13 +109792,20 @@
       ],
       "text": "The authoritative xRegistry extension model in [model.json](model.json) defines the catalog as a compact `modelsource`. An implementation MUST apply both that model and this specification's semantic constraints. Core remains authoritative for entity IDs, navigation, labels, Version management and Meta attributes.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The selected verified model and prose both use binding; the packaged artifact now selects that exact successor. Model shape does not establish all semantic constraints. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "PackagedCatalogDiscriminatorMatchesSelectedRegistryDraft",
+          "ServerPresetsDoNotMutateOriginalCompilationOrPackagedBytes"
+        ],
         "nativeEvidence": []
       }
     },
@@ -109815,8 +109830,8 @@
       ],
       "text": "The fragment shows the domain shape. Core attributes are omitted. A `?` marks an OPTIONAL attribute, and `*` permits zero or more occurrences.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
+        "status": "informative",
+        "note": "The question-mark and repetition markers explain an illustrative fragment. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
         "roles": []
       },
       "implementation": {
@@ -109846,9 +109861,13 @@
       ],
       "text": "The Group singular name MUST be `category` and its collection name MUST be `categories`. The Resource singular name MUST be `registry` and its collection name MUST be `registries`. Canonical entry XIDs have the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The selected model defines categories/category and metadata-only registries/registry. Complete Core identity, case-sensitive lookup, sibling uniqueness, empty/mixed-category and document-locator workflows remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -109878,9 +109897,13 @@
       ],
       "text": "A catalog-description Version appends `/versions/<versionid>`. Its Meta entity appends `/meta` to the entry XID. All identifiers MUST follow [Core ID rules][Core IDs]. IDs MUST be unique case-insensitively within their parent scope, but lookups MUST be case-sensitive. For example, `Catalog` and `catalog` MUST NOT identify different siblings. A lookup using the wrong case MUST be treated as not found, not normalized to an existing ID.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The selected model defines categories/category and metadata-only registries/registry. Complete Core identity, case-sensitive lookup, sibling uniqueness, empty/mixed-category and document-locator workflows remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -109909,9 +109932,13 @@
       ],
       "text": "IDs MUST contain 1 to 128 ASCII characters. The first character MUST be a letter, digit or `_`. Subsequent characters MUST be letters, digits, `_`, `.`, `~`, `:`, `@` or `-`. Storage mappings MUST preserve the original IDs and their scopes without weakening this grammar or introducing case-only duplicate siblings. For example, `schema:main` is a valid Core ID even on a platform that prohibits `:` in a filename: an ID is not a raw filesystem name. Equal IDs in distinct parent or model-type scopes do not imply identity.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The selected model defines categories/category and metadata-only registries/registry. Complete Core identity, case-sensitive lookup, sibling uniqueness, empty/mixed-category and document-locator workflows remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -109942,9 +109969,13 @@
       ],
       "text": "Every catalog entry MUST belong to a Category. Category IDs are open-ended. A producer MUST NOT assume that a Category ID selects a protocol, grants trust or proves a target model. Empty Categories are valid. A catalog MAY host other Group types in addition to this domain.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The selected model defines categories/category and metadata-only registries/registry. Complete Core identity, case-sensitive lookup, sibling uniqueness, empty/mixed-category and document-locator workflows remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -109973,9 +110004,13 @@
       ],
       "text": "Registry Resources MUST have `hasdocument: false`, so their metadata is their document. There is no separate `registry` document, `registrybase64` content or `registryurl` document locator in this domain. The `xregurl` domain attribute does not replace a Core document locator.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The selected model defines categories/category and metadata-only registries/registry. Complete Core identity, case-sensitive lookup, sibling uniqueness, empty/mixed-category and document-locator workflows remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -110005,9 +110040,13 @@
       ],
       "text": "Each non-alias entry MUST have at least one catalog-description Version. Core determines its default Version through `meta.defaultversionid`. A consumer MUST NOT select a description by sorting Version IDs, endpoint tags or timestamps instead.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Catalog description Versions, target Versions and binding pins are distinct. Complete Version lifecycle, immutable selected acquisition and one-hop/dangling alias workflows remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -110036,9 +110075,13 @@
       ],
       "text": "An endpoint, authority, type assertion or relationship is description data. Core permits changing that data by updating a Version or creating another Version. This domain requires neither immutable descriptions nor a target snapshot for every catalog Version. When a consumer needs a stable snapshot, it MUST use the selected binding's revision rules.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Catalog description Versions, target Versions and binding pins are distinct. Complete Version lifecycle, immutable selected acquisition and one-hop/dangling alias workflows remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -110067,9 +110110,13 @@
       ],
       "text": "The following values MUST NOT be substituted for one another:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Catalog description Versions, target Versions and binding pins are distinct. Complete Version lifecycle, immutable selected acquisition and one-hop/dangling alias workflows remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -110100,9 +110147,13 @@
       ],
       "text": "An entry MAY use Core `meta.xref` to alias another same-typed Resource in the same catalog. Core's [cross-reference rules][Core xref] for one-hop processing, source-relative identity, document-view serialization and dangling references MUST remain unchanged. An absolute endpoint MUST NOT be placed in `meta.xref`, and consumers MUST NOT transitively follow a target Resource's own `xref`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Catalog description Versions, target Versions and binding pins are distinct. Complete Version lifecycle, immutable selected acquisition and one-hop/dangling alias workflows remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -110131,9 +110182,13 @@
       ],
       "text": "Document-view serialization MUST follow Core's [Multiple Document View][Core multiple document view] and the [`doc` flag][Core doc]. In particular, it MUST:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Core document projection must preserve identity, suppress delegated attributes, rebase only included navigation targets and reject alias Version document requests. The complete catalog-specific projection/escaping/alias matrix remains pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -110163,9 +110218,13 @@
       ],
       "text": "If, and only if, the referenced entity or collection is included in the serialized output, the Core navigation attributes `self`, `<COLLECTION>url`, `metaurl` and `defaultversionurl` MUST become `#JSON-POINTER` references. Each pointer MUST locate its target within the current response document, using JSON Pointer escaping, and MUST NOT include a protocol suffix such as `$details`. Its base is not necessarily the catalog Registry root.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Core document projection must preserve identity, suppress delegated attributes, rebase only included navigation targets and reject alias Version document requests. The complete catalog-specific projection/escaping/alias matrix remains pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -110194,9 +110253,13 @@
       ],
       "text": "If the referenced entity or collection is not included, the applicable absolute Core API URL MUST be retained rather than inventing a pointer to absent data.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Core document projection must preserve identity, suppress delegated attributes, rebase only included navigation targets and reject alias Version document requests. The complete catalog-specific projection/escaping/alias matrix remains pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -110225,9 +110288,13 @@
       ],
       "text": "This conversion MUST NOT rewrite `xid`, `meta.xref` or catalog-root `relationships.target` values as document-local pointers. Their catalog scope remains unchanged. A storage filename is not a replacement base.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Core document projection must preserve identity, suppress delegated attributes, rebase only included navigation targets and reject alias Version document requests. The complete catalog-specific projection/escaping/alias matrix remains pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -110256,9 +110323,13 @@
       ],
       "text": "When a document-view request targets an alias's `versions` collection or one of its Versions, the server MUST generate [Core `cannot_doc_xref`][Core alias doc] rather than resolve the target or follow an alias chain. Reading the alias Resource itself in document view remains valid and MUST preserve Core's non-expanding serialization.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Core document projection must preserve identity, suppress delegated attributes, rebase only included navigation targets and reject alias Version document requests. The complete catalog-specific projection/escaping/alias matrix remains pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -110287,9 +110358,13 @@
       ],
       "text": "Unless stated otherwise, the attributes in this section are OPTIONAL, Version-specific, and can change between catalog-description Versions. The normal Core extension rules apply to additional attributes permitted by the model.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Description fields belong to the selected Version. Syntax does not prove a serving Registry root or a website's identity; complete publication, explicit-context and acquired-root workflows remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -110318,13 +110393,19 @@
       ],
       "text": "- OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "xregurl is optional. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "BaseDescriptionsNeedNoResolvableAdvertisement"
+        ],
         "nativeEvidence": []
       }
     },
@@ -110349,9 +110430,13 @@
       ],
       "text": "- MUST be an absolute HTTP or HTTPS Registry root URL without user information, a query or a fragment.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Description fields belong to the selected Version. Syntax does not prove a serving Registry root or a website's identity; complete publication, explicit-context and acquired-root workflows remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -110380,9 +110465,13 @@
       ],
       "text": "- MUST NOT be interpreted as a catalog entry XID or a document URL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Description fields belong to the selected Version. Syntax does not prove a serving Registry root or a website's identity; complete publication, explicit-context and acquired-root workflows remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -110411,13 +110500,19 @@
       ],
       "text": "- When supplied with explicit `http` advertisements, at least one explicit endpoint MUST match it exactly, as specified in [advertisement selection](#62-advertisement-selection).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "At least one explicit HTTP endpoint must agree exactly; differing spellings reject atomically. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "HttpLocatorsUseExactAgreementWithoutNormalization"
+        ],
         "nativeEvidence": []
       }
     },
@@ -110442,13 +110537,19 @@
       ],
       "text": "- OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Website metadata is optional and relative references are retained. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "BaseDescriptionsNeedNoResolvableAdvertisement"
+        ],
         "nativeEvidence": []
       }
     },
@@ -110473,9 +110574,13 @@
       ],
       "text": "- MUST be a URL, not an instruction to discover an API automatically.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Description fields belong to the selected Version. Syntax does not prove a serving Registry root or a website's identity; complete publication, explicit-context and acquired-root workflows remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -110505,13 +110610,19 @@
       ],
       "text": "- A relative URL MUST be resolved against the catalog Registry root URL, treated as a directory. It MUST NOT be resolved against the entry's Version URL, an advertised endpoint or a document's storage path.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Descriptive resolution uses only the supplied catalog root as a directory. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "RelativeDescriptiveUrlsUseOnlyTheExplicitCatalogRootAsADirectory"
+        ],
         "nativeEvidence": []
       }
     },
@@ -110537,13 +110648,19 @@
       ],
       "text": "- Without that external catalog URL context, a relative value MAY be retained and displayed as a reference, but MUST NOT be guessed.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Missing root context preserves the original reference with an unresolved target. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "MissingAndUnresolvedDescriptiveReferencesStayDistinct"
+        ],
         "nativeEvidence": []
       }
     },
@@ -110568,13 +110685,19 @@
       ],
       "text": "- MUST NOT contribute a federation candidate, even if its scheme is HTTP or HTTPS.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Descriptive references do not contribute federation candidates. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "WebsiteAndDescriptiveLinksDoNotBecomeAdvertisements"
+        ],
         "nativeEvidence": []
       }
     },
@@ -110599,13 +110722,19 @@
       ],
       "text": "- OPTIONAL. An empty array makes no type assertion.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Absent and empty registrytypes are accepted. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "BaseDescriptionsNeedNoResolvableAdvertisement"
+        ],
         "nativeEvidence": []
       }
     },
@@ -110630,9 +110759,13 @@
       ],
       "text": "- Each item MUST be a nonempty absolute URI identifying a domain or a model, rather than a display name such as `schema`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "registrytypes is descriptive, not target model or capability verification. Revision assertions, permutation/duplicate invariance and acquired model compatibility remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -110661,13 +110794,19 @@
       ],
       "text": "- No fixed set of domains is imposed. Multiple domain identifiers MAY be advertised for one target.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Absolute extension model URIs are accepted without a fixed domain allowlist. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AbsoluteExtensionUrisAreNotInterpretedAsWindowsPaths"
+        ],
         "nativeEvidence": []
       }
     },
@@ -110692,9 +110831,13 @@
       ],
       "text": "- An identifier denotes only the specification or model it identifies. An unversioned URI MUST NOT imply a particular `modelversion`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "registrytypes is descriptive, not target model or capability verification. Revision assertions, permutation/duplicate invariance and acquired model compatibility remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -110724,9 +110867,13 @@
       ],
       "text": "- To identify a particular revision, producers SHOULD use a URI that identifies that revision explicitly. Consumers MUST inspect the target model for its actual version and compatibility claims.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "registrytypes is descriptive, not target model or capability verification. Revision assertions, permutation/duplicate invariance and acquired model compatibility remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -110755,9 +110902,13 @@
       ],
       "text": "- Array order and duplicate identifiers MUST NOT affect binding selection. The list is not a target capability response or proof of model compatibility.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "registrytypes is descriptive, not target model or capability verification. Revision assertions, permutation/duplicate invariance and acquired model compatibility remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -110786,13 +110937,19 @@
       ],
       "text": "- OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "authority is optional. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "BaseDescriptionsNeedNoResolvableAdvertisement"
+        ],
         "nativeEvidence": []
       }
     },
@@ -110817,9 +110974,13 @@
       ],
       "text": "- MUST identify an administrative party, not convey credentials.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "authority is descriptive administrative identity, never credentials, authentication or Registry identity. URI syntax cannot prove the named party or independent endpoint trust. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -110848,13 +111009,19 @@
       ],
       "text": "- An absolute URI is RECOMMENDED. A relative URI uses the catalog-root base and unavailable-base rules defined for `weburl`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "authority shares weburl's explicit-context and unavailable-base rules. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "MissingAndUnresolvedDescriptiveReferencesStayDistinct"
+        ],
         "nativeEvidence": []
       }
     },
@@ -110879,9 +111046,13 @@
       ],
       "text": "- MUST NOT be treated as authentication, authorization, a certificate, a trust anchor or proof that the named party endorsed the entry.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "authority is descriptive administrative identity, never credentials, authentication or Registry identity. URI syntax cannot prove the named party or independent endpoint trust. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -110910,9 +111081,13 @@
       ],
       "text": "- A shared value MUST NOT establish that two Registries are identical.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "authority is descriptive administrative identity, never credentials, authentication or Registry identity. URI syntax cannot prove the named party or independent endpoint trust. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -110941,13 +111116,19 @@
       ],
       "text": "- OPTIONAL. An empty array advertises no explicit access methods.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Absent and empty advertisement arrays are accepted. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "BaseDescriptionsNeedNoResolvableAdvertisement"
+        ],
         "nativeEvidence": []
       }
     },
@@ -110972,9 +111153,13 @@
       ],
       "text": "- Each object MUST satisfy [Section 5](#5-federation-advertisements).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Advertisements preserve order and separate snapshots; relationships remain descriptive. Complete multi-advertisement distinct-snapshot and non-interference workflows remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -111003,13 +111188,19 @@
       ],
       "text": "- Multiple advertisements MAY use the same `binding` value or endpoint.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Duplicate binding/endpoint entries remain distinct and explicitly selectable. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DuplicateAdvertisementsKeepFirst"
+        ],
         "nativeEvidence": []
       }
     },
@@ -111034,13 +111225,19 @@
       ],
       "text": "- Producers MUST preserve array order. It determines preference when priorities are equal.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Equal priorities retain original array order. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DuplicateAdvertisementsKeepFirst"
+        ],
         "nativeEvidence": []
       }
     },
@@ -111065,9 +111262,13 @@
       ],
       "text": "- Multiple advertisements assert access to the same logical Registry, but MUST NOT be taken as a guarantee of identical instantaneous snapshots or interchangeable revision identifiers.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Advertisements preserve order and separate snapshots; relationships remain descriptive. Complete multi-advertisement distinct-snapshot and non-interference workflows remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -111096,13 +111297,19 @@
       ],
       "text": "- OPTIONAL. An empty array asserts no relationships.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Absent and empty relationships are accepted. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "BaseDescriptionsNeedNoResolvableAdvertisement"
+        ],
         "nativeEvidence": []
       }
     },
@@ -111127,9 +111334,13 @@
       ],
       "text": "- Each object MUST satisfy [Section 7](#7-descriptive-relationships).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Advertisements preserve order and separate snapshots; relationships remain descriptive. Complete multi-advertisement distinct-snapshot and non-interference workflows remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -111158,13 +111369,19 @@
       ],
       "text": "- Relationship order MUST NOT control profile preference.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Partial: direct relationship permutation/non-interference evidence remains pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "CyclicDescriptiveRelationshipsDoNotBecomeCandidates"
+        ],
         "nativeEvidence": []
       }
     },
@@ -111189,13 +111406,19 @@
       ],
       "text": "- Relationships MUST NOT imply synchronization, automatic traversal, write propagation or trust.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Cycles and duplicates remain data without implicit traversal or candidate creation. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CyclicDescriptiveRelationshipsDoNotBecomeCandidates"
+        ],
         "nativeEvidence": []
       }
     },
@@ -111221,9 +111444,13 @@
       ],
       "text": "Labels retain their [Core definition][Core labels]. They are OPTIONAL maps of ordinary key/value strings, not mandatory localized names. An absent map, an empty map and an empty string value are valid. Keys MUST follow Core map-key rules. This specification assigns no language-tag meaning.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Core label syntax and Version/Meta scopes remain distinct. Complete key boundaries, missing/empty values and no Meta-label substitution during selection remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -111253,9 +111480,13 @@
       ],
       "text": "Version labels describe that catalog-description Version. Meta labels remain Resource-wide Core metadata and MUST NOT silently replace Version labels during selection. An application MAY use language-like keys by agreement without changing Core comparison rules.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Core label syntax and Version/Meta scopes remain distinct. Complete key boundaries, missing/empty values and no Meta-label substitution during selection remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -111286,13 +111517,20 @@
       ],
       "text": "An advertisement contains `binding`, `endpoint`, OPTIONAL `priority` and OPTIONAL `parameters`. The object MUST NOT contain other fields. Parameter names MUST follow the model's Core attribute-name rules. Profile-specific extensions belong inside `parameters`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Closed fields and invalid Core parameter names reject with exact paths; LegacyNameIsNotAnAliasForTheRequiredBindingDiscriminator rejects the historical alias. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CommonFieldsHaveExactCoreDiagnostics",
+          "LegacyNameIsNotAnAliasForTheRequiredBindingDiscriminator"
+        ],
         "nativeEvidence": []
       }
     },
@@ -111318,13 +111556,20 @@
       ],
       "text": "- REQUIRED and MUST be nonempty.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Empty binding rejects atomically; CommonFieldsHaveExactCoreDiagnostics covers its required shape. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SuppliedCommonFieldsRejectBeforePublication",
+          "CommonFieldsHaveExactCoreDiagnostics"
+        ],
         "nativeEvidence": []
       }
     },
@@ -111349,13 +111594,19 @@
       ],
       "text": "- MUST be compared case-sensitively, without normalization.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Selection preserves exact extension spelling and does not match a differently cased supported choice. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "BindingDiscriminatorRetainsExactAdvertisementAndExtensionSpelling"
+        ],
         "nativeEvidence": []
       }
     },
@@ -111380,13 +111631,19 @@
       ],
       "text": "- An unknown value MUST NOT be executed as a known binding. For example, `HTTP` is not an alias for `http`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Uppercase built-in-looking values remain opaque extensions, not known binding aliases. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "FutureBindingsRemainOpaqueCatalogData"
+        ],
         "nativeEvidence": []
       }
     },
@@ -111411,13 +111668,19 @@
       ],
       "text": "- REQUIRED.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Missing endpoint rejects with its precise metadata path. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CommonFieldsHaveExactCoreDiagnostics"
+        ],
         "nativeEvidence": []
       }
     },
@@ -111442,9 +111705,13 @@
       ],
       "text": "- MUST be an absolute URI satisfying the selected binding's endpoint rules.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Closed advertisement fields and Core parameter names are checked before exclusion. binding is the sole discriminator. Complete serving-location and separate target identity evidence remains pending beyond URI grammar. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -111473,9 +111740,13 @@
       ],
       "text": "- MUST NOT contain user information or embedded credentials.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Closed advertisement fields and Core parameter names are checked before exclusion. binding is the sole discriminator. Complete serving-location and separate target identity evidence remains pending beyond URI grammar. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -111504,9 +111775,13 @@
       ],
       "text": "- MUST NOT be interpreted as a global entity identifier or an XID.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Closed advertisement fields and Core parameter names are checked before exclusion. binding is the sole discriminator. Complete serving-location and separate target identity evidence remains pending beyond URI grammar. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -111535,9 +111810,13 @@
       ],
       "text": "- A snapshot selector belongs in the binding parameters when so defined. Consumers MUST NOT infer one from an unrelated URL component.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Closed advertisement fields and Core parameter names are checked before exclusion. binding is the sole discriminator. Complete serving-location and separate target identity evidence remains pending beyond URI grammar. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -111567,13 +111846,19 @@
       ],
       "text": "- OPTIONAL. Absence MUST be interpreted as `0`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Implicit HTTP defaults to zero independently of an explicit matching priority. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ImplicitHttpKeepsZeroPriority"
+        ],
         "nativeEvidence": []
       }
     },
@@ -111598,13 +111883,20 @@
       ],
       "text": "- MUST be an integer greater than or equal to zero, not a string, fractional number or boolean. This is the mathematical value constraint of Core `uinteger`, not an unsigned-only JSON token grammar. Integer-valued decimal and exponent notation, such as `0.0` and `1e0`, are valid. Negative zero has value zero. These spellings do not require rewriting retained metadata.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Integral decimal, exponent and negative-zero values retain tokens; CatalogPriorityRequiresAnUnsignedIntegerValue rejects fractional, negative and nonnumeric values. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ExactPriorityValuesOrderWithoutFloatingPointOrLexicalNarrowing",
+          "CatalogPriorityRequiresAnUnsignedIntegerValue"
+        ],
         "nativeEvidence": []
       }
     },
@@ -111629,13 +111921,21 @@
       ],
       "text": "- Lower values MUST sort before higher values after caller selection and policy are applied. Equal values retain original array order.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact ordering avoids float rounding; CallerChoicePrecedesPriority and DuplicateAdvertisementsKeepFirst prove caller precedence and stable ties. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ExactPriorityValuesOrderWithoutFloatingPointOrLexicalNarrowing",
+          "CallerChoicePrecedesPriority",
+          "DuplicateAdvertisementsKeepFirst"
+        ],
         "nativeEvidence": []
       }
     },
@@ -111661,13 +111961,19 @@
       ],
       "text": "- OPTIONAL. Absence MUST be interpreted as an empty object.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Absent parameters expose an empty object without inventing required binding fields. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "MissingGitParametersDoNotTurnIntoAnImplicitRevisionOrHttpFallback"
+        ],
         "nativeEvidence": []
       }
     },
@@ -111693,9 +111999,13 @@
       ],
       "text": "- Built-in profiles MUST supply the parameters marked REQUIRED below.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Priority and parameter defaults are processing rules, not injected metadata. Complete producer credential exclusion is not proven by opaque parameter syntax or independent consumer policy. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -111725,13 +112035,19 @@
       ],
       "text": "- Unknown parameters MAY be retained in catalog metadata. If a built-in profile containing an unknown parameter is selected, the resolver MUST report `unsupported_operation` before accessing the endpoint.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Unknown built-in parameters remain retained; selection reports unsupported_operation without fallback and permits a separate explicit alternative. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "UnknownSelectedParametersStillFailWithoutDroppingThemOrFallingBack"
+        ],
         "nativeEvidence": []
       }
     },
@@ -111756,9 +112072,13 @@
       ],
       "text": "- Credentials, bearer tokens, passwords and private keys MUST NOT be included. Authentication configuration is external to the catalog.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Priority and parameter defaults are processing rules, not injected metadata. Complete producer credential exclusion is not proven by opaque parameter syntax or independent consumer policy. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -111788,9 +112108,13 @@
       ],
       "text": "The `http` profile provides access to the target Registry through the [Core HTTP binding][HTTP]. Its endpoint MUST be an absolute HTTP or HTTPS URL of that Registry's root, with no query or fragment. It MUST NOT point to a Group, Resource, Version, website or domain document in place of the root. This revision defines no HTTP parameters. If `parameters` is present in a supported advertisement, it MUST be empty.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "HTTP/OCI endpoint syntax is checked before access. Actual serving root/repository bootstrap, Core version and capability checks remain separate pending binding workflows. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -111821,9 +112145,13 @@
       ],
       "text": "The `oci` profile accesses Registry snapshots in an OCI Distribution repository. Its endpoint MUST have the form `oci://host/repository`. A port MAY be included in the authority. The endpoint MUST NOT embed a tag, digest, query or fragment. The `oci` scheme is a binding locator defined by this draft, not a new Core HTTP endpoint.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "HTTP/OCI endpoint syntax is checked before access. Actual serving root/repository bootstrap, Core version and capability checks remain separate pending binding workflows. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -111852,13 +112180,19 @@
       ],
       "text": "- REQUIRED.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "OCI reference is required at publication. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "KnownParametersAreValidatedEvenWhenAnotherAdvertisementWouldBeSelected"
+        ],
         "nativeEvidence": []
       }
     },
@@ -111883,13 +112217,20 @@
       ],
       "text": "- MUST be an OCI tag or `sha256:` followed by 64 lowercase hexadecimal digits, using [OCI Distribution][OCI Distribution] reference syntax.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Digest algorithm, lowercase hexadecimal and 64-digit boundaries are checked; OciTagLengthBoundariesAlsoApplyToFileLayouts covers tag lengths. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "OciDigestSpellingAndLengthAreExact",
+          "OciTagLengthBoundariesAlsoApplyToFileLayouts"
+        ],
         "nativeEvidence": []
       }
     },
@@ -111914,13 +112255,19 @@
       ],
       "text": "- A tag MUST contain 1 to 128 ASCII characters. Its first character MUST be alphanumeric or `_`. Subsequent characters MUST be alphanumeric, `_`, `.` or `-`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Partial: full first/subsequent tag-character partitions remain to be mapped. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "OciTagLengthBoundariesAlsoApplyToFileLayouts"
+        ],
         "nativeEvidence": []
       }
     },
@@ -111945,9 +112292,13 @@
       ],
       "text": "- A tag is mutable. A resolver MUST pin the resolved root digest for the operation. The digest identifies exact published bytes.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "OCI reference syntax does not prove immutable pinning, exact byte verification or distinction from target XIDs/Versions. Complete binding-operation evidence remains pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -111976,9 +112327,13 @@
       ],
       "text": "- MUST NOT replace a target XID or target Resource `versionid`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "OCI reference syntax does not prove immutable pinning, exact byte verification or distinction from target XIDs/Versions. Complete binding-operation evidence remains pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -112008,9 +112363,13 @@
       ],
       "text": "The `git` profile reads a Registry snapshot from a repository. Its endpoint MUST be an absolute HTTPS repository URL without a query or fragment. It MUST NOT be a hosting website's file-view URL. This revision does not advertise shell commands, SSH credentials or arbitrary repository execution.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Git syntax does not prove repository identity, commit pin lifetime or disabled repository execution. File-view URLs cannot be identified reliably by path heuristics. Complete acquisition evidence remains pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -112039,13 +112398,19 @@
       ],
       "text": "- REQUIRED.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Git revision must be a nonempty string before fallback can occur. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SelectedGitRequiresANonemptyStringRevisionBeforeAnyFallback"
+        ],
         "nativeEvidence": []
       }
     },
@@ -112070,13 +112435,20 @@
       ],
       "text": "- MUST be a complete `refs/...` reference satisfying Git reference-name rules, or a complete 40-digit SHA-1 or 64-digit SHA-256 hexadecimal object ID.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Complete refs follow Git grammar; GitObjectIdsMustBeCompleteWithoutCaseNormalization proves full 40/64-digit ID lengths. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "GitRefsCannotBecomeRevisionExpressions",
+          "GitObjectIdsMustBeCompleteWithoutCaseNormalization"
+        ],
         "nativeEvidence": []
       }
     },
@@ -112101,13 +112473,19 @@
       ],
       "text": "- Abbreviated object IDs, unqualified branch names such as `main`, `HEAD` and revision expressions MUST NOT be used.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "HEAD, unqualified branches and revision expressions reject without a fallback. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "RevisionExpressionsAndInvalidRefComponentsCannotSelectAFallback"
+        ],
         "nativeEvidence": []
       }
     },
@@ -112132,9 +112510,13 @@
       ],
       "text": "- A reference or tag MUST be resolved to one commit before traversal. The commit MUST remain pinned for the complete operation.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Git syntax does not prove repository identity, commit pin lifetime or disabled repository execution. File-view URLs cannot be identified reliably by path heuristics. Complete acquisition evidence remains pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -112163,9 +112545,13 @@
       ],
       "text": "- A Git object ID MUST NOT be substituted for an OCI content digest or an xRegistry Version ID.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Git syntax does not prove repository identity, commit pin lifetime or disabled repository execution. File-view URLs cannot be identified reliably by path heuristics. Complete acquisition evidence remains pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -112195,9 +112581,13 @@
       ],
       "text": "- OPTIONAL. Absence MUST select `xregistry`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Git portable locator syntax is not repository containment. The binding must apply the absent-path xregistry default and preserve an explicit empty root without command/URL reinterpretation; complete acquisition evidence remains pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -112226,13 +112616,19 @@
       ],
       "text": "- The empty string MUST select the repository root.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "An explicit empty Git root remains empty without an injected default. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "PortableRootLocatorsRetainExactSpellingIncludingTheExplicitEmptyRoot"
+        ],
         "nativeEvidence": []
       }
     },
@@ -112258,13 +112654,19 @@
       ],
       "text": "- A nonempty value MUST be a portable relative directory path using `/` as its segment separator. It MUST NOT contain an empty, `.` or `..` segment, a backslash, a drive prefix or an absolute-path prefix.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Traversal/separator/root/component grammar rejects invalid inputs; GitDirectoryComponentsHaveExactPortableBoundaries proves component limits. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "GitRootSyntaxIsPortableWithoutFilesystemInterpretation"
+        ],
         "nativeEvidence": []
       }
     },
@@ -112290,9 +112692,13 @@
       ],
       "text": "- The selected path MUST remain within the repository tree. Consumers MUST NOT reinterpret it as an operating-system command or a URL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Git portable locator syntax is not repository containment. The binding must apply the absent-path xregistry default and preserve an explicit empty root without command/URL reinterpretation; complete acquisition evidence remains pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -112321,9 +112727,13 @@
       ],
       "text": "The `file` profile reads a Registry representation from a directory. Its endpoint MUST be an absolute [file URI][File URI] identifying that directory, with no query or fragment. The selected binding and caller remain responsible for filesystem authority, containment and access policy. A locator does not grant permission to read a local or network path.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "File syntax does not authorize filesystem access. Complete platform containment, explicit layout acquisition and non-arbitrary OCI layout root-selection evidence remains pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -112352,13 +112762,19 @@
       ],
       "text": "- REQUIRED.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "File layout is required with the correct type at publication. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "KnownParametersAreValidatedEvenWhenAnotherAdvertisementWouldBeSelected"
+        ],
         "nativeEvidence": []
       }
     },
@@ -112383,13 +112799,19 @@
       ],
       "text": "- MUST be exactly `document-tree` or `oci-layout`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "File layout must be document-tree or oci-layout. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "KnownParametersAreValidatedEvenWhenAnotherAdvertisementWouldBeSelected"
+        ],
         "nativeEvidence": []
       }
     },
@@ -112414,9 +112836,13 @@
       ],
       "text": "- A consumer MUST NOT guess a layout by trying one interpretation after another fails.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "File syntax does not authorize filesystem access. Complete platform containment, explicit layout acquisition and non-arbitrary OCI layout root-selection evidence remains pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -112445,13 +112871,19 @@
       ],
       "text": "- REQUIRED when `layout` is `oci-layout`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "File oci-layout requires a reference. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "KnownParametersAreValidatedEvenWhenAnotherAdvertisementWouldBeSelected"
+        ],
         "nativeEvidence": []
       }
     },
@@ -112476,13 +112908,19 @@
       ],
       "text": "- MUST be absent when `layout` is `document-tree`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "File document-tree must not supply a reference; failed publication preserves prior state. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "KnownParametersAreValidatedEvenWhenAnotherAdvertisementWouldBeSelected"
+        ],
         "nativeEvidence": []
       }
     },
@@ -112507,13 +112945,19 @@
       ],
       "text": "- MUST use the tag or SHA-256 digest syntax defined for [OCI `reference`](#531-parametersreference).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Partial: complete File tag-character/digest partitions remain to be mapped. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "OciTagLengthBoundariesAlsoApplyToFileLayouts"
+        ],
         "nativeEvidence": []
       }
     },
@@ -112538,9 +112982,13 @@
       ],
       "text": "- The File and OCI bindings determine root selection within the layout. A layout containing multiple roots MUST NOT cause an arbitrary choice.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "File syntax does not authorize filesystem access. Complete platform containment, explicit layout acquisition and non-arbitrary OCI layout root-selection evidence remains pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -112569,9 +113017,13 @@
       ],
       "text": "The `opcua` profile accesses a Registry through the [native binding][OPC UA]. Its endpoint MUST be a native OPC UA endpoint URL as defined by that binding. It identifies a serving location, not the Server Application URI or Namespace URI. The native binding defines supported transport profiles and endpoint discovery, including [advertisement and Registry selection][OPC UA selection] and [structured reference resolution][OPC UA references].",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Native endpoint and portable root syntax remain separate from application/namespace identities. Complete transport discovery, connected namespace and Session/bootstrap evidence remains pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -112600,13 +113052,19 @@
       ],
       "text": "- REQUIRED.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Publication requires registryroot while preserving unknown parameters without granting selected support. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "OpcUaRegistryRootIsValidatedAndUnknownParametersRemainOpaque"
+        ],
         "nativeEvidence": []
       }
     },
@@ -112631,13 +113089,19 @@
       ],
       "text": "- MUST use the OPC UA portable NodeId string representation.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Portable grammar/null forms are checked; PortableNodeIdIdentifierLimitsApplyToStringAndDecodedOpaqueValues covers scalar/byte limits. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "PortableNodeIdSyntaxUsesPart6GrammarAndPart3NullRules"
+        ],
         "nativeEvidence": []
       }
     },
@@ -112662,13 +113126,20 @@
       ],
       "text": "- A nonstandard namespace MUST be identified with `nsu=`, not a persisted `ns=` index. The resolver maps that Namespace URI to the selected Server's namespace table.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The nsu URI maps to the connected table; RegistryRootMustUseNonNullPortableNodeIdForm rejects persisted index and server-prefix forms. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "PortableRegistryRootMapsItsNamespaceUriToTheConnectedServer",
+          "RegistryRootMustUseNonNullPortableNodeIdForm"
+        ],
         "nativeEvidence": []
       }
     },
@@ -112693,13 +113164,19 @@
       ],
       "text": "- Standard namespace identifiers MAY omit the namespace component.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A bare numeric identifier resolves in namespace zero. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "StandardNamespaceMayUseTheBarePortableIdentifier"
+        ],
         "nativeEvidence": []
       }
     },
@@ -112724,9 +113201,13 @@
       ],
       "text": "- A Server table index or an Application URI MUST NOT be substituted for the endpoint or the Registry root.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Native endpoint and portable root syntax remain separate from application/namespace identities. Complete transport discovery, connected namespace and Session/bootstrap evidence remains pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -112755,13 +113236,19 @@
       ],
       "text": "- OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "applicationuri can be absent. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "StandardNamespaceMayUseTheBarePortableIdentifier"
+        ],
         "nativeEvidence": []
       }
     },
@@ -112786,13 +113273,19 @@
       ],
       "text": "- MUST be an absolute Application URI, not an endpoint URL inferred from its spelling.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A supplied applicationuri must be absolute; malformed values have precise paths. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "OpcUaAdvertisementsValidateEndpointRootAndOptionalUris"
+        ],
         "nativeEvidence": []
       }
     },
@@ -112817,9 +113310,13 @@
       ],
       "text": "- When present, the selected Server application MUST match this identity under the native binding's verification rules.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Optional application/transport URI syntax is not certificate trust or consumer transport support. Exact endpoint mismatch tests report not_found; unsupported requested transport must separately report unsupported_operation. Audit the connection layer before changing semantics. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -112848,9 +113345,13 @@
       ],
       "text": "- This assertion MUST NOT replace certificate and trust verification.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Optional application/transport URI syntax is not certificate trust or consumer transport support. Exact endpoint mismatch tests report not_found; unsupported requested transport must separately report unsupported_operation. Audit the connection layer before changing semantics. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -112879,13 +113380,19 @@
       ],
       "text": "- OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "transportprofileuri can be absent without an injected catalog value. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "StandardNamespaceMayUseTheBarePortableIdentifier"
+        ],
         "nativeEvidence": []
       }
     },
@@ -112910,9 +113417,13 @@
       ],
       "text": "- MUST be an absolute transport-profile URI recognized by the consumer.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Optional application/transport URI syntax is not certificate trust or consumer transport support. Exact endpoint mismatch tests report not_found; unsupported requested transport must separately report unsupported_operation. Audit the connection layer before changing semantics. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -112942,9 +113453,13 @@
       ],
       "text": "- An unsupported requested profile MUST produce `unsupported_operation`. It MUST NOT be silently dropped to select a weaker transport.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Optional application/transport URI syntax is not certificate trust or consumer transport support. Exact endpoint mismatch tests report not_found; unsupported requested transport must separately report unsupported_operation. Audit the connection layer before changing semantics. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -112973,9 +113488,13 @@
       ],
       "text": "The model's advisory `enum` permits extension `binding` values. An extension SHOULD use a collision-resistant name under its publisher's control and document its endpoint, parameters, version rules, security properties and conformance requirements.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Extension bindings retain exact advisory-enum values. Publisher-controlled naming and extension documentation remain producer duties, not runtime acceptance proofs. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -113005,13 +113524,20 @@
       ],
       "text": "Unknown profiles remain valid catalog descriptions when their common fields are valid. A consumer that does not implement their semantics MUST exclude them from supported resolution candidates. It MUST NOT infer a known binding from their endpoints. Parameters in an extension profile are owned by that extension. Their names do not activate built-in semantics.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "An extension is selectable only under its exact supported name; FutureBindingsRemainOpaqueCatalogData proves no built-in reinterpretation. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "BindingDiscriminatorRetainsExactAdvertisementAndExtensionSpelling",
+          "FutureBindingsRemainOpaqueCatalogData"
+        ],
         "nativeEvidence": []
       }
     },
@@ -113036,9 +113562,13 @@
       ],
       "text": "A consumer MUST select the containing catalog, Category and catalog entry before interpreting advertisements. XIDs are resolved within that catalog only. When selecting by a label, the consumer MUST name the collection and use [Core string matching][Core filter] and the [shared selector rules][Selectors].",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Catalog/Category/entry selection precedes advertisements. Complete paged label matching, missing/empty comparison and zero/ambiguous results remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -113068,9 +113598,13 @@
       ],
       "text": "Label values are literal strings, including the empty string. An absent label does not match. String matching is case-insensitive under Core. This domain MUST NOT impose NFC normalization, language-key selection or a case-sensitive alternate default. A consumer MUST examine every necessary page before claiming a unique match. Zero matches yield `not_found`. Multiple matches yield `ambiguous`, not an arbitrary first entry.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Catalog/Category/entry selection precedes advertisements. Complete paged label matching, missing/empty comparison and zero/ambiguous results remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -113100,13 +113634,19 @@
       ],
       "text": "The consumer MUST select an explicit catalog-description Version if the caller supplied one. Otherwise it MUST use the Core default Version. In document view, the consumer obtains that Version through the entry's Meta entity and Versions collection. It MUST NOT merge advertisements from different description Versions.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exactly the explicit or Meta-default Version is selected, never merged; missing explicit versions report not_found. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CatalogDescriptionUsesExplicitOrDefaultVersion"
+        ],
         "nativeEvidence": []
       }
     },
@@ -113131,9 +113671,13 @@
       ],
       "text": "Selection MUST use the following procedure:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The procedure includes all numbered steps, even steps without extracted keywords. Direct selection tests do not establish acquired target context/read workflows or full conformance. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -113162,13 +113706,19 @@
       ],
       "text": "2. If `xregurl` is present, validate it as an HTTP root. If explicit `http` advertisements also exist, at least one endpoint MUST equal `xregurl` exactly. Otherwise the entry is contradictory and resolution MUST fail. Comparison here is exact string comparison, not URI normalization or a global identity rule.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Contradictory HTTP data rejects before filtering using exact string agreement. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "HttpConsistencyPrecedesExclusion"
+        ],
         "nativeEvidence": []
       }
     },
@@ -113193,13 +113743,19 @@
       ],
       "text": "3. A present `xregurl` contributes an implicit `http` candidate with that endpoint, priority `0` and empty parameters, ordered after the explicit advertisements. Its selection defaults MUST NOT be inherited from a different explicit candidate.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "xregurl appends an implicit HTTP candidate with zero priority and independent empty parameters. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ImplicitHttpKeepsZeroPriority"
+        ],
         "nativeEvidence": []
       }
     },
@@ -113224,13 +113780,20 @@
       ],
       "text": "4. Apply the caller's explicit advertisement choice, including a selected `binding` value or original array position, and the caller's access policy. The producer's priority MUST NOT override that choice.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Binding and array-position choice constrain ranking; CallerPolicyCanExcludeButDenialStopsSelection proves policy precedence. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CallerChoicePrecedesPriority",
+          "CallerPolicyCanExcludeButDenialStopsSelection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -113256,13 +113819,20 @@
       ],
       "text": "Repeated advertisements are permitted. Exact duplicates do not create ambiguous Registry selection: the first equally ranked candidate wins. Candidates with the same endpoint but different parameters or priorities MUST retain those distinctions. In particular, a matching explicit HTTP advertisement does not change the implicit candidate's zero priority. Map iteration order MUST NOT be used to rank advertisements.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Repeated entries retain their positions and first equal rank wins; ImplicitHttpKeepsZeroPriority proves the separate implicit default. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DuplicateAdvertisementsKeepFirst",
+          "ImplicitHttpKeepsZeroPriority"
+        ],
         "nativeEvidence": []
       }
     },
@@ -113288,9 +113858,13 @@
       ],
       "text": "An entry's advertisements assert access to a common logical target; its contents can differ between access methods at a given instant. A consumer MUST record the chosen catalog entry, description Version, advertisement and binding revision separately from target entity IDs. It MUST NOT equate two target snapshots solely because their endpoint URLs, labels or `registryid` values match.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Complete selected-origin/revision, target model/Core/capability verification, logical identity inconsistency and acquisition failure/no-fallback matrices remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -113319,9 +113893,13 @@
       ],
       "text": "A consumer MUST check the target's model, Core version and applicable capabilities. Neither `registrytypes` nor a successful endpoint connection replaces those checks. If advertisements demonstrably identify different logical Registries, the consumer MUST report an inconsistent selection rather than silently merge them.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Complete selected-origin/revision, target model/Core/capability verification, logical identity inconsistency and acquisition failure/no-fallback matrices remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -113351,9 +113929,13 @@
       ],
       "text": "An integrity error, policy rejection, unsupported version, ambiguous selection or inconsistent snapshot MUST NOT trigger silent fallback to a different candidate. A caller MAY initiate a new operation with an explicit alternative after inspecting the failure. This specification does not authorize automatic retries through weaker trust or integrity mechanisms.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Complete selected-origin/revision, target model/Core/capability verification, logical identity inconsistency and acquisition failure/no-fallback matrices remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -113383,13 +113965,19 @@
       ],
       "text": "A relationship contains REQUIRED `type` and `target` fields and OPTIONAL Core `labels`. No other fields are defined in the relationship object.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Partial: unknown relationship fields reject; direct missing-field partitions remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "CommonFieldsHaveExactCoreDiagnostics"
+        ],
         "nativeEvidence": []
       }
     },
@@ -113415,13 +114003,19 @@
       ],
       "text": "- REQUIRED and MUST be nonempty.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Partial: empty type rejects atomically; a direct missing-type case remains pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "SuppliedCommonFieldsRejectBeforePublication"
+        ],
         "nativeEvidence": []
       }
     },
@@ -113447,9 +114041,13 @@
       ],
       "text": "- Defined values MUST be recognized case-sensitively. Other values remain valid extensions and MUST NOT acquire a built-in meaning.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Relationship types/targets/labels remain descriptive. Absolute URI syntax cannot prove a target is another catalog entry. Complete map boundaries, case-sensitive types, non-interference and explicitly authorized bounded traversal remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -113478,9 +114076,13 @@
       ],
       "text": "`mirrors` MUST NOT be treated as proof of matching bytes, revision, completeness or freshness. `supersedes` MUST NOT automatically redirect selection, and `depends-on` does not enumerate all transitive dependencies.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Relationship types/targets/labels remain descriptive. Absolute URI syntax cannot prove a target is another catalog entry. Complete map boundaries, case-sensitive types, non-interference and explicitly authorized bounded traversal remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -113509,13 +114111,19 @@
       ],
       "text": "- REQUIRED.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Partial: target shape is checked; a direct missing-target case remains pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "CommonFieldsHaveExactCoreDiagnostics"
+        ],
         "nativeEvidence": []
       }
     },
@@ -113541,13 +114149,19 @@
       ],
       "text": "- A leading `/` MUST denote a catalog-root Resource XID of the form `/categories/<categoryid>/registries/<registryid>`. It MUST NOT be a network-path reference beginning `//`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Local targets must be category/registry Resource XIDs; network, Group, Meta, Version and wrong collection forms reject. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SuppliedCommonFieldsRejectBeforePublication"
+        ],
         "nativeEvidence": []
       }
     },
@@ -113572,9 +114186,13 @@
       ],
       "text": "- An absolute URI MUST identify a catalog entry in another catalog, not merely a target Registry's serving endpoint.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Relationship types/targets/labels remain descriptive. Absolute URI syntax cannot prove a target is another catalog entry. Complete map boundaries, case-sensitive types, non-interference and explicitly authorized bounded traversal remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -113603,13 +114221,19 @@
       ],
       "text": "- Other relative references, including `../`, bare IDs and document fragments, MUST NOT be used.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Other relative relationship targets reject without acquisition. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CatalogAttributesAndRelationshipsAreValidated"
+        ],
         "nativeEvidence": []
       }
     },
@@ -113635,13 +114259,19 @@
       ],
       "text": "- OPTIONAL and MAY be empty.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Partial: absent labels and empty string values are accepted; a direct empty-map case remains pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "BaseDescriptionsNeedNoResolvableAdvertisement"
+        ],
         "nativeEvidence": []
       }
     },
@@ -113666,9 +114296,13 @@
       ],
       "text": "- Keys and values MUST follow [Core label rules][Core labels], including permitting an empty string value.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Relationship types/targets/labels remain descriptive. Absolute URI syntax cannot prove a target is another catalog entry. Complete map boundaries, case-sensitive types, non-interference and explicitly authorized bounded traversal remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -113697,9 +114331,13 @@
       ],
       "text": "- MUST NOT select an endpoint, imply a language-key comparison rule or establish trust.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Relationship types/targets/labels remain descriptive. Absolute URI syntax cannot prove a target is another catalog entry. Complete map boundaries, case-sensitive types, non-interference and explicitly authorized bounded traversal remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -113730,9 +114368,13 @@
       ],
       "text": "Relationships MAY contain cycles and duplicate assertions. Consumers MUST NOT traverse them automatically as part of ordinary entry selection. An application explicitly traversing them MUST apply access policy, cycle detection and finite depth and size limits, and MUST report limits rather than presenting truncated results as complete.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Relationship types/targets/labels remain descriptive. Absolute URI syntax cannot prove a target is another catalog entry. Complete map boundaries, case-sensitive types, non-interference and explicitly authorized bounded traversal remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -113761,9 +114403,13 @@
       ],
       "text": "Catalog writers and servers MUST apply Core model, attribute and entity errors. For example, a value that violates an attribute constraint generates Core `invalid_attribute`. A field not permitted by the model generates `unknown_attribute`. This domain does not add Core error codes.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Core publication errors and caller policy are separate from producer credential exclusion, endpoint trust and byte integrity. Complete error, redirect credential isolation, containment, budgets, certificates and no-execution workflows remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -113793,9 +114439,13 @@
       ],
       "text": "A catalog is untrusted input unless independently authenticated. A URI, `authority`, label or relationship is an assertion, not authorization. Consumers MUST establish endpoint trust and credentials independently. Producers MUST NOT store credentials in URLs, parameters, labels or other catalog metadata.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Core publication errors and caller policy are separate from producer credential exclusion, endpoint trust and byte integrity. Complete error, redirect credential isolation, containment, budgets, certificates and no-execution workflows remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -113825,9 +114475,13 @@
       ],
       "text": "Consumers MUST apply policy to the selected scheme, destination and operation before resolving an advertisement or explicitly following a relationship. They MUST protect against requests to unintended local or private services, filesystem escape, redirect loops and resource exhaustion. Redirects MUST NOT cause credentials to be forwarded to an unauthorized destination.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Core publication errors and caller policy are separate from producer credential exclusion, endpoint trust and byte integrity. Complete error, redirect credential isolation, containment, budgets, certificates and no-execution workflows remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -113857,9 +114511,13 @@
       ],
       "text": "Names, descriptions, labels and websites MUST be treated as untrusted display data. Consumers MUST NOT execute catalog strings, repository hooks or commands derived from them. Merely displaying `weburl` does not authorize fetching it.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Core publication errors and caller policy are separate from producer credential exclusion, endpoint trust and byte integrity. Complete error, redirect credential isolation, containment, budgets, certificates and no-execution workflows remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -113888,9 +114546,13 @@
       ],
       "text": "Digest and commit pins establish particular published bytes or repository objects, not publisher authorization. Consumers MUST validate integrity and publisher trust separately, including native OPC UA application and certificate checks. Catalog mutation, mutable tags and changing endpoints can make previously observed descriptions stale.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Core publication errors and caller policy are separate from producer credential exclusion, endpoint trust and byte integrity. Complete error, redirect credential isolation, containment, budgets, certificates and no-execution workflows remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -113919,9 +114581,13 @@
       ],
       "text": "A base catalog implementation MUST conform to Core 1.0-rc4, implement the authoritative domain model and preserve this specification's hierarchy, metadata-only Resources and Version semantics. It MUST accept conforming entries without labels, `registrytypes`, `authority`, `relationships`, `federationprofiles`, `xregurl` or `weburl`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "This is an aggregate conformance or derived-artifact precedence obligation. Individual managed tests and exact model copying do not establish complete Core/domain/binding conformance or native qualification. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -113951,9 +114617,13 @@
       ],
       "text": "When a domain attribute is supplied, its types and semantic constraints apply. Unknown `binding` values and relationship types MUST remain valid catalog data if their common fields are valid. A base catalog is not REQUIRED to implement any advertised transport or reachability check.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "This is an aggregate conformance or derived-artifact precedence obligation. Individual managed tests and exact model copying do not establish complete Core/domain/binding conformance or native qualification. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -113983,13 +114653,19 @@
       ],
       "text": "A base entry MAY describe only a website, or have no endpoint at all. Failure to resolve such an entry MUST NOT retroactively invalidate its base catalog conformance.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Website-only metadata remains parsed base data while selection reports unsupported_binding. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "WebsiteAndDescriptiveLinksDoNotBecomeAdvertisements"
+        ],
         "nativeEvidence": []
       }
     },
@@ -114014,9 +114690,13 @@
       ],
       "text": "A federation-resolvable entry MUST first be a conforming base entry. In its selected description Version it MUST provide at least one valid advertisement for a binding supported by the consumer, either explicitly or through `xregurl`, with all parameters needed to identify the target. Any xregurl/explicit HTTP consistency constraint MUST also hold.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "This is an aggregate conformance or derived-artifact precedence obligation. Individual managed tests and exact model copying do not establish complete Core/domain/binding conformance or native qualification. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -114046,9 +114726,13 @@
       ],
       "text": "A catalog consumer claiming resolution conformance MUST implement the selection procedure. It MUST preserve origin and revision distinctions. It MUST conform to [shared federation][Federation] and each binding it claims to support. It MUST report unsupported operations and failures explicitly. It is not REQUIRED to implement every built-in binding.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "This is an aggregate conformance or derived-artifact precedence obligation. Individual managed tests and exact model copying do not establish complete Core/domain/binding conformance or native qualification. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -114077,9 +114761,13 @@
       ],
       "text": "Read-only federation consumption does not prohibit independent, authorized catalog editing under Core. Such editing MUST NOT cause write-through to a target Registry.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "This is an aggregate conformance or derived-artifact precedence obligation. Individual managed tests and exact model copying do not establish complete Core/domain/binding conformance or native qualification. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -114108,9 +114796,13 @@
       ],
       "text": "Derived artifacts MUST NOT override Core or this specification when a generator omits a constraint or produces an incompatible description. Current limitations and reproduction commands are documented alongside the generated files rather than changing the domain model to accommodate them.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "This is an aggregate conformance or derived-artifact precedence obligation. Individual managed tests and exact model copying do not establish complete Core/domain/binding conformance or native qualification. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",

@@ -355,7 +355,7 @@ internal static class PublicationJson
         using (var writer = new Utf8JsonWriter(buffer))
         {
             writer.WriteStartObject();
-            writer.WriteString("name", registry.Binding);
+            writer.WriteString("binding", registry.Binding);
             writer.WriteString("endpoint", registry.Endpoint);
             writer.WriteStartObject("parameters");
             foreach (var parameter in registry.Parameters)

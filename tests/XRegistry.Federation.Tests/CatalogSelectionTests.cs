@@ -19,8 +19,8 @@ public class CatalogSelectionTests
     {
         var description = Parse($$$"""
             {"federationprofiles":[
-              {"name":"file","endpoint":"{{{endpoint}}}","parameters":{"layout":"document-tree"}},
-              {"name":"http","endpoint":"https://fallback.invalid","priority":9}]}
+              {"binding":"file","endpoint":"{{{endpoint}}}","parameters":{"layout":"document-tree"}},
+              {"binding":"http","endpoint":"https://fallback.invalid","priority":9}]}
             """);
         var selected = description.Select(new(["file", "http"]));
         await Assert.That(selected.Name).IsEqualTo("file");
@@ -35,8 +35,8 @@ public class CatalogSelectionTests
             {
               "xregurl": "https://example.test/Registry",
               "federationprofiles": [
-                {"name":"http","endpoint":"https://example.test/Registry","priority":5},
-                {"name":"file","endpoint":"file:///catalog","priority":2,
+                {"binding":"http","endpoint":"https://example.test/Registry","priority":5},
+                {"binding":"file","endpoint":"file:///catalog","priority":2,
                  "parameters":{"layout":"document-tree"}}
               ]
             }
@@ -55,10 +55,14 @@ public class CatalogSelectionTests
     [Test]
     public async Task CatalogDescriptionUsesExplicitOrDefaultVersion()
     {
-        using var json = JsonDocument.Parse(await File.ReadAllBytesAsync(
-            Path.Combine(AppContext.BaseDirectory, "Fixtures", "Catalog", "multi-profile-catalog.json")));
-        var resource = json.RootElement.GetProperty("categories").GetProperty("public")
-            .GetProperty("registries").GetProperty("schemas");
+        using var json = JsonDocument.Parse("""
+            {"registryid":"schemas","meta":{"defaultversionid":"2"},"versions":{
+              "1":{"versionid":"1","xregurl":"https://schemas.example/registry"},
+              "2":{"versionid":"2","federationprofiles":[
+                {"binding":"git","endpoint":"https://git.example/catalog","parameters":{"revision":"refs/heads/main"}},
+                {"binding":"http","endpoint":"https://schemas.example/registry","priority":9}]}}}
+            """);
+        var resource = json.RootElement;
         var current = CatalogDescription.FromResource(resource);
         var old = CatalogDescription.FromResource(resource, "1");
 
@@ -74,10 +78,10 @@ public class CatalogSelectionTests
     {
         var description = Parse("""
             {"federationprofiles":[
-              {"name":"http","endpoint":"https://first.test","priority":0},
-              {"name":"git","endpoint":"https://git.test/repo","priority":20,
+              {"binding":"http","endpoint":"https://first.test","priority":0},
+              {"binding":"git","endpoint":"https://git.test/repo","priority":20,
                "parameters":{"revision":"refs/heads/main","path":""}},
-              {"name":"http","endpoint":"https://last.test","priority":30}]}
+              {"binding":"http","endpoint":"https://last.test","priority":30}]}
             """);
         await Assert.That(description.Select(new(["http", "git"], profileName: "git")).OriginalIndex)
             .IsEqualTo(1);
@@ -92,8 +96,8 @@ public class CatalogSelectionTests
     {
         var description = Parse("""
             {"federationprofiles":[
-              {"name":"http","endpoint":"https://same.test","priority":7},
-              {"name":"http","endpoint":"https://same.test","priority":7}]}
+              {"binding":"http","endpoint":"https://same.test","priority":7},
+              {"binding":"http","endpoint":"https://same.test","priority":7}]}
             """);
         var selected = description.Select(new(["http"]));
         await Assert.That(selected.OriginalIndex).IsEqualTo(0);
@@ -109,24 +113,24 @@ public class CatalogSelectionTests
     {
         var input = $$$"""
             {"xregurl":"https://example.test/Registry","federationprofiles":[
-             {"name":"http","endpoint":"{{{endpoint}}}"},
-             {"name":"file","endpoint":"file:///root","parameters":{"layout":"document-tree"}}]}
+             {"binding":"http","endpoint":"{{{endpoint}}}"},
+             {"binding":"file","endpoint":"file:///root","parameters":{"layout":"document-tree"}}]}
             """;
         await Check.Error(() => Parse(input).Select(new(["file"], profileName: "file")),
             FederationErrorCode.InvalidPackage);
     }
 
     [Test]
-    [Arguments("""{"name":"other","endpoint":"/relative"}""")]
-    [Arguments("""{"name":"other","endpoint":"urn:example:x","priority":false}""")]
-    [Arguments("""{"name":"other","endpoint":"urn:example:x","priority":0.5}""")]
-    [Arguments("""{"name":"other","endpoint":"urn:example:x","parameters":[]}""")]
-    [Arguments("""{"name":"other","endpoint":"urn:example:x","parameters":{"Bad":1}}""")]
-    [Arguments("""{"name":"other","endpoint":"urn:example:x","extra":1}""")]
+    [Arguments("""{"binding":"other","endpoint":"/relative"}""")]
+    [Arguments("""{"binding":"other","endpoint":"urn:example:x","priority":false}""")]
+    [Arguments("""{"binding":"other","endpoint":"urn:example:x","priority":0.5}""")]
+    [Arguments("""{"binding":"other","endpoint":"urn:example:x","parameters":[]}""")]
+    [Arguments("""{"binding":"other","endpoint":"urn:example:x","parameters":{"Bad":1}}""")]
+    [Arguments("""{"binding":"other","endpoint":"urn:example:x","extra":1}""")]
     public async Task CommonFieldsAreValidatedBeforeExclusion(string candidate)
     {
         await Check.Error(() => Parse($$"""
-            {"federationprofiles":[{{candidate}},{"name":"http","endpoint":"https://ok.test"}]}
+            {"federationprofiles":[{{candidate}},{"binding":"http","endpoint":"https://ok.test"}]}
             """).Select(new(["http"])), FederationErrorCode.InvalidPackage);
     }
 
@@ -135,8 +139,8 @@ public class CatalogSelectionTests
     {
         var description = Parse("""
             {"federationprofiles":[
-              {"name":"git","endpoint":"https://git.test/repo","parameters":{"future":true}},
-              {"name":"http","endpoint":"https://ok.test","priority":2}]}
+              {"binding":"git","endpoint":"https://git.test/repo","parameters":{"future":true}},
+              {"binding":"http","endpoint":"https://ok.test","priority":2}]}
             """);
         await Assert.That(description.Select(new(["http"])).Endpoint).IsEqualTo("https://ok.test");
         await Check.Error(() => description.Select(new(["git", "http"])),
@@ -144,14 +148,14 @@ public class CatalogSelectionTests
     }
 
     [Test]
-    [Arguments("""{"name":"git","endpoint":"https://git.test/repo","parameters":{"revision":"HEAD"}}""")]
-    [Arguments("""{"name":"oci","endpoint":"oci://host/team/name:tag","parameters":{"reference":"stable"}}""")]
-    [Arguments("""{"name":"oci","endpoint":"oci://host/team/name","parameters":{"reference":"bad/tag"}}""")]
-    [Arguments("""{"name":"file","endpoint":"file:///root","parameters":{"layout":"unknown"}}""")]
+    [Arguments("""{"binding":"git","endpoint":"https://git.test/repo","parameters":{"revision":"HEAD"}}""")]
+    [Arguments("""{"binding":"oci","endpoint":"oci://host/team/name:tag","parameters":{"reference":"stable"}}""")]
+    [Arguments("""{"binding":"oci","endpoint":"oci://host/team/name","parameters":{"reference":"bad/tag"}}""")]
+    [Arguments("""{"binding":"file","endpoint":"file:///root","parameters":{"layout":"unknown"}}""")]
     public async Task SelectedInvalidBindingNeverFallsBack(string candidate)
     {
         var description = Parse($$"""
-            {"federationprofiles":[{{candidate}},{"name":"http","endpoint":"https://ok.test","priority":9}]}
+            {"federationprofiles":[{{candidate}},{"binding":"http","endpoint":"https://ok.test","priority":9}]}
             """);
         await Check.Error(() => description.Select(new(["http", "git", "oci", "file"])),
             FederationErrorCode.InvalidPackage);
@@ -162,8 +166,8 @@ public class CatalogSelectionTests
     {
         var description = Parse("""
             {"federationprofiles":[
-              {"name":"http","endpoint":"https://first.test"},
-              {"name":"http","endpoint":"https://second.test"}]}
+              {"binding":"http","endpoint":"https://first.test"},
+              {"binding":"http","endpoint":"https://second.test"}]}
             """);
         await Assert.That(description.Select(new(["http"], accessPolicy: candidate =>
             candidate.OriginalIndex == 0 ? AdvertisementAccess.Exclude : AdvertisementAccess.Allow)).OriginalIndex)
@@ -207,8 +211,8 @@ public class CatalogSelectionTests
     {
         var description = Parse("""
             {"federationprofiles":[
-              {"name":"http","endpoint":"https://first.test","priority":18446744073709551616},
-              {"name":"http","endpoint":"https://second.test","priority":18446744073709551615}]}
+              {"binding":"http","endpoint":"https://first.test","priority":18446744073709551616},
+              {"binding":"http","endpoint":"https://second.test","priority":18446744073709551615}]}
             """);
         await Assert.That(description.Select(new(["http"])).OriginalIndex).IsEqualTo(1);
     }

@@ -20,7 +20,7 @@ public class CatalogPriorityValueTests
         var store = new InMemoryRegistryPersistence();
         var engine = Create(BuiltInRegistryModels.CompileForServer(RegistryModelKind.Registry).Source.RootElement.GetRawText(), store);
         await Send(engine, RegistryAction.Replace, "/categories/c/registries/r", $$"""
-            {"federationprofiles":[{"name":"future","endpoint":"urn:example:registry","priority":{{priority}}}]}
+            {"federationprofiles":[{"binding":"future","endpoint":"urn:example:registry","priority":{{priority}}}]}
             """);
         var result = await Send(engine, RegistryAction.Read, "/categories/c/registries/r");
         await Assert.That(result.Metadata!.RootElement.GetProperty("federationprofiles")[0].GetProperty("priority").GetRawText())

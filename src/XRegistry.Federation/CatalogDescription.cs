@@ -49,7 +49,7 @@ public sealed class CatalogAdvertisement
 {
     internal CatalogAdvertisement(JsonElement data, int index, bool isImplicit)
     {
-        Name = data.GetProperty("name").GetString()!;
+        Name = data.GetProperty("binding").GetString()!;
         Endpoint = data.GetProperty("endpoint").GetString()!;
         Priority = data.TryGetProperty("priority", out _) ? FederationJson.Priority(data) : 0;
         if (data.TryGetProperty("parameters", out var parameters))
@@ -210,7 +210,7 @@ public sealed class CatalogDescription
         if (XregUrl is not null)
         {
             var data = JsonSerializer.SerializeToElement(
-                new Dictionary<string, string> { ["name"] = "http", ["endpoint"] = XregUrl },
+                new Dictionary<string, string> { ["binding"] = "http", ["endpoint"] = XregUrl },
                 FederationSerializationContext.Default.DictionaryStringString);
             candidates.Add(new CatalogAdvertisement(data, candidates.Count, true));
         }

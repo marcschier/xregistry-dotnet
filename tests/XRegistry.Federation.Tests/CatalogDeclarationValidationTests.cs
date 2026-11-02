@@ -11,6 +11,27 @@ namespace XRegistry.Federation.Tests;
 public class CatalogDeclarationValidationTests
 {
     [Test]
+    public async Task BindingDiscriminatorRetainsExactAdvertisementAndExtensionSpelling()
+    {
+        const string advertisement = """{"binding":"FutureBinding","endpoint":"urn:example:registry","parameters":{"future":true}}""";
+        var description = Parse($$"""{"federationprofiles":[{{advertisement}}]}""");
+        var selected = description.Select(new(["FutureBinding"]));
+        await Assert.That(selected.Name).IsEqualTo("FutureBinding");
+        await Assert.That(description.Data.GetProperty("federationprofiles")[0].GetRawText()).IsEqualTo(advertisement);
+        await Check.Error(() => description.Select(new(["futurebinding"])), FederationErrorCode.UnsupportedBinding);
+    }
+
+    [Test]
+    [Arguments("""{"name":"http","endpoint":"https://registry.example/root"}""")]
+    [Arguments("""{"binding":"http","name":"http","endpoint":"https://registry.example/root"}""")]
+    [Arguments("""{"endpoint":"https://registry.example/root"}""")]
+    public async Task LegacyNameIsNotAnAliasForTheRequiredBindingDiscriminator(string advertisement)
+    {
+        await Check.Error(() => Parse($$"""{"federationprofiles":[{{advertisement}}]}"""),
+            FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
     [Arguments("http", "https://registry.example/root", """{"future":true}""")]
     [Arguments("git", "https://git.example/repo", """{"revision":"refs/heads/main","future":true}""")]
     [Arguments("oci", "oci://host/team/repo", """{"reference":"stable","future":true}""")]
@@ -43,8 +64,8 @@ public class CatalogDeclarationValidationTests
 
     [Test]
     [Arguments("""{"registrytypes":["schema"]}""")]
-    [Arguments("""{"federationprofiles":[{"name":"future","endpoint":"/relative"}]}""")]
-    [Arguments("""{"federationprofiles":[{"name":"future","endpoint":"https://user@registry.example/root"}]}""")]
+    [Arguments("""{"federationprofiles":[{"binding":"future","endpoint":"/relative"}]}""")]
+    [Arguments("""{"federationprofiles":[{"binding":"future","endpoint":"https://user@registry.example/root"}]}""")]
     public async Task MalformedCommonDataFailsBeforeSelectionPolicy(string json)
     {
         var policyCalls = 0;
@@ -87,8 +108,8 @@ public class CatalogDeclarationValidationTests
         Parse(new JsonObject
         {
             ["federationprofiles"] = new JsonArray(
-                new JsonObject { ["name"] = name, ["endpoint"] = endpoint, ["parameters"] = JsonNode.Parse(parameters) },
-                new JsonObject { ["name"] = "http", ["endpoint"] = "https://fallback.example/root", ["priority"] = 9 })
+                new JsonObject { ["binding"] = name, ["endpoint"] = endpoint, ["parameters"] = JsonNode.Parse(parameters) },
+                new JsonObject { ["binding"] = "http", ["endpoint"] = "https://fallback.example/root", ["priority"] = 9 })
         }.ToJsonString());
 
     private static CatalogDescription Parse(string json) => CatalogDescription.Parse(Encoding.UTF8.GetBytes(json));

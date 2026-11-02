@@ -224,7 +224,7 @@ public class OpcUaFederationTargetTests
         string endpoint,
         string parameters = """{"registryroot":"i=85"}""") =>
         CatalogDescription.Parse(Encoding.UTF8.GetBytes($$"""
-            {"federationprofiles":[{"name":"opcua","endpoint":"{{endpoint}}","parameters":{{parameters}}}]}
+            {"federationprofiles":[{"binding":"opcua","endpoint":"{{endpoint}}","parameters":{{parameters}}}]}
             """));
 
     private static EndpointDescription Endpoint(

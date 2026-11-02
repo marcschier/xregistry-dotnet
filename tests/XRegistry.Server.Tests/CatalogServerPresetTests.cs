@@ -47,13 +47,13 @@ public class CatalogServerPresetTests
     {
         var engine = CreatePreset(all, new InMemoryRegistryPersistence());
         await ExpectCode(() => Send(engine, RegistryAction.Replace, Entry,
-            """{"federationprofiles":[{"name":"git","endpoint":"https://git.example/repo","parameters":{"revision":"HEAD"}}]}"""),
+            """{"federationprofiles":[{"binding":"git","endpoint":"https://git.example/repo","parameters":{"revision":"HEAD"}}]}"""),
             "invalid_attribute");
         await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(0);
         var accepted = await Send(engine, RegistryAction.Replace, Entry, """
-            {"federationprofiles":[{"name":"git","endpoint":"https://git.example/repo",
+            {"federationprofiles":[{"binding":"git","endpoint":"https://git.example/repo",
               "parameters":{"revision":"refs/heads/main","path":""}},
-              {"name":"future","endpoint":"urn:example:opaque","parameters":{"revision":false}}]}
+              {"binding":"future","endpoint":"urn:example:opaque","parameters":{"revision":false}}]}
             """);
         var profiles = accepted.Metadata!.RootElement.GetProperty("federationprofiles");
         await Assert.That(profiles.GetArrayLength()).IsEqualTo(2);

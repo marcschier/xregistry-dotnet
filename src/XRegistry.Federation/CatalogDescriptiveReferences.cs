@@ -57,7 +57,7 @@ public static class CatalogDescriptiveReferences
         {
             RegistryDomainRules.ValidateCatalogAdvertisement(RegistryJson.Parse(new JsonObject
             {
-                ["name"] = "http",
+                ["binding"] = "http",
                 ["endpoint"] = catalogRegistryRoot.OriginalString,
             }.ToJsonString()).RootElement, cancellationToken);
         }

@@ -17,7 +17,7 @@ public static partial class RegistryDomainRules
 
     private static void ValidateCatalogBinding(JsonElement advertisement, string path)
     {
-        var name = advertisement.GetProperty("name").GetString();
+        var name = advertisement.GetProperty("binding").GetString();
         if (name is not ("http" or "git" or "oci" or "file" or "opcua"))
         {
             return;

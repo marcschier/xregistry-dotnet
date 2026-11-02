@@ -79,6 +79,10 @@ class ModelResourceSynchronizationTests(unittest.TestCase):
             target = self.root / tool.source_tool.CORPUS / path
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(data)
+        self.enterContext(mock.patch.object(tool.source_tool, "successor_sources", return_value=[{
+            "sourceId": "pr571-d757328e", "path": tool.MODELS["registry"],
+            "kind": "artifact", "file": (tool.source_tool.CORPUS / tool.MODELS["registry"]).as_posix(),
+        }]))
 
     def write_draft_manifest(self) -> None:
         draft_path = self.root / self.api_source_path
@@ -144,6 +148,32 @@ class ModelResourceSynchronizationTests(unittest.TestCase):
         (self.root / self.api_source_path).write_bytes(b'{"changed":"api"}\n')
         with mock.patch.object(tool.source_tool, "verify_corpus", return_value=self.lock):
             with self.assertRaisesRegex(tool.source_tool.SpecificationError, "hash mismatch"):
+                tool.synchronize(self.root, False)
+
+    def test_selected_successor_model_replaces_historical_model_without_rewriting_source(self) -> None:
+        relative = "tests/Conformance/Successors/pr571-d757328e/workingdrafts/models/registry/model.json"
+        target = self.root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        successor = b'{"binding":"selected"}\n'
+        target.write_bytes(successor)
+        with (
+            mock.patch.object(tool.source_tool, "verify_corpus", return_value=self.lock),
+            mock.patch.object(tool.source_tool, "successor_sources", return_value=[{
+                "sourceId": "pr571-d757328e", "path": tool.MODELS["registry"],
+                "kind": "artifact", "file": relative,
+            }]),
+        ):
+            tool.synchronize(self.root, False)
+            tool.synchronize(self.root, True)
+        self.assertEqual(successor, (self.root / "src/XRegistry.Models/Resources/registry.json").read_bytes())
+        self.assertEqual(successor, target.read_bytes())
+
+    def test_selected_successor_model_cannot_silently_fall_back_to_historical_model(self) -> None:
+        with (
+            mock.patch.object(tool.source_tool, "verify_corpus", return_value=self.lock),
+            mock.patch.object(tool.source_tool, "successor_sources", return_value=[]),
+        ):
+            with self.assertRaisesRegex(tool.source_tool.SpecificationError, "successor model is missing"):
                 tool.synchronize(self.root, False)
 
     def test_draft_repository_must_be_a_canonical_github_repository_url(self) -> None:

@@ -15,8 +15,6 @@
              Link="Fixtures\Mapping\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\Conformance\Sources\workingdrafts\bindings\samples\mapping-example\**\*.json"
              Link="Fixtures\Walkthrough\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="..\Conformance\Sources\workingdrafts\models\registry\samples\*.json"
-             Link="Fixtures\Catalog\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\Conformance\Sources\workingdrafts\federation\samples\selection.json"
              Link="Fixtures\selection.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

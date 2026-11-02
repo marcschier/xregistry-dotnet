@@ -18,8 +18,8 @@ public class CatalogPriorityValueTests
     {
         var description = CatalogDescription.Parse(Encoding.UTF8.GetBytes($$"""
             {"federationprofiles":[
-              {"name":"http","endpoint":"https://first.example/","priority":{{first}}},
-              {"name":"http","endpoint":"https://second.example/","priority":{{second}}}]}
+              {"binding":"http","endpoint":"https://first.example/","priority":{{first}}},
+              {"binding":"http","endpoint":"https://second.example/","priority":{{second}}}]}
             """));
         var selected = description.Select(new(["http"]));
         await Assert.That(selected.OriginalIndex).IsEqualTo(index);

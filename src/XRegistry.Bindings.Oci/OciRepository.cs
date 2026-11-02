@@ -52,7 +52,7 @@ public sealed partial class OciRepository
     {
         budget ??= new();
         var profile = OciJson.Parse(utf8Json.Span, budget, cancellationToken);
-        if (OciJson.Text(profile, "name") != "oci")
+        if (OciJson.Text(profile, "binding") != "oci")
         {
             throw new FederationException(FederationErrorCode.UnsupportedBinding, "The selected advertisement is not native OCI.");
         }

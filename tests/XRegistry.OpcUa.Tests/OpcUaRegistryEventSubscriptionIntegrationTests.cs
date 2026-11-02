@@ -50,7 +50,7 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
                 {
                     new
                     {
-                        name = "opcua",
+                        binding = "opcua",
                         endpoint = server.Endpoint,
                         parameters = new
                         {
@@ -247,7 +247,7 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
                 {
                     new
                     {
-                        name = "opcua",
+                        binding = "opcua",
                         endpoint = server.Endpoint,
                         parameters = new
                         {
@@ -345,7 +345,7 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
                 {
                     new
                     {
-                        name = "opcua",
+                        binding = "opcua",
                         endpoint,
                         parameters = new
                         {

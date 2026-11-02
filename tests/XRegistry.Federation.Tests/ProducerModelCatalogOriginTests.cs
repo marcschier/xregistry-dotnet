@@ -24,8 +24,8 @@ public class ProducerModelCatalogOriginTests
         });
         var description = CatalogDescription.Parse("""
             {"versionid":"description-v2","registryid":"description-id","federationprofiles":[
-              {"name":"http","endpoint":"https://selected.test/registry"},
-              {"name":"http","endpoint":"https://never-open.test/registry","priority":2}]}
+              {"binding":"http","endpoint":"https://selected.test/registry"},
+              {"binding":"http","endpoint":"https://never-open.test/registry","priority":2}]}
             """u8.ToArray());
         var catalog = new NativeRegistryContext("git", "https://catalog.test/repository", "catalog-commit", true);
         const string descriptionXid = "/categories/public/registries/example/versions/description-v2";

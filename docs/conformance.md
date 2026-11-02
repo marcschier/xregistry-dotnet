@@ -55,7 +55,7 @@ it does not transfer historical qualification to a successor.
 | openusd | 122 | 59 | 0 |
 | pagination | 88 | 36 | 0 |
 | publication | 65 | 65 | 0 |
-| registry | 143 | 0 | 0 |
+| registry | 143 | 143 | 0 |
 | schema | 47 | 47 | 0 |
 | wot | 123 | 5 | 0 |
 

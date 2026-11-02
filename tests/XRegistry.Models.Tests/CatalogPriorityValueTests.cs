@@ -18,7 +18,7 @@ public class CatalogPriorityValueTests
     public async Task CatalogPriorityUsesTheSameUnsignedValueSemanticsAsItsCoreModel(string priority)
     {
         var metadata = RegistryJson.Parse($$"""
-            {"federationprofiles":[{"name":"future","endpoint":"urn:example:registry","priority":{{priority}}}]}
+            {"federationprofiles":[{"binding":"future","endpoint":"urn:example:registry","priority":{{priority}}}]}
             """);
         var model = BuiltInRegistryModels.Compile(RegistryModelKind.Registry);
         var validated = RegistryMetadataValidator.Validate(metadata, model.Groups["categories"].Resources["registries"].Attributes,
