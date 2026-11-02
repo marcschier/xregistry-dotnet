@@ -1423,6 +1423,11 @@ public static partial class ApiOperationDocumentResolver
                         new ReferenceTarget(response.Document, link.Value, response.Pointer + "/links/" + Escape(link.Name)),
                         references, ValidateOpenApiLinkDeclaration, "link", cancellationToken).ConfigureAwait(false);
                     if (target.Failure is not null) { return target.Failure; }
+                    if (target.Target!.Value.TryGetProperty("operationId", out _))
+                    {
+                        references.Work(target.Target.Pointer);
+                        references.OperationIdLinks.Add(target.Target);
+                    }
                 }
             }
             var failure = await ValidateEffectiveOpenApiContentAsync(response, references, cancellationToken).ConfigureAwait(false);

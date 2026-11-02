@@ -11,6 +11,195 @@ namespace XRegistry.Validation.Tests;
 public class ApiOperationReferenceTests
 {
     [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiNamedLinkIdsRequireExactlyOneReachedOperationWithoutRewritingLinks(string format, string version)
+    {
+        foreach (var target in new[] { "Target", "Other", "other", "", "Missing" })
+        {
+            foreach (var restored in new[] { true, false, true })
+            {
+                var id = restored ? "Other" : target;
+                var document = new JsonObject { ["openapi"] = version, ["paths"] = JsonNode.Parse("""
+                    {"/target":{"get":{"operationId":"Target","responses":{"200":{"description":"",
+                    "links":{"next":{"operationId":"Other","parameters":{"p":{"$ref":"https://must-not-load.test/data"}},
+                    "requestBody":"$request.body"}}}}}},
+                    "/other":{"post":{"operationId":"Other"}}}
+                    """) };
+                document["paths"]!["/target"]!["get"]!["responses"]!["200"]!["links"]!["next"]!["operationId"] = id;
+                var authored = document["paths"]!["/target"]!["get"]!.DeepClone();
+                var calls = 0;
+                var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+                    resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+                var valid = id is "Target" or "Other";
+                await Assert.That(calls).IsEqualTo(0);
+                await Assert.That(result.Status).IsEqualTo(valid
+                    ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+                if (valid) { await Assert.That(JsonNode.DeepEquals(authored, JsonNode.Parse(result.Operation.GetRawText()))).IsTrue(); }
+                else
+                {
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.link_operation_id");
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo("$/paths/~1target/get/responses/200/links/next/operationId");
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiNamedLinkIdsResolveAcrossCallbacksAndRetrievedLinkDeclarations(string format, string version)
+    {
+        foreach (var valid in new[] { true, false, true })
+        {
+            var document = new JsonObject { ["openapi"] = version, ["paths"] = JsonNode.Parse("""
+                {"/target":{"get":{"operationId":"Target","responses":{"200":{"$ref":"https://allowed.test/response#/R"}},
+                "callbacks":{"done":{"{$request.body#/url}":{"post":{"operationId":"Callback"}}}}}}}
+                """) };
+            if (!valid)
+            {
+                document["paths"]!["/target"]!["get"]!["callbacks"]!["done"]!["{$request.body#/url}"]!["post"]!["operationId"] = "callback";
+            }
+            var calls = new List<string>();
+            var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+                resolveReference: (uri, _) =>
+                {
+                    calls.Add(uri);
+                    var json = uri switch
+                    {
+                        "https://allowed.test/response" => """{"R":{"description":"","links":{"next":{"$ref":"link#/L"}}}}""",
+                        "https://allowed.test/link" => """{"L":{"operationId":"Callback","description":"authored"}}""",
+                        _ => throw new UnauthorizedAccessException()
+                    };
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(json));
+                });
+            await Assert.That(string.Join("|", calls)).IsEqualTo("https://allowed.test/response|https://allowed.test/link");
+            await Assert.That(result.Status).IsEqualTo(valid
+                ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+            if (valid)
+            {
+                await Assert.That(result.Operation.GetProperty("responses").GetProperty("200").GetProperty("$ref").GetString())
+                    .IsEqualTo("https://allowed.test/response#/R");
+            }
+            else
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.link_operation_id");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo("$/L/operationId");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiNamedLinkIdsRejectAmbiguousRequestedIdsButKeepPointerAndUnusedLinkLocality(string format, string version)
+    {
+        foreach (var selector in new[] { "operations/Target", "/paths/~1first/get" })
+        {
+            var document = new JsonObject { ["openapi"] = version, ["components"] = JsonNode.Parse("""
+                {"links":{"Unused":{"operationId":"Absent"},"Remote":{"$ref":"https://must-not-load.test/link"}}}
+                """), ["paths"] = JsonNode.Parse("""
+                {"/first":{"get":{"operationId":"Target","responses":{"200":{"description":"","links":{"next":{"operationId":"Target"}}}}}},
+                "/second":{"get":{"operationId":"Target"}}}
+                """) };
+            var calls = 0;
+            var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+            await Assert.That(calls).IsEqualTo(0);
+            var pointer = selector.StartsWith('/');
+            await Assert.That(result.Status).IsEqualTo(pointer
+                ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+            if (pointer)
+            {
+                await Assert.That(result.Operation.GetProperty("responses").GetProperty("200").GetProperty("links")
+                    .GetProperty("next").GetProperty("operationId").GetString()).IsEqualTo("Target");
+            }
+            else
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.link_operation_id");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo("$/paths/~1first/get/responses/200/links/next/operationId");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiNamedLinkIdsCountReusedPathOccurrencesWithoutAcquiringAReferencedDocumentTwice(string format, string version)
+    {
+        foreach (var duplicate in new[] { false, true, false })
+        {
+            var document = new JsonObject { ["openapi"] = version, ["paths"] = JsonNode.Parse("""
+                {"/target":{"$ref":"https://allowed.test/path#/P"}}
+                """) };
+            if (duplicate) { document["paths"]!["/alias"] = JsonNode.Parse("""{"$ref":"https://allowed.test/path#/P"}"""); }
+            var calls = 0;
+            var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+                resolveReference: (uri, _) =>
+                {
+                    calls++;
+                    if (uri != "https://allowed.test/path") { throw new UnauthorizedAccessException(); }
+                    return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes("""
+                        {"P":{"get":{"operationId":"Target","responses":{"200":{"description":"",
+                        "links":{"self":{"operationId":"Target"}}}}}}}
+                        """));
+                });
+            await Assert.That(calls).IsEqualTo(1);
+            await Assert.That(result.Status).IsEqualTo(duplicate
+                ? ApiOperationResolutionStatus.Invalid : ApiOperationResolutionStatus.Selected);
+            if (duplicate)
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.link_operation_id");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo("$/P/get/responses/200/links/self/operationId");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+            else
+            {
+                await Assert.That(result.Operation.GetProperty("responses").GetProperty("200").GetProperty("links")
+                    .GetProperty("self").GetProperty("operationId").GetString()).IsEqualTo("Target");
+                await Assert.That(result.DocumentUri!.AbsoluteUri).IsEqualTo("https://allowed.test/path");
+            }
+        }
+    }
+
+    [Test]
+    public async Task OpenApiNamedLinkIdsInclude31WebhooksButDoNotTreatReusablePathItemsAsOperationOccurrences()
+    {
+        foreach (var liveWebhook in new[] { true, false, true })
+        {
+            var document = JsonNode.Parse("""
+                {"openapi":"3.1.1","components":{"pathItems":{"Unused":{"post":{"operationId":"Hook"}}}},
+                "webhooks":{},"paths":{"/target":{"get":{"operationId":"Target",
+                "responses":{"200":{"description":"","links":{"next":{"operationId":"Hook"}}}}}}}}
+                """)!.AsObject();
+            if (liveWebhook) { document["webhooks"]!["event"] = JsonNode.Parse("""{"post":{"operationId":"Hook"}}"""); }
+            var result = ApiOperationDocumentResolver.Resolve("OpenAPI/3.1", "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"));
+            await Assert.That(result.Status).IsEqualTo(liveWebhook
+                ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+            if (liveWebhook) { await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo("Target"); }
+            else
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.link_operation_id");
+                await Assert.That(result.Diagnostic.Path).IsEqualTo("$/paths/~1target/get/responses/200/links/next/operationId");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+        }
+    }
+
+    [Test]
     public async Task SwaggerResponseExamplesRequireMediaKeysInEffectiveProducesWithoutRewritingValues()
     {
         foreach (var (root, local, key, valid) in new (string?, string?, string, bool)[]

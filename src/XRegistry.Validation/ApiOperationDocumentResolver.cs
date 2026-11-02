@@ -900,6 +900,16 @@ public static partial class ApiOperationDocumentResolver
             }
         }
 
+        foreach (var link in references.OperationIdLinks)
+        {
+            references.Work(link.Pointer + "/operationId");
+            if (operationCounts.GetValueOrDefault(link.Value.GetProperty("operationId").GetString()!) != 1)
+            {
+                return Failure(ApiOperationResolutionStatus.Invalid, "document.link_operation_id",
+                    "A reached Link operationId must identify exactly one operation occurrence in the OpenAPI description.",
+                    link.Pointer + "/operationId");
+            }
+        }
         return matches.Count switch
         {
             0 => Failure(ApiOperationResolutionStatus.NotFound, "selection.not_found",
@@ -1332,6 +1342,7 @@ public static partial class ApiOperationDocumentResolver
         internal ReferencedDocument Root { get; }
         internal string Format { get; }
         internal ValidationContext Budget => _budget;
+        internal List<ReferenceTarget> OperationIdLinks { get; } = [];
         internal void Work(string path) => _budget.Work(path: path);
 
         internal async ValueTask<ReferenceTargetResolution> ResolveAsync(ReferencedDocument source,
