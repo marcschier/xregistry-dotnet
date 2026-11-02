@@ -280,8 +280,28 @@ selected reference reports `not_found`; the operation does not substitute the
 other role or select a default Version. Invalid source-role combinations and
 pre-cancelled requests reject before source reads. This is a source-directed
 read sequence, not a new atomic snapshot guarantee.
-These APIs do not yet persist origin/XID/role source keys or remote identity
-pins, and do not complete the `XREG-Federation` proxy workflow.
+Origin-admitted results expose an `OpcUaFederationSourcePin` containing the
+origin, concrete target XID, logical/exact role and portable remote Node
+identity. `HasSameSource` compares the origin/XID/role key independently of
+document bytes; different origins or Registry roots remain separate. Equivalent
+escaped XID segments compare by their decoded value without case folding.
+`Serialize` and `Parse` provide a versioned local JSON receipt bounded to 64 KiB.
+This is an implementation storage format, not a standardized wire format.
+It preserves all four native identifier kinds and contains no endpoint or
+Session table indexes. The host owns durable storage and must supply current
+independent trust configuration when reopening a receipt; stored origin text
+does not authorize acquisition.
+`ResolvePinnedTargetAsync` remaps the retained Node identity through the new
+Session and rejects a changed target XID before resolving its hierarchy.
+`ResolvePinnedExternalResourceAsync` also rereads the source Resource's current
+origin and selected reference; a changed portable Node identity rejects before
+provider acquisition. A changed origin or authoritative form is a different
+source, not an update to an existing pin. Failed target validation disposes the
+acquired lease. Two-server cases serialize and reopen both origin forms,
+reacquire a target Session and read the same exact Version bytes.
+No automatic pin store, non-OPC-UA target router or native server-side
+origin publication is provided. These boundaries still prevent presenting this
+as the complete `XREG-Federation` proxy workflow.
 Cancellation already requested at resolver entry prevents provider acquisition.
 If acquisition returns a lease after cancellation, the resolver disposes that
 lease before propagating cancellation. A disposal failure is retained under

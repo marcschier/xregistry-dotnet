@@ -193,13 +193,32 @@ public sealed class OpcUaRegistryReadSource : IFederationReadSource
         Func<string, bool> isSupportedSpecVersion, OpcUaExternalTargetRole role,
         CancellationToken cancellationToken = default) =>
         ResolveExternalTargetCoreAsync(identity, trustedProviderResolver, isSupportedSpecVersion, role, null,
-            cancellationToken);
+            null, cancellationToken);
 
     /// <summary>Reads a source Resource's origin and reference, then acquires only its independently approved provider.</summary>
-    public async ValueTask<OpcUaResolvedExternalResource> ResolveExternalResourceAsync(
+    public ValueTask<OpcUaResolvedExternalResource> ResolveExternalResourceAsync(
         string sourceXid, NodeId originDataType, OpcUaRegistryOrigin trustedOrigin,
         OpcUaOriginProviderResolver trustedProviderResolver, Func<string, bool> isSupportedSpecVersion,
-        OpcUaExternalTargetRole role, CancellationToken cancellationToken = default)
+        OpcUaExternalTargetRole role, CancellationToken cancellationToken = default) =>
+        ResolveExternalResourceCoreAsync(sourceXid, originDataType, trustedOrigin, trustedProviderResolver,
+            isSupportedSpecVersion, role, null, cancellationToken);
+
+    /// <summary>Revalidates a source's current origin and reference against its persisted target pin before acquisition.</summary>
+    public ValueTask<OpcUaResolvedExternalResource> ResolvePinnedExternalResourceAsync(
+        string sourceXid, NodeId originDataType, OpcUaFederationSourcePin pin, OpcUaRegistryOrigin trustedOrigin,
+        OpcUaOriginProviderResolver trustedProviderResolver, Func<string, bool> isSupportedSpecVersion,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(pin);
+        return ResolveExternalResourceCoreAsync(sourceXid, originDataType, trustedOrigin, trustedProviderResolver,
+            isSupportedSpecVersion, pin.Role, pin, cancellationToken);
+    }
+
+    private async ValueTask<OpcUaResolvedExternalResource> ResolveExternalResourceCoreAsync(
+        string sourceXid, NodeId originDataType, OpcUaRegistryOrigin trustedOrigin,
+        OpcUaOriginProviderResolver trustedProviderResolver, Func<string, bool> isSupportedSpecVersion,
+        OpcUaExternalTargetRole role, OpcUaFederationSourcePin? expectedPin,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(trustedOrigin);
         ArgumentNullException.ThrowIfNull(trustedProviderResolver);
@@ -211,6 +230,11 @@ public sealed class OpcUaRegistryReadSource : IFederationReadSource
         if (role is not (OpcUaExternalTargetRole.LogicalResource or OpcUaExternalTargetRole.ExactVersion))
         {
             throw new ArgumentOutOfRangeException(nameof(role));
+        }
+        if (expectedPin is not null && !expectedPin.Origin.Equals(trustedOrigin))
+        {
+            throw new FederationException(FederationErrorCode.PolicyDenied,
+                "The stored source origin does not match the current independent provider binding.");
         }
         var request = new FederationReadRequest(FederationOperation.Entity, sourceXid);
         var parts = ParseParts(request.Target);
@@ -239,6 +263,12 @@ public sealed class OpcUaRegistryReadSource : IFederationReadSource
             throw new FederationException(FederationErrorCode.NotFound,
                 "The selected source Resource or Version has no ExternalReference.");
         }
+        if (expectedPin is not null)
+        {
+            expectedPin.ValidateReconnect(new(origin, expectedPin.Xid, role, identity));
+            return await ResolvePinnedTargetAsync(expectedPin, trustedOrigin, trustedProviderResolver,
+                isSupportedSpecVersion, cancellationToken).ConfigureAwait(false);
+        }
         return await ResolveOriginTargetAsync(origin, trustedOrigin, identity, trustedProviderResolver,
             isSupportedSpecVersion, role, cancellationToken).ConfigureAwait(false);
     }
@@ -263,13 +293,33 @@ public sealed class OpcUaRegistryReadSource : IFederationReadSource
         }
         return ResolveExternalTargetCoreAsync(identity,
             (requested, token) => trustedProviderResolver(trustedOrigin, requested, token),
-            isSupportedSpecVersion, role, trustedOrigin, cancellationToken);
+            isSupportedSpecVersion, role, trustedOrigin, null, cancellationToken);
+    }
+
+    /// <summary>Reopens a persisted source pin using current independent origin and endpoint policy.</summary>
+    public static ValueTask<OpcUaResolvedExternalResource> ResolvePinnedTargetAsync(
+        OpcUaFederationSourcePin pin, OpcUaRegistryOrigin trustedOrigin,
+        OpcUaOriginProviderResolver trustedProviderResolver, Func<string, bool> isSupportedSpecVersion,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(pin);
+        ArgumentNullException.ThrowIfNull(trustedOrigin);
+        ArgumentNullException.ThrowIfNull(trustedProviderResolver);
+        ArgumentNullException.ThrowIfNull(isSupportedSpecVersion);
+        if (!pin.Origin.Equals(trustedOrigin))
+        {
+            throw new FederationException(FederationErrorCode.PolicyDenied,
+                "The stored source origin does not match the current independent provider binding.");
+        }
+        return ResolveExternalTargetCoreAsync(pin.RemoteNode,
+            (identity, token) => trustedProviderResolver(trustedOrigin, identity, token),
+            isSupportedSpecVersion, pin.Role, trustedOrigin, pin, cancellationToken);
     }
 
     private static async ValueTask<OpcUaResolvedExternalResource> ResolveExternalTargetCoreAsync(
         OpcUaExternalNodeId identity, OpcUaTrustedProviderResolver trustedProviderResolver,
         Func<string, bool> isSupportedSpecVersion, OpcUaExternalTargetRole role, OpcUaRegistryOrigin? origin,
-        CancellationToken cancellationToken = default)
+        OpcUaFederationSourcePin? expectedPin, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(identity);
         ArgumentNullException.ThrowIfNull(trustedProviderResolver);
@@ -352,6 +402,10 @@ public sealed class OpcUaRegistryReadSource : IFederationReadSource
                 throw new FederationException(FederationErrorCode.InvalidPackage,
                     "The external target XID does not match the declared reference role.");
             }
+            if (expectedPin is not null)
+            {
+                expectedPin.ValidateReconnect(new(origin!, target.Target, role, identity));
+            }
 
             var groupNode = await reader.ResolveGroupNodeAsync(root, parts[0], parts[1],
                 targetSource.GroupType(parts[0]), cancellationToken).ConfigureAwait(false);
@@ -374,7 +428,7 @@ public sealed class OpcUaRegistryReadSource : IFederationReadSource
             }
 
             return new OpcUaResolvedExternalResource(lease, targetSource, resolvedNode, target.Target,
-                acceptedVersion, role, origin);
+                acceptedVersion, role, origin, identity);
         }
         catch (Exception failure)
         {

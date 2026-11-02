@@ -400,7 +400,30 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
             await stream.ReadExactlyAsync(actual, cancellation.Token);
             await Assert.That(actual).IsEquivalentTo(ExpectedVersionDocument);
         }
-        await Assert.That(receivedIdentities).Count().IsEqualTo(2);
+        if (originForm != "target-only")
+        {
+            await Assert.That(resolvedVersion.SourcePin).IsNotNull();
+            var storedPin = resolvedVersion.SourcePin!.Serialize();
+            var pin = OpcUaFederationSourcePin.Parse(storedPin);
+            await using var reconnected = await OpcUaRegistryReadSource.ResolvePinnedTargetAsync(
+                pin, trustedOrigin, (_, node, token) => resolver(node, token),
+                static version => version == "1.0", cancellation.Token);
+            pin.ValidateReconnect(reconnected.SourcePin!);
+            var document = await reconnected.ReadSource.ReadAsync(
+                new(FederationOperation.Document, reconnected.Xid), cancellation.Token);
+            using var stream = document.Document!.OpenRead();
+            var bytes = new byte[ExpectedVersionDocument.Length];
+            await stream.ReadExactlyAsync(bytes, cancellation.Token);
+            await Assert.That(bytes).IsEquivalentTo(ExpectedVersionDocument);
+            await Assert.That(reconnected.Xid).IsEqualTo(resolvedVersion.Xid);
+            await Assert.That(reconnected.Node).IsEqualTo(resolvedVersion.Node);
+        }
+        else
+        {
+            await Assert.That(resolved.SourcePin).IsNull();
+            await Assert.That(resolvedVersion.SourcePin).IsNull();
+        }
+        await Assert.That(receivedIdentities).Count().IsEqualTo(originForm == "target-only" ? 2 : 3);
         await Assert.That(receivedIdentities[0]).IsEqualTo(identity);
         await Assert.That(receivedIdentities[1]).IsEqualTo(versionIdentity);
     }

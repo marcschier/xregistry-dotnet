@@ -139989,7 +139989,7 @@
       "text": "For de-duplication, the source key MUST contain the trusted origin, concrete origin-relative XID and logical/exact role. The application/root form uses both values, not Application URI alone. Equal XIDs or document bytes from independent origins remain separate. An authorized locator change or table reordering MUST NOT change the pinned origin, XID, role or remote Node identity. A changed origin, including a switch between authoritative forms, is a different source, not a reconnect.",
       "review": {
         "status": "reviewed",
-        "note": "Selected section 10.2 was read with all origin and table-context rules. OpcUaExternalNodeId preserves exact application/namespace/identifier and the resolver retains validated target XID, but no native immutable origin-form pin or origin-root/XID/role source-key contract exists. NativeRegistryContext/caller lease is not a substitute for source OriginRegistry validation or persistence. Implement source-key construction, independent-origin separation, authorized locator-only changes and rejection of changed origin/form/role/remote identity; table-reordering evidence alone cannot close this obligation.",
+        "note": "Selected section 10.2 was read with all origin and table-context rules. Origin-admitted results now expose a portable source pin containing the exact origin form, concrete origin-relative XID, logical/exact role and remote application/namespace/identifier. HasSameSource compares the origin/XID/role key independently of bytes or locator; distinct origins and Registry roots remain separate. Bounded versioned local receipts preserve all four identifier kinds without endpoints or Session indexes. ResolvePinnedTargetAsync requires current independent trust, remaps the Node in the acquired Session and rejects target-XID drift before hierarchy resolution. ResolvePinnedExternalResourceAsync also rereads source origin/reference and rejects retargeting before provider acquisition. Two-server cases serialize/reopen both origin forms, reacquire a target Session and read the same exact Version bytes. Caller-owned durable storage, broader deduplication integration, authorized endpoint relocation and server-origin exposure are not established by these cases. Keep the compound client/server requirement pending rather than treating a serializable receipt as a complete durable federation workflow.",
         "roles": [
           "client",
           "server"
@@ -139997,7 +139997,19 @@
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "SourcePinRoundTripRetainsOriginXidRoleAndAllNodeIdentifierKinds",
+          "SourcePinRejectsChangedSourceOrRemoteIdentity",
+          "SourcePinUsesDecodedConcreteXidWithoutFoldingCase",
+          "SourcePinSerializationEnforcesExactByteBudget",
+          "SourcePinParserRejectsInvalidJsonAndRetainsCoreDiagnostic",
+          "SourcePinConstructorRejectsInvalidIdentityCombination",
+          "SourcePinParserRejectsMalformedStoredIdentity",
+          "PinnedResolutionRejectsChangedXidAndDisposesProvider",
+          "PinnedResolutionRequiresCurrentIndependentOriginBeforeProviderSelection",
+          "SourceDirectedPinnedFederationRejectsRetargetingBeforeProviderSelection",
+          "TrustedProviderResolverReadsAnExternalVersionFromAnAlternateTargetModel"
+        ],
         "nativeEvidence": []
       }
     },

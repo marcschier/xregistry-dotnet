@@ -26,6 +26,60 @@ public class OpcUaTrustedProviderLeaseTests
     [Test]
     [Arguments(false)]
     [Arguments(true)]
+    public async Task PinnedResolutionRejectsChangedXidAndDisposesProvider(bool changed)
+    {
+        var lease = new TrackingLease();
+        var origin = OpcUaRegistryOrigin.Stable("urn:origin");
+        var original = new OpcUaFederationSourcePin(origin,
+            changed ? "/teams/team-b/schemas/schema-a" : ResourceXid,
+            OpcUaExternalTargetRole.LogicalResource, new(ServerUri, NamespaceUri, IdType.String, "schema-a"));
+        var pin = OpcUaFederationSourcePin.Parse(original.Serialize());
+        var calls = 0;
+        ValueTask<OpcUaResolvedExternalResource> Resolve() => OpcUaRegistryReadSource.ResolvePinnedTargetAsync(
+            pin, origin, (_, _, _) =>
+            {
+                calls++;
+                return ValueTask.FromResult<IOpcUaTrustedProviderLease>(lease);
+            }, version => version == Version);
+
+        if (changed)
+        {
+            var error = await Assert.ThrowsAsync<FederationException>(async () => await Resolve());
+            await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.PolicyDenied);
+        }
+        else
+        {
+            await using var result = await Resolve();
+            await Assert.That(result.SourcePin).IsNotNull();
+            pin.ValidateReconnect(result.SourcePin!);
+            await Assert.That(result.Xid).IsEqualTo(ResourceXid);
+        }
+        await Assert.That(calls).IsEqualTo(1);
+        await Assert.That(lease.DisposeCalls).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task PinnedResolutionRequiresCurrentIndependentOriginBeforeProviderSelection()
+    {
+        var pin = new OpcUaFederationSourcePin(OpcUaRegistryOrigin.Stable("urn:old-origin"), ResourceXid,
+            OpcUaExternalTargetRole.LogicalResource, new(ServerUri, NamespaceUri, IdType.String, "schema-a"));
+        var calls = 0;
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await OpcUaRegistryReadSource.ResolvePinnedTargetAsync(pin, OpcUaRegistryOrigin.Stable("urn:new-origin"),
+                (_, _, _) =>
+                {
+                    calls++;
+                    throw new InvalidOperationException("The stored pin established its own trust.");
+                }, _ => true));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.PolicyDenied);
+        await Assert.That(calls).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
     public async Task OriginAdmissionPassesIndependentBindingToProviderAndRetainsOrigin(bool stable)
     {
         var lease = new TrackingLease();

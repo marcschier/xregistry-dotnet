@@ -1588,6 +1588,36 @@ public class OpcUaRegistryReaderTests
     }
 
     [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task SourceDirectedPinnedFederationRejectsRetargetingBeforeProviderSelection(bool changed)
+    {
+        var (session, source) = await OpenExternalReferenceSource();
+        AddSourceOrigin(session, new("urn:approved-origin", "", ExpandedNodeId.Null));
+        var identity = session.ExternalNodeIdMappings[session.ExpandedNodeIds["logical:ExternalReference"]];
+        var origin = OpcUaRegistryOrigin.Stable("urn:approved-origin");
+        var pin = new OpcUaFederationSourcePin(origin, "/remote/g1/artifacts/r1",
+            OpcUaExternalTargetRole.LogicalResource, changed
+                ? new(identity.ServerApplicationUri, identity.NamespaceUri, IdType.Numeric, 99u) : identity);
+        var calls = 0;
+        var unavailable = new FederationException(FederationErrorCode.Unavailable, "Provider is unavailable.");
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await source.ResolvePinnedExternalResourceAsync("/teams/team-a/schemas/schema-a",
+                new NodeId("RegistryOriginDataType", 1), OpcUaFederationSourcePin.Parse(pin.Serialize()), origin,
+                (_, _, _) =>
+                {
+                    calls++;
+                    return ValueTask.FromException<IOpcUaTrustedProviderLease>(unavailable);
+                }, _ => true));
+
+        await Assert.That(error!.Code).IsEqualTo(changed ? FederationErrorCode.PolicyDenied :
+            FederationErrorCode.Unavailable);
+        await Assert.That(calls).IsEqualTo(changed ? 0 : 1);
+        await Assert.That(session.ExpandedNodeIdReads.Count).IsEqualTo(1);
+    }
+
+    [Test]
     [Arguments(false, false)]
     [Arguments(false, true)]
     [Arguments(true, false)]

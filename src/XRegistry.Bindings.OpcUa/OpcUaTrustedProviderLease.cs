@@ -91,7 +91,7 @@ public sealed class OpcUaResolvedExternalResource : IAsyncDisposable
 
     internal OpcUaResolvedExternalResource(IOpcUaTrustedProviderLease lease,
         OpcUaRegistryReadSource readSource, NodeId node, string xid, string specVersion,
-        OpcUaExternalTargetRole role, OpcUaRegistryOrigin? origin = null)
+        OpcUaExternalTargetRole role, OpcUaRegistryOrigin? origin = null, OpcUaExternalNodeId? remoteNode = null)
     {
         this.lease = lease;
         ReadSource = readSource;
@@ -100,6 +100,8 @@ public sealed class OpcUaResolvedExternalResource : IAsyncDisposable
         SpecVersion = specVersion;
         Role = role;
         Origin = origin;
+        SourcePin = origin is not null && remoteNode is not null
+            ? new OpcUaFederationSourcePin(origin, xid, role, remoteNode) : null;
     }
 
     /// <summary>The target Registry read source; use it only while this result is alive.</summary>
@@ -114,6 +116,8 @@ public sealed class OpcUaResolvedExternalResource : IAsyncDisposable
     public OpcUaExternalTargetRole Role { get; }
     /// <summary>The independently admitted origin, or null when only the low-level target resolver was used.</summary>
     public OpcUaRegistryOrigin? Origin { get; }
+    /// <summary>The portable source pin for caller-owned persistence, absent for low-level unscoped resolution.</summary>
+    public OpcUaFederationSourcePin? SourcePin { get; }
 
     /// <inheritdoc />
     public ValueTask DisposeAsync() =>
