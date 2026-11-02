@@ -3,9 +3,20 @@
 
 namespace XRegistry.Models;
 
-/// <summary>Pure Git advertisement syntax, independent of repository acquisition and caller access policy.</summary>
+/// <summary>Binding declaration syntax, independent of acquisition and caller access policy.</summary>
 public static class CatalogBindingSyntax
 {
+    /// <summary>Checks a built-in binding's selected parameter names; extension bindings retain their own vocabulary.</summary>
+    public static bool IsParameterSupported(string binding, string parameter) => binding switch
+    {
+        "http" => false,
+        "git" => parameter is "revision" or "path",
+        "oci" => parameter == "reference",
+        "file" => parameter is "layout" or "reference",
+        "opcua" => parameter is "registryroot" or "applicationuri" or "transportprofileuri",
+        _ => true
+    };
+
     /// <summary>Tests for a complete Git ref or SHA-1/SHA-256 object ID, not a revision expression.</summary>
     public static bool IsGitRevision(string? value)
     {

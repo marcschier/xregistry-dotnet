@@ -409,7 +409,16 @@ internal static class PublicationJson
             throw Error("invalid_uri", path, "An absolute endpoint URI is required.");
         }
 
-        if (uri.UserInfo.Length != 0)
+        var authority = endpoint.AsSpan(endpoint.IndexOf(':', StringComparison.Ordinal) + 1);
+        var hasUserInformation = uri.UserInfo.Length != 0;
+        if (authority.StartsWith("//", StringComparison.Ordinal))
+        {
+            authority = authority[2..];
+            var end = authority.IndexOfAny('/', '?', '#');
+            hasUserInformation |= (end < 0 ? authority : authority[..end]).Contains('@');
+        }
+
+        if (hasUserInformation)
         {
             throw Error("credentialed_endpoint", path, "A credential-free absolute endpoint URI is required.");
         }
@@ -525,7 +534,7 @@ internal static class PublicationJson
 
     internal static PublicationException Error(string code, string path, string message) => new(code, path, message);
 
-    private static string Escape(string value) =>
+    internal static string Escape(string value) =>
         value.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal);
 
     private static string IdentityPart(string value, bool fold)

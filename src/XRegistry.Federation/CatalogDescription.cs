@@ -84,20 +84,12 @@ public sealed class CatalogAdvertisement
     /// <summary>Validates the selected built-in binding's syntax, without accessing an endpoint.</summary>
     public void ValidateBinding()
     {
-        var allowed = Name switch
-        {
-            "http" => Array.Empty<string>(),
-            "git" => ["revision", "path"],
-            "oci" => ["reference"],
-            "file" => ["layout", "reference"],
-            "opcua" => ["registryroot", "applicationuri", "transportprofileuri"],
-            _ => null,
-        };
-        if (allowed is null)
+        if (Name is not ("http" or "git" or "oci" or "file" or "opcua"))
         {
             return;
         }
-        if (Parameters.EnumerateObject().Any(parameter => !allowed.Contains(parameter.Name, StringComparer.Ordinal)))
+        if (Parameters.EnumerateObject().Any(parameter =>
+                !XRegistry.Models.CatalogBindingSyntax.IsParameterSupported(Name, parameter.Name)))
         {
             throw new FederationException(FederationErrorCode.UnsupportedOperation, "Unknown selected profile parameter.");
         }

@@ -134657,7 +134657,7 @@
       "text": "- `registry` contains the selected `binding`, credential-free absolute `endpoint` and OPTIONAL `parameters`. Their meanings and validation follow Federation's [binding definitions](../federation/spec.md#discovery-and-binding-selection). This is one selected access context, not a catalog advertisement list. Priority and implicit HTTP access are not part of this reference.",
       "review": {
         "status": "reviewed",
-        "note": "The parser checks one explicit access context, string-valued parameters and a credential-free absolute endpoint. The reader now applies the same endpoint guard before invoking the caller's binding resolver for programmatic channel access or returned heads. Platform paths and malformed URI spellings reject without acquisition, and accepted pinned selectors retain their authored access context. Complete validation of each known binding's endpoint and parameter rules remains pending; common endpoint validation and immutable selectors alone do not establish that contract.",
+        "note": "The parser checks one explicit access context, string-valued parameters and a credential-free absolute endpoint, including explicit empty user information that URI normalization would otherwise discard. The reader applies the same endpoint guard before invoking the caller's binding resolver for programmatic channel access or returned heads. Selected built-in bindings reject unknown parameter names using the vocabulary shared with Federation; separately named extension bindings retain opaque parameters. Platform paths and malformed URI spellings reject without acquisition, and accepted pinned selectors retain their authored access context. Complete validation of each known binding's endpoint and parameter value rules remains pending.",
         "roles": [
           "client",
           "producer"
@@ -134667,7 +134667,11 @@
         "status": "pending",
         "testIds": [
           "ParsedPublicationEndpointsRejectPlatformPathsAndMalformedUriSpellings",
+          "ParsedPublicationEndpointsDoNotNormalizeEmptyUserInformationAway",
           "ProgrammaticAccessRejectsInvalidEndpointsBeforeBindingAcquisition",
+          "SelectedBuiltInBindingsRejectUnknownParametersWithoutInvokingTheResolver",
+          "ExtensionBindingParametersRemainOpaqueToTheGenericPublicationReader",
+          "SelectedBindingParameterVocabularyIsSharedWithoutInterpretingExtensionNames",
           "RejectsCredentialedBindingsAndMissingRequiredExtensions",
           "PinnedCaptureSelectorsReachOnlyTheExplicitlySelectedBindingUnchanged"
         ],

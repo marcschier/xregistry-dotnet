@@ -451,6 +451,22 @@ public class PublicationManifestTests
     }
 
     [Test]
+    [Arguments("https://@publisher.example.test", "credentialed_endpoint")]
+    [Arguments("file://@localhost/captured", "invalid_uri")]
+    public async Task ParsedPublicationEndpointsDoNotNormalizeEmptyUserInformationAway(
+        string endpoint, string expectedCode)
+    {
+        var json = JsonNode.Parse(ValidManifest)!.AsObject();
+        json["registry"]!["reference"]!["registry"]!["endpoint"] = endpoint;
+
+        var error = await Assert.That(() => PublicationManifest.Parse(Encoding.UTF8.GetBytes(json.ToJsonString())))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected user-information rejection.");
+
+        await Assert.That(error.Code).IsEqualTo(expectedCode);
+        await Assert.That(error.Path).IsEqualTo("/reference/registry/endpoint");
+    }
+
+    [Test]
     public async Task RejectsSelfDigestRatherThanMakingManifestIdentityRecursive()
     {
         var json = JsonNode.Parse(ValidManifest)!.AsObject();

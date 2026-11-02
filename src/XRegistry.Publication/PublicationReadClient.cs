@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Numerics;
+using XRegistry.Models;
 
 namespace XRegistry.Publication;
 
@@ -172,6 +173,7 @@ public sealed class PublicationReadClient
         PublicationRegistryAccess registry, CancellationToken cancellationToken)
     {
         PublicationJson.RequireCredentialFreeEndpoint(registry.Endpoint, "/reference/registry/endpoint");
+        RequireSupportedParameters(registry);
         PublicationJson.RequirePinnedAccess(registry);
         var binding = await _openBinding(registry, cancellationToken).ConfigureAwait(false);
         if (binding is null)
@@ -180,6 +182,19 @@ public sealed class PublicationReadClient
         }
 
         return binding;
+    }
+
+    private static void RequireSupportedParameters(PublicationRegistryAccess registry)
+    {
+        foreach (var name in registry.Parameters.Keys)
+        {
+            if (!CatalogBindingSyntax.IsParameterSupported(registry.Binding, name))
+            {
+                throw PublicationJson.Error("unsupported_operation",
+                    "/reference/registry/parameters/" + PublicationJson.Escape(name),
+                    "The selected built-in binding does not support this parameter.");
+            }
+        }
     }
 
     private static void ValidateChannelResource(string channelResource)

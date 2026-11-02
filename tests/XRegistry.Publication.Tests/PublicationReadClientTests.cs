@@ -20,6 +20,8 @@ public class PublicationReadClientTests
     [Test]
     [Arguments(false, "https://reader:password@publisher.example.test", "credentialed_endpoint")]
     [Arguments(true, "https://reader:password@publisher.example.test", "credentialed_endpoint")]
+    [Arguments(false, "https://@publisher.example.test", "credentialed_endpoint")]
+    [Arguments(true, "https://@publisher.example.test", "credentialed_endpoint")]
     [Arguments(false, "/relative", "invalid_uri")]
     [Arguments(true, "/relative", "invalid_uri")]
     [Arguments(false, "", "invalid_uri")]
@@ -60,6 +62,83 @@ public class PublicationReadClientTests
         await Assert.That(calls).IsEqualTo(channelHead ? 1 : 0);
         await Assert.That(binding.ChannelReadCount).IsEqualTo(channelHead ? 1 : 0);
         await Assert.That(binding.OpenedVersions.Count).IsZero();
+    }
+
+    [Test]
+    [Arguments("http")]
+    [Arguments("git")]
+    [Arguments("oci")]
+    [Arguments("file")]
+    [Arguments("opcua")]
+    public async Task SelectedBuiltInBindingsRejectUnknownParametersWithoutInvokingTheResolver(string kind)
+    {
+        var fixture = Fixture.Create();
+        var parameters = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["unexpected"] = "value"
+        };
+        if (kind == "git")
+        {
+            parameters["revision"] = new string('a', 40);
+        }
+        else if (kind is "oci" or "file")
+        {
+            parameters["reference"] = "sha256:" + new string('a', 64);
+            if (kind == "file")
+            {
+                parameters["layout"] = "oci-layout";
+            }
+        }
+        else if (kind == "opcua")
+        {
+            parameters["registryroot"] = "nsu=urn:example:registry;i=1";
+        }
+        var access = Access with
+        {
+            Binding = kind,
+            Parameters = parameters
+        };
+        var calls = 0;
+        var client = new PublicationReadClient((_, _) =>
+        {
+            calls++;
+            return ValueTask.FromResult<IPublicationReadBinding>(fixture.Binding(access));
+        });
+
+        var error = await Assert.That(async () => await client.OpenChannelAsync(access, ChannelResource))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected selected parameter rejection.");
+
+        await Assert.That(error.Code).IsEqualTo("unsupported_operation");
+        await Assert.That(error.Path).IsEqualTo("/reference/registry/parameters/unexpected");
+        await Assert.That(calls).IsZero();
+    }
+
+    [Test]
+    public async Task ExtensionBindingParametersRemainOpaqueToTheGenericPublicationReader()
+    {
+        var fixture = Fixture.Create();
+        var access = Access with
+        {
+            Binding = "vendor",
+            Parameters = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["unexpected"] = "opaque"
+            }
+        };
+        var calls = new List<PublicationRegistryAccess>();
+        var client = new PublicationReadClient((selected, _) =>
+        {
+            calls.Add(selected);
+            return ValueTask.FromResult<IPublicationReadBinding>(fixture.Binding(selected));
+        });
+
+        var snapshot = await client.OpenChannelAsync(access, ChannelResource);
+
+        await Assert.That(calls.Count).IsEqualTo(3);
+        await Assert.That(calls[0].Binding).IsEqualTo("vendor");
+        await Assert.That(calls[0].Parameters["unexpected"]).IsEqualTo("opaque");
+        await Assert.That(snapshot.OpenRecord.Channel!.Registry.Parameters["unexpected"]).IsEqualTo("opaque");
+        await Assert.That(snapshot.GetExactManifestBytes().SequenceEqual(fixture.ManifestBytes)).IsTrue();
     }
 
     [Test]

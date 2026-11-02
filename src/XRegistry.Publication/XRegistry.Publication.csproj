@@ -8,5 +8,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\XRegistry\XRegistry.csproj" />
+    <ProjectReference Include="..\XRegistry.Models\XRegistry.Models.csproj" />
   </ItemGroup>
 </Project>

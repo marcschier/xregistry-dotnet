@@ -10,6 +10,29 @@ namespace XRegistry.Models.Tests;
 public class CatalogDeclarationRulesTests
 {
     [Test]
+    [Arguments("http", "reference", false)]
+    [Arguments("git", "revision", true)]
+    [Arguments("git", "path", true)]
+    [Arguments("git", "Revision", false)]
+    [Arguments("git", "unexpected", false)]
+    [Arguments("oci", "reference", true)]
+    [Arguments("oci", "path", false)]
+    [Arguments("file", "layout", true)]
+    [Arguments("file", "reference", true)]
+    [Arguments("file", "revision", false)]
+    [Arguments("opcua", "registryroot", true)]
+    [Arguments("opcua", "applicationuri", true)]
+    [Arguments("opcua", "transportprofileuri", true)]
+    [Arguments("opcua", "unexpected", false)]
+    [Arguments("vendor", "unexpected", true)]
+    [Arguments("HTTP", "unexpected", true)]
+    public async Task SelectedBindingParameterVocabularyIsSharedWithoutInterpretingExtensionNames(
+        string binding, string parameter, bool expected)
+    {
+        await Assert.That(CatalogBindingSyntax.IsParameterSupported(binding, parameter)).IsEqualTo(expected);
+    }
+
+    [Test]
     [Arguments("""{"federationprofiles":[{"endpoint":"urn:example:catalog"}]}""", "/federationprofiles/0/name", "invalid_attribute")]
     [Arguments("""{"federationprofiles":[{"name":"future"}]}""", "/federationprofiles/0/endpoint", "invalid_attribute")]
     [Arguments("""{"federationprofiles":[{"name":"future","endpoint":"urn:example:catalog","extra":true}]}""", "/federationprofiles/0/extra", "unknown_attribute")]

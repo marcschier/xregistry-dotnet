@@ -194,6 +194,11 @@ guard before the binding resolver runs. Endpoints must be well-formed absolute
 URIs without embedded user information; local path spellings are not converted
 into File access. This check does not authorize a destination or replace the
 selected binding's endpoint and parameter rules.
+An explicit empty user-information component such as `https://@host` also
+rejects; URI normalization does not remove that declaration before validation.
+Selected built-in bindings reject unknown parameter names before acquisition.
+Publication and Federation share that vocabulary through `XRegistry.Models`;
+separately named extension bindings retain their caller-supplied parameters.
 
 A `source-snapshot` manifest must declare at least one included mandatory
 extension. Missing or empty `requiredExtensions` rejects before a channel
