@@ -1,6 +1,7 @@
 // Copyright (c) 2026 xregistry-dotnet contributors.
 // SPDX-License-Identifier: MIT
 
+using System.Text.Json.Nodes;
 using TUnit.Assertions;
 using TUnit.Core;
 
@@ -8,6 +9,65 @@ namespace XRegistry.Models.Tests;
 
 public class EndpointDefinitionAuthorizationTests
 {
+    [Test]
+    public async Task AuthorizationMembersRejectEveryInvalidNativeKindAndEmptyDeclaration()
+    {
+        foreach (var value in new[] { "null", "true", "42", "\"entry\"", "{}" })
+        {
+            await Rejects($$"""{"authorization":{{value}}}""", "/protocoloptions/authorization", "invalid_attribute");
+        }
+        foreach (var value in new[] { "null", "true", "42", "\"entry\"", "[]" })
+        {
+            await Rejects($$"""{"authorization":[{{value}}]}""", "/protocoloptions/authorization/0", "invalid_attribute");
+        }
+        foreach (var field in new[] { "type", "mechanism", "resourceuri", "authorityuri" })
+        {
+            foreach (var value in new[] { "null", "true", "42", "{}", "[]", "\"\"" })
+            {
+                var member = field == "type" ? "" : "\"type\":\"SASL\",";
+                await Rejects($$"""{"authorization":[{ {{member}}"{{field}}":{{value}} }]}""",
+                    "/protocoloptions/authorization/0/" + field, "invalid_attribute");
+            }
+        }
+        foreach (var field in new[] { "resourceuri", "authorityuri" })
+        {
+            foreach (var value in new[] { "bad uri", "https://example.com/%ZZ", "https://[bad]/auth" })
+            {
+                await Rejects($$"""{"authorization":[{"{{field}}":"{{value}}"}]}""",
+                    "/protocoloptions/authorization/0/" + field, "invalid_attribute");
+            }
+        }
+        await Rejects("""{"authorization":[{"type":"sasl","mechanism":"PLAIN"}]}""",
+            "/protocoloptions/authorization/0/mechanism", "invalid_attribute");
+    }
+
+    [Test]
+    public async Task AuthorizationAlternativesKeepOptionalSelectorsExtensionsAndPreferenceOrder()
+    {
+        var empty = EndpointDefinition.Materialize(RegistryJson.Parse(
+            """{"usage":["producer"],"protocol":"HTTP","protocoloptions":{"authorization":[]}}"""));
+        await Assert.That(empty.GetProtocolOption("authorization").GetArrayLength()).IsEqualTo(0);
+        await Assert.That(empty.DeferredChecks.Count(check => check.Code == "authorization_configuration")).IsEqualTo(0);
+        var input = RegistryJson.Parse("""
+            {"usage":["producer"],"protocol":"HTTP","protocoloptions":{"authorization":[
+             {"type":"OAuth2","resourceuri":"urn:orders:west","authorityuri":"../issuer"},
+             {"type":"SASL"},{"vendor-selection":{"profile":"corporate"}},
+             {"type":"Vendor/2","authorityuri":"/auth/vendor"}]}}
+            """);
+        var before = input.RootElement.GetRawText();
+        var result = EndpointDefinition.Materialize(input);
+        await Assert.That(JsonNode.DeepEquals(JsonNode.Parse(result.GetProtocolOption("authorization").GetRawText()),
+            JsonNode.Parse(input.RootElement.GetProperty("protocoloptions").GetProperty("authorization").GetRawText()))).IsTrue();
+        await Assert.That(result.GetProtocolOption("authorization")[1].TryGetProperty("mechanism", out _)).IsFalse();
+        await Assert.That(result.GetProtocolOption("authorization")[2].TryGetProperty("type", out _)).IsFalse();
+        await Assert.That(result.DeferredChecks.Where(check => check.Code == "authorization_configuration")
+            .Select(check => check.Path).ToArray()).IsEquivalentTo([
+                "/protocoloptions/authorization/0", "/protocoloptions/authorization/1",
+                "/protocoloptions/authorization/2", "/protocoloptions/authorization/3"
+            ], StringComparer.Ordinal);
+        await Assert.That(input.RootElement.GetRawText()).IsEqualTo(before);
+    }
+
     [Test]
     public async Task AuthorizationTemplatesRemainMetadataAndRelativeReferencesAreNotAcquired()
     {

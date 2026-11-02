@@ -9,6 +9,45 @@ namespace XRegistry.Models.Tests;
 public class EndpointClauseCompletionTests
 {
     [Test]
+    public async Task DeploymentDefaultsDoNotCoerceNativeKindsOrRewriteDeclarations()
+    {
+        foreach (var protocol in new[] { "HTTP", "AMQP", "MQTT", "NATS", "KAFKA", "Vendor/1" })
+        {
+            foreach (var value in new[] { "true", "false" })
+            {
+                var input = RegistryJson.Parse($$$"""
+                    {"usage":["producer"],"protocol":"{{{protocol}}}","protocoloptions":{"deployed":{{{value}}}}}
+                    """);
+                var before = input.RootElement.GetRawText();
+                var definition = EndpointDefinition.Materialize(input);
+                await Assert.That(definition.IsDeployed).IsEqualTo(value == "true");
+                await Assert.That(definition.GetProtocolOption("deployed").GetRawText()).IsEqualTo(value);
+                await Assert.That(definition.Resolved.RootElement.GetRawText()).IsEqualTo(before);
+                await Assert.That(input.RootElement.GetRawText()).IsEqualTo(before);
+            }
+            foreach (var value in new[] { "null", "0", "\"true\"", "\"False\"", "[]", "{}" })
+            {
+                var input = RegistryJson.Parse($$$"""
+                    {"usage":["producer"],"protocol":"{{{protocol}}}","protocoloptions":{"deployed":{{{value}}}}}
+                    """);
+                var failure = await Assert.That(() => EndpointDefinition.Materialize(input)).Throws<RegistryException>()
+                    ?? throw new InvalidOperationException("Expected a deployment kind diagnostic.");
+                await Assert.That(failure.Diagnostic.Code).IsEqualTo("invalid_attribute");
+                await Assert.That(failure.Diagnostic.Path).IsEqualTo("/protocoloptions/deployed");
+            }
+            foreach (var options in new[] { "", ",\"protocoloptions\":{}" })
+            {
+                var input = RegistryJson.Parse($$"""{"usage":["producer"],"protocol":"{{protocol}}"{{options}}}""");
+                var before = input.RootElement.GetRawText();
+                var definition = EndpointDefinition.Materialize(input);
+                await Assert.That(definition.IsDeployed).IsTrue();
+                await Assert.That(definition.Resolved.RootElement.GetRawText()).IsEqualTo(before);
+                await Assert.That(input.RootElement.GetRawText()).IsEqualTo(before);
+            }
+        }
+    }
+
+    [Test]
     [Arguments("type")]
     [Arguments("mechanism")]
     [Arguments("resourceuri")]

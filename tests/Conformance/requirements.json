@@ -98260,13 +98260,20 @@
       ],
       "text": "- Description: Configuration details of the endpoint related to the protocol used to transmit the messages. An endpoint MAY be defined without detailed configuration. In this case, the endpoint is considered to be \"abstract\". For per-protocol option definitions, see [Protocol Options](#protocol-options).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "An Endpoint can remain abstract without protocol options. Authored admission preserves that omission; consumer materialization reports the missing address as deferred rather than acquiring or inventing one.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AuthoredValidationLeavesAbstractOptionsAndOtherMetadataUntouched",
+          "AbstractAndExtensionProtocolsExposeDeferredChecksInsteadOfPretendingToBeConnectable"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98291,13 +98298,20 @@
       ],
       "text": "- OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Protocol options are optional. Authored validation accepts their absence without inserting defaults; consumer default interpretation is separate from stored metadata.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AuthoredValidationLeavesAbstractOptionsAndOtherMetadataUntouched",
+          "DefaultsAreConsumerInterpretationsAndNeverRewriteTheAuthoredMetadata"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98322,13 +98336,20 @@
       ],
       "text": "- Description: An array of objects where each object describes one network address at which clients can communicate with the endpoint. The object MAY contain extension attributes that can be used by clients to determine which address to use, or to configure access to the specific address. Whether the address identifies a network host or links directly to a resource managed by the network host is protocol specific.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Address entries retain extension attributes and authored preference order. Consumer validation interprets known address fields without replacing extension metadata or contacting the advertised endpoint.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "PermittedEndpointAddressFormsRemainInAuthoredPreferenceOrder",
+          "AbstractAndExtensionProtocolsExposeDeferredChecksInsteadOfPretendingToBeConnectable"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98353,13 +98374,19 @@
       ],
       "text": "- OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The endpoint address array is optional. Abstract definitions materialize with an explicit endpoint_address deferred check instead of a fabricated address.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AbstractAndExtensionProtocolsExposeDeferredChecksInsteadOfPretendingToBeConnectable"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98385,13 +98412,24 @@
       ],
       "text": "- Each object MUST carry the endpoint address in the attribute that the endpoint's protocol defines for that purpose. Of the protocols defined in this specification, `HTTP`, `AMQP/1.0`, `MQTT/3.1.1`, `MQTT/5.0`, and `NATS` use a `uri` attribute holding a valid, absolute URI (URL), and `KAFKA` uses a non-empty `bootstrap.servers` attribute. A protocol defined outside of this specification MAY define a different addressing attribute.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Consumer materialization requires protocol-specific address fields on supplied entries: absolute network URIs for the five URI protocols and nonempty Kafka bootstrap lists. Invalid shapes and malformed addresses reject at their exact paths; external protocols can retain their own addressing fields.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EachAddressEntryRequiresItsProtocolSpecificShape",
+          "PermittedEndpointAddressFormsRemainInAuthoredPreferenceOrder",
+          "UnsafeOrWrongProtocolAddressesAreErrorsAfterRendering",
+          "KafkaBootstrapAddressesSupportTheDraftsHostAndListenerForms",
+          "MalformedKafkaBootstrapAddressesAreNotSilentlyIgnored",
+          "AbstractAndExtensionProtocolsExposeDeferredChecksInsteadOfPretendingToBeConnectable"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98418,13 +98456,21 @@
       ],
       "text": "- Description: OPTIONAL authorization configuration details of the endpoint. Each entry describes one authorization option that the endpoint accepts; a client selects one of them. When specified, each entry MUST provide sufficient metadata for clients to select the authorization mechanism and discover where authorization is obtained. Runtime credentials and deployment-specific values are expected to be supplied separately through external configuration. The attribute names below MUST be used as defined. Additional endpoint-specific extension attributes MAY be added.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Known authorization member kinds, optional selectors and extension metadata are checked without acquiring credentials or discovery documents. Every nonempty alternative produces authorization_configuration deferral. Actual selection and sufficiency of provider-specific discovery metadata remain consumer obligations; these declarations alone do not prove them.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "AuthorizationAlternativesKeepOptionalSelectorsExtensionsAndPreferenceOrder",
+          "AuthorizationTemplatesRemainMetadataAndRelativeReferencesAreNotAcquired",
+          "RecognizedCredentialCarriersAreNeverReturnedAsEndpointConfiguration"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98449,13 +98495,20 @@
       ],
       "text": "- OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Authorization is optional. Existing concrete declarations without authorization remain materializable; an explicit empty alternatives array is also preserved without adding a required selector or credential.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "PermittedEndpointAddressFormsRemainInAuthoredPreferenceOrder",
+          "AuthorizationAlternativesKeepOptionalSelectorsExtensionsAndPreferenceOrder"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98480,13 +98533,20 @@
       ],
       "text": "- MUST be an array of objects if present.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "All non-array native JSON kinds reject for authorization; every non-object array member rejects at its indexed path. Valid alternatives retain their order and extension members.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AuthorizationMembersRejectEveryInvalidNativeKindAndEmptyDeclaration",
+          "AuthorizationAlternativesKeepOptionalSelectorsExtensionsAndPreferenceOrder"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98511,13 +98571,20 @@
       ],
       "text": "- MUST only be used for authorization configuration.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Recognized credential carriers are rejected by consumer materialization, while provider-specific authorization configuration is retained and explicitly deferred. An arbitrary extension's semantic purpose cannot be established from its JSON representation; application confirmation remains necessary.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "RecognizedCredentialCarriersAreNeverReturnedAsEndpointConfiguration",
+          "AuthorizationAlternativesKeepOptionalSelectorsExtensionsAndPreferenceOrder"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98542,13 +98609,20 @@
       ],
       "text": "- MUST NOT be used for credential configuration.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Consumer materialization rejects recognized credential fields, URI user information, credential query keys and declared HTTP carriers. Supplied values do not leak through diagnostics. Unknown extension payloads cannot be proven credential-free generically, so the complete credential prohibition remains an application obligation.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "RecognizedCredentialCarriersAreNeverReturnedAsEndpointConfiguration",
+          "SuppliedCredentialValuesDoNotLeakThroughFailuresOrMutateAuthoredInput"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98573,13 +98647,20 @@
       ],
       "text": "- Description: The type of the authorization configuration. The value SHOULD be one of the following:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The listed authorization types are recommendations rather than a closed enum. Standard and vendor selectors are preserved; an absent type is permitted when extension discovery metadata supplies the alternative.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AuthorizationAlternativesKeepOptionalSelectorsExtensionsAndPreferenceOrder",
+          "OptionalAuthorizationSelectorsAndPathTextAreNotInventedCredentials"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98604,13 +98685,20 @@
       ],
       "text": "- `OAuth2`: [OAuth 2.0][RFC6749] authorization is used. The [`authorityuri`](#protocoloptionsauthorizationauthorityuri) SHOULD reference authorization server metadata as defined by [RFC 8414][RFC8414].",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "OAuth2 metadata can identify an issuer or discovery location without local acquisition. Verification that a selected authority actually provides RFC8414 metadata remains a consumer obligation and is reported as authorization_configuration deferral.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "AuthorizationAlternativesKeepOptionalSelectorsExtensionsAndPreferenceOrder",
+          "AuthorizationTemplatesRemainMetadataAndRelativeReferencesAreNotAcquired"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98635,13 +98723,21 @@
       ],
       "text": "- `Plain`: The client uses a username with a plaintext password for authentication and authorization. For HTTP, see the [HTTP options](#http-options) `plainscheme`, `plainusernamefield`, and `plainpasswordfield`; for other protocols, equivalent transport-specific options MAY be defined as protocol extensions.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Plain authorization configuration and HTTP carrier names are supported separately from credentials. Equivalent non-HTTP extension semantics and actual username/password authentication require provider-specific consumer integration.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "AuthorizationUsesOnlyItsActualRequiredAndConditionalConstraints",
+          "RecognizedCredentialCarriersAreNeverReturnedAsEndpointConfiguration",
+          "DeclaredProtocolOptionTypesPreserveTheirExactJson"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98666,13 +98762,21 @@
       ],
       "text": "- `SASL`: The client uses a [SASL][RFC4422] authentication mechanism. The [`mechanism`](#protocoloptionsauthorizationmechanism) attribute SHOULD be provided when this type is selected.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "SASL mechanism metadata is permitted only with exact type SASL. Omission remains valid because the source recommends rather than requires a mechanism; selecting and negotiating the actual SASL mechanism is deferred to the consumer.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "OptionalAuthorizationSelectorsAndPathTextAreNotInventedCredentials",
+          "AuthorizationUsesOnlyItsActualRequiredAndConditionalConstraints",
+          "AuthorizationMembersRejectEveryInvalidNativeKindAndEmptyDeclaration"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98697,13 +98801,20 @@
       ],
       "text": "- `APIKey`: The client uses an API key for authentication and authorization. For HTTP, see the [HTTP options](#http-options) `apikeyname` and `apikeyin`; for other protocols, equivalent carrier-specific options MAY be defined as protocol extensions.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "APIKey configuration is distinct from credential material and HTTP carriers are recognized during credential rejection. Non-HTTP carrier extensions and actual key provisioning or authentication remain consumer responsibilities.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "RecognizedCredentialCarriersAreNeverReturnedAsEndpointConfiguration",
+          "DeclaredProtocolOptionTypesPreserveTheirExactJson"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98728,13 +98839,19 @@
       ],
       "text": "- OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The type selector is optional and is not synthesized. An alternative can retain vendor selection metadata without type while still reporting provider-specific verification as deferred.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AuthorizationAlternativesKeepOptionalSelectorsExtensionsAndPreferenceOrder"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98759,13 +98876,20 @@
       ],
       "text": "- MUST be a non-empty string if used.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "When supplied, type must be a nonempty native JSON string. All other JSON kinds and the empty string reject at the exact member path; standard and extension strings are retained.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AuthorizationMembersRejectEveryInvalidNativeKindAndEmptyDeclaration",
+          "AuthorizationAlternativesKeepOptionalSelectorsExtensionsAndPreferenceOrder"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98790,13 +98914,20 @@
       ],
       "text": "- OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A SASL alternative may omit mechanism. Materialization preserves the omission and does not invent a default mechanism.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "OptionalAuthorizationSelectorsAndPathTextAreNotInventedCredentials",
+          "AuthorizationAlternativesKeepOptionalSelectorsExtensionsAndPreferenceOrder"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98821,13 +98952,20 @@
       ],
       "text": "- MUST be a non-empty string if used.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A supplied mechanism must be a nonempty string, independently of the conditional SASL type rule. Empty and non-string values reject at the mechanism path.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AuthorizationMembersRejectEveryInvalidNativeKindAndEmptyDeclaration",
+          "AuthorizationUsesOnlyItsActualRequiredAndConditionalConstraints"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98852,13 +98990,21 @@
       ],
       "text": "- MUST only be used when `protocoloptions.authorization.type` is `SASL`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Mechanism is accepted only with exact type SASL. Missing, Plain and case-distinct sasl selectors reject when mechanism is supplied; mechanism is not made mandatory.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AuthorizationMembersRejectEveryInvalidNativeKindAndEmptyDeclaration",
+          "AuthorizationUsesOnlyItsActualRequiredAndConditionalConstraints",
+          "AuthorizationTemplatesRemainMetadataAndRelativeReferencesAreNotAcquired"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98883,13 +99029,19 @@
       ],
       "text": "- OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The resource URI is optional. Valid alternatives without resourceuri retain the omission; no resource identity is inferred from a different member.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AuthorizationAlternativesKeepOptionalSelectorsExtensionsAndPreferenceOrder"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98914,13 +99066,21 @@
       ],
       "text": "- MUST be a non-empty URI if used.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A supplied resourceuri must be a nonempty URI reference under the registry URI type. Empty strings, invalid native kinds and malformed references reject; URNs and relative references are retained without acquisition.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AuthorizationMembersRejectEveryInvalidNativeKindAndEmptyDeclaration",
+          "AuthorizationTemplatesRemainMetadataAndRelativeReferencesAreNotAcquired",
+          "AuthorizationAlternativesKeepOptionalSelectorsExtensionsAndPreferenceOrder"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98945,13 +99105,19 @@
       ],
       "text": "- OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The authority URI is optional. Alternatives without authorityuri remain valid when their extension metadata or selected type supplies the declaration; actual discovery sufficiency remains deferred.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AuthorizationAlternativesKeepOptionalSelectorsExtensionsAndPreferenceOrder"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98976,13 +99142,20 @@
       ],
       "text": "- MUST be a non-empty URI if used.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A supplied authorityuri must be a nonempty URI reference. Malformed references and every invalid native kind reject at the exact member path. Relative discovery references remain data and are not retrieved.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AuthorizationMembersRejectEveryInvalidNativeKindAndEmptyDeclaration",
+          "AuthorizationTemplatesRemainMetadataAndRelativeReferencesAreNotAcquired"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99007,13 +99180,19 @@
       ],
       "text": "- OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Deployment metadata is optional for predefined and extension protocols. Omission is preserved in both authored and resolved representations while the consumer accessor supplies the normative true default.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DeploymentDefaultsDoNotCoerceNativeKindsOrRewriteDeclarations"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99038,13 +99217,19 @@
       ],
       "text": "- If present, MUST be either `true` or `false`, case-sensitive.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Only native true and false values are accepted for deployed. Null, numbers, strings of either casing, arrays and objects reject at /protocoloptions/deployed without coercion.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DeploymentDefaultsDoNotCoerceNativeKindsOrRewriteDeclarations"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99069,13 +99254,19 @@
       ],
       "text": "- When not specified, the default value MUST be `true`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Absent deployed is interpreted as true whether protocoloptions is omitted or empty. Explicit false remains false; neither interpretation rewrites the declaration or constitutes a runtime liveness check.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DeploymentDefaultsDoNotCoerceNativeKindsOrRewriteDeclarations"
+        ],
         "nativeEvidence": []
       }
     },
