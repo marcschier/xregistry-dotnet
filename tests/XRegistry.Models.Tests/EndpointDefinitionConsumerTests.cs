@@ -9,6 +9,71 @@ namespace XRegistry.Models.Tests;
 public class EndpointDefinitionConsumerTests
 {
     [Test]
+    [Arguments("hTtP", "HTTP", true)]
+    [Arguments("amqp", "AMQP/1.0", true)]
+    [Arguments("amqp/1.0", "AMQP/1.0", true)]
+    [Arguments("mqtt", "MQTT/5.0", true)]
+    [Arguments("mqtt/3.1.1", "MQTT/3.1.1", true)]
+    [Arguments("mqtt/5.0", "MQTT/5.0", true)]
+    [Arguments("nats", "NATS", true)]
+    [Arguments("kafka", "KAFKA", true)]
+    [Arguments("AMQP/0.9", "AMQP/0.9", false)]
+    [Arguments("MQTT/4.0", "MQTT/4.0", false)]
+    [Arguments("NATS/1", "NATS/1", false)]
+    [Arguments("Vendor/2", "Vendor/2", false)]
+    public async Task ProtocolAliasesUseOnlyAssignedDefaultsAndKeepOtherVersionsAsExtensions(
+        string authored, string expected, bool predefined)
+    {
+        var input = Input(authored, "{}");
+        var result = EndpointDefinition.Materialize(input);
+        await Assert.That(result.Protocol).IsEqualTo(expected);
+        await Assert.That(result.Authored.RootElement.GetProperty("protocol").GetString()).IsEqualTo(authored);
+        await Assert.That(result.Resolved.RootElement.GetProperty("protocol").GetString()).IsEqualTo(authored);
+        await Assert.That(result.DeferredChecks.Any(check => check.Code == "protocol_contract")).IsEqualTo(!predefined);
+        if (!predefined)
+        {
+            foreach (var option in new[] { "durable", "qos", "acks" })
+            {
+                await Assert.That(result.GetProtocolOption(option).ValueKind).IsEqualTo(System.Text.Json.JsonValueKind.Undefined);
+            }
+        }
+    }
+
+    [Test]
+    public async Task KafkaResetMetadataCannotEncodeConcreteRuntimeOffsetsOrTimestamps()
+    {
+        foreach (var reset in new[] { "earliest", "latest", "none" })
+        {
+            var input = Input("KAFKA", $$$"""{"consumergroup":"existing","autooffsetreset":"{{{reset}}}"}""",
+                """["consumer"]""");
+            var result = EndpointDefinition.Materialize(input);
+            await Assert.That(result.GetProtocolOption("autooffsetreset").GetString()).IsEqualTo(reset);
+        }
+        foreach (var reset in new[] { "null", "0", "true", "[]", "{}", "\"\"", "\"Earliest\"", "\"123\"", "\"2026-01-01T00:00:00Z\"" })
+        {
+            var input = Input("KAFKA", $$$"""{"consumergroup":"existing","autooffsetreset":{{{reset}}}}""",
+                """["consumer"]""");
+            await Rejects(input, "/protocoloptions/autooffsetreset");
+        }
+    }
+
+    [Test]
+    [Arguments("MQTT", """{"topicfilter":"#"}""")]
+    [Arguments("MQTT", """{"topicfilter":"+/orders/#"}""")]
+    [Arguments("MQTT/3.1.1", """{"topicfilter":"orders/+"}""")]
+    [Arguments("NATS", """{"subjectfilter":">"}""")]
+    [Arguments("NATS", """{"subjectfilter":"orders.*.created"}""")]
+    [Arguments("NATS", """{"subjectfilter":"orders.>","queuegroup":"workers"}""")]
+    public async Task ValidProtocolFiltersRetainWholeLevelWildcardsAndFinalMultiLevelTokens(string protocol, string options)
+    {
+        var result = EndpointDefinition.Materialize(Input(protocol, options, """["subscriber"]"""));
+        foreach (var option in RegistryJson.Parse(options).RootElement.EnumerateObject())
+        {
+            await Assert.That(result.GetProtocolOption(option.Name).GetString()).IsEqualTo(option.Value.GetString());
+        }
+    }
+
+    [Test]
     [Arguments("HTTP", "http://example.com")]
     [Arguments("http", "https://example.com:443/a%2Fb?query=value")]
     [Arguments("AMQP", "amqp://example.com/area/queue")]

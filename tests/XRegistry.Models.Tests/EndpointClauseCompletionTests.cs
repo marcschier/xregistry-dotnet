@@ -9,6 +9,51 @@ namespace XRegistry.Models.Tests;
 public class EndpointClauseCompletionTests
 {
     [Test]
+    public async Task EndpointSelectorsAndChannelKeepExactStringsWithoutInventingAClosedVocabulary()
+    {
+        foreach (var field in new[] { "protocol", "envelope", "channel" })
+        {
+            foreach (var value in new[] { "null", "true", "42", "[]", "{}", "\"\"" })
+            {
+                var input = RegistryJson.Parse($$"""{"usage":["producer"],"{{field}}":{{value}}}""");
+                var failure = await Assert.That(() => EndpointDefinition.Materialize(input)).Throws<RegistryException>()
+                    ?? throw new InvalidOperationException("Expected a selector or channel declaration diagnostic.");
+                await Assert.That(failure.Diagnostic.Code).IsEqualTo("invalid_attribute");
+                await Assert.That(failure.Diagnostic.Path).IsEqualTo("/" + field);
+            }
+        }
+        foreach (var field in new[] { "protocol", "envelope" })
+        {
+            foreach (var value in new[] { "/1", "Vendor/" })
+            {
+                var input = RegistryJson.Parse($$"""{"usage":["producer"],"{{field}}":"{{value}}"}""");
+                var failure = await Assert.That(() => EndpointDefinition.Materialize(input)).Throws<RegistryException>()
+                    ?? throw new InvalidOperationException("Expected a nonempty selector component diagnostic.");
+                await Assert.That(failure.Diagnostic.Path).IsEqualTo("/" + field);
+            }
+            foreach (var value in new[] { "Vendor", "Vendor/1.0", "vEnDoR/release-candidate/opaque" })
+            {
+                var input = RegistryJson.Parse($$"""{"usage":["producer"],"{{field}}":"{{value}}"}""");
+                var result = EndpointDefinition.Materialize(input);
+                await Assert.That(result.Resolved.RootElement.GetProperty(field).GetString()).IsEqualTo(value);
+                await Assert.That(result.Authored.RootElement.GetProperty(field).GetString()).IsEqualTo(value);
+            }
+        }
+        foreach (var value in new[] { "queue 1", "pipeline/stage~1", "a,b|c" })
+        {
+            var input = RegistryJson.Parse($$"""{"usage":["producer"],"channel":"{{value}}"}""");
+            var result = EndpointDefinition.Materialize(input);
+            await Assert.That(result.Resolved.RootElement.GetProperty("channel").GetString()).IsEqualTo(value);
+            await Assert.That(result.Authored.RootElement.GetProperty("channel").GetString()).IsEqualTo(value);
+        }
+        var absent = EndpointDefinition.Materialize(RegistryJson.Parse("""{"usage":["producer"]}"""));
+        foreach (var field in new[] { "protocol", "envelope", "channel", "envelopeoptions" })
+        {
+            await Assert.That(absent.Resolved.RootElement.TryGetProperty(field, out _)).IsFalse();
+        }
+    }
+
+    [Test]
     public async Task DeploymentDefaultsDoNotCoerceNativeKindsOrRewriteDeclarations()
     {
         foreach (var protocol in new[] { "HTTP", "AMQP", "MQTT", "NATS", "KAFKA", "Vendor/1" })

@@ -97195,13 +97195,20 @@
       ],
       "text": "- `producer`: A producer endpoint is made available by a consumer or intermediary (like an application or a queue) to a producer, so that the producer can send events/messages to the endpoint. Those events/messages MUST conform to the declared constraints. If the endpoint is associated with at least one message group, only messages/events that match one of the declared message definitions can be sent. If the message definition references a data schema, the message payload MUST match that schema.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Endpoint message selection exposes explicit definitions and defers message binding, schemas and runtime payload evaluation. Sending only conforming messages and verifying actual payloads remain producer responsibilities; metadata materialization is not that runtime verification.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "InlineAndExplicitReferencedGroupsAreSelectedWithoutFetchingOrExpandingMessages",
+          "MessageInheritanceIsPreservedAndExplicitlyDeferredRatherThanFetchedOrInvented"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97226,13 +97233,19 @@
       ],
       "text": "- `subscriber`: A subscriber endpoint is made available to consumers for the purpose of setting up their own consumer endpoint. The [CloudEvents Subscriptions API](https://github.com/cloudevents/spec/blob/main/subscriptions/spec.md) specification enumerates the subscription mechanisms intended for these endpoints. As subscription mechanisms can vary substantially across products that implement the same protocol, it is RECOMMENDED to use the `label` mechanism to identify the specific product that provides the endpoint.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The subscriber role is supported as metadata. Selecting product-identifying labels and implementing a provider's subscription mechanism require application knowledge; accepting the role does not establish those runtime capabilities.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "EndpointRoleCombinationsFollowExactNativeAndProtocolRules"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97257,13 +97270,20 @@
       ],
       "text": "Each endpoint definition defines a `protocol` selector by which the specific network application protocol is chosen to communicate with the endpoint. If a networked entity supports multiple protocols, each protocol endpoint MUST be declared separately, even if those are multiplexed over the same port. For instance, if you have an MQTT broker that can dynamically select between MQTT 3.1.1 and MQTT 5.0, those endpoints are to be declared separately as the capabilities differ substantially.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "An Endpoint has one string protocol selector and distinct protocol definitions can be represented separately. Verifying that a deployed multi-protocol service has published every required definition needs producer inventory and cannot be inferred from one registry declaration.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "EndpointSelectorsAndChannelKeepExactStringsWithoutInventingAClosedVocabulary",
+          "EndpointRoleCombinationsFollowExactNativeAndProtocolRules"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97288,13 +97308,20 @@
       ],
       "text": "Each endpoint MAY also define an `envelope` selector which allows for defining particular `envelopeoptions` at the endpoint level. For CloudEvents, this permits the definition of the serialization mode (binary or structured) and the event format for structured mode.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Envelope selection and envelopeoptions remain optional. CloudEvents mode and format declarations receive their specific checks without imposing those fields on extension envelopes.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CommonEnvelopeValidationPreservesOptionalAndExtensionDeclarations",
+          "AuthoredEnvelopeOptionsEnforceCommonShapeAndModeWithoutAModel"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97319,13 +97346,20 @@
       ],
       "text": "The Endpoint is an xRegistry group-level construct that is conceptually an extension of the [message definition group](../message/spec.md), meaning there are no \u201cgroups of endpoints\u201d. An endpoint MAY contain directly embedded message definitions. In the simplest case, an endpoint MAY embed its message definitions locally which in turn MAY embed their data schema definitions locally, all in one compact construct.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The Endpoint model places messages directly under endpoint Groups. Public engine creation preserves an inline Message schema within that group; consumer materialization selects inline and supplied referenced definitions without adding another endpoint collection layer.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "UnboundMessagesRemainUsableWithinProtocolBoundGroups",
+          "InlineAndExplicitReferencedGroupsAreSelectedWithoutFetchingOrExpandingMessages"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97359,8 +97393,8 @@
       ],
       "text": "The key words \"MUST\", \"MUST NOT\", \"REQUIRED\", \"SHALL\", \"SHALL NOT\", \"SHOULD\", \"SHOULD NOT\", \"RECOMMENDED\", \"MAY\", and \"OPTIONAL\" in this document are to be interpreted as described in [RFC 2119](https://tools.ietf.org/html/rfc2119).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
+        "status": "informative",
+        "note": "This paragraph defines the normative keyword vocabulary; it introduces no independent Endpoint operation.",
         "roles": []
       },
       "implementation": {
@@ -97392,13 +97426,21 @@
       ],
       "text": "For clarity, OPTIONAL attributes (specification-defined and extensions) are OPTIONAL for clients to use, but the servers' responsibility will vary. Server-unknown extension attributes MUST be silently stored in the backing datastore. Specification-defined attributes and server-known extension attributes MUST generate an error if the corresponding feature is not supported or enabled. However, as with all attributes, if accepting the attribute results in a bad state (such as exceeding a size limit or resulting in a security issue), then the server MAY choose to reject the request.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Existing authored admission preserves extension metadata and rejects known malformed shapes atomically. The compound Core obligation also covers every unsupported or disabled known feature and safety limits; those surfaces need the broader Core review rather than being inferred from these Endpoint cases.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "AuthoredAdmissionPreservesUnresolvedValuesAndConsumerOnlyViolations",
+          "InvalidAuthoredShapeRollsBackRegistryAndOutbox",
+          "AuthoredValidationIsBoundedCancellableAndDoesNotNeedBindings"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97425,8 +97467,8 @@
       ],
       "text": "In the pseudo JSON format snippets `?` means the preceding attribute is OPTIONAL, `*` means the preceding attribute MAY appear zero or more times, and `+` means the preceding attribute MUST appear at least once. The presence of the `#` character means the remaining portion of the line is a comment. Whitespace characters in the JSON snippets are used for readability and are not normative.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
+        "status": "informative",
+        "note": "This paragraph explains the pseudo-JSON notation used by examples, including its non-normative whitespace; it adds no independent wire-format requirement.",
         "roles": []
       },
       "implementation": {
@@ -97456,13 +97498,20 @@
       ],
       "text": "As discussed in the [CloudEvents Registry overview](../cloudevents/spec.md), endpoints are supersets of [message definition groups](../message/spec.md#message-definition-groups) and MAY contain inlined messages. Therefore, the Resources in the meta-model for the Endpoint Registry are likewise `messages` as defined in the [message catalog specification](../message/spec.md).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Endpoint Groups expose the Message resource collection rather than nested Groups of Endpoints. Public engine and consumer tests exercise inline Message definitions within this composition.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "UnboundMessagesRemainUsableWithinProtocolBoundGroups",
+          "InlineAndExplicitReferencedGroupsAreSelectedWithoutFetchingOrExpandingMessages"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97790,13 +97839,20 @@
       ],
       "text": "- Endpoints that jointly describe more than one role SHOULD be declared separately and correlated with a shared `channel` value.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The native role validator enforces the permitted combinations, and channel remains available as opaque correlation metadata. Whether independently declared endpoints describe one real multi-role service and should share a channel is a producer modeling decision.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "EndpointRoleCombinationsFollowExactNativeAndProtocolRules",
+          "EndpointSelectorsAndChannelKeepExactStringsWithoutInventingAClosedVocabulary"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97821,13 +97877,19 @@
       ],
       "text": "- Description: A string that can be used to correlate Endpoints. Any Endpoints within an instance of an Endpoint Registry that share the same non-empty `channel` value MUST have some relationship. This specification does not define that relationship or the specific values used in this property. However, it is expected that the `usage` value in combination with this `channel` property will provide some information to help determine the relationship.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Channel values retain their exact nonempty strings without a registry-invented relationship or comparison algorithm. Establishing an actual relationship between endpoints sharing a value requires producer semantics, which the source deliberately does not define.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "EndpointSelectorsAndChannelKeepExactStringsWithoutInventingAClosedVocabulary"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97852,13 +97914,19 @@
       ],
       "text": "- OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Channel is optional. Its absence survives materialization without adding a generated channel or inferred relationship.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EndpointSelectorsAndChannelKeepExactStringsWithoutInventingAClosedVocabulary"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97883,13 +97951,19 @@
       ],
       "text": "- When specified, the value MUST be a non-empty string.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A supplied channel must be a nonempty string. Invalid native kinds and the empty string reject at /channel; spaces and punctuation remain accepted because the source defines no narrower syntax.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EndpointSelectorsAndChannelKeepExactStringsWithoutInventingAClosedVocabulary"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97916,13 +97990,20 @@
       ],
       "text": "- MUST be a non-empty case-insensitive string of the form `<SPEC>[/<VERSION>]`, where `<SPEC>` is the non-empty string name of the specification that defines the Resource. An OPTIONAL `<VERSION>` value SHOULD be included if there are multiple versions of the specification available.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Envelope selectors require a nonempty specification name and a nonempty version when a slash is supplied. Unversioned names and opaque version text remain permitted and retain authored casing; no closed specification vocabulary or version syntax is introduced.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EndpointSelectorsAndChannelKeepExactStringsWithoutInventingAClosedVocabulary",
+          "EndpointEnvelopeRefinementAndProtocolShorthandsUseExistingDomainContracts"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97948,13 +98029,21 @@
       ],
       "text": "- If a `<VERSION>` is specified at the Group level, all Resources within that Group MUST have a `<VERSION>` value that is at least as precise as its Group, and MUST NOT expand it. For example, if a Group had a `envelope` value of `myspec`, then Resources within that Group can have `envelope` values of `myspec` or `myspec/1.0`. However, if a Group has a value of `myspec/1.0`, it would be invalid for a Resource to have a value of `myspec/2.0` or just `myspec`. Additionally, if a Group does not have an `envelope` attribute, then there are no constraints on its Resources' `envelope` attributes.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Group-to-Message envelope checks enforce specification identity and version precision, including component boundaries rather than a raw string prefix. Public consumer and engine tests reject broadening or incompatible versions and accept a permitted refinement.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DomainGroupRelationsRespectSelectorAndPrecisionBoundaries",
+          "EndpointEnvelopeVersionCannotBeBroadenedByAChild",
+          "EndpointMessageMembershipValidatesExplicitSelectorAndReferenceContracts"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97979,13 +98068,20 @@
       ],
       "text": "- OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Envelope options can be omitted independently of the optional envelope selector. Empty and extension option objects remain intact; CloudEvents-specific declarations are checked only for that selected envelope.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CommonEnvelopeValidationPreservesOptionalAndExtensionDeclarations",
+          "EndpointSelectorsAndChannelKeepExactStringsWithoutInventingAClosedVocabulary"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98010,13 +98106,20 @@
       ],
       "text": "- `mode` : indicates whether the CloudEvent will use `binary` or `structured` [mode](https://github.com/cloudevents/spec/blob/main/cloudevents/spec.md#message). When specified, its value MUST be one of: `binary` or `structured`, case sensitive. When not specified, the endpoint is indicating that either mode is acceptable.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "CloudEvents mode is optional and its values are the exact strings binary and structured. Case variants and non-string kinds reject; omission is preserved rather than rewritten as a default mode.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AuthoredEnvelopeOptionsEnforceCommonShapeAndModeWithoutAModel",
+          "CommonEnvelopeValidationPreservesOptionalAndExtensionDeclarations"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98042,13 +98145,21 @@
       ],
       "text": "- `format` : indicates the format of the CloudEvent when sent in `structured` mode. This attribute MUST NOT be specified when `mode` is `binary`. The value used MUST match the expected content type of the message (e.g. for HTTP the `Content-Type` header value).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Binary mode rejects format, and declared structured-format media types must agree with a declared HTTP Content-Type. Matching the actual runtime message representation remains an envelope_content_type deferred check; declaration agreement alone does not establish the compound runtime obligation.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "CloudEventsFormatsCheckDeclaredHttpContentTypesAndDeferRuntimeEvidence",
+          "EndpointMetadataSeparatesEnvelopeConstraintsFromProtocolExecution",
+          "ConsumerEnvelopeChecksDoNotTreatDescriptiveRoleCellsAsProhibitions"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98074,13 +98185,21 @@
       ],
       "text": "- Description: The transport or application protocol used by the endpoint. This specification defines a set of common protocol names that MUST be used for respective protocol endpoints, but implementations MAY define and use additional protocol names.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Predefined protocol selectors and aliases are recognized case-insensitively; extension selectors retain their exact strings and a deferred protocol contract. Confirming that an advertised live endpoint actually speaks the named protocol requires provider/runtime evidence.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "EndpointSelectorsAndChannelKeepExactStringsWithoutInventingAClosedVocabulary",
+          "DefaultsAreConsumerInterpretationsAndNeverRewriteTheAuthoredMetadata",
+          "AbstractAndExtensionProtocolsExposeDeferredChecksInsteadOfPretendingToBeConnectable"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98105,13 +98224,20 @@
       ],
       "text": "Predefined protocols SHOULD be referred to by name and version as `<NAME>/<VERSION>`. The version number format is determined by the protocol specification's usage of versions. If the version is not specified, the default version of the protocol is assumed. For AMQP and MQTT, see the list below. For others, refer to the protocol specifications.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Canonical protocol interpretation maps the unversioned AMQP and MQTT names to their specified defaults without rewriting authored selectors. Supported explicit versions keep their distinct protocol semantics.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultsAreConsumerInterpretationsAndNeverRewriteTheAuthoredMetadata",
+          "EndpointEnvelopeRefinementAndProtocolShorthandsUseExistingDomainContracts"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98136,13 +98262,20 @@
       ],
       "text": "- \"AMQP/1.0\" - Use the [AMQP 1.0][AMQP 1.0] protocol. MAY be shortened to \"AMQP\". AMQP draft versions before 1.0 (e.g. 0.9) are *not* AMQP.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "AMQP and AMQP/1.0 resolve to the same predefined contract. Unsupported pre-1.0 selectors remain extension protocols rather than acquiring AMQP 1.0 validation or defaults.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultsAreConsumerInterpretationsAndNeverRewriteTheAuthoredMetadata",
+          "ProtocolAliasesUseOnlyAssignedDefaultsAndKeepOtherVersionsAsExtensions"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98167,13 +98300,22 @@
       ],
       "text": "All messages inside an Endpoint MUST use this same protocol.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Explicit child protocols must agree with the Endpoint's effective protocol, including case-insensitive predefined aliases. Public engine checks reject incompatible creation and reverse mutations through borrowed Messages atomically; unbound child metadata remains usable within the parent's contract.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DomainGroupContractsRejectIncompatibleChildProtocols",
+          "DomainGroupContractsValidateBorrowedMessagesAndReverseMutations",
+          "UnboundMessagesRemainUsableWithinProtocolBoundGroups",
+          "ReferencedGroupProtocolCannotBeBypassedByAnUnboundMessage"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98198,13 +98340,20 @@
       ],
       "text": "- MUST be a non-empty case-insensitive string.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Supplied protocol selectors reject empty strings and invalid native kinds while retaining exact authored casing. Consumer access recognizes predefined names case-insensitively and preserves extension names.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EndpointSelectorsAndChannelKeepExactStringsWithoutInventingAClosedVocabulary",
+          "DefaultsAreConsumerInterpretationsAndNeverRewriteTheAuthoredMetadata"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98229,13 +98378,19 @@
       ],
       "text": "- SHOULD follow the naming convention `<NAME>/<VERSION>`, whereby `<NAME>` is the name of the protocol and `<VERSION>` is the version of the protocol.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The naming convention remains a recommendation rather than a closed enum or mandatory version grammar. Unversioned extension names and opaque nonempty version strings remain representable.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EndpointSelectorsAndChannelKeepExactStringsWithoutInventingAClosedVocabulary"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99291,13 +99446,20 @@
       ],
       "text": "Endpoints are supersets of [message definition groups](../message/spec.md#message-definition-groups) and MAY contain inlined messages. See [Message Definitions](../message/spec.md#message-definitions).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Inline Message definitions remain available directly within an Endpoint alongside explicitly supplied referenced collections. The consumer does not fetch unknown groups or invent missing definitions.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "InlineAndExplicitReferencedGroupsAreSelectedWithoutFetchingOrExpandingMessages",
+          "MissingAndUnexpandedGroupsBlockAggregateSelectionButNotAnExplicitInlineScope"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99322,13 +99484,20 @@
       ],
       "text": "When this specification, and the [message specification](../message/spec.md), are used with specifications such as [CloudEvents](https://cloudevents.io), where a semantically unique identifier is used in a runtime message (e.g. CloudEvent's `type` attribute), it is STRONGLY RECOMMENDED that the `messageid` values of the message definitions for an Endpoint match that unique identifier and therefore be unique across all messages within the `messages` collection and the messages referenced by the `messagegroups` attribute. This will allow for an easy \"lookup\" from an incoming runtime message to its related message definition.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Exact Message ID lookup is available across inline and supplied referenced collections. Ambiguity and incomplete collections fail explicitly; correspondence between an actual runtime event type and a producer-chosen Message ID remains a producer integration obligation.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "DuplicateIdsAreLegalButAnAmbiguousSelectionNeverChoosesTheFirst",
+          "MissingAndUnexpandedGroupsBlockAggregateSelectionButNotAnExplicitInlineScope"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99353,13 +99522,19 @@
       ],
       "text": "Implementations MAY choose to generate an error if they detect duplicate `messageid` values across the `messages` collection message definitions and the `messagegroups` referenced message definitions, if that is the desired constraint for their users.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Duplicate IDs remain legal by default, but ambiguous aggregate selection fails. The explicit RejectDuplicateMessageIds policy rejects them during materialization without silently choosing the first definition.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DuplicateIdsAreLegalButAnAmbiguousSelectionNeverChoosesTheFirst"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99384,13 +99559,21 @@
       ],
       "text": "For each protocol specified in the following sections there is a table that describes the set of protocol-specific options and the roles (Producer, Consumer, Subscriber) to which each option applies. All protocol options are OPTIONAL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Protocol options are optional and defaults are consumer interpretations rather than injected fields. More specific conditional requirements, such as a Kafka consumer's group, remain enforced separately; descriptive role cells do not create extra prohibitions.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultsAreConsumerInterpretationsAndNeverRewriteTheAuthoredMetadata",
+          "ConsumerEnvelopeChecksDoNotTreatDescriptiveRoleCellsAsProhibitions",
+          "KafkaExplicitRoleRulesApplyEvenToFalseValuesAndAbstractDefinitions"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99417,13 +99600,21 @@
       ],
       "text": "The role applicability is descriptive: it guides clients on how to interpret metadata. Where a rule below is stated with MUST, MUST NOT, or REQUIRED, it is a conformance requirement of this specification, and a client evaluating the metadata MUST treat a violation as an error. A Registry server is not obligated to check these rules.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Bounded consumer evaluation rejects the explicit declaration violations exercised by protocol tests, while authored storage can preserve consumer-only violations. Applying every protocol option to an actual connection remains outside this metadata component and is not established by these checks.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "InvalidTopicCanBeStoredDeclarativelyButFailsConsumerMaterialization",
+          "WrongTypesRequiredMembersAndEnumsFailAtTheirResolvedPaths",
+          "ConsumerEnvelopeChecksDoNotTreatDescriptiveRoleCellsAsProhibitions"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99448,13 +99639,20 @@
       ],
       "text": "- `\u2713`: The option applies to that role. Clients acting in that role SHOULD apply the option semantics.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Role-table cells guide consumer interpretation and are not an admission allowlist. Native option types and explicit cross-option rules are checked, but actual client application of all role-relative protocol settings needs provider integration.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "ConsumerEnvelopeChecksDoNotTreatDescriptiveRoleCellsAsProhibitions",
+          "DeclaredProtocolOptionTypesPreserveTheirExactJson"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99480,13 +99678,24 @@
       ],
       "text": "Any string value of any protocol option MAY contain placeholders expressed with the [RFC6570][RFC6570] Level 1 URI Template expression syntax, for example `orders/{tenantid}/events`. This applies to plain string values, to the string items of arrays, and to the keys and values of maps, and it also applies to the `uri` values of [`protocoloptions.endpoints`](#protocoloptionsendpoints). Placeholders are resolved out-of-band by the client; this specification does not define how the values are supplied. When the same placeholder name occurs in more than one value of the same endpoint, all of its occurrences MUST resolve to the same value.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Level-1 expansion uses one explicit string binding per exact variable name across URI values, array strings and map keys or values. Unsupported operators, undefined or typed bindings and key collisions reject; structural record member names remain literal.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "LevelOneExpansionUsesOneValueAcrossUriMapKeysAndArrayStrings",
+          "OnlySingleUnmodifiedLevelOneExpressionsAreAccepted",
+          "MissingVariablesFailInsteadOfBecomingEmptyStrings",
+          "LevelOneBindingsDoNotInjectCompositeOrTypedJson",
+          "ExpandedMapKeysNeverOverwriteAnEarlierEntry",
+          "TemplateMapKeysCannotRenameDeclaredRecordMembers"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99511,13 +99720,20 @@
       ],
       "text": "The [endpoint URIs](#protocoloptionsendpoints) for \"HTTP\" endpoints MUST be valid HTTP URIs using the \"http\" or \"https\" scheme as defined in [HTTP Message Format].",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "HTTP consumer addresses require an absolute network URI with http or https scheme. Wrong schemes, relative paths and malformed lexical forms reject after template expansion; accepted addresses retain their spelling.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "PermittedEndpointAddressFormsRemainInAuthoredPreferenceOrder",
+          "UnsafeOrWrongProtocolAddressesAreErrorsAfterRendering"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99542,13 +99758,20 @@
       ],
       "text": "- An HTTP Endpoint MUST declare exactly one `usage` value and therefore MUST represent exactly one of the three roles above.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Every ordered role combination on HTTP and case-distinct http accepts only native singletons. Invalid combinations reject at /usage independently of protocol options.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EndpointRoleCombinationsFollowExactNativeAndProtocolRules",
+          "KestrelEnforcesOptedInEndpointUsageWithoutPublishingInvalidPatches"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99573,13 +99796,20 @@
       ],
       "text": "- An HTTP Endpoint MUST NOT declare `[\"subscriber\", \"consumer\"]`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Both consumer/subscriber orders reject for HTTP. A stored mixed-role MQTT endpoint cannot be patched to HTTP without changing its roles; failure preserves its previous state.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EndpointRoleCombinationsFollowExactNativeAndProtocolRules",
+          "KestrelEnforcesOptedInEndpointUsageWithoutPublishingInvalidPatches"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99605,13 +99835,20 @@
       ],
       "text": "- A subscription manager, a delivery target, and a pull consumer that belong to the same logical channel MUST be declared as separate Endpoint resources and SHOULD be correlated with a shared `channel` value.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "HTTP declarations cannot combine the three interfaces into one usage array. Whether a subscription manager, delivery target and pull endpoint describe the same deployed channel, and should be correlated, requires producer modeling information beyond the registry declarations.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "EndpointRoleCombinationsFollowExactNativeAndProtocolRules",
+          "EndpointSelectorsAndChannelKeepExactStringsWithoutInventingAClosedVocabulary"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99636,13 +99873,21 @@
       ],
       "text": "| `apikeyin` | enum: `header`, `query`, default `header` | \u2713 | \u2713 | \u2713 | Placement of API key metadata when `authorization.type` is `APIKey`. `header` SHOULD be used; `query` SHOULD only be used when header placement is not possible. |",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "HTTP API-key placement defaults to header; exact header and query enum values are accepted. Whether header placement is impossible and query is justified is a deployment decision that this metadata validator cannot establish.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "DefaultsAreConsumerInterpretationsAndNeverRewriteTheAuthoredMetadata",
+          "DeclaredProtocolOptionTypesPreserveTheirExactJson",
+          "WrongTypesRequiredMembersAndEnumsFailAtTheirResolvedPaths"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99668,13 +99913,20 @@
       ],
       "text": "These options only define protocol-level placement and naming metadata. Credential values (API keys, usernames, passwords) MUST NOT be stored in endpoint metadata and MUST be supplied out-of-band.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Known credential carriers are rejected by consumer materialization and diagnostics do not echo supplied credentials. The caller must supply runtime credentials separately; arbitrary extension payloads cannot be proven free of credentials by generic metadata validation.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "RecognizedCredentialCarriersAreNeverReturnedAsEndpointConfiguration",
+          "SuppliedCredentialValuesDoNotLeakThroughFailuresOrMutateAuthoredInput"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99699,13 +99951,21 @@
       ],
       "text": "The [endpoint URIs](#protocoloptionsendpoints) for \"AMQP\" endpoints MUST be valid AMQP URIs using the \"amqp\" or \"amqps\" scheme. If the path portion of the URI is present, it MUST be a valid AMQP node name according to [AMQP Addressing Version 1.0].",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "AMQP addresses require amqp or amqps URIs with lexical validation. Container-specific node-name and terminus resolution remain explicitly deferred, including when a node option overrides the URI path; syntactic acceptance alone does not complete the compound addressing obligation.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "PermittedEndpointAddressFormsRemainInAuthoredPreferenceOrder",
+          "UnsafeOrWrongProtocolAddressesAreErrorsAfterRendering",
+          "AmqpNodeOverrideIsOpaqueMetadataAndNeverBypassesUriChecks"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99730,13 +99990,19 @@
       ],
       "text": "An AMQP Endpoint MAY declare `[\"subscriber\", \"consumer\"]`, because a single AMQP receiving link both establishes interest in the source node and carries the resulting transfers. When it does, the `subscriber` role refers to the establishment of the link with the node as source and the `consumer` role refers to the transfers over that link.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Both consumer/subscriber role orders are permitted for AMQP and AMQP/1.0, including case-insensitive spellings. Producer combinations remain invalid. This disposition covers the allowed declaration, not establishment of a receiving link.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EndpointRoleCombinationsFollowExactNativeAndProtocolRules"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99763,13 +100029,20 @@
       ],
       "text": "The [endpoint URIs](#protocoloptionsendpoints) for \"MQTT\" endpoints MUST be valid MQTT URIs using the (informal) \"mqtt\" or \"mqtts\" scheme. If the path portion of the URI is present, it MUST be a valid MQTT topic name as described by [MQTT 3.1.1] and [MQTT 5.0]. The informal schemes \"tcp\" (plain TCP/1883), \"ssl\" (TLS TCP/8883), and \"wss\" (Websockets/443) MAY also be used, but MUST NOT have a path.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "MQTT URI paths are decoded once and checked as concrete topics. MQTT/MQTTS schemes permit such paths; TCP/SSL/WSS schemes reject every path, including a trailing slash. Malformed escapes, invalid UTF-8 and wildcard destinations reject.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "PermittedEndpointAddressFormsRemainInAuthoredPreferenceOrder",
+          "UnsafeOrWrongProtocolAddressesAreErrorsAfterRendering"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99795,13 +100068,21 @@
       ],
       "text": "- `topic` MUST be a concrete MQTT topic name. It MUST NOT contain the `+` or `#` wildcard characters, since a wildcard is not a valid publish destination.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Concrete MQTT topic names reject either wildcard, empty values and invalid string boundaries. Valid publish topics remain accepted without interpreting them as subscription filters.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "MqttAndNatsAddressingConstraintsAreConsumerFailures",
+          "MqttTopicUtf8LengthHasTheProtocolsExact65535ByteBoundary",
+          "DeclaredProtocolOptionTypesPreserveTheirExactJson"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99826,13 +100107,21 @@
       ],
       "text": "- `topicfilter` MAY contain the `+` and `#` wildcard characters as defined by [MQTT 3.1.1] and [MQTT 5.0].",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "MQTT filters accept complete-level plus wildcards and a complete final hash wildcard. Invalid placements reject; literal option values are not expanded a second time when a shared filter is derived.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "MqttAndNatsAddressingConstraintsAreConsumerFailures",
+          "ValidProtocolFiltersRetainWholeLevelWildcardsAndFinalMultiLevelTokens",
+          "MqttSharedFilterUsesResolvedOptionLiteralsWithoutASecondExpansion"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99857,13 +100146,20 @@
       ],
       "text": "- An MQTT Endpoint MUST NOT declare both `topic` and `topicfilter`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A resolved MQTT definition cannot declare both topic and topicfilter. Authored storage may retain such a declaration because this is an explicit consumer evaluation requirement, not a mandatory server check.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "MqttAndNatsAddressingConstraintsAreConsumerFailures",
+          "InvalidTopicCanBeStoredDeclarativelyButFailsConsumerMaterialization"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99888,13 +100184,20 @@
       ],
       "text": "- An MQTT Endpoint MAY declare `[\"subscriber\", \"consumer\"]`, because a single MQTT connection both sends the `SUBSCRIBE` packet and receives the resulting `PUBLISH` packets.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "MQTT 3.1.1 and 5.0 declarations accept the distinct consumer/subscriber pair in either order; the unversioned alias follows MQTT 5.0. No producer role can join that pair.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EndpointRoleCombinationsFollowExactNativeAndProtocolRules",
+          "MqttSharedFilterUsesResolvedOptionLiteralsWithoutASecondExpansion"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99919,13 +100222,20 @@
       ],
       "text": "- `sharedsubscriptiongroup` MUST only be present when `topicfilter` is also present.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "MQTT 5 sharedsubscriptiongroup requires topicfilter. Missing filters reject at the group option path, while a valid literal group and filter produce the derived subscription filter.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "MqttAndNatsAddressingConstraintsAreConsumerFailures",
+          "MqttSharedFilterUsesResolvedOptionLiteralsWithoutASecondExpansion"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99950,13 +100260,20 @@
       ],
       "text": "- The value of `sharedsubscriptiongroup` is the bare group name. It MUST NOT include the `$share/` prefix and MUST NOT contain the `/` character.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Shared groups reject the reserved dollar-share prefix and every slash instead of accepting an already-assembled shared filter. Empty and wildcard-bearing group names also reject under the referenced MQTT rules.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "MqttAndNatsAddressingConstraintsAreConsumerFailures",
+          "MqttSharedFilterUsesResolvedOptionLiteralsWithoutASecondExpansion"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99981,13 +100298,20 @@
       ],
       "text": "- When `sharedsubscriptiongroup` is present, a client MUST send the subscription as the topic filter `$share/{sharedsubscriptiongroup}/{topicfilter}`, where `{sharedsubscriptiongroup}` and `{topicfilter}` are the literal values of those two options.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The consumer helper derives the exact dollar-share/group/filter value from resolved literal options and checks its byte budget. Sending that value in an actual MQTT subscription remains the caller's protocol operation, not a registry or metadata-materialization action.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "MqttSharedFilterUsesResolvedOptionLiteralsWithoutASecondExpansion",
+          "DerivedSharedSubscriptionIsBoundedBeforeItCanBeReturned"
+        ],
         "nativeEvidence": []
       }
     },
@@ -100052,13 +100376,19 @@
       ],
       "text": "- A `subscriber` Kafka Endpoint describes the creation and configuration of a consumer group as an act of registering interest. It MUST NOT declare `consumergroup`, since the group is the resource being established rather than a group to be joined.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A Kafka subscriber declaration rejects consumergroup even when other options are absent. It does not silently reinterpret the declaration as joining an existing group or create a group at a broker.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "KafkaExplicitRoleRulesApplyEvenToFalseValuesAndAbstractDefinitions"
+        ],
         "nativeEvidence": []
       }
     },
@@ -100083,13 +100413,19 @@
       ],
       "text": "- A `consumer` Kafka Endpoint describes joining an existing consumer group. It MUST declare `consumergroup` with a non-empty value.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A Kafka consumer requires a nonempty consumergroup, including abstract definitions without protocoloptions. A valid exact group identifier is preserved in the resulting metadata.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "KafkaExplicitRoleRulesApplyEvenToFalseValuesAndAbstractDefinitions"
+        ],
         "nativeEvidence": []
       }
     },
@@ -100116,13 +100452,20 @@
       ],
       "text": "- A Kafka Endpoint MUST NOT declare `[\"subscriber\", \"consumer\"]`. The two roles MUST be declared as separate Endpoint resources and SHOULD be correlated with a shared `channel` value.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The native Kafka role rule rejects the combined consumer/subscriber array in both orders. Publishing complete separate deployed interfaces and choosing a shared channel require producer modeling evidence beyond rejection of one invalid declaration.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "EndpointRoleCombinationsFollowExactNativeAndProtocolRules",
+          "KafkaExplicitRoleRulesApplyEvenToFalseValuesAndAbstractDefinitions"
+        ],
         "nativeEvidence": []
       }
     },
@@ -100147,13 +100490,19 @@
       ],
       "text": "- `autooffsetreset` and `enableautocommit` describe group-based consumption. They MUST NOT be used on a `producer` or `subscriber` Endpoint.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Kafka producer and subscriber declarations reject autooffsetreset or enableautocommit when present, including an explicit false boolean. Existing-group consumers can retain valid reset and auto-commit options.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "KafkaExplicitRoleRulesApplyEvenToFalseValuesAndAbstractDefinitions"
+        ],
         "nativeEvidence": []
       }
     },
@@ -100178,13 +100527,20 @@
       ],
       "text": "- `autooffsetreset` expresses only the reset behavior when no valid committed offset exists. A concrete starting offset or a starting timestamp is runtime consumer state, not endpoint metadata, and MUST NOT be expressed through this option.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Autooffsetreset accepts only earliest, latest or none. It cannot carry a concrete offset or timestamp through a numeric value or an unrecognized string; the native enum remains distinct from runtime consumer state.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "KafkaResetMetadataCannotEncodeConcreteRuntimeOffsetsOrTimestamps",
+          "KafkaExplicitRoleRulesApplyEvenToFalseValuesAndAbstractDefinitions"
+        ],
         "nativeEvidence": []
       }
     },
@@ -100209,13 +100565,20 @@
       ],
       "text": "The [endpoint URIs](#protocoloptionsendpoints) for \"NATS\" endpoints MUST be valid NATS URIs as described by [NATS]. The scheme MUST be \"nats\" or \"tls\" or \"ws\" and the URI MUST include a port number, e.g. `nats://<HOST>:<PORT>` or `tls://<HOST>:<PORT>`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "NATS addresses require nats, tls or ws scheme and an explicit port in the supported network range. Missing ports, zero or oversized ports and unsupported wss addresses reject; IPv6 and boundary ports are covered.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "PermittedEndpointAddressFormsRemainInAuthoredPreferenceOrder",
+          "UnsafeOrWrongProtocolAddressesAreErrorsAfterRendering"
+        ],
         "nativeEvidence": []
       }
     },
@@ -100241,13 +100604,20 @@
       ],
       "text": "- `subject` MUST be a concrete NATS subject. It MUST NOT contain the `*` or `>` wildcard tokens, since a wildcard is not a valid publish destination.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Concrete NATS subjects reject wildcard tokens, empty components and whitespace. Valid publish subjects remain distinct from subscription filters.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "MqttAndNatsAddressingConstraintsAreConsumerFailures",
+          "DeclaredProtocolOptionTypesPreserveTheirExactJson"
+        ],
         "nativeEvidence": []
       }
     },
@@ -100272,13 +100642,20 @@
       ],
       "text": "- `subjectfilter` MAY contain the `*` and `>` wildcard tokens as defined by [NATS].",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "NATS filters accept whole-token star wildcards and a whole final greater-than wildcard. Embedded or nonfinal wildcards reject rather than being interpreted as literal publish subjects.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "MqttAndNatsAddressingConstraintsAreConsumerFailures",
+          "ValidProtocolFiltersRetainWholeLevelWildcardsAndFinalMultiLevelTokens"
+        ],
         "nativeEvidence": []
       }
     },
@@ -100303,13 +100680,20 @@
       ],
       "text": "- `queuegroup` MUST only be present when `subjectfilter` is also present.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A supplied NATS queuegroup requires a subjectfilter and a nonempty group name. The valid group and filter remain exact metadata; no subscription is established.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "MqttAndNatsAddressingConstraintsAreConsumerFailures",
+          "MqttSharedFilterUsesResolvedOptionLiteralsWithoutASecondExpansion"
+        ],
         "nativeEvidence": []
       }
     },
@@ -100334,13 +100718,19 @@
       ],
       "text": "- A NATS Endpoint MUST NOT declare both `subject` and `subjectfilter`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "NATS consumer evaluation rejects a simultaneous subject and subjectfilter declaration at the filter path, independently of descriptive role-table applicability.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "MqttAndNatsAddressingConstraintsAreConsumerFailures"
+        ],
         "nativeEvidence": []
       }
     },
@@ -100365,13 +100755,20 @@
       ],
       "text": "- A NATS Endpoint MAY declare `[\"subscriber\", \"consumer\"]`, because a single Core NATS connection both registers the subscription interest and receives the resulting messages.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "NATS declarations accept the distinct subscriber/consumer pair in either order. The permission is implemented as a metadata rule without treating it as proof of an established Core NATS connection.",
+        "roles": [
+          "client",
+          "producer",
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EndpointRoleCombinationsFollowExactNativeAndProtocolRules",
+          "MqttSharedFilterUsesResolvedOptionLiteralsWithoutASecondExpansion"
+        ],
         "nativeEvidence": []
       }
     },
