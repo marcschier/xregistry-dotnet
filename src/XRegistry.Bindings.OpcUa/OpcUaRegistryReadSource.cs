@@ -130,7 +130,7 @@ public sealed class OpcUaRegistryReadSource : IFederationReadSource
     /// <summary>The accepted Core version reported by the selected Registry.</summary>
     public string SpecVersion { get; }
 
-    /// <summary>Validates the Registry root, compiles its Model and captures its enabled Capabilities.</summary>
+    /// <summary>Validates the selected root, compiles its Model, checks type mappings and captures enabled Capabilities.</summary>
     public static async ValueTask<OpcUaRegistryReadSource> OpenAsync(OpcUaRegistryReader reader,
         NodeId registryRoot, NativeRegistryContext context, OpcUaRegistryTypeMap types,
         CancellationToken cancellationToken = default)
@@ -144,6 +144,7 @@ public sealed class OpcUaRegistryReadSource : IFederationReadSource
             throw new ArgumentException("The source context binding must be 'opcua'.", nameof(context));
         }
 
+        _ = await reader.VerifyRegistryRootAsync(registryRoot, cancellationToken).ConfigureAwait(false);
         var registry = await reader.ReadRegistryPropertiesAsync(registryRoot, cancellationToken).ConfigureAwait(false);
         using var modelDocument = await reader.ReadModelAsync(registryRoot, cancellationToken).ConfigureAwait(false);
         var model = reader.CompileModelDefinition(modelDocument.RootElement);
@@ -151,8 +152,17 @@ public sealed class OpcUaRegistryReadSource : IFederationReadSource
             .ConfigureAwait(false);
         var capabilities = capabilitiesDocument.RootElement.Clone();
         _ = FederationCapabilities.GetResolutionOwner(capabilities);
-        return new(reader, registryRoot, context, types, model,
+        var source = new OpcUaRegistryReadSource(reader, registryRoot, context, types, model,
             modelDocument.RootElement, capabilities, registry.GetProperty("specversion").GetString()!);
+        foreach (var group in model.Groups)
+        {
+            _ = source.GroupType(group.Key);
+            foreach (var resource in group.Value.Resources)
+            {
+                _ = source.ResourceType(group.Key, resource.Key);
+            }
+        }
+        return source;
     }
 
     /// <summary>

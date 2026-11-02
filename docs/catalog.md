@@ -203,7 +203,14 @@ document replacement, created-Resource completion, and FileType byte
 readback. Callers still supply OPC UA type NodeIds for Groups and Resources,
 and the `ResourceVersionsType` NodeId for version operations. The binding draft permits
 several ways to represent collection names but does not define a deterministic
-collection-name-to-ObjectType lookup. The source does not provide API views
+collection-name-to-ObjectType lookup. `OpcUaRegistryReadSource.OpenAsync` verifies
+the selected Registry root before reading its documents. Before returning a
+source, it requires exact-name mappings for every Group and Resource collection
+in the compiled Model, including collections with no observed instances. Missing
+mappings or a document/metadata-only mapping that contradicts the Model report
+`unsupported_operation`; the source does not defer these checks until an entity
+is requested. An empty Model requires no collection mappings.
+The source does not provide API views
 because the binding exposes no retrievable Core API URL. Metadata-only
 `MetadataResourceType` Resources with `hasdocument=false` and `maxversions=1`
 are projected from their read-only `Metadata` FileType. Resource Properties

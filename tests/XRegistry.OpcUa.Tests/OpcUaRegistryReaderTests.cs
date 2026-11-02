@@ -1273,15 +1273,105 @@ public class OpcUaRegistryReaderTests
     [Test]
     public async Task FederationSourceRejectsMissingObjectTypeMappingInsteadOfGuessing()
     {
-        var source = await OpenSource(SourceSession(), new(
-            new Dictionary<string, NodeId>(StringComparer.Ordinal),
-            new Dictionary<(string GroupCollection, string ResourceCollection), OpcUaResourceTypeBinding>(),
-            AttributesType));
+        var session = SourceSession();
 
         var error = await Assert.ThrowsAsync<FederationException>(
-            async () => await source.ReadAsync(new(FederationOperation.Entity, "/teams/team-a")));
+            async () => await OpenSource(session, new(
+                new Dictionary<string, NodeId>(StringComparer.Ordinal),
+                new Dictionary<(string GroupCollection, string ResourceCollection), OpcUaResourceTypeBinding>(),
+                AttributesType)));
 
         await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.UnsupportedOperation);
+        await Assert.That(session.BrowsedNodes.Contains(GroupNode)).IsFalse();
+    }
+
+    [Test]
+    public async Task FederationBootstrapRejectsNonRegistryRootBeforeOpeningDocuments()
+    {
+        var session = SourceSession(isRegistry: false);
+
+        var error = await Assert.ThrowsAsync<FederationException>(
+            async () => await OpenSource(session));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.NotFound);
+        await Assert.That(session.OpenedFiles.Count).IsEqualTo(0);
+        await Assert.That(session.BrowsedNodes.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    [Arguments("group")]
+    [Arguments("resource")]
+    [Arguments("group-case")]
+    [Arguments("resource-case")]
+    [Arguments("document-contract")]
+    public async Task FederationBootstrapValidatesEveryModelCollectionBeforeReturningSource(string mismatch)
+    {
+        const string model = """
+            {"groups":{
+                "teams":{"singular":"team","resources":{"schemas":{"singular":"schema"}}},
+                "departments":{"singular":"department","resources":{"pages":{"singular":"page"}}}
+            }}
+            """;
+        var session = SourceSession(model);
+        var groups = new Dictionary<string, NodeId>(StringComparer.Ordinal)
+        {
+            ["teams"] = new("GroupType", 1),
+            ["departments"] = new("DepartmentType", 1)
+        };
+        var resources = new Dictionary<(string GroupCollection, string ResourceCollection), OpcUaResourceTypeBinding>
+        {
+            [("teams", "schemas")] = new(ResourceType, ResourceVersionsType),
+            [("departments", "pages")] = new(new NodeId("PageType", 1), new NodeId("PageVersionsType", 1))
+        };
+        switch (mismatch)
+        {
+            case "group":
+                groups.Remove("departments");
+                break;
+            case "resource":
+                resources.Remove(("departments", "pages"));
+                break;
+            case "group-case":
+                groups["Departments"] = groups["departments"];
+                groups.Remove("departments");
+                break;
+            case "resource-case":
+                resources[("departments", "Pages")] = resources[("departments", "pages")];
+                resources.Remove(("departments", "pages"));
+                break;
+            case "document-contract":
+                resources[("departments", "pages")] =
+                    OpcUaResourceTypeBinding.ForMetadataOnly(new NodeId("PageType", 1));
+                break;
+        }
+
+        var error = await Assert.ThrowsAsync<FederationException>(
+            async () => await OpenSource(session, new(groups, resources, AttributesType)));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.UnsupportedOperation);
+        await Assert.That(session.BrowsedNodes.Contains(GroupNode)).IsFalse();
+        await Assert.That(NodeIdTrace(session.OpenedFiles)).IsEqualTo("Model|Capabilities");
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task FederationBootstrapAcceptsCompleteAndEmptyModelMappings(bool emptyModel)
+    {
+        var groups = new Dictionary<string, NodeId>(StringComparer.Ordinal);
+        var resources = new Dictionary<(string GroupCollection, string ResourceCollection), OpcUaResourceTypeBinding>();
+        if (!emptyModel)
+        {
+            groups["teams"] = new("GroupType", 1);
+            resources[("teams", "schemas")] = new(ResourceType, ResourceVersionsType);
+        }
+        var session = SourceSession(emptyModel ? """{"groups":{}}""" : TestModel);
+
+        var source = await OpenSource(session, new(groups, resources, AttributesType));
+
+        await Assert.That(source.Model.Groups.Count).IsEqualTo(emptyModel ? 0 : 1);
+        await Assert.That(session.BrowsedNodes.Contains(GroupNode)).IsFalse();
+        await Assert.That(NodeIdTrace(session.OpenedFiles)).IsEqualTo("Model|Capabilities");
     }
 
     [Test]
@@ -2218,9 +2308,9 @@ public class OpcUaRegistryReaderTests
         return reader;
     }
 
-    private static FakeSession SourceSession(string model = TestModel)
+    private static FakeSession SourceSession(string model = TestModel, bool isRegistry = true)
     {
-        var session = new FakeSession();
+        var session = new FakeSession { IsRegistry = isRegistry };
         session.Chunks.AddRange([
             System.Text.Encoding.UTF8.GetBytes(model), Array.Empty<byte>(),
             System.Text.Encoding.UTF8.GetBytes("""{"flags":["doc"]}"""), Array.Empty<byte>()
@@ -3263,35 +3353,21 @@ public class OpcUaRegistryReaderTests
     }
 
     [Test]
-    [Arguments(FederationOperation.Collection)]
-    [Arguments(FederationOperation.Entity)]
-    public async Task FederationMetadataMappingRequiresMaxVersionsOne(FederationOperation operation)
+    public async Task FederationMetadataMappingRequiresMaxVersionsOne()
     {
-        var (session, source) = await OpenMetadataOnlySource(includeOptionalMembers: false, maxVersions: 2);
-        var target = operation == FederationOperation.Collection
-            ? "/teams/team-a/schemas" : "/teams/team-a/schemas/metadata-a";
-
         var error = await Assert.ThrowsAsync<FederationException>(
-            async () => await source.ReadAsync(new(operation, target)));
+            async () => await OpenMetadataOnlySource(includeOptionalMembers: false, maxVersions: 2));
 
         await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.UnsupportedOperation);
-        await Assert.That(NodeIdTrace(session.OpenedFiles)).IsEqualTo("Model|Capabilities");
     }
 
     [Test]
-    [Arguments(FederationOperation.Collection)]
-    [Arguments(FederationOperation.Entity)]
-    public async Task FederationMetadataMappingRequiresHasDocumentFalse(FederationOperation operation)
+    public async Task FederationMetadataMappingRequiresHasDocumentFalse()
     {
-        var (session, source) = await OpenMetadataOnlySource(includeOptionalMembers: false, hasDocument: true);
-        var target = operation == FederationOperation.Collection
-            ? "/teams/team-a/schemas" : "/teams/team-a/schemas/metadata-a";
-
         var error = await Assert.ThrowsAsync<FederationException>(
-            async () => await source.ReadAsync(new(operation, target)));
+            async () => await OpenMetadataOnlySource(includeOptionalMembers: false, hasDocument: true));
 
         await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.UnsupportedOperation);
-        await Assert.That(NodeIdTrace(session.OpenedFiles)).IsEqualTo("Model|Capabilities");
     }
 
     [Test]
@@ -4110,6 +4186,19 @@ public class OpcUaRegistryReaderTests
     }
 
     [Test]
+    public async Task ResolveExternalTargetAsyncRejectsMissingRequiredMappingBeforeTargetReadAndDisposesLease()
+    {
+        var fixture = CreateResolverFixture(omitResourceMapping: true);
+
+        var error = await ResolveFailureAsync(fixture);
+
+        await Assert.That(error.Code).IsEqualTo(FederationErrorCode.UnsupportedOperation);
+        await Assert.That(fixture.Session.BrowsedNodes.Contains(LogicalResourceNode)).IsFalse();
+        await Assert.That(fixture.Session.BrowsedNodes.Contains(GroupNode)).IsFalse();
+        await Assert.That(fixture.Lease.DisposeCount).IsEqualTo(1);
+    }
+
+    [Test]
     public async Task ResolveExternalTargetAsyncRejectsMetadataOnlyXidWithVersionsAndDisposesLease()
     {
         var fixture = CreateResolverFixture(
@@ -4185,6 +4274,7 @@ public class OpcUaRegistryReaderTests
         string registryPropertySpecVersion = "1.0-rc4",
         bool metadataOnly = false,
         bool useWrongResourceType = false,
+        bool omitResourceMapping = false,
         Exception? readFailure = null)
     {
         targetXid ??= metadataOnly
@@ -4238,15 +4328,17 @@ public class OpcUaRegistryReaderTests
         var typeBinding = metadataOnly
             ? OpcUaResourceTypeBinding.ForMetadataOnly(MetadataResourceType)
             : new OpcUaResourceTypeBinding(resourceType, ResourceVersionsType);
+        var resourceMappings = new Dictionary<(string GroupCollection, string ResourceCollection), OpcUaResourceTypeBinding>();
+        if (!omitResourceMapping)
+        {
+            resourceMappings[("teams", "schemas")] = typeBinding;
+        }
         var types = new OpcUaRegistryTypeMap(
             new Dictionary<string, NodeId>(StringComparer.Ordinal)
             {
                 ["teams"] = new("GroupType", 1)
             },
-            new Dictionary<(string GroupCollection, string ResourceCollection), OpcUaResourceTypeBinding>
-            {
-                [("teams", "schemas")] = typeBinding
-            },
+            resourceMappings,
             AttributesType);
         var registryReader = new OpcUaRegistryReader(session);
 
