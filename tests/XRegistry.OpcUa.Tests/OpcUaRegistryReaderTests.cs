@@ -162,6 +162,87 @@ public class OpcUaRegistryReaderTests
     }
 
     [Test]
+    [Arguments(1)]
+    [Arguments(2)]
+    [Arguments(3)]
+    public async Task BrowsePageBudgetCountsInitialAndEmptyPages(int limit)
+    {
+        var session = new FakeSession();
+        session.Pages.Enqueue(new([SpecVersionRef()]));
+        var reader = new OpcUaRegistryReader(session, maxBrowsePages: limit);
+        await reader.ReadSpecVersionAsync(File, _ => true);
+        for (var index = 0; index < limit; index++)
+        {
+            session.Pages.Enqueue(new([], [(byte)(index + 1)]));
+        }
+        session.Pages.Enqueue(new([]));
+
+        var error = await Assert.ThrowsAsync<FederationException>(
+            async () => await reader.BrowseAllAsync(File));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        await Assert.That(error.Message).IsEqualTo("The Browse result exceeds the page budget.");
+        await Assert.That(session.Released.Single()).IsEquivalentTo(new byte[] { (byte)limit });
+        await Assert.That(session.Pages.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    [Arguments(1)]
+    [Arguments(2)]
+    [Arguments(3)]
+    public async Task BrowsePageBudgetPermitsCompletionAtExactLimit(int limit)
+    {
+        var session = new FakeSession();
+        session.Pages.Enqueue(new([SpecVersionRef()]));
+        var reader = new OpcUaRegistryReader(session, maxBrowsePages: limit);
+        await reader.ReadSpecVersionAsync(File, _ => true);
+        for (var index = 0; index < limit - 1; index++)
+        {
+            session.Pages.Enqueue(new([], [1]));
+        }
+        session.Pages.Enqueue(new([Ref("final")]));
+
+        var references = await reader.BrowseAllAsync(File);
+
+        await Assert.That(references.Single().BrowseName.Name).IsEqualTo("final");
+        await Assert.That(session.Released.Count).IsEqualTo(0);
+        await Assert.That(session.Pages.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task BrowsePageBudgetRetainsReleaseFailureOnLimitError()
+    {
+        var failure = new IOException("Synthetic continuation release failure.");
+        var session = new FakeSession { ReleaseFailure = failure };
+        session.Pages.Enqueue(new([SpecVersionRef()]));
+        var reader = new OpcUaRegistryReader(session, maxBrowsePages: 1);
+        await reader.ReadSpecVersionAsync(File, _ => true);
+        session.Pages.Enqueue(new([], [7]));
+        session.Pages.Enqueue(new([]));
+
+        var error = await Assert.ThrowsAsync<FederationException>(
+            async () => await reader.BrowseAllAsync(File));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        await Assert.That(ReferenceEquals(error.Data["OpcUa.ContinuationReleaseFailure"], failure)).IsTrue();
+        await Assert.That(session.Released.Single()).IsEquivalentTo(new byte[] { 7 });
+    }
+
+    [Test]
+    [Arguments(0)]
+    [Arguments(-1)]
+    public async Task BrowsePageBudgetMustBePositive(int limit)
+    {
+        var error = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () =>
+        {
+            _ = new OpcUaRegistryReader(new FakeSession(), maxBrowsePages: limit);
+            await Task.CompletedTask;
+        });
+
+        await Assert.That(error!.ParamName).IsEqualTo("maxBrowsePages");
+    }
+
+    [Test]
     public async Task RootThatIsNotARegistryIsNotFoundNeverSubstituted()
     {
         var target = OpcUaFederationTargetTests.Target("""{"registryroot":"nsu=urn%3Axregistry;s=Registry"}""");

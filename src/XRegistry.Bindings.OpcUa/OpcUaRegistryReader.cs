@@ -71,22 +71,25 @@ public sealed class OpcUaRegistryReader
     private readonly int maxBytes;
     private readonly int chunkSize;
     private readonly int maxReferences;
+    private readonly int maxBrowsePages;
     private RegistryModel? registryModel;
     private bool specVersionValidated;
     private string? acceptedSpecVersion;
 
-    /// <summary>Creates a reader with finite file-size and browse-count budgets.</summary>
+    /// <summary>Creates a reader with finite file-size, reference-count and Browse-page budgets.</summary>
     public OpcUaRegistryReader(IOpcUaRegistrySession session, int maxBytes = 64 * 1024 * 1024,
-        int chunkSize = 64 * 1024, int maxReferences = 1_000_000)
+        int chunkSize = 64 * 1024, int maxReferences = 1_000_000, int maxBrowsePages = 10_000)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxBytes);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(chunkSize);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxReferences);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxBrowsePages);
         this.session = session;
         this.maxBytes = maxBytes;
         this.chunkSize = chunkSize;
         this.maxReferences = maxReferences;
+        this.maxBrowsePages = maxBrowsePages;
     }
 
     /// <summary>Maps the advertised root and confirms it is a Registry; never selects another Registry.</summary>
@@ -149,6 +152,7 @@ public sealed class OpcUaRegistryReader
     {
         var all = new List<OpcUaReference>();
         var page = await session.BrowseAsync(node, cancellationToken).ConfigureAwait(false);
+        var pages = 1;
         while (true)
         {
             var continuation = page.ContinuationPoint is { Length: > 0 } c ? c : null;
@@ -165,9 +169,15 @@ public sealed class OpcUaRegistryReader
                     return all;
                 }
                 cancellationToken.ThrowIfCancellationRequested();
+                if (pages >= maxBrowsePages)
+                {
+                    throw new FederationException(FederationErrorCode.LimitExceeded,
+                        "The Browse result exceeds the page budget.");
+                }
                 var next = continuation;
                 var nextPage = await session.BrowseNextAsync(next, false, cancellationToken).ConfigureAwait(false);
                 continuation = null;
+                pages++;
                 page = nextPage;
             }
             catch (Exception exception) when (continuation is not null)

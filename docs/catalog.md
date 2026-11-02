@@ -110,6 +110,13 @@ as JSON. `OpcUaSessionConnection` discovers endpoints and opens a Session only
 after caller policy selects one; it maps the advertised root through the
 Session's `NamespaceArray` and verifies the root and Core version.
 
+The reader's `maxBrowsePages` budget defaults to 10,000 pages per enumeration,
+including the initial page and empty pages. Completion on the final permitted
+page succeeds. If that page still has a continuation, the reader reports
+`limit_exceeded` before requesting another page and attempts to release the
+outstanding continuation. A release failure remains attached to the limit
+error. This budget is separate from the returned-reference limit.
+
 Root admission requires one ObjectType TypeDefinition and follows only that
 definition's ObjectType supertypes. Competing definitions or supertypes,
 cycles and non-ObjectType parents are rejected; an absent or unrelated

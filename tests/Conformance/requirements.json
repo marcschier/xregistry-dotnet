@@ -140620,6 +140620,7 @@
           "ExplicitContinuationReleaseRejectsNonGoodStatus",
           "SdkServiceFailureMapsOutcomeAndRetainsOriginalException",
           "SdkCancellationRemainsCancellationInsteadOfNativeFailure",
+          "BrowsePageBudgetRetainsReleaseFailureOnLimitError",
           "DiscoveryMapsServiceFailureAndRetainsOriginalException",
           "DiscoveryRetainsFailedBrowseAndEveryContinuationCleanupDiagnostic",
           "DiscoveryRejectsNonGoodServiceDespiteGoodOperation"
