@@ -117859,8 +117859,8 @@
       ],
       "text": "The key words \"MUST\", \"MUST NOT\", \"REQUIRED\", \"SHALL\", \"SHALL NOT\", \"SHOULD\", \"SHOULD NOT\", \"RECOMMENDED\", \"MAY\", and \"OPTIONAL\" in this document are to be interpreted as described in [RFC 2119][rfc2119].",
       "review": {
-        "status": "unreviewed",
-        "note": "",
+        "status": "informative",
+        "note": "RFC2119 interpretation defines normative vocabulary rather than a separately executable behavior. Review covers the complete seven-clause Media compatibility draft at pr571-d757328e; it does not close the separate Media model artifact, binding or runtime qualification work.",
         "roles": []
       },
       "implementation": {
@@ -117891,13 +117891,21 @@
       ],
       "text": "Codec identifiers are open-vocabulary, case-sensitive strings. Implementations MUST preserve their spelling and MUST NOT normalize their case when comparing identifiers.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "MediaEndpointSemantics compares recognized codecs by exact case-sensitive strings. Both materialization and metadata validation preserve unknown identifiers, including lower-case cross-kind spellings; canonical vectors assert the unchanged authored values. No codec normalization or closed vocabulary is introduced.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CodecIdentifiersRemainCaseSensitiveAndOpenEnded",
+          "UnrecognizedCodecNamesRemainExactForBothMediaKinds",
+          "CanonicalMediaCodecVectorsExerciseMaterializationAndMetadataValidation"
+        ],
         "nativeEvidence": []
       }
     },
@@ -117922,13 +117930,20 @@
       ],
       "text": "An endpoint provider MUST ensure that its producer-only codec and `streamformat` declarations describe the media it provides. A receiving implementation MUST decide whether it can consume those declarations. Successful xRegistry validation does not establish that a receiver supports the advertised media.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Provider declaration accuracy and receiver capability decisions require actual media behavior, which is outside the registry implementation. Materialization retains explicit media_session_setup and producer media_input_compatibility obligations without fetching native descriptions. Existing tests prove that boundary, not the provider's accuracy or a receiver's ability to consume media; those runtime obligations remain pending.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "MediaMaterializationDefersNativeSetupAndProducerCompatibility",
+          "ReferencedMediaDescriptionsRemainDeferredAfterSuccessfulTemplateBinding",
+          "MissingAddressesAndUndeployedFlagsDoNotDischargeMediaRuntimeObligations"
+        ],
         "nativeEvidence": []
       }
     },
@@ -117953,13 +117968,25 @@
       ],
       "text": "An xRegistry validator MUST enforce the types and enumerations declared by the Media Endpoints model. When the selected protocol defines `streamformat`, the validator MUST accept only values in that protocol's declared enumeration and MUST reject other values.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Canonical tests verify the pinned model and vector inventories, every protocol's declared streamformat alternatives, exact case, invalid non-string JSON kinds, signaling direction and inherited option shapes. Both materialization and metadata validation reject invalid values at exact option paths. This maps the validation clause; it does not qualify every separate model artifact or server write surface.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CanonicalMediaVectorInventoryRetainsEveryPinnedCodecAndProtocol",
+          "CanonicalMediaModelEnumsMatchVectorsWithoutInventingProducerSupport",
+          "CanonicalMediaStreamFormatVectorsExerciseEveryDeclaredRuntimeAlternative",
+          "StreamFormatEnumsRejectUnknownCaseVariantsAndNonStringValues",
+          "CanonicalMediaOptionTypesRejectEveryNonStringJsonKind",
+          "CanonicalMediaSignalingEnumEnforcesExactSpellingAndDirection",
+          "InheritedMediaOptionShapesRejectInvalidJsonKindsAtExactPaths"
+        ],
         "nativeEvidence": []
       }
     },
@@ -117985,13 +118012,21 @@
       ],
       "text": "A validator that recognizes a codec identifier MUST reject it when its known media kind conflicts with the attribute: a video codec in `audiocodec` or an audio codec in `videocodec`. The open vocabulary does not require a validator to recognize every codec identifier. A validator MUST NOT reject an unrecognized codec identifier solely because it does not recognize it.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Known audio identifiers in videocodec and known video identifiers in audiocodec reject at the respective attribute. Unknown and case-distinct identifiers remain accepted unchanged. Canonical vectors exercise both metadata validation and materialization; additional direct cases cover every recognized cross-kind identifier.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "KnownCodecsCannotBeDeclaredForTheOtherMediaKind",
+          "UnrecognizedCodecNamesRemainExactForBothMediaKinds",
+          "CanonicalMediaCodecVectorsExerciseMaterializationAndMetadataValidation"
+        ],
         "nativeEvidence": []
       }
     },
@@ -118016,13 +118051,21 @@
       ],
       "text": "A validator MUST NOT infer codec/protocol/`streamformat` incompatibility beyond the media-kind check and the protocol's declared `streamformat` enumeration. This draft defines no codec/format compatibility matrix. Its validation vectors exercise only the media-kind and declared `streamformat` checks; they do not assert cross-property codec/format compatibility.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Every producer protocol accepts its declared streamformat with independent known video/audio identifiers, including combinations for which this draft defines no compatibility matrix. MediaEndpointSemantics checks only recognized cross-kind placement and the protocol's streamformat enumeration, without introducing codec/format compatibility inference.",
+        "roles": [
+          "client",
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DeclaredStreamFormatsAcceptIndependentKnownCodecDeclarations",
+          "CanonicalMediaCodecVectorsExerciseMaterializationAndMetadataValidation",
+          "CanonicalMediaStreamFormatVectorsExerciseEveryDeclaredRuntimeAlternative"
+        ],
         "nativeEvidence": []
       }
     },
@@ -118047,13 +118090,21 @@
       ],
       "text": "Compatibility depends on the receiving implementation's support for the advertised media and on protocol-specific behavior. A receiver MUST NOT treat successful xRegistry validation as proof that it can consume an endpoint. The provider is responsible for making its declarations accurate, and the receiver is responsible for deciding whether it supports them. This draft does not prescribe negotiation or failure signaling.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Successful metadata materialization leaves native session and producer compatibility checks explicitly deferred, including missing addresses, undeployed flags and shared HTTP media selection. Tests verify those exact diagnostics and their budgets. No receiving media connector is implemented, so actual receiver support and provider accuracy remain pending rather than inferred from registry validation.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "MediaMaterializationDefersNativeSetupAndProducerCompatibility",
+          "MissingAddressesAndUndeployedFlagsDoNotDischargeMediaRuntimeObligations",
+          "SharedHttpSelectorDefersMediaSetupOnlyWhenExplicitlyMaterializedAsMedia",
+          "MediaRuntimeObligationsRespectExactDeferredCountAndByteBudgets"
+        ],
         "nativeEvidence": []
       }
     },
