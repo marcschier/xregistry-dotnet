@@ -599,6 +599,16 @@ public static partial class ApiOperationDocumentResolver
             if (resolution.Failure is not null) { return resolution.Failure; }
             if (references.Format == "Swagger/2.0") { continue; }
             var response = resolution.Target!;
+            if (response.Value.TryGetProperty("links", out var links))
+            {
+                foreach (var link in links.EnumerateObject())
+                {
+                    var target = await ResolveHttpDeclarationAsync(
+                        new ReferenceTarget(response.Document, link.Value, response.Pointer + "/links/" + Escape(link.Name)),
+                        references, ValidateOpenApiLinkDeclaration, "link", cancellationToken).ConfigureAwait(false);
+                    if (target.Failure is not null) { return target.Failure; }
+                }
+            }
             if (!response.Value.TryGetProperty("content", out var content)) { continue; }
             foreach (var media in content.EnumerateObject())
             {

@@ -13,6 +13,187 @@ public class ApiOperationReferenceTests
     [Test]
     [Arguments("OpenAPI/3.0", "3.0.4")]
     [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiLinkReferencesResolveContainingBasesCacheAndRestoredTargets(string format, string version)
+    {
+        foreach (var valid in new[] { true, false, true })
+        {
+            foreach (var selector in new[] { "operations/Target", "/paths/~1items/get" })
+            {
+                var document = new JsonObject { ["openapi"] = version,
+                    ["paths"] = JsonNode.Parse("""
+                        {"/items":{"get":{"operationId":"Target","responses":{"200":{"$ref":"https://allowed.test/responses/ok.json#/Ok"}}}}}
+                        """) };
+                var calls = new List<string>();
+                var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                    resolveReference: (uri, _) =>
+                    {
+                        calls.Add(uri);
+                        var text = uri switch
+                        {
+                            "https://allowed.test/responses/ok.json" => """
+                                {"Ok":{"description":"","links":{"first":{"$ref":"../links/first.json#/L"},
+                                "again":{"$ref":"../links/first.json#/L"}}}}
+                                """,
+                            "https://allowed.test/links/first.json" => """{"L":{"$ref":"second.json#/Result"}}""",
+                            "https://allowed.test/links/second.json" => valid
+                                ? """{"Result":{"operationId":"Target","server":{"url":"https://must-not-load.test/api"}}}"""
+                                : """{"Result":{"operationId":"Target","parameters":false}}""",
+                            _ => throw new UnauthorizedAccessException()
+                        };
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(text));
+                    });
+                await Assert.That(result.Status).IsEqualTo(valid
+                    ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+                await Assert.That(string.Join("|", calls)).IsEqualTo(
+                    "https://allowed.test/responses/ok.json|https://allowed.test/links/first.json|https://allowed.test/links/second.json");
+                if (valid)
+                {
+                    await Assert.That(result.Operation.GetProperty("responses").GetProperty("200").GetProperty("$ref").GetString())
+                        .IsEqualTo("https://allowed.test/responses/ok.json#/Ok");
+                }
+                else
+                {
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.link");
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo("$/Result/parameters");
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiLinkReferenceFailuresPreventPartialOperationSelection(string format, string version)
+    {
+        foreach (var (target, status, code) in new (string?, ApiOperationResolutionStatus, string)[]
+        {
+            (null, ApiOperationResolutionStatus.Indeterminate, "dependency.unresolved"),
+            ("denied", ApiOperationResolutionStatus.Denied, "dependency.denied"),
+            ("not json", ApiOperationResolutionStatus.Invalid, "dependency.json"),
+            ("""{"L":false}""", ApiOperationResolutionStatus.Invalid, "document.link"),
+            ("""{"L":{}}""", ApiOperationResolutionStatus.Invalid, "document.link"),
+            ("""{"L":{"$ref":"#/L"}}""", ApiOperationResolutionStatus.Indeterminate, "dependency.cycle")
+        })
+        {
+            foreach (var selector in new[] { "operations/Target", "operations/Missing", "/paths/~1items/get" })
+            {
+                var document = new JsonObject { ["openapi"] = version,
+                    ["paths"] = JsonNode.Parse("""
+                        {"/items":{"get":{"operationId":"Target","responses":{"200":{"description":"",
+                        "links":{"L":{"$ref":"https://allowed.test/link#/L"}}}}}}}
+                        """) };
+                var calls = 0;
+                var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                    resolveReference: (_, _) =>
+                    {
+                        calls++;
+                        if (target == "denied") { throw new UnauthorizedAccessException(); }
+                        if (target is null) { return ValueTask.FromResult<ReadOnlyMemory<byte>?>(null); }
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(target));
+                    });
+                await Assert.That(result.Status).IsEqualTo(status);
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo(code);
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                await Assert.That(calls).IsEqualTo(1);
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiLinkReferenceChainsHonorDepthAndLeaveUnusedReferencesInactive(string format, string version)
+    {
+        foreach (var depth in new[] { 63, 64, 65 })
+        {
+            var document = new JsonObject { ["openapi"] = version,
+                ["paths"] = JsonNode.Parse("""
+                    {"/items":{"get":{"operationId":"Target","responses":{"200":{"description":"","links":{"L":{"$ref":"#/L0"}}}}}}}
+                    """),
+                ["components"] = JsonNode.Parse("""{"links":{"Unused":{"$ref":"https://must-not-load.test/unused"}}}""") };
+            for (var index = 0; index < depth; index++)
+            {
+                document["L" + index] = index == depth - 1
+                    ? JsonNode.Parse("""{"operationId":"Target"}""")
+                    : new JsonObject { ["$ref"] = "#/L" + (index + 1) };
+            }
+            var calls = 0;
+            var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                ApiOperationReference.Parse("/apigroups/g/apis/a#operations/Target"),
+                resolveReference: (_, _) => { calls++; throw new UnauthorizedAccessException(); });
+            await Assert.That(result.Status).IsEqualTo(depth <= 64
+                ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Indeterminate);
+            await Assert.That(calls).IsEqualTo(0);
+            if (depth > 64)
+            {
+                await Assert.That(result.Diagnostic!.Code).IsEqualTo("limit.reference_depth");
+                await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            }
+            else
+            {
+                await Assert.That(result.Operation.GetProperty("responses").GetProperty("200").GetProperty("links")
+                    .GetProperty("L").GetProperty("$ref").GetString()).IsEqualTo("#/L0");
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task OpenApiLinkReferencesFollowCallbackAncestorsAndRetainPointerLocality(string format, string version)
+    {
+        var document = new JsonObject { ["openapi"] = version,
+            ["paths"] = JsonNode.Parse("""
+                {"/target":{"get":{"operationId":"Target"}},
+                 "/parent":{"get":{"operationId":"Parent","responses":{"200":{"description":"",
+                 "links":{"L":{"$ref":"https://allowed.test/link#/L"}}}},
+                 "callbacks":{"event":{"{$request.query.url}":{"post":{"operationId":"Child"}}}}}}}
+                """) };
+        foreach (var valid in new[] { true, false, true })
+        {
+            foreach (var selector in new[] { "operations/Child",
+                "/paths/~1parent/get/callbacks/event/%7B$request.query.url%7D/post",
+                "operations/Target", "/paths/~1target/get" })
+            {
+                var local = selector == "/paths/~1target/get";
+                var calls = 0;
+                var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                    System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                    ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                    resolveReference: (_, _) =>
+                    {
+                        calls++;
+                        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(valid
+                            ? """{"L":{"operationId":"Target"}}""" : """{"L":{"operationId":false}}"""));
+                    });
+                await Assert.That(result.Status).IsEqualTo(valid || local
+                    ? ApiOperationResolutionStatus.Selected : ApiOperationResolutionStatus.Invalid);
+                await Assert.That(calls).IsEqualTo(local ? 0 : 1);
+                if (!valid && !local)
+                {
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.link");
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo("$/L/operationId");
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                }
+                else
+                {
+                    await Assert.That(result.Operation.GetProperty("operationId").GetString()).IsEqualTo(
+                        selector.Contains("target", StringComparison.Ordinal) || selector.EndsWith("Target", StringComparison.Ordinal)
+                            ? "Target" : "Child");
+                }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
     public async Task OpenApiResponseLinkNamesRequireComponentNameSyntax(string format, string version)
     {
         foreach (var name in new[] { "", "bad/~", "with space", "\u00e9" })

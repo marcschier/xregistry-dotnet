@@ -675,9 +675,16 @@ remain arbitrary JSON. Request bodies also retain arbitrary JSON values.
 Present servers receive the same URL-template, variable and metadata checks
 as other Server Objects. Reference declarations require string URI references;
 OpenAPI 3.1 checks optional string summary and description, while OpenAPI 3.0
-ignores these siblings. Extension contents remain opaque. These checks do not
-resolve Link Reference Objects, establish linked-operation existence or
-uniqueness, evaluate runtime expressions or invoke linked operations.
+ignores these siblings. Extension contents remain opaque.
+Reached response Link Reference Objects resolve through the same bounded
+chain helper as responses and examples. Targets receive Link Object and
+server declaration checks; containing-document bases, acquisition caches and
+work budgets remain shared. Dependency failures, malformed targets, cycles
+and depth exhaustion prevent partial selection. Unused reusable link references
+remain inactive. Selection retains authored references and never retrieves
+server addresses. Linked-operation existence and uniqueness, `operationRef`
+target resolution and runtime-expression evaluation remain unverified;
+operation selection does not invoke linked operations.
 Root and reached HTTP operation `externalDocs` values must be objects with a
 string `url` and, when present, a string `description`. An External
 Documentation Object is not a Reference Object: a `$ref` alone cannot replace
