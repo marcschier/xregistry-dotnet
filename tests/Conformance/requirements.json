@@ -139453,13 +139453,20 @@
       ],
       "text": "| `registryroot` | REQUIRED portable NodeId of the selected Registry root. |",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The selected OPC UA advertisement requires registryroot and parses only non-null portable NodeId forms. Direct target tests cover missing roots, all identifier kinds, namespace-zero forms and rejected source-local/server-prefixed roots. This bounded client declaration rule is implemented without native execution qualification.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "OpcUaParametersAreClosedAndRequireRegistryRoot",
+          "PortableNodeIdFormsPassSharedSyntaxAndUaParsing",
+          "RegistryRootMustUseNonNullPortableNodeIdForm",
+          "NonPortableOrNullRootsAreRejectedBeforeUaResolution"
+        ],
         "nativeEvidence": []
       }
     },
@@ -139484,13 +139491,20 @@
       ],
       "text": "| `applicationuri` | OPTIONAL expected OPC UA Application URI, not a transport endpoint. |",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Application identity is optional and retained separately from the native endpoint. Present values must be nonempty absolute URI strings; endpoint selection compares the advertised application exactly. This table declaration is implemented; authenticated-application/certificate workflow evidence belongs to the separate compound selection clause.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SelectEndpointRequiresExactAdvertisedOptionalIdentities",
+          "SelectEndpointRejectsApplicationUriMismatch",
+          "SelectEndpointExcludesUnsupportedProfilesBeforePolicyAndAmbiguityChecks",
+          "PresentOptionalIdentitiesRequireNonemptyAbsoluteUriStrings"
+        ],
         "nativeEvidence": []
       }
     },
@@ -139515,13 +139529,21 @@
       ],
       "text": "| `transportprofileuri` | OPTIONAL expected UA transport profile URI. |",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Transport identity is optional, syntax-checked when present and compared exactly during endpoint selection. The caller supplies installed-profile support independently of permission; an unsupported explicit request cannot fall back to another profile. This is client declaration/selection evidence, not authenticated-channel qualification.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "PresentOptionalIdentitiesRequireNonemptyAbsoluteUriStrings",
+          "SelectEndpointRequiresExactAdvertisedOptionalIdentities",
+          "SelectEndpointRejectsTransportProfileUriMismatch",
+          "SelectEndpointDoesNotDropUnsupportedRequestedTransportForASupportedCandidate",
+          "SelectEndpointExcludesUnsupportedProfilesBeforePolicyAndAmbiguityChecks"
+        ],
         "nativeEvidence": []
       }
     },
@@ -139546,13 +139568,22 @@
       ],
       "text": "The `registryroot` value MUST use the [Part 6 portable NodeId string form][ua-string]. Nonstandard namespaces use `nsu=` rather than a stored `ns=` index; namespace zero uses only the identifier, such as `i=85`. Namespace URI semicolons MUST be percent encoded under Part 6. Because application selection is separate, a root NodeId has no `svr=` or `svu=` prefix. A null NodeId selects no Registry. An unknown selected parameter yields `unsupported_operation`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Shared portable grammar and actual UA parsing preserve encoded namespace semicolons and identifier delimiters, reject namespace indexes, server prefixes and null roots, and report unknown selected parameters as unsupported_operation. These tests were inspected against the newly selected source rather than inheriting historical evidence.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "PortableStringRootRetainsIdentifierDelimitersAndDecodedNamespace",
+          "StandardNamespaceMayUseTheBarePortableIdentifier",
+          "PortableNodeIdFormsPassSharedSyntaxAndUaParsing",
+          "RegistryRootMustUseNonNullPortableNodeIdForm",
+          "NonPortableOrNullRootsAreRejectedBeforeUaResolution",
+          "OpcUaParametersAreClosedAndRequireRegistryRoot"
+        ],
         "nativeEvidence": []
       }
     },
@@ -139577,13 +139608,24 @@
       ],
       "text": "Under caller policy, the resolver MUST select a supported transport and endpoint, use OPC UA discovery where needed, and validate the application and security context. If supplied, `applicationuri` MUST match the discovered and authenticated application identity. If supplied, `transportprofileuri` MUST match the endpoint's transport profile. An `https` endpoint alone does not imply an xRegistry HTTP facade.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The client applies explicit installed-transport support, SDK scheme-factory preflight, exact endpoint/application/profile matching and caller permission before opening a native Session; connected ServerArray identity is checked afterward. Existing real-server coverage uses SecurityMode.None, so it does not prove authenticated certificate/application mismatch rejection or HTTPS native transport behavior. The compound security/discovery obligation remains pending.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "OpenAsyncRejectsUnsupportedRequestedTransportBeforeEndpointDiscovery",
+          "OpenAsyncRejectsUnregisteredTransportSchemesBeforeEndpointDiscovery",
+          "SelectEndpointRequiresExactAdvertisedOptionalIdentities",
+          "SelectEndpointRejectsApplicationUriMismatch",
+          "SelectEndpointRejectsTransportProfileUriMismatch",
+          "SelectEndpointRejectsCandidatesOutsideCallerPolicy",
+          "SelectEndpointReportsAmbiguousPermittedCandidates",
+          "SubscriptionCreatesAndRemovesAnEventMonitoredItemOnARealServer"
+        ],
         "nativeEvidence": []
       }
     },
@@ -139609,13 +139651,22 @@
       ],
       "text": "To address the root, the resolver reads the target Server's `NamespaceArray`, finds the exact namespace URI and constructs a Session-local NodeId using its index. It MUST verify that this node is the selected `RegistryType` or a permitted subtype. It MUST NOT select the first Registry found at the endpoint.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Direct target evidence remaps the same portable root across namespace reorderings, rejects case-changed/missing namespaces and leaves NamespaceTables unchanged. Reader verification retains only the selected root and rejects non-Registry roots; the adapter traverses type ancestry. Direct adapter subtype, competing-root and malformed-type workflow evidence is still incomplete, so the compound root-admission obligation remains pending.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "PortableRegistryRootRemapsEachSessionAndRequiresExactNamespaceIdentity",
+          "MissingNamespaceIsNotSubstitutedWithNamespaceZero",
+          "VerifyRootAsyncResolvesAdvertisedRootUsingSessionNamespaceArray",
+          "RootThatIsNotARegistryIsNotFoundNeverSubstituted",
+          "VerifyRegistryRootAsyncReturnsTheExactRegistryNodeId",
+          "VerifyRegistryRootAsyncRejectsNullOrNonRegistryRoot"
+        ],
         "nativeEvidence": []
       }
     },
@@ -139640,13 +139691,21 @@
       ],
       "text": "Before interpreting entities, the resolver reads `SpecVersion` and the necessary model/capabilities. An incompatible Core version yields `unsupported_version`; a missing usable model or REQUIRED mapping yields an explicit unsupported operation. The root's `RegistryId`, a catalog entry's Resource ID and the Application URI identify different scopes.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The connection validates SpecVersion before returning and the reader blocks interpretation until acceptance, clearing prior acceptance after a rejected recheck. Model/capabilities file parsing has direct evidence, but required usable-model/type-map admission is not uniformly part of connection bootstrap and the complete cross-scope identity workflow is not proved. This compound obligation remains pending rather than treating JSON parsing as model admission.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "SpecVersionIsReadAndCheckedBeforeUse",
+          "RejectedSpecVersionRecheckClearsThePreviouslyAcceptedSessionVersion",
+          "RegistryContentsCannotBeBrowsedBeforeSpecVersionIsAccepted",
+          "FileContentsCannotBeReadBeforeSpecVersionIsAccepted",
+          "ModelAndCapabilitiesAreParsedFromTheirNamedFileObjects"
+        ],
         "nativeEvidence": []
       }
     },

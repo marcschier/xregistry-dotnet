@@ -92,6 +92,33 @@ public class OpcUaFederationTargetTests
     }
 
     [Test]
+    public async Task PortableRegistryRootRemapsEachSessionAndRequiresExactNamespaceIdentity()
+    {
+        var target = Target("""{"registryroot":"nsu=urn:Example:registry;s=SelectedRegistry"}""");
+        var firstNamespaces = new NamespaceTable([
+            "http://opcfoundation.org/UA/", "urn:Example:registry"
+        ]);
+        var secondNamespaces = new NamespaceTable([
+            "http://opcfoundation.org/UA/", "urn:other:application",
+            "urn:other:model", "urn:Example:registry"
+        ]);
+        var differentCase = new NamespaceTable([
+            "http://opcfoundation.org/UA/", "urn:example:registry"
+        ]);
+
+        var first = target.ResolveRegistryRoot(firstNamespaces);
+        var second = target.ResolveRegistryRoot(secondNamespaces);
+
+        await Assert.That(first).IsEqualTo(new NodeId("SelectedRegistry", 1));
+        await Assert.That(second).IsEqualTo(new NodeId("SelectedRegistry", 3));
+        await Check.Error(() => target.ResolveRegistryRoot(differentCase), FederationErrorCode.NotFound);
+        await Assert.That(firstNamespaces.Count).IsEqualTo(2);
+        await Assert.That(secondNamespaces.Count).IsEqualTo(4);
+        await Assert.That(differentCase.Count).IsEqualTo(2);
+        await Assert.That(target.RegistryRoot).IsEqualTo("nsu=urn:Example:registry;s=SelectedRegistry");
+    }
+
+    [Test]
     [Arguments("""{"registryroot":"ns=2;s=Registry"}""")]
     [Arguments("""{"registryroot":"nsu=urn%3Axregistry;ns=2;s=Registry"}""")]
     [Arguments("""{"registryroot":"svr=1;nsu=urn%3Axregistry;s=Registry"}""")]
@@ -111,6 +138,21 @@ public class OpcUaFederationTargetTests
             """{"registryroot":"i=85","future":"value"}"""), FederationErrorCode.UnsupportedOperation);
         await Check.Error(() => Target(
             """{"registryroot":"i=85","transportprofileuri":"not a URI"}"""),
+            FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    [Arguments("applicationuri", "\"\"")]
+    [Arguments("applicationuri", "\"relative/application\"")]
+    [Arguments("applicationuri", "null")]
+    [Arguments("applicationuri", "42")]
+    [Arguments("transportprofileuri", "\"\"")]
+    [Arguments("transportprofileuri", "\"relative/transport\"")]
+    [Arguments("transportprofileuri", "null")]
+    [Arguments("transportprofileuri", "true")]
+    public async Task PresentOptionalIdentitiesRequireNonemptyAbsoluteUriStrings(string name, string value)
+    {
+        await Check.Error(() => Target($$"""{"registryroot":"i=85","{{name}}":{{value}}}"""),
             FederationErrorCode.InvalidPackage);
     }
 
