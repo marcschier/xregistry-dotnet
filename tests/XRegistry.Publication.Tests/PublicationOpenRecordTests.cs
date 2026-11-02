@@ -1,6 +1,8 @@
 // Copyright (c) 2026 xregistry-dotnet contributors.
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
+using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -33,6 +35,74 @@ public class PublicationOpenRecordTests
           "documents": []
         }
         """u8.ToArray();
+
+    [Test]
+    [Arguments("12.0", "12")]
+    [Arguments("1.2e1", "12")]
+    [Arguments("120e-1", "12")]
+    [Arguments("-0", "0")]
+    [Arguments("-0.000e999", "0")]
+    [Arguments("9007199254740993e0", "9007199254740993")]
+    [Arguments("340282366920938463463374607431768211456.0", "340282366920938463463374607431768211456")]
+    public async Task ChannelEpochUsesExactUnsignedIntegerValuesAndRetainsOpenRecordBytes(
+        string token, string expected)
+    {
+        var manifest = PublicationManifest.Parse(ManifestBytes);
+        var text = Encoding.UTF8.GetString(CreateOpenRecord(manifest, SnapshotDescriptor(manifest)));
+        var bytes = Encoding.UTF8.GetBytes(text.Replace("\"epoch\":12", "\"epoch\":" + token, StringComparison.Ordinal));
+
+        var open = PublicationOpenRecord.Parse(bytes);
+
+        await Assert.That(open.Channel!.Epoch).IsEqualTo(BigInteger.Parse(expected, CultureInfo.InvariantCulture));
+        await Assert.That(open.GetExactBytes().SequenceEqual(bytes)).IsTrue();
+        open.ValidateAgainstManifest(manifest);
+    }
+
+    [Test]
+    [Arguments("-1")]
+    [Arguments("-0.1")]
+    [Arguments("12.01")]
+    [Arguments("121e-1")]
+    [Arguments("\"12\"")]
+    [Arguments("null")]
+    [Arguments("true")]
+    [Arguments("[]")]
+    [Arguments("{}")]
+    public async Task ChannelEpochRejectsNegativeFractionalAndNonNumericValues(string token)
+    {
+        var manifest = PublicationManifest.Parse(ManifestBytes);
+        var text = Encoding.UTF8.GetString(CreateOpenRecord(manifest, SnapshotDescriptor(manifest)));
+        var bytes = Encoding.UTF8.GetBytes(text.Replace("\"epoch\":12", "\"epoch\":" + token, StringComparison.Ordinal));
+
+        var error = await Assert.That(() => PublicationOpenRecord.Parse(bytes))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected invalid epoch.");
+
+        await Assert.That(error.Code).IsEqualTo("invalid_integer");
+        await Assert.That(error.Path).IsEqualTo("/channel/epoch");
+    }
+
+    [Test]
+    public async Task OpenRecordNumbersHonorCallerLimitsForChannelAndAllDescriptors()
+    {
+        var json = SourceContextRecord();
+        json["channel"]!["epoch"] = JsonNode.Parse("1e10001");
+        json["snapshot"]!["size"] = JsonNode.Parse("1e10001");
+        json["registry"]!["size"] = JsonNode.Parse("1e10001");
+        json["sources"]![0]!["snapshot"]!["size"] = JsonNode.Parse("1e10001");
+        var bytes = Encoding.UTF8.GetBytes(json.ToJsonString());
+
+        var error = await Assert.That(() => PublicationOpenRecord.Parse(bytes))
+            .Throws<RegistryException>() ?? throw new InvalidOperationException("Expected numeric limit rejection.");
+        await Assert.That(error.Diagnostic.Code).IsEqualTo("number_limit");
+
+        var open = PublicationOpenRecord.Parse(bytes, new RegistryJsonLimits { MaxNumberExponent = 10001 });
+        var expected = BigInteger.Pow(10, 10001);
+        await Assert.That(open.Channel!.Epoch).IsEqualTo(expected);
+        await Assert.That(open.Snapshot.Size).IsEqualTo(expected);
+        await Assert.That(open.Registry.Size).IsEqualTo(expected);
+        await Assert.That(open.Sources[0].Snapshot.Size).IsEqualTo(expected);
+        await Assert.That(open.GetExactBytes().SequenceEqual(bytes)).IsTrue();
+    }
 
     [Test]
     public async Task ValidatesTheOpenRecordAgainstItsExactManifestAndChannelHead()

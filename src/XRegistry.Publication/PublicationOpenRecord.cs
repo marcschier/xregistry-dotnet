@@ -66,11 +66,11 @@ public sealed class PublicationOpenRecord
         PublicationJson.RequireString(root, "format", "", "xregistry-open/1");
 
         var scope = PublicationJson.RequireUri(root, "scope", "");
-        var snapshot = PublicationByteDescriptor.Parse(PublicationJson.RequireProperty(root, "snapshot", ""));
-        var registry = PublicationByteDescriptor.Parse(PublicationJson.RequireProperty(root, "registry", ""));
+        var snapshot = PublicationByteDescriptor.Parse(PublicationJson.RequireProperty(root, "snapshot", ""), limits);
+        var registry = PublicationByteDescriptor.Parse(PublicationJson.RequireProperty(root, "registry", ""), limits);
         var completeness = PublicationJson.RequireOneOf(root, "completeness", "", "linked", "offline-complete");
-        var channel = root.TryGetProperty("channel", out var channelValue) ? ParseChannel(channelValue) : null;
-        var sources = root.TryGetProperty("sources", out var sourceValues) ? ParseSources(sourceValues) : [];
+        var channel = root.TryGetProperty("channel", out var channelValue) ? ParseChannel(channelValue, limits) : null;
+        var sources = root.TryGetProperty("sources", out var sourceValues) ? ParseSources(sourceValues, limits) : [];
 
         return new PublicationOpenRecord(exactJson.ToArray(), scope, snapshot, registry, completeness, channel,
             Array.AsReadOnly(sources));
@@ -157,7 +157,7 @@ public sealed class PublicationOpenRecord
         }
     }
 
-    private static PublicationChannelSelection ParseChannel(JsonElement element)
+    private static PublicationChannelSelection ParseChannel(JsonElement element, RegistryJsonLimits? limits)
     {
         const string path = "/channel";
         PublicationJson.RequireObject(element, path);
@@ -171,11 +171,11 @@ public sealed class PublicationOpenRecord
             PublicationJson.RequireString(reference, "resource", path + "/reference"),
             path + "/reference/resource");
         var epoch = PublicationJson.RequireNonNegativeInteger(
-            PublicationJson.RequireProperty(element, "epoch", path), path + "/epoch");
+            PublicationJson.RequireProperty(element, "epoch", path), path + "/epoch", limits);
         return new PublicationChannelSelection(access, resource, epoch);
     }
 
-    private static PublicationSnapshotSource[] ParseSources(JsonElement element)
+    private static PublicationSnapshotSource[] ParseSources(JsonElement element, RegistryJsonLimits? limits)
     {
         var array = PublicationJson.RequireArray(element, "/sources");
         var sources = new PublicationSnapshotSource[array.GetArrayLength()];
@@ -188,7 +188,7 @@ public sealed class PublicationOpenRecord
             var registry = PublicationByteDescriptor.ParseRegistryAccess(
                 PublicationJson.RequireProperty(source, "registry", path));
             var snapshot = PublicationByteDescriptor.Parse(
-                PublicationJson.RequireProperty(source, "snapshot", path));
+                PublicationJson.RequireProperty(source, "snapshot", path), limits);
             if (!PublicationReferenceComparer.ReferencesEqual(snapshot.Reference,
                     new PublicationVersionReference(registry, snapshot.Reference.Version)))
             {

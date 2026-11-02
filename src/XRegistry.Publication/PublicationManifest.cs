@@ -93,10 +93,10 @@ public sealed class PublicationManifest
         var scope = PublicationJson.RequireUri(root, "scope", "");
         var capture = PublicationJson.RequireOneOf(root, "capture", "", "assembled", "source-snapshot", "live-observation");
         var completeness = PublicationJson.RequireOneOf(root, "completeness", "", "linked", "offline-complete");
-        var registry = PublicationByteDescriptor.Parse(PublicationJson.RequireProperty(root, "registry", ""));
-        var parent = root.TryGetProperty("parent", out var parentValue) ? PublicationByteDescriptor.Parse(parentValue) : null;
-        var documents = ParseDocuments(root);
-        var extensions = ParseExtensions(root);
+        var registry = PublicationByteDescriptor.Parse(PublicationJson.RequireProperty(root, "registry", ""), limits);
+        var parent = root.TryGetProperty("parent", out var parentValue) ? PublicationByteDescriptor.Parse(parentValue, limits) : null;
+        var documents = ParseDocuments(root, limits);
+        var extensions = ParseExtensions(root, limits);
         var requiredExtensions = ParseRequiredExtensions(root);
         foreach (var requiredExtension in requiredExtensions)
         {
@@ -112,7 +112,7 @@ public sealed class PublicationManifest
             Array.AsReadOnly(requiredExtensions));
     }
 
-    private static PublicationDocument[] ParseDocuments(JsonElement root)
+    private static PublicationDocument[] ParseDocuments(JsonElement root, RegistryJsonLimits? limits)
     {
         var array = PublicationJson.RequireArray(PublicationJson.RequireProperty(root, "documents", ""), "/documents");
         var documents = new PublicationDocument[array.GetArrayLength()];
@@ -133,14 +133,14 @@ public sealed class PublicationManifest
             var originRegistry = PublicationJson.RequireUri(item, "originRegistry", path);
             var originVersion = PublicationJson.RequireVersion(PublicationJson.RequireString(item, "originVersion", path), path + "/originVersion");
             var baseUri = PublicationJson.RequireUri(item, "base", path);
-            var content = PublicationByteDescriptor.Parse(PublicationJson.RequireProperty(item, "content", path));
+            var content = PublicationByteDescriptor.Parse(PublicationJson.RequireProperty(item, "content", path), limits);
             documents[index++] = new PublicationDocument(viewVersion, originRegistry, originVersion, baseUri, content);
         }
 
         return documents;
     }
 
-    private static Dictionary<string, PublicationByteDescriptor> ParseExtensions(JsonElement root)
+    private static Dictionary<string, PublicationByteDescriptor> ParseExtensions(JsonElement root, RegistryJsonLimits? limits)
     {
         var result = new Dictionary<string, PublicationByteDescriptor>(StringComparer.Ordinal);
         if (!root.TryGetProperty("extensions", out var extensions))
@@ -152,7 +152,7 @@ public sealed class PublicationManifest
         foreach (var property in extensions.EnumerateObject())
         {
             PublicationJson.RequireAbsoluteUri(property.Name, "/extensions");
-            result.Add(property.Name, PublicationByteDescriptor.Parse(property.Value));
+            result.Add(property.Name, PublicationByteDescriptor.Parse(property.Value, limits));
         }
 
         return result;
@@ -197,7 +197,7 @@ public sealed record PublicationVersionReference(PublicationRegistryAccess Regis
 public sealed record PublicationByteDescriptor(PublicationVersionReference Reference, string Digest, BigInteger Size)
 {
     /// <summary>Parses a byte descriptor from a manifest value.</summary>
-    public static PublicationByteDescriptor Parse(JsonElement element)
+    public static PublicationByteDescriptor Parse(JsonElement element, RegistryJsonLimits? limits = null)
     {
         PublicationJson.RequireObject(element, "");
         PublicationJson.RequireOnly(element, "", "reference", "digest", "size");
@@ -208,13 +208,8 @@ public sealed record PublicationByteDescriptor(PublicationVersionReference Refer
             throw PublicationJson.Error("invalid_digest", "/digest", "A lower-case sha256 digest with 64 hexadecimal digits is required.");
         }
 
-        var sizeElement = PublicationJson.RequireProperty(element, "size", "");
-        if (sizeElement.ValueKind != JsonValueKind.Number ||
-            !BigInteger.TryParse(sizeElement.GetRawText(), NumberStyles.None, CultureInfo.InvariantCulture, out var size) ||
-            size < BigInteger.Zero)
-        {
-            throw PublicationJson.Error("invalid_size", "/size", "A non-negative integer byte size is required.");
-        }
+        var size = PublicationJson.RequireNonNegativeInteger(
+            PublicationJson.RequireProperty(element, "size", ""), "/size", limits, "invalid_size");
 
         return new PublicationByteDescriptor(reference, digest, size);
     }
@@ -438,15 +433,19 @@ internal static class PublicationJson
             IdentityPart(path.ResourceId!.Value, fold: true);
     }
 
-    internal static BigInteger RequireNonNegativeInteger(JsonElement value, string path)
+    internal static BigInteger RequireNonNegativeInteger(JsonElement value, string path,
+        RegistryJsonLimits? limits = null, string code = "invalid_integer")
     {
-        if (value.ValueKind != JsonValueKind.Number ||
-            !BigInteger.TryParse(value.GetRawText(), NumberStyles.None, CultureInfo.InvariantCulture, out var integer))
+        if (value.ValueKind == JsonValueKind.Number)
         {
-            throw Error("invalid_integer", path, "A non-negative integer is required.");
+            var number = RegistryNumber.FromElement(value, limits);
+            if (number.IsInteger && number.Significand.Sign >= 0)
+            {
+                return number.ToBigInteger();
+            }
         }
 
-        return integer;
+        throw Error(code, path, "A non-negative integer is required.");
     }
 
     internal static string RequireVersion(string value, string path)

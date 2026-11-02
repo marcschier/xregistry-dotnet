@@ -169,6 +169,14 @@ reference, and commits new objects with the channel-head update in one
 `IRegistryPersistence` batch. A channel update must supply the current epoch;
 the publication scope remains fixed after channel creation.
 
+Manifest and open-record parsers interpret byte sizes and channel epochs as
+exact, non-negative integer values under Core's numeric rules. Decimal and
+exponential spellings such as `790.0` and `79e1` are accepted without
+floating-point conversion; fractional and negative values are rejected.
+`RegistryJsonLimits` applies to numeric tokens, including nested descriptors.
+Parsing retains the received bytes. Equivalent numeric values do not imply
+equal Snapshot IDs because manifest identity covers exact bytes.
+
 Opening a channel reads the retained manifest and checks its descriptor, scope
 and completeness. Offline replay is limited to `offline-complete` manifests,
 which must supply every referenced object; replay verifies each object again

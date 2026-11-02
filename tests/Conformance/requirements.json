@@ -134615,13 +134615,23 @@
       ],
       "text": "A byte descriptor MUST contain `reference`, `digest` as `sha256:` followed by 64 lowercase hexadecimal characters, and non-negative integer byte `size`. Its `reference` MUST contain `registry` and `version`:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The public descriptor parser requires every descriptor and reference member, enforces the exact SHA-256 prefix, lowercase hexadecimal alphabet and 64-digit length, and interprets size as an exact non-negative integer value. Decimal and exponential integer spellings and negative zero retain their authored bytes; fractional, negative and nonnumeric values reject. Caller numeric limits reach every nested descriptor without floating-point conversion. This structural contract does not establish graph completeness or binding authorization.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DescriptorsRejectMissingRequiredMembersInsteadOfSubstitutingDefaults",
+          "DescriptorDigestsRejectWrongLengthCaseAlphabetAndAlgorithm",
+          "DescriptorSizesUseExactUnsignedIntegerValuesWithoutRewritingManifestBytes",
+          "DescriptorSizesRejectNegativeFractionalAndNonNumericValues",
+          "ManifestDescriptorNumbersHonorCallerLimitsAtEveryDescriptorLocation",
+          "RejectsInvalidVersionXidsAndNonCanonicalDigests"
+        ],
         "nativeEvidence": []
       }
     },
@@ -134708,13 +134718,19 @@
       ],
       "text": "A consumer MUST reject a descriptor that lacks these fields, such as one that supplies only a URL.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Public descriptor parsing rejects each missing required descriptor, reference and Registry-access member with its exact diagnostic path. A URL-only object rejects explicitly instead of being converted into an implicit binding, default Version or acquired document.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DescriptorsRejectMissingRequiredMembersInsteadOfSubstitutingDefaults",
+          "DescriptorsRejectUrlOnlyObjectsRatherThanInventingVersionReferences"
+        ],
         "nativeEvidence": []
       }
     },
@@ -135522,13 +135538,24 @@
       ],
       "text": "The schema defines the `open` record with `format`, `scope`, `snapshot`, `registry`, `completeness`, OPTIONAL `channel` selection, and OPTIONAL constituent `sources`. Here `format` is `xregistry-open/1`. The channel selection records its selected Registry access, Resource XID and observed Meta epoch. Unlike a byte descriptor, its `reference` has `resource` instead of `version`, because a channel selection belongs to Resource Meta. The sample [open record](samples/open.json) for a reader that opened `stable` at epoch 12 is:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Open records retain the schema-defined context and optional channel and source selections. Channel references select a Resource rather than a Version; epochs use exact non-negative integer values, including integral decimal and exponential spellings, without rewriting the received bytes. Caller numeric limits reach the channel and all nested descriptors. Source access must match its pinned descriptor. Retained source provenance does not imply reconstruction of a federated composition.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ValidatesTheOpenRecordAgainstItsExactManifestAndChannelHead",
+          "ChannelEpochUsesExactUnsignedIntegerValuesAndRetainsOpenRecordBytes",
+          "ChannelEpochRejectsNegativeFractionalAndNonNumericValues",
+          "OpenRecordNumbersHonorCallerLimitsForChannelAndAllDescriptors",
+          "SourceParsingRejectsEachIndependentlyDifferentAccessContextField",
+          "SourceParsingAcceptsExactAccessContextAndRetainsPinnedDescriptor",
+          "PinnedReadsRejectMissingLookupsAndOpenMaterializedSnapshotsWithSources"
+        ],
         "nativeEvidence": []
       }
     },

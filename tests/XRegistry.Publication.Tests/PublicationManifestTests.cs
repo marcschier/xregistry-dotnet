@@ -1,8 +1,11 @@
 // Copyright (c) 2026 xregistry-dotnet contributors.
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
+using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using TUnit.Assertions;
 using TUnit.Core;
@@ -67,6 +70,138 @@ public class PublicationManifestTests
           "requiredExtensions": ["urn:example:manifest-extension"]
         }
         """u8.ToArray();
+
+    [Test]
+    [Arguments("790.0", "790")]
+    [Arguments("79e1", "790")]
+    [Arguments("7900e-1", "790")]
+    [Arguments("7.90e2", "790")]
+    [Arguments("-0", "0")]
+    [Arguments("-0.000e999", "0")]
+    [Arguments("9007199254740993e0", "9007199254740993")]
+    [Arguments("340282366920938463463374607431768211456.0", "340282366920938463463374607431768211456")]
+    public async Task DescriptorSizesUseExactUnsignedIntegerValuesWithoutRewritingManifestBytes(
+        string token, string expected)
+    {
+        var bytes = Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(ValidManifest)
+            .Replace("\"size\": 790", "\"size\": " + token, StringComparison.Ordinal));
+
+        var manifest = PublicationManifest.Parse(bytes);
+
+        await Assert.That(manifest.Registry.Size).IsEqualTo(BigInteger.Parse(expected, CultureInfo.InvariantCulture));
+        await Assert.That(manifest.GetExactBytes().SequenceEqual(bytes)).IsTrue();
+        await Assert.That(manifest.SnapshotId)
+            .IsEqualTo(Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant());
+    }
+
+    [Test]
+    [Arguments("-1")]
+    [Arguments("-0.1")]
+    [Arguments("790.01")]
+    [Arguments("7901e-1")]
+    [Arguments("\"790\"")]
+    [Arguments("null")]
+    [Arguments("true")]
+    [Arguments("[]")]
+    [Arguments("{}")]
+    public async Task DescriptorSizesRejectNegativeFractionalAndNonNumericValues(string token)
+    {
+        var bytes = Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(ValidManifest)
+            .Replace("\"size\": 790", "\"size\": " + token, StringComparison.Ordinal));
+
+        var error = await Assert.That(() => PublicationManifest.Parse(bytes))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected invalid byte size.");
+
+        await Assert.That(error.Code).IsEqualTo("invalid_size");
+        await Assert.That(error.Path).IsEqualTo("/size");
+    }
+
+    [Test]
+    public async Task ManifestDescriptorNumbersHonorCallerLimitsAtEveryDescriptorLocation()
+    {
+        var json = JsonNode.Parse(ValidManifest)!.AsObject();
+        json["registry"]!["size"] = JsonNode.Parse("1e10001");
+        json["parent"] = json["registry"]!.DeepClone();
+        json["documents"]![0]!["content"]!["size"] = JsonNode.Parse("1e10001");
+        json["extensions"]!["urn:example:manifest-extension"]!["size"] = JsonNode.Parse("1e10001");
+        var bytes = Encoding.UTF8.GetBytes(json.ToJsonString());
+
+        var error = await Assert.That(() => PublicationManifest.Parse(bytes))
+            .Throws<RegistryException>() ?? throw new InvalidOperationException("Expected numeric limit rejection.");
+        await Assert.That(error.Diagnostic.Code).IsEqualTo("number_limit");
+
+        var limits = new RegistryJsonLimits { MaxNumberExponent = 10001 };
+        var manifest = PublicationManifest.Parse(bytes, limits);
+        var expected = BigInteger.Pow(10, 10001);
+        await Assert.That(manifest.Registry.Size).IsEqualTo(expected);
+        await Assert.That(manifest.Parent!.Size).IsEqualTo(expected);
+        await Assert.That(manifest.Documents[0].Content.Size).IsEqualTo(expected);
+        await Assert.That(manifest.Extensions["urn:example:manifest-extension"].Size).IsEqualTo(expected);
+        await Assert.That(manifest.GetExactBytes().SequenceEqual(bytes)).IsTrue();
+
+        var descriptor = PublicationByteDescriptor.Parse(RegistryJson.Parse(
+            json["registry"]!.ToJsonString(), limits).RootElement, limits);
+        await Assert.That(descriptor.Size).IsEqualTo(expected);
+    }
+
+    [Test]
+    [Arguments("/reference")]
+    [Arguments("/digest")]
+    [Arguments("/size")]
+    [Arguments("/reference/registry")]
+    [Arguments("/reference/version")]
+    [Arguments("/reference/registry/binding")]
+    [Arguments("/reference/registry/endpoint")]
+    public async Task DescriptorsRejectMissingRequiredMembersInsteadOfSubstitutingDefaults(string path)
+    {
+        var descriptor = JsonNode.Parse(ValidManifest)!["registry"]!.DeepClone();
+        var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var parent = descriptor;
+        foreach (var segment in segments[..^1])
+        {
+            parent = parent[segment]!;
+        }
+        parent.AsObject().Remove(segments[^1]);
+        using var document = JsonDocument.Parse(descriptor.ToJsonString());
+
+        var error = await Assert.That(() => PublicationByteDescriptor.Parse(document.RootElement))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected missing descriptor field.");
+
+        await Assert.That(error.Code).IsEqualTo("missing_property");
+        await Assert.That(error.Path).IsEqualTo(path);
+    }
+
+    [Test]
+    public async Task DescriptorsRejectUrlOnlyObjectsRatherThanInventingVersionReferences()
+    {
+        using var document = JsonDocument.Parse("""{"url":"https://publisher.example.test/document"}""");
+
+        var error = await Assert.That(() => PublicationByteDescriptor.Parse(document.RootElement))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected URL-only descriptor rejection.");
+
+        await Assert.That(error.Code).IsEqualTo("unknown_property");
+        await Assert.That(error.Path).IsEqualTo("/url");
+    }
+
+    [Test]
+    [Arguments("sha256:", 63, 'a')]
+    [Arguments("sha256:", 65, 'a')]
+    [Arguments("sha256:", 64, 'A')]
+    [Arguments("sha256:", 64, 'g')]
+    [Arguments("SHA256:", 64, 'a')]
+    [Arguments("sha512:", 64, 'a')]
+    public async Task DescriptorDigestsRejectWrongLengthCaseAlphabetAndAlgorithm(string prefix, int count, char digit)
+    {
+        var descriptor = JsonNode.Parse(ValidManifest)!["registry"]!.DeepClone();
+        descriptor["digest"] = prefix + new string(digit, count);
+        using var document = JsonDocument.Parse(descriptor.ToJsonString());
+
+        var error = await Assert.That(() => PublicationByteDescriptor.Parse(document.RootElement))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected noncanonical digest rejection.");
+
+        await Assert.That(error.Code).IsEqualTo("invalid_digest");
+        await Assert.That(error.Path).IsEqualTo("/digest");
+    }
 
     [Test]
     public async Task ParsesManifestAndRetainsItsExactBytes()
