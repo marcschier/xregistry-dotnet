@@ -304,6 +304,63 @@ public class PublicationManifestTests
         await Assert.That(extensionDescriptor.Reference.Registry.Parameters["revision"]).IsEqualTo("vendor-selection");
     }
 
+    [Test]
+    [Arguments("http")]
+    [Arguments("git")]
+    [Arguments("oci")]
+    [Arguments("file")]
+    [Arguments("opcua")]
+    public async Task ParsedSelectedBindingsRejectUnknownParametersEvenWithoutAcquisition(string binding)
+    {
+        var json = CaptureDescriptor(binding, binding == "git" ? new string('a', 40) : "sha256:" + new string('a', 64));
+        if (binding is "http" or "opcua")
+        {
+            json["reference"]!["registry"]!["parameters"] = new JsonObject();
+            json["reference"]!["registry"]!["endpoint"] = binding == "http"
+                ? "https://publisher.example.test" : "opc.tcp://ua.example.test:4840";
+        }
+        json["reference"]!["registry"]!["parameters"]!["unexpected"] = "value";
+        using var document = JsonDocument.Parse(json.ToJsonString());
+
+        var error = await Assert.That(() => PublicationByteDescriptor.Parse(document.RootElement))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected selected parameter rejection.");
+
+        await Assert.That(error.Code).IsEqualTo("unsupported_operation");
+        await Assert.That(error.Path).IsEqualTo("/reference/registry/parameters/unexpected");
+    }
+
+    [Test]
+    [Arguments("http", "ftp://publisher.example.test", "", "", "/endpoint")]
+    [Arguments("http", "https://publisher.example.test?tenant=blue", "", "", "/endpoint")]
+    [Arguments("git", "http://git.example.test/captures.git", "", "", "/endpoint")]
+    [Arguments("git", "https://git.example.test/captures.git", "path", "../escape", "/parameters/path")]
+    [Arguments("oci", "oci://registry.example.test/Captures", "", "", "/endpoint")]
+    [Arguments("file", "https://publisher.example.test/captured", "layout", "oci-layout", "/endpoint")]
+    [Arguments("file", "file:///D:/captured", "layout", "unknown", "/parameters/layout")]
+    [Arguments("file", "file:///D:/captured", "layout", "document-tree", "/parameters/reference")]
+    public async Task ParsedSelectedBindingsApplyTheSameEndpointAndValueRulesAsAcquisition(
+        string binding, string endpoint, string parameter, string value, string errorPath)
+    {
+        var json = CaptureDescriptor(binding, binding == "git" ? new string('a', 40) : "sha256:" + new string('a', 64));
+        var access = json["reference"]!["registry"]!;
+        access["endpoint"] = endpoint;
+        if (binding == "http")
+        {
+            access["parameters"] = new JsonObject();
+        }
+        if (parameter.Length != 0)
+        {
+            access["parameters"]![parameter] = value;
+        }
+        using var document = JsonDocument.Parse(json.ToJsonString());
+
+        var error = await Assert.That(() => PublicationByteDescriptor.Parse(document.RootElement))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected selected syntax rejection.");
+
+        await Assert.That(error.Code).IsEqualTo("invalid_binding");
+        await Assert.That(error.Path).IsEqualTo("/reference/registry" + errorPath);
+    }
+
     private static JsonNode CaptureDescriptor(string binding, string? selector)
     {
         var descriptor = JsonNode.Parse(ValidManifest)!["registry"]!.DeepClone();

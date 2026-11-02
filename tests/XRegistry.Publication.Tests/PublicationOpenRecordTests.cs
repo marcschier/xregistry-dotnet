@@ -332,7 +332,7 @@ public class PublicationOpenRecordTests
         switch (field)
         {
             case "binding":
-                access["binding"] = "vendor";
+                access["binding"] = "other-vendor";
                 break;
             case "endpoint":
                 access["endpoint"] = "https://other.example.test";
@@ -367,12 +367,12 @@ public class PublicationOpenRecordTests
 
         await Assert.That(open.Sources.Count).IsEqualTo(1);
         var source = open.Sources[0];
-        await Assert.That(source.Registry.Binding).IsEqualTo("http");
+        await Assert.That(source.Registry.Binding).IsEqualTo("vendor");
         await Assert.That(source.Registry.Endpoint).IsEqualTo("https://source.example.test");
         await Assert.That(source.Registry.Parameters.Count).IsEqualTo(2);
         await Assert.That(source.Registry.Parameters["tenant"]).IsEqualTo("blue");
         await Assert.That(source.Registry.Parameters["region"]).IsEqualTo("west");
-        await Assert.That(source.Snapshot.Reference.Registry.Binding).IsEqualTo("http");
+        await Assert.That(source.Snapshot.Reference.Registry.Binding).IsEqualTo("vendor");
         await Assert.That(source.Snapshot.Reference.Registry.Endpoint).IsEqualTo("https://source.example.test");
         await Assert.That(source.Snapshot.Reference.Registry.Parameters.Count).IsEqualTo(2);
         await Assert.That(source.Snapshot.Reference.Registry.Parameters["tenant"]).IsEqualTo("blue");
@@ -389,7 +389,7 @@ public class PublicationOpenRecordTests
         var json = JsonNode.Parse(CreateOpenRecord(manifest, SnapshotDescriptor(manifest)))!.AsObject();
         var access = new JsonObject
         {
-            ["binding"] = "http",
+            ["binding"] = "vendor",
             ["endpoint"] = "https://source.example.test",
             ["parameters"] = new JsonObject { ["tenant"] = "blue", ["region"] = "west" }
         };

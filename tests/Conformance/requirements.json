@@ -134657,7 +134657,7 @@
       "text": "- `registry` contains the selected `binding`, credential-free absolute `endpoint` and OPTIONAL `parameters`. Their meanings and validation follow Federation's [binding definitions](../federation/spec.md#discovery-and-binding-selection). This is one selected access context, not a catalog advertisement list. Priority and implicit HTTP access are not part of this reference.",
       "review": {
         "status": "reviewed",
-        "note": "The parser checks one explicit access context, string-valued parameters and a credential-free absolute endpoint, including explicit empty user information that URI normalization would otherwise discard. The reader applies the same endpoint guard before invoking the caller's binding resolver for programmatic channel access or returned heads. Selected built-in bindings reject unknown parameter names using the vocabulary shared with Federation; separately named extension bindings retain opaque parameters. Before acquisition, the reader also reuses Models validation for HTTP roots, Git repository/path syntax, OCI repository locators and File layouts, retaining valid pinned selectors and document-tree layout without inventing a reference. Full parsed-reference binding rules and OPC UA-specific value validation remain pending.",
+        "note": "The parser checks one explicit access context, string-valued parameters and a credential-free absolute endpoint, including explicit empty user information that URI normalization would otherwise discard. The reader applies the same endpoint guard before invoking the caller's binding resolver for programmatic channel access or returned heads. Parsing and acquisition share built-in parameter-name, immutable-selector and Models declaration checks for HTTP roots, Git repository/path syntax, OCI repository locators and File layouts. Valid pinned selectors and document-tree layout retain their exact context without invented references. Separately named extension bindings retain opaque parameters, including constituent sources that are not acquired during materialized reads. OPC UA-specific endpoint/value validation remains pending in the generic Publication path.",
         "roles": [
           "client",
           "producer"
@@ -134674,6 +134674,8 @@
           "SelectedBindingParameterVocabularyIsSharedWithoutInterpretingExtensionNames",
           "SelectedBindingSyntaxRejectsBeforeResolverInvocation",
           "SelectedFileDocumentTreePreservesLayoutWithoutInventingAReference",
+          "ParsedSelectedBindingsRejectUnknownParametersEvenWithoutAcquisition",
+          "ParsedSelectedBindingsApplyTheSameEndpointAndValueRulesAsAcquisition",
           "RejectsCredentialedBindingsAndMissingRequiredExtensions",
           "PinnedCaptureSelectorsReachOnlyTheExplicitlySelectedBindingUnchanged"
         ],

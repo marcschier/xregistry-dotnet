@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Security.Cryptography;
 using System.Text.Json;
+using XRegistry.Models;
 
 namespace XRegistry.Publication;
 
@@ -255,7 +256,7 @@ public sealed record PublicationByteDescriptor(PublicationVersionReference Refer
 
         var access = new PublicationRegistryAccess(binding, endpoint,
             new ReadOnlyDictionary<string, string>(parameters));
-        PublicationJson.RequirePinnedAccess(access);
+        PublicationJson.RequireSelectedBindingSyntax(access);
         return access;
     }
 }
@@ -304,6 +305,48 @@ public sealed class PublicationException : FormatException
 
 internal static class PublicationJson
 {
+    internal static void RequireSelectedBindingSyntax(PublicationRegistryAccess registry)
+    {
+        foreach (var name in registry.Parameters.Keys)
+        {
+            if (!CatalogBindingSyntax.IsParameterSupported(registry.Binding, name))
+            {
+                throw Error("unsupported_operation", "/reference/registry/parameters/" + Escape(name),
+                    "The selected built-in binding does not support this parameter.");
+            }
+        }
+        RequirePinnedAccess(registry);
+        if (registry.Binding is not ("http" or "git" or "oci" or "file"))
+        {
+            return;
+        }
+
+        using var buffer = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("name", registry.Binding);
+            writer.WriteString("endpoint", registry.Endpoint);
+            writer.WriteStartObject("parameters");
+            foreach (var parameter in registry.Parameters)
+            {
+                writer.WriteString(parameter.Key, parameter.Value);
+            }
+            writer.WriteEndObject();
+            writer.WriteEndObject();
+        }
+        using var advertisement = JsonDocument.Parse(buffer.ToArray());
+        try
+        {
+            RegistryDomainRules.ValidateCatalogAdvertisement(advertisement.RootElement);
+        }
+        catch (RegistryException exception)
+        {
+            throw Error("invalid_binding", "/reference/registry" + exception.Diagnostic.Path,
+                exception.Diagnostic.Message);
+        }
+    }
+
     internal static void RequireObject(JsonElement value, string path)
     {
         if (value.ValueKind != JsonValueKind.Object)
@@ -534,7 +577,7 @@ internal static class PublicationJson
 
     internal static PublicationException Error(string code, string path, string message) => new(code, path, message);
 
-    internal static string Escape(string value) =>
+    private static string Escape(string value) =>
         value.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal);
 
     private static string IdentityPart(string value, bool fold)

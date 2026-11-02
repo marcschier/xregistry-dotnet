@@ -199,11 +199,13 @@ rejects; URI normalization does not remove that declaration before validation.
 Selected built-in bindings reject unknown parameter names before acquisition.
 Publication and Federation share that vocabulary through `XRegistry.Models`;
 separately named extension bindings retain their caller-supplied parameters.
-Before acquisition, the reader also applies the Models declaration rules for
+Parsing and acquisition apply the same Models declaration rules for
 HTTP roots, Git repositories and paths, OCI repository locators, and File layouts.
 A rejected value produces `invalid_binding` with its reference-relative pointer;
-the resolver is not invoked for that access context. OPC UA-specific value
-validation remains the selected adapter's responsibility.
+the resolver is not invoked for that access context. Parsed descriptors and
+offline contexts also reject unknown built-in parameters without acquiring the
+referenced object. OPC UA-specific value validation remains the selected
+adapter's responsibility.
 
 A `source-snapshot` manifest must declare at least one included mandatory
 extension. Missing or empty `requiredExtensions` rejects before a channel

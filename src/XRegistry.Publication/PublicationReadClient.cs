@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Numerics;
-using System.Text.Json;
-using XRegistry.Models;
 
 namespace XRegistry.Publication;
 
@@ -174,9 +172,7 @@ public sealed class PublicationReadClient
         PublicationRegistryAccess registry, CancellationToken cancellationToken)
     {
         PublicationJson.RequireCredentialFreeEndpoint(registry.Endpoint, "/reference/registry/endpoint");
-        RequireSupportedParameters(registry);
-        PublicationJson.RequirePinnedAccess(registry);
-        RequireSelectedBindingSyntax(registry);
+        PublicationJson.RequireSelectedBindingSyntax(registry);
         var binding = await _openBinding(registry, cancellationToken).ConfigureAwait(false);
         if (binding is null)
         {
@@ -184,52 +180,6 @@ public sealed class PublicationReadClient
         }
 
         return binding;
-    }
-
-    private static void RequireSupportedParameters(PublicationRegistryAccess registry)
-    {
-        foreach (var name in registry.Parameters.Keys)
-        {
-            if (!CatalogBindingSyntax.IsParameterSupported(registry.Binding, name))
-            {
-                throw PublicationJson.Error("unsupported_operation",
-                    "/reference/registry/parameters/" + PublicationJson.Escape(name),
-                    "The selected built-in binding does not support this parameter.");
-            }
-        }
-    }
-
-    private static void RequireSelectedBindingSyntax(PublicationRegistryAccess registry)
-    {
-        if (registry.Binding is not ("http" or "git" or "oci" or "file"))
-        {
-            return;
-        }
-
-        using var buffer = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(buffer))
-        {
-            writer.WriteStartObject();
-            writer.WriteString("name", registry.Binding);
-            writer.WriteString("endpoint", registry.Endpoint);
-            writer.WriteStartObject("parameters");
-            foreach (var parameter in registry.Parameters)
-            {
-                writer.WriteString(parameter.Key, parameter.Value);
-            }
-            writer.WriteEndObject();
-            writer.WriteEndObject();
-        }
-        using var advertisement = JsonDocument.Parse(buffer.ToArray());
-        try
-        {
-            RegistryDomainRules.ValidateCatalogAdvertisement(advertisement.RootElement);
-        }
-        catch (RegistryException exception)
-        {
-            throw PublicationJson.Error("invalid_binding",
-                "/reference/registry" + exception.Diagnostic.Path, exception.Diagnostic.Message);
-        }
     }
 
     private static void ValidateChannelResource(string channelResource)

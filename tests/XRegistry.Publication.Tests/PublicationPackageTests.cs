@@ -485,7 +485,7 @@ public class PublicationPackageTests
     public async Task OfflineMaterializedReadsRetainSourceWhoseObjectIsAbsentFromPackage()
     {
         var fixture = Fixture.Create();
-        var sourceAccess = new PublicationRegistryAccess("http", "https://source.example.test",
+        var sourceAccess = new PublicationRegistryAccess("vendor", "https://source.example.test",
             new Dictionary<string, string>(StringComparer.Ordinal) { ["tenant"] = "blue" });
         var sourceDescriptor = new PublicationByteDescriptor(new(sourceAccess,
             "/publications/source/snapshots/" + new string('b', 64) + "/versions/manifest"),
@@ -514,11 +514,11 @@ public class PublicationPackageTests
 
         await Assert.That(snapshot.OpenRecord.Sources.Count).IsEqualTo(1);
         var retained = snapshot.OpenRecord.Sources[0];
-        await Assert.That(retained.Registry.Binding).IsEqualTo("http");
+        await Assert.That(retained.Registry.Binding).IsEqualTo("vendor");
         await Assert.That(retained.Registry.Endpoint).IsEqualTo("https://source.example.test");
         await Assert.That(retained.Registry.Parameters.Count).IsEqualTo(1);
         await Assert.That(retained.Registry.Parameters["tenant"]).IsEqualTo("blue");
-        await Assert.That(retained.Snapshot.Reference.Registry.Binding).IsEqualTo("http");
+        await Assert.That(retained.Snapshot.Reference.Registry.Binding).IsEqualTo("vendor");
         await Assert.That(retained.Snapshot.Reference.Registry.Endpoint).IsEqualTo("https://source.example.test");
         await Assert.That(retained.Snapshot.Reference.Registry.Parameters.Count).IsEqualTo(1);
         await Assert.That(retained.Snapshot.Reference.Registry.Parameters["tenant"]).IsEqualTo("blue");
