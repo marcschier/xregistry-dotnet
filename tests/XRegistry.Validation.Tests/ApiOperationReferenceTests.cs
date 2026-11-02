@@ -11,6 +11,84 @@ namespace XRegistry.Validation.Tests;
 public class ApiOperationReferenceTests
 {
     [Test]
+    [Arguments("Swagger/2.0", "2.0")]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task HttpApiKeyHeaderNamesRequireTokensInInlineAndEffectiveSchemes(string format, string version)
+    {
+        var swagger = format == "Swagger/2.0";
+        foreach (var name in new[] { "", "bad name", "bad:name", "bad/name", "bad\tname", "bad\r\nname", "caf\u00e9", "bad(name)", "bad@name" })
+        {
+            foreach (var referenced in swagger ? new[] { false } : new[] { false, true })
+            {
+                var scheme = new JsonObject { ["type"] = "apiKey", ["in"] = "header", ["name"] = name };
+                var operation = JsonNode.Parse("""{"operationId":"Target","security":[{"Key":[]}]}""")!;
+                var schemes = new JsonObject { ["Key"] = referenced
+                    ? JsonNode.Parse("""{"$ref":"https://allowed.test/scheme#/S"}""") : scheme.DeepClone() };
+                var document = new JsonObject { [swagger ? "swagger" : "openapi"] = version,
+                    ["paths"] = new JsonObject { ["/source"] = new JsonObject { ["get"] = operation } } };
+                if (swagger) { document["securityDefinitions"] = schemes; }
+                else { document["components"] = new JsonObject { ["securitySchemes"] = schemes }; }
+                foreach (var selector in new[] { "operations/Target", "/paths/~1source/get" })
+                {
+                    var calls = new List<string>();
+                    var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                        System.Text.Encoding.UTF8.GetBytes(document.ToJsonString()),
+                        ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                        resolveReference: (uri, _) =>
+                        {
+                            calls.Add(uri);
+                            if (uri != "https://allowed.test/scheme") { throw new UnauthorizedAccessException(); }
+                            var target = new JsonObject { ["S"] = scheme.DeepClone() };
+                            return ValueTask.FromResult<ReadOnlyMemory<byte>?>(System.Text.Encoding.UTF8.GetBytes(target.ToJsonString()));
+                        });
+                    await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Invalid);
+                    await Assert.That(result.Diagnostic!.Code).IsEqualTo("document.header_name");
+                    await Assert.That(result.Diagnostic.Path).IsEqualTo(referenced ? "$/S/name" :
+                        swagger ? "$/securityDefinitions/Key/name" : "$/components/securitySchemes/Key/name");
+                    await Assert.That(result.Operation.ValueKind).IsEqualTo(JsonValueKind.Undefined);
+                    await Assert.That(string.Join("|", calls)).IsEqualTo(referenced ? "https://allowed.test/scheme" : "");
+                }
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("Swagger/2.0", "2.0")]
+    [Arguments("OpenAPI/3.0", "3.0.4")]
+    [Arguments("OpenAPI/3.1", "3.1.1")]
+    public async Task HttpApiKeyNamesPreserveHeaderTokensAndNativeNonHeaderLocations(string format, string version)
+    {
+        var swagger = format == "Swagger/2.0";
+        foreach (var location in swagger ? new[] { "header", "query" } : new[] { "header", "query", "cookie" })
+        {
+            foreach (var name in location == "header"
+                ? new[] { "!#$%&'*+-.^_`|~012AZaz", "Authorization", "Content-Type", "Accept" }
+                : new[] { "", "bad name", "bad/name", "caf\u00e9" })
+            {
+                var schemes = new JsonObject { ["Key"] = new JsonObject
+                    { ["type"] = "apiKey", ["in"] = location, ["name"] = name } };
+                var operation = JsonNode.Parse("""{"operationId":"Target","security":[{"Key":[]}]}""")!;
+                var document = new JsonObject { [swagger ? "swagger" : "openapi"] = version,
+                    ["paths"] = new JsonObject { ["/source"] = new JsonObject { ["get"] = operation } } };
+                if (swagger) { document["securityDefinitions"] = schemes; }
+                else { document["components"] = new JsonObject { ["securitySchemes"] = schemes }; }
+                var authored = document.ToJsonString();
+                foreach (var selector in new[] { "operations/Target", "/paths/~1source/get" })
+                {
+                    var result = await ApiOperationDocumentResolver.ResolveAsync(format, "application/json",
+                        System.Text.Encoding.UTF8.GetBytes(authored),
+                        ApiOperationReference.Parse("/apigroups/g/apis/a#" + selector),
+                        resolveReference: (_, _) => throw new InvalidOperationException("API-key metadata is not a credential request."));
+                    await Assert.That(result.Status).IsEqualTo(ApiOperationResolutionStatus.Selected);
+                    await Assert.That(JsonNode.DeepEquals(operation, JsonNode.Parse(result.Operation.GetRawText()))).IsTrue();
+                    await Assert.That(document.ToJsonString()).IsEqualTo(authored);
+                }
+            }
+        }
+    }
+
+    [Test]
     public async Task SwaggerHeaderNamesRequireHttpTokensAcrossParametersAndResponses()
     {
         foreach (var name in new[] { "", "bad name", "bad:name", "bad/~name", "bad\tname", "bad\r\nname", "caf\u00e9", "bad(name)", "bad@name" })

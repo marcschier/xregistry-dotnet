@@ -1943,6 +1943,10 @@ public static partial class ApiOperationDocumentResolver
                     ValidateSecurityString(scheme, "in", pointer, required: true);
                 if (failure is not null) { return failure; }
                 var location = scheme.GetProperty("in").GetString();
+                if (location == "header" && !IsHttpToken(scheme.GetProperty("name").GetString()!.AsSpan()))
+                {
+                    return InvalidHttpHeaderName(pointer + "/name");
+                }
                 return location is "query" or "header" || !swagger && location == "cookie"
                     ? null : InvalidSecurityScheme("The API key location is not declared by the selected API format.", pointer + "/in");
             case "http":

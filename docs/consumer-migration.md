@@ -997,6 +997,12 @@ rules: `Content-Type` response headers and `Accept`, `Content-Type` and
 `Authorization` header parameters retain their native declaration checks.
 Form and query parameter names remain unaffected; selection preserves authored
 names and metadata.
+Header-based API-key Security Scheme names also require HTTP tokens in Swagger
+and OpenAPI. Invalid inline declarations or acquired scheme targets report
+`Invalid document.header_name` at `name`. Query and OpenAPI cookie API-key names
+retain their native string rules. Special header names remain valid here; the
+Parameter Object ignore rules do not suppress a Security Scheme declaration.
+These checks do not retrieve credentials or authorize requests.
 For OpenAPI 3.1, an authored root `jsonSchemaDialect` must be a string
 containing a URI, not a relative URI reference. Invalid JSON types, relative
 values and malformed URI syntax report `Invalid document.schema_dialect` at
