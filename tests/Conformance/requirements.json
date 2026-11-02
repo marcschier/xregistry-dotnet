@@ -97314,13 +97314,17 @@
       ],
       "text": "As updates are made to entities within an xRegistry instance, events SHOULD be generated to notify interested parties of those changes. This specification defines the metadata associated with each event as [CloudEvent](https://cloudevents.io) context attributes. Whether CloudEvents are used in the generation/serialization of the events is OPTIONAL, but it is RECOMMENDED.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Committed mutations publish structured CloudEvents through the durable outbox; no standardized subscription transport is exposed.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "OutboxEventsAreAtomicDeduplicatedAndCorrelated"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97418,13 +97422,17 @@
       ],
       "text": "Notification of changes to the entities within an xRegistry instance SHOULD be exposed as events. These changes could be the result of an end-user interaction with the Registry, or due to some other (possibly internal) processing of the Registry data.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Committed entity changes are exposed through structured outbox events; the specification leaves delivery and subscription mechanisms open.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "OutboxEventsAreAtomicDeduplicatedAndCorrelated"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97449,13 +97457,19 @@
       ],
       "text": "A single interaction with the Registry MAY result in multiple events; however, within the scope of one interaction (see [`xregcorrelationid`](#xregcorrelationid-extension-context-attribute)), the following constraints apply:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "One interaction can produce events for several subjects; Core coalesces lifecycle observations within each subject.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "OneInteractionMergesChangedNamesAndUsesDeletedCreatedUpdatedPrecedence",
+          "CreatedOutranksLaterUpdatesAndDeprecationUsesItsOwnChangedFreeEvent",
+          "OutboxEventsAreAtomicDeduplicatedAndCorrelated"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97480,13 +97494,19 @@
       ],
       "text": "- Only one `created`, `updated` or `deleted` event MUST be generated per `subject`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The Core accumulator emits at most one created, updated, or deleted lifecycle event per subject.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "OneInteractionMergesChangedNamesAndUsesDeletedCreatedUpdatedPrecedence",
+          "CreatedOutranksLaterUpdatesAndDeprecationUsesItsOwnChangedFreeEvent",
+          "OutboxEventsAreAtomicDeduplicatedAndCorrelated"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97511,13 +97531,19 @@
       ],
       "text": "- If the interaction involved more than one of those actions, then the single event generated MUST be chosen in the following order of precedence: `deleted`, `created`, `updated`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "When lifecycle observations conflict, Core selects deleted before created and created before updated.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "OneInteractionMergesChangedNamesAndUsesDeletedCreatedUpdatedPrecedence",
+          "CreatedOutranksLaterUpdatesAndDeprecationUsesItsOwnChangedFreeEvent",
+          "OutboxEventsAreAtomicDeduplicatedAndCorrelated"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97542,13 +97568,19 @@
       ],
       "text": "- Only one event with the same `type` and `subject` combination MUST be generated.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The accumulator suppresses duplicate events for the same type and canonical subject.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "OneInteractionMergesChangedNamesAndUsesDeletedCreatedUpdatedPrecedence",
+          "CreatedOutranksLaterUpdatesAndDeprecationUsesItsOwnChangedFreeEvent",
+          "OutboxEventsAreAtomicDeduplicatedAndCorrelated"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97573,13 +97605,17 @@
       ],
       "text": "The following sections specify the metadata defined for xRegistry events. Implementations MAY define additional metadata.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The serializer emits the standardized context and data fields without arbitrary extension metadata.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "StructuredCloudEventShapeAndEncodedCorrelationMatchTheCoreExample"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97604,13 +97640,17 @@
       ],
       "text": "The type of action taken on the entity. The value MUST be of the form: `io.xregistry.<ENTITY>.<ACTION>`",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The serializer uses the io.xregistry entity/action type form and rejects undefined combinations.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "StructuredCloudEventShapeAndEncodedCorrelationMatchTheCoreExample"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97635,13 +97675,17 @@
       ],
       "text": "- `<ENTITY>` is the type of xRegistry entity ([`subject`](#cloudevent-subject-core-context-attribute)) that was acted upon. It MUST be one of:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Supported event entities match the specification; invalid subjects are rejected before publication.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "StructuredCloudEventShapeAndEncodedCorrelationMatchTheCoreExample"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97666,13 +97710,17 @@
       ],
       "text": "- `<ACTION>` is the operation performed on the entity. It MUST be one of:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Supported lifecycle actions match the specification; invalid entity/action combinations are rejected.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "StructuredCloudEventShapeAndEncodedCorrelationMatchTheCoreExample"
+        ],
         "nativeEvidence": []
       }
     },
@@ -97697,13 +97745,17 @@
       ],
       "text": "This context attribute MUST be present in each event.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Every serialized event contains its required type context attribute.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "StructuredCloudEventShapeAndEncodedCorrelationMatchTheCoreExample"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98162,13 +98214,17 @@
       ],
       "text": "When present, and serialized in JSON, the `data` MUST be of the form:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Serialized event data uses exact unsigned JSON integers for epoch fields and a string array for changed names.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "StructuredCloudEventShapeAndEncodedCorrelationMatchTheCoreExample"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98193,13 +98249,19 @@
       ],
       "text": "- The `epoch` attribute MUST be included in `created` and `updated` events for Registries, Groups, Resources and Versions; and it MUST be the `subject` entity's `epoch` value as seen at the end of the interaction.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Created and updated lifecycle events carry the entity epoch observed after the interaction.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "UpdatedLifecycleEventsCarryFinalEpochsAndResourceMetaEpoch",
+          "NewResourceAndNondefaultVersionCreationReportExactMembershipChanges",
+          "DeletionEventsCoverDescendantsAndOnlyTheImmediateParentCollection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98224,13 +98286,17 @@
       ],
       "text": "- MUST NOT be included in `deleted` events.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Delete events omit lifecycle epoch data.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DeletionEventsCoverDescendantsAndOnlyTheImmediateParentCollection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98255,13 +98321,19 @@
       ],
       "text": "- The `meta.epoch` attribute MUST be included in Resource `created` and `updated` events and it MUST be the `subject` Resource's `meta.epoch` value as seen at the end of the interaction.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Resource create and update events carry the final Resource meta epoch.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "UpdatedLifecycleEventsCarryFinalEpochsAndResourceMetaEpoch",
+          "NewResourceAndNondefaultVersionCreationReportExactMembershipChanges",
+          "DeletionEventsCoverDescendantsAndOnlyTheImmediateParentCollection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98286,13 +98358,19 @@
       ],
       "text": "- MUST only be included for Resource related events.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Only Resource events carry meta.epoch.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "UpdatedLifecycleEventsCarryFinalEpochsAndResourceMetaEpoch",
+          "NewResourceAndNondefaultVersionCreationReportExactMembershipChanges",
+          "DeletionEventsCoverDescendantsAndOnlyTheImmediateParentCollection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98317,13 +98395,17 @@
       ],
       "text": "- MUST NOT be included in Resource `deleted` events.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Resource delete events omit meta.epoch.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DeletionEventsCoverDescendantsAndOnlyTheImmediateParentCollection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98348,13 +98430,19 @@
       ],
       "text": "- The `changed` attribute MAY be included to indicate which attributes of the `subject` entity were modified. When present, has the following constraints:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The implementation includes changed names when it can determine a complete list and otherwise does not publish an incomplete list.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AttributeEventsMatchTheChangedEntityAndItsDefaultProjection",
+          "RegistryAttributeUpdatesReportChangedNamesAndFinalEpoch",
+          "RepeatedResourceUpdatesCoalesceChangedNamesAndKeepFinalEpochs"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98379,13 +98467,19 @@
       ],
       "text": "- MUST be a list of the top-level attribute names (not values) that were added, modified, or deleted for the `subject` entity.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Changed data contains attribute names rather than values; tests cover Registry, entity, and nested meta updates.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AttributeEventsMatchTheChangedEntityAndItsDefaultProjection",
+          "RegistryAttributeUpdatesReportChangedNamesAndFinalEpoch",
+          "RepeatedResourceUpdatesCoalesceChangedNamesAndKeepFinalEpochs"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98410,13 +98504,19 @@
       ],
       "text": "- This attribute MUST NOT appear on the `created`, `deleted`, or `deprecated` events.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Created, deleted, and deprecated events do not include changed data.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "NewResourceAndNondefaultVersionCreationReportExactMembershipChanges",
+          "DeletionEventsCoverDescendantsAndOnlyTheImmediateParentCollection",
+          "DeprecationChangesAndRemovalHaveSeparateObjectAndEntityChangedLists"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98441,13 +98541,19 @@
       ],
       "text": "- There are certain events where non-top-level attributes are included, and those will be noted in the [Entity Events](#entity-events) sections below. When they do appear they MUST use the [xRegistry Dot (`.`) Notation](spec.md#xregistry-dot--notation) to express the traversal to the attribute of interest.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Nested Resource meta changes use dot notation, and default-Version projections are reported as top-level Resource names.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultPointerEventsIncludeBothVersionProjectionsWithoutInventingVersionUpdates",
+          "DefaultPointerEventsIncludeTheStoredDocumentAttributeWithoutUpdatingVersions",
+          "DefaultPointerEventsDistinguishEmptyStoredDocumentsFromExternalOnlyContent"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98474,13 +98580,19 @@
       ],
       "text": "- While `changed` is OPTIONAL, it is RECOMMENDED to be present on an event where it is permitted due to its usefulness for consumers. However, if exposure of this information would be inappropriate for some scenarios then it MAY be excluded. For example, for privacy/security reasons.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Changed names are included for permitted updates when known; created, deleted, and deprecated events remain excluded.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AttributeEventsMatchTheChangedEntityAndItsDefaultProjection",
+          "RegistryAttributeUpdatesReportChangedNamesAndFinalEpoch",
+          "RepeatedResourceUpdatesCoalesceChangedNamesAndKeepFinalEpochs"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98505,13 +98617,19 @@
       ],
       "text": "- If an entity is updated for multiple reasons during the processing of an interaction, per the rules previously stated, there MUST only be one `updated` event be generated. This means the attribute names of all impacted attributes MUST be merged into one `changed` list.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Repeated updates merge changed names into the single coalesced update event.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "OneInteractionMergesChangedNamesAndUsesDeletedCreatedUpdatedPrecedence",
+          "CreatedOutranksLaterUpdatesAndDeprecationUsesItsOwnChangedFreeEvent",
+          "OutboxEventsAreAtomicDeduplicatedAndCorrelated"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98536,13 +98654,17 @@
       ],
       "text": "Implementations MAY define their own metadata to be included in the `data` of a CloudEvent.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The implementation chooses not to emit arbitrary implementation-defined event metadata.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "StructuredCloudEventShapeAndEncodedCorrelationMatchTheCoreExample"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98568,13 +98690,17 @@
       ],
       "text": "This metadata (`data`) is NOT REQUIRED to be present in the event, but is RECOMMENDED.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Structured events include data with the entity epoch and available changed names.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "StructuredCloudEventShapeAndEncodedCorrelationMatchTheCoreExample"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98599,9 +98725,11 @@
       ],
       "text": "- STRONGLY RECOMMENDED to be generated when a new Registry is created. This event isn't mandated since the action of creating a new Registry is not defined in the xRegistry specification, and therefore (technically) out of scope. However, for interoperability, the suggested event is defined here.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The server API does not define Registry creation, so no Registry-created event is generated.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -98630,9 +98758,11 @@
       ],
       "text": "- If, during the process of creating a new Registry, the model, modelsource or entities are modified/created, then events for those actions MUST be generated as well.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "No Registry-creation operation exists in this server surface; its conditional child-event obligation is therefore not exercised.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -98696,13 +98826,18 @@
       ],
       "text": "- MUST be generated when a Group is created or deleted, where `changed`, if present, MUST include `epoch`, `modifiedat`, `<GROUPS>` and `<GROUPS>count` attribute names.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Registry update events report Group collection changes when Groups are created or deleted.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "NewResourceAndNondefaultVersionCreationReportExactMembershipChanges",
+          "DeletionEventsCoverDescendantsAndOnlyTheImmediateParentCollection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98727,13 +98862,17 @@
       ],
       "text": "- MUST be generated when `model`, `modelsource` or `capabilities` are updated and the appropriate attribute MUST appear in `changed`, if present.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Registry updates accompany model, modelsource, and capability changes with the corresponding changed name.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ModelUpdatesProduceDistinctPreparedAdministrativeEvents"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98758,9 +98897,11 @@
       ],
       "text": "- STRONGLY RECOMMENDED to be generated when a Registry is deleted. This event isn't mandated since the action of deleting a new Registry is not defined in the xRegistry specification, and therefore (technically) out of scope. However, for interoperability, the suggested event is defined here.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The server API does not define Registry deletion, so the recommended Registry-deleted event is not generated.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -98789,9 +98930,11 @@
       ],
       "text": "- It is STRONGLY RECOMMENDED that a `deleted` event be generated for each entity within the deleted Registry. The optionality of this requirement is to allow for situations where implementations (or users) might view such a large volume of events to be problematic in their use cases.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Without a Registry-deletion operation, descendant deletion events for Registry removal are not applicable.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -98820,13 +98963,17 @@
       ],
       "text": "- MUST be generated when the Registry's model is updated. This might occur due to a user action (e.g. updating `modelsource`) or an internal (system) action.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Model replacement produces a distinct model.updated administrative event.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ModelUpdatesProduceDistinctPreparedAdministrativeEvents"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98851,13 +98998,17 @@
       ],
       "text": "- MUST NOT include a `changed` list.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The model.updated event omits changed data.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ModelUpdatesProduceDistinctPreparedAdministrativeEvents"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98882,13 +99033,17 @@
       ],
       "text": "- An `io.xregistry.registry.updated` event MUST also be generated where the `model` attribute MUST be included in `changed`, if present.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Model replacement also updates the Registry event with model in changed.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ModelUpdatesProduceDistinctPreparedAdministrativeEvents"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98913,13 +99068,17 @@
       ],
       "text": "- MUST be generated when the Registry's `modelsource` attribute is updated.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Updating modelsource produces a distinct modelsource.updated administrative event.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ModelUpdatesProduceDistinctPreparedAdministrativeEvents"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98944,13 +99103,17 @@
       ],
       "text": "- MUST NOT include a `changed` list.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The modelsource.updated event omits changed data.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ModelUpdatesProduceDistinctPreparedAdministrativeEvents"
+        ],
         "nativeEvidence": []
       }
     },
@@ -98975,13 +99138,17 @@
       ],
       "text": "- An `io.xregistry.registry.updated` event MUST also be generated where the `modelsource` attribute MUST be included in `changed`, if present.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Updating modelsource also updates the Registry event with modelsource in changed.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ModelUpdatesProduceDistinctPreparedAdministrativeEvents"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99076,13 +99243,18 @@
       ],
       "text": "- MUST be generated when a new Group is created.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Group creation produces a group.created event.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "OutboxEventsAreAtomicDeduplicatedAndCorrelated",
+          "CreationAndDeprecationRemainSeparateWhileLifecycleUpdatesCoalesce"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99107,13 +99279,18 @@
       ],
       "text": "- An `io.xregistry.registry.updated` event MUST also be generated where `changed`, if present, MUST include `epoch`, `modifiedat`, `<GROUPS>` and `<GROUPS>count` attribute names.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Group creation updates the Registry event with the Group collection and count names.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "OutboxEventsAreAtomicDeduplicatedAndCorrelated",
+          "CreationAndDeprecationRemainSeparateWhileLifecycleUpdatesCoalesce"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99138,13 +99315,17 @@
       ],
       "text": "- MUST be generated when a Group's attribute is updated, where each modified attribute MUST be included in `changed`, if present.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Group attribute updates report changed names for the Group subject.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AttributeEventsMatchTheChangedEntityAndItsDefaultProjection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99169,13 +99350,18 @@
       ],
       "text": "- MUST be generated when a Resource is created or deleted, where `changed`, if present, MUST include `epoch`, `modifiedat`, `<RESOURCES>` and `<RESOURCES>count` attribute names.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Resource creation and deletion update the containing Group collection and count fields.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "NewResourceAndNondefaultVersionCreationReportExactMembershipChanges",
+          "DeletionEventsCoverDescendantsAndOnlyTheImmediateParentCollection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99200,13 +99386,17 @@
       ],
       "text": "This MUST include any updates to the `deprecated` sub-object, even though a `io.xregistry.group.deprecated` event is also generated. And in that situation `deprecated` MUST be included in the `io.xregistry.group.updated` event's `changed` list, if present.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Group deprecation produces both a changed-free deprecated event and an updated event naming deprecated.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DeprecationChangesAndRemovalHaveSeparateObjectAndEntityChangedLists"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99232,13 +99422,17 @@
       ],
       "text": "- MUST be generated when a Group's `deprecated` sub-object is set, deleted or any of its attributes are updated. Note, a `changed` list MUST NOT be included. Note, deleting the `deprecated` sub-object in a production environment is discouraged.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Setting, removing, or changing Group deprecation produces a changed-free group.deprecated event.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DeprecationChangesAndRemovalHaveSeparateObjectAndEntityChangedLists"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99263,13 +99457,17 @@
       ],
       "text": "- An `io.xregistry.group.updated` event MUST also be generated where `changed`, if present, MUST include `epoch`, `modifiedat` and `deprecated` attribute names.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The companion Group update includes epoch, modifiedat, and deprecated in changed.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DeprecationChangesAndRemovalHaveSeparateObjectAndEntityChangedLists"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99294,13 +99492,17 @@
       ],
       "text": "- MUST be generated when a Group is deleted.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Group deletion produces a group.deleted event.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DeletionEventsCoverDescendantsAndOnlyTheImmediateParentCollection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99325,13 +99527,17 @@
       ],
       "text": "- An `io.xregistry.registry.updated` event MUST also be generated where `changed`, if present, MUST include `epoch`, `modifiedat`, `<GROUPS>` and `<GROUPS>count` attribute names.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Group deletion updates the Registry Group collection and count fields.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DeletionEventsCoverDescendantsAndOnlyTheImmediateParentCollection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99425,13 +99631,18 @@
       ],
       "text": "- An `io.xregistry.group.updated` event MUST also be generated where the `changed`, if present, MUST include `epoch`, `modifiedat`, `<RESOURCES>` and `<RESOURCES>count` attributes names.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Resource creation updates the containing Group collection and count fields.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "OutboxEventsAreAtomicDeduplicatedAndCorrelated",
+          "NewResourceAndNondefaultVersionCreationReportExactMembershipChanges"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99456,13 +99667,18 @@
       ],
       "text": "- MUST be generated when: - A Resource's attribute (from the default Version entity) is updated, where `changed`, if present, MUST include each modified attribute. Note that a `io.xregistry.version.updated` event MUST also be generated.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Default-Version attribute changes produce Resource and Version updates with changed names.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AttributeEventsMatchTheChangedEntityAndItsDefaultProjection",
+          "UpdatedLifecycleEventsCarryFinalEpochsAndResourceMetaEpoch"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99487,13 +99703,18 @@
       ],
       "text": "- A Version is created or deleted, where `changed`, if present, MUST include `meta.epoch`, `meta.modifiedat`, `versions` and `versionscount` attribute names.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Version creation and deletion update Resource meta epochs and version collection fields.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "NewResourceAndNondefaultVersionCreationReportExactMembershipChanges",
+          "DeletionEventsCoverDescendantsAndOnlyTheImmediateParentCollection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99518,13 +99739,17 @@
       ],
       "text": "- A Resource's `meta` sub-object is update, where `changed`, if present, MUST include the changed top-level `meta` attribute names prefixes with `meta.`. For example, `meta.defaultversionid`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Resource meta changes use the meta. prefix in the Resource changed list.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AttributeEventsMatchTheChangedEntityAndItsDefaultProjection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99549,13 +99774,17 @@
       ],
       "text": "This MUST include any updates to the `deprecated` sub-object, even though a `io.xregistry.resource.deprecated` event is also generated. And in that situation `meta.deprecated` MUST be included in the `io.xregistry.resource.updated` event's `changed` list, if present.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Resource deprecation produces a changed-free deprecated event and an updated event naming meta.deprecated.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DeprecationChangesAndRemovalHaveSeparateObjectAndEntityChangedLists"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99581,13 +99810,19 @@
       ],
       "text": "In the case of changing a Resource's `meta.defaultversionid` attribute, the `changed` list MUST include all attributes from the previous default Version that have non-`null` values, and all attributes from the new default Version that have non-`null` values. This MUST include the `versionid` attribute as well. Any duplicate attribute names MUST be removed. Note that a `io.xregistry.version.updated` event MUST NOT be generated for either the prior or new default Version due to the default Version changing.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Changing the default Version reports non-null names from both Version projections, removes duplicates, and emits no Version update.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultPointerEventsIncludeBothVersionProjectionsWithoutInventingVersionUpdates",
+          "DefaultPointerEventsIncludeTheStoredDocumentAttributeWithoutUpdatingVersions",
+          "DefaultPointerEventsDistinguishEmptyStoredDocumentsFromExternalOnlyContent"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99612,13 +99847,18 @@
       ],
       "text": "- When a Resource's domain-specific document that is stored within the Registry is modified, then the Resource's `SINGULAR` attribute MUST be included in `changed`, not `SINGULARbase64` - even if the `base64` variant is used during serialization of the Resource.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Stored document changes report the singular document attribute, including when a base64 representation was used.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultPointerEventsIncludeTheStoredDocumentAttributeWithoutUpdatingVersions",
+          "ExternalReferenceReplacementReportsRemovalOfTheStoredDocument"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99644,13 +99884,17 @@
       ],
       "text": "- MUST be generated when a Resource's `meta.deprecated` sub-object is set, deleted, or when any of its attributes are updated. Note that a `changed` attribute MUST NOT be be included. Note, deleting the `meta.deprecated` sub-object in a production environment is discouraged.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Setting, removing, or changing Resource deprecation produces a changed-free resource.deprecated event.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DeprecationChangesAndRemovalHaveSeparateObjectAndEntityChangedLists"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99675,13 +99919,17 @@
       ],
       "text": "- An `io.xregistry.resource.updated` event MUST also be generated where `changed`, if present, MUST include `meta.epoch`, `meta.modifiedat` and `meta.deprecated` attribute names.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The companion Resource update includes meta.epoch, meta.modifiedat, and meta.deprecated.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DeprecationChangesAndRemovalHaveSeparateObjectAndEntityChangedLists"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99706,13 +99954,17 @@
       ],
       "text": "- MUST be generated when a Resource is deleted.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Resource deletion produces a resource.deleted event.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DeletionEventsCoverDescendantsAndOnlyTheImmediateParentCollection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99737,13 +99989,17 @@
       ],
       "text": "- A `io.xregistry.version.deleted` event MUST also be generated for each Version.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Deleting a Resource produces a version.deleted event for each owned Version.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DeletionEventsCoverDescendantsAndOnlyTheImmediateParentCollection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99768,13 +100024,17 @@
       ],
       "text": "- An `io.xregistry.group.updated` event MUST also be generated where `changed`, if present, MUST include `epoch`, `modifiedat` and `<RESOURCES>` and `<RESOURCES>count` attribute names.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Resource deletion updates only its containing Group collection and count fields.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DeletionEventsCoverDescendantsAndOnlyTheImmediateParentCollection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99799,13 +100059,18 @@
       ],
       "text": "- MUST be generated when a new Version is created.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Creating a Version produces a version.created event.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "OutboxEventsAreAtomicDeduplicatedAndCorrelated",
+          "NewResourceAndNondefaultVersionCreationReportExactMembershipChanges"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99830,13 +100095,18 @@
       ],
       "text": "- An `io.xregistry.resource.updated` event MUST also be generated where `changed`, if present, MUST include `meta.epoch`, `meta.modifiedat`, `versions` and `versionscount` attribute names.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Version creation updates the Resource meta epochs and version collection fields.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "NewResourceAndNondefaultVersionCreationReportExactMembershipChanges",
+          "DeletionEventsCoverDescendantsAndOnlyTheImmediateParentCollection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99861,13 +100131,18 @@
       ],
       "text": "- MUST be generated when a Version attribute is updated, where each modified attribute MUST be included in `changed`, if present. Note that a `io.xregistry.resource.updated` event MUST also be generated if this Version is also the Resource's default Version.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Version attribute changes report changed names; the Resource is also updated when that Version is the default.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AttributeEventsMatchTheChangedEntityAndItsDefaultProjection",
+          "UpdatedLifecycleEventsCarryFinalEpochsAndResourceMetaEpoch"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99892,13 +100167,18 @@
       ],
       "text": "- When a Versions's domain-specific document that is stored within the Registry is modified, then the Resource's `SINGULAR` attribute MUST be included in `changed`, not `SINGULARbase64` - even if the `base64` variant is used during serialization of the Resource.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Stored Version document changes report the singular document attribute rather than its base64 representation.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultPointerEventsIncludeTheStoredDocumentAttributeWithoutUpdatingVersions",
+          "ExternalReferenceReplacementReportsRemovalOfTheStoredDocument"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99923,13 +100203,17 @@
       ],
       "text": "- MUST be generated when a Version is deleted.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Version deletion produces a version.deleted event.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DeletionEventsCoverDescendantsAndOnlyTheImmediateParentCollection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -99954,13 +100238,18 @@
       ],
       "text": "- An `io.xregistry.resource.updated` event MUST also be generated where `changed`, if present, MUST include `meta.epoch`, `meta.modifiedat`, `versions` and `versionscount` attribute names.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Version deletion updates the Resource meta epochs and version collection fields.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "NewResourceAndNondefaultVersionCreationReportExactMembershipChanges",
+          "DeletionEventsCoverDescendantsAndOnlyTheImmediateParentCollection"
+        ],
         "nativeEvidence": []
       }
     },
