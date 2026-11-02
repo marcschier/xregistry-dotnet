@@ -297,8 +297,11 @@ Session and rejects a changed target XID before resolving its hierarchy.
 origin and selected reference; a changed portable Node identity rejects before
 provider acquisition. A changed origin or authoritative form is a different
 source, not an update to an existing pin. Failed target validation disposes the
-acquired lease. Two-server cases serialize and reopen both origin forms,
-reacquire a target Session and read the same exact Version bytes.
+acquired lease. Real-server cases flush both origin forms to a host-managed
+file and reopen it before selecting a different endpoint for the same
+application. The replacement Server assigns the Registry namespace a different
+index. The checked result has a new Session-local NodeId and locator but retains
+the exact serialized pin, XID and Version bytes.
 No automatic pin store, non-OPC-UA target router or native server-side
 origin publication is provided. These boundaries still prevent presenting this
 as the complete `XREG-Federation` proxy workflow.

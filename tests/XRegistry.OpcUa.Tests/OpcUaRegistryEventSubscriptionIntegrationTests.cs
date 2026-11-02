@@ -287,7 +287,6 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
         }
 
         var sourceTarget = CreateTarget(sourceServer.Endpoint);
-        var targetTarget = CreateTarget(targetServer.Endpoint);
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         await using var sourceConnection = await OpcUaSessionConnection.OpenAsync(
             sourceTarget,
@@ -302,7 +301,6 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
             cancellation.Token);
         _ = await sourceConnection.Reader.ReadModelDefinitionAsync(
             sourceConnection.RegistryRoot, cancellationToken: cancellation.Token);
-        var typeMap = CreateMetadataTypeMap(targetServer);
         var identity = await sourceConnection.Reader.ReadExternalNodeIdAsync(
             sourceServer.GroupNode,
             "/teams/team-a",
@@ -331,6 +329,7 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
         await Assert.That(versionIdentity.Identifier).IsEqualTo("Registry.VersionedResource.Versions.v1");
 
         var receivedIdentities = new List<OpcUaExternalNodeId>();
+        var activeTargetServer = targetServer;
         OpcUaTrustedProviderResolver resolver = async (requested, token) =>
         {
             if (!string.Equals(requested.ServerApplicationUri, targetServer.ApplicationUri,
@@ -343,11 +342,11 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
 
             receivedIdentities.Add(requested);
             var targetConnection = await OpcUaSessionConnection.OpenAsync(
-                targetTarget,
+                CreateTarget(activeTargetServer.Endpoint),
                 clientConfiguration,
                 telemetry,
                 new UserIdentity(),
-                targetServer.RegistryType,
+                activeTargetServer.RegistryType,
                 static endpoint => endpoint.SecurityMode == MessageSecurityMode.None &&
                     endpoint.SecurityPolicyUri == SecurityPolicies.None,
                 static profile => profile == Profiles.UaTcpTransport,
@@ -355,8 +354,8 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
                 token);
             return new OpcUaTrustedProviderLease(
                 targetConnection,
-                new NativeRegistryContext("opcua", "urn:xregistry:opcua:trusted-provider"),
-                typeMap);
+                new NativeRegistryContext("opcua", activeTargetServer.Endpoint),
+                CreateMetadataTypeMap(activeTargetServer));
         };
         var trustedOrigin = originForm == "application"
             ? OpcUaRegistryOrigin.Application(new(targetServer.ApplicationUri,
@@ -404,7 +403,16 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
         {
             await Assert.That(resolvedVersion.SourcePin).IsNotNull();
             var storedPin = resolvedVersion.SourcePin!.Serialize();
-            var pin = OpcUaFederationSourcePin.Parse(storedPin);
+            var pinPath = Path.Combine(sourceServer.PkiRoot, "native-source-pin.json");
+            using (var file = new FileStream(pinPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                file.Write(storedPin);
+                file.Flush(flushToDisk: true);
+            }
+            await using var relocatedServer = await InProcessRegistryServer.StartAsync(
+                alternateModelLayout: true, serverApplicationUri: targetServer.ApplicationUri, extraNamespace: true);
+            activeTargetServer = relocatedServer;
+            var pin = OpcUaFederationSourcePin.Parse(await File.ReadAllBytesAsync(pinPath, cancellation.Token));
             await using var reconnected = await OpcUaRegistryReadSource.ResolvePinnedTargetAsync(
                 pin, trustedOrigin, (_, node, token) => resolver(node, token),
                 static version => version == "1.0", cancellation.Token);
@@ -416,7 +424,11 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
             await stream.ReadExactlyAsync(bytes, cancellation.Token);
             await Assert.That(bytes).IsEquivalentTo(ExpectedVersionDocument);
             await Assert.That(reconnected.Xid).IsEqualTo(resolvedVersion.Xid);
-            await Assert.That(reconnected.Node).IsEqualTo(resolvedVersion.Node);
+            await Assert.That(relocatedServer.Endpoint == targetServer.Endpoint).IsFalse();
+            await Assert.That(reconnected.ReadSource.Context.Source).IsEqualTo(relocatedServer.Endpoint);
+            await Assert.That(reconnected.Node.NamespaceIndex == resolvedVersion.Node.NamespaceIndex).IsFalse();
+            await Assert.That(reconnected.Node).IsEqualTo(relocatedServer.VersionNode);
+            await Assert.That(reconnected.SourcePin!.Serialize()).IsEquivalentTo(storedPin);
         }
         else
         {
@@ -585,7 +597,7 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
                 [(groupCollection, versionedCollection)] =
                     new(server.VersionedResourceType, server.ResourceVersionsType),
             },
-            new NodeId("AttributesType", 1));
+            new NodeId("AttributesType", server.GroupType.NamespaceIndex));
     }
 
     private sealed class InProcessRegistryServer : IAsyncDisposable
@@ -643,7 +655,7 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
 
         public static async ValueTask<InProcessRegistryServer> StartAsync(
             string? externalServerApplicationUri = null,
-            bool alternateModelLayout = false)
+            bool alternateModelLayout = false, string? serverApplicationUri = null, bool extraNamespace = false)
         {
             var telemetry = DefaultTelemetry.Create(static _ => { });
             var application = new ApplicationInstance(telemetry)
@@ -653,7 +665,8 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
             };
             var port = GetFreePort();
             var endpoint = $"opc.tcp://localhost:{port}/xregistry-integration";
-            var applicationUri = "urn:xregistry:opcua:integration:server:" + Guid.NewGuid().ToString("N");
+            var applicationUri = serverApplicationUri ??
+                "urn:xregistry:opcua:integration:server:" + Guid.NewGuid().ToString("N");
             var pkiRoot = Path.Combine(Path.GetTempPath(), "xregistry-opcua-integration",
                 Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(pkiRoot);
@@ -674,7 +687,8 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
             {
                 throw new InvalidOperationException("The integration server certificate is invalid.");
             }
-            var server = new IntegrationServer(telemetry, externalServerApplicationUri, alternateModelLayout);
+            var server = new IntegrationServer(telemetry, externalServerApplicationUri, alternateModelLayout,
+                extraNamespace);
             await application.StartAsync(server, CancellationToken.None);
             return new(endpoint, applicationUri, pkiRoot, application, server, alternateModelLayout);
         }
@@ -700,7 +714,7 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
     private sealed class IntegrationServer(
         ITelemetryContext telemetry,
         string? externalServerApplicationUri,
-        bool alternateModelLayout) : StandardServer(telemetry)
+        bool alternateModelLayout, bool extraNamespace) : StandardServer(telemetry)
     {
         private NodeId registryType = NodeId.Null;
         private NodeId writeProbe = NodeId.Null;
@@ -769,6 +783,10 @@ public class OpcUaRegistryEventSubscriptionIntegrationTests
             IServerInternal server,
             ApplicationConfiguration configuration)
         {
+            if (extraNamespace)
+            {
+                server.NamespaceUris.GetIndexOrAppend("urn:xregistry:integration:namespace-padding");
+            }
             nodeManager = new IntegrationNodeManager(
                 server, configuration, externalServerApplicationUri, alternateModelLayout);
             registryType = nodeManager.RegistryType;
