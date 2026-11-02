@@ -1474,7 +1474,22 @@ public static partial class ApiOperationDocumentResolver
         {
             return InvalidTarget("Linked operation callbacks must be an object.", target.Pointer + "/callbacks");
         }
-        var metadataFailure = ValidateHttpOperationMetadata(target.Value, target.Pointer, references.Format, null,
+        string? httpMethod = null;
+        if (references.Format == "OpenAPI/3.0" && target.Value.TryGetProperty("requestBody", out _))
+        {
+            references.Work(target.Pointer);
+            var tokens = target.Pointer == "$" ? [] : target.Pointer[2..].Split('/')
+                .Select(static token => token.Replace("~1", "/", StringComparison.Ordinal)
+                    .Replace("~0", "~", StringComparison.Ordinal)).ToArray();
+            if (ValidateHttpOperationPointer(references.Format, tokens, out _) is not null)
+            {
+                return Failure(ApiOperationResolutionStatus.Indeterminate, "document.link_operation_method",
+                    "OpenAPI 3.0 linked request-body admission requires an HTTP method from a supported operation location.",
+                    target.Pointer + "/requestBody");
+            }
+            httpMethod = tokens[^1];
+        }
+        var metadataFailure = ValidateHttpOperationMetadata(target.Value, target.Pointer, references.Format, httpMethod,
             cancellationToken);
         return metadataFailure ?? ValidateOpenApiServers(target.Value, target.Pointer, references.Format, cancellationToken);
 

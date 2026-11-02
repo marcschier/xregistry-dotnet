@@ -892,9 +892,16 @@ authored links and response references.
 Target admission does not recursively follow the target's response links or
 other declaration references, establish an invocation URL for multiply mounted
 Path Items, evaluate schemas or runtime expressions, or invoke the operation.
-OpenAPI 3.0 request-body applicability remains unverified when a target lacks
-HTTP-method context. Unused reusable Link references remain inactive. These
-checks do not qualify the complete linked description.
+For OpenAPI 3.0 targets with `requestBody`, admission derives the HTTP method
+only from a supported Paths or Callback operation location. POST, PUT and PATCH
+bodies receive Request Body Object checks; bodies on other methods remain
+ignored under the selected 3.0 profile. A detached target or arbitrary property
+named `post` does not establish a method. When the method cannot be established,
+admission returns indeterminate at the target's `requestBody` instead of
+claiming a completed check. Targets without request bodies do not need this
+context; OpenAPI 3.1 checks request-body shape independently of method.
+Unused reusable Link references remain inactive. These checks do not qualify
+the complete linked description.
 Root and reached HTTP operation `externalDocs` values must be objects with a
 string `url` and, when present, a string `description`. An External
 Documentation Object is not a Reference Object: a `$ref` alone cannot replace

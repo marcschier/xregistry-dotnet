@@ -1111,11 +1111,10 @@ public static partial class ApiOperationDocumentResolver
         return inherited;
     }
 
-    private static async ValueTask<ApiOperationResolutionResult> ResolvePointerAsync(string format, JsonElement root,
-        IReadOnlyList<string> tokens, ReferenceContext references, CancellationToken cancellationToken)
+    private static ApiOperationResolutionResult? ValidateHttpOperationPointer(
+        string format, IReadOnlyList<string> tokens, out int methodStart)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        var methodStart = 2;
+        methodStart = 2;
         if (tokens.Count >= 4 && tokens[0] == "components" && format != "Swagger/2.0")
         {
             methodStart = tokens[1] switch
@@ -1162,7 +1161,15 @@ public static partial class ApiOperationDocumentResolver
                 return InvalidCallbackExpression("$/" + string.Join("/", tokens.Take(index + 3).Select(Escape)));
             }
         }
+        return null;
+    }
 
+    private static async ValueTask<ApiOperationResolutionResult> ResolvePointerAsync(string format, JsonElement root,
+        IReadOnlyList<string> tokens, ReferenceContext references, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var pointerFailure = ValidateHttpOperationPointer(format, tokens, out var methodStart);
+        if (pointerFailure is not null) { return pointerFailure; }
         var pathPointer = "$";
         var pathItem = root;
         for (var index = 0; index < methodStart; index++)
