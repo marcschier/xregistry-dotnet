@@ -111,6 +111,9 @@ occurs while Open or Read returns, the reader stops before another read or
 accepting the returned bytes, even when the Session ignores its token. An
 acquired handle is closed with an uncancelled token, and a Close failure remains
 attached to the original cancellation under `OpcUa.FileCloseFailure`.
+When a completed read is followed by a failed Close, an already classified
+federation error retains its original code, diagnostic and cause. An
+unclassified Close exception reports `unavailable`.
 `OpcUaSessionConnection` discovers endpoints and opens a Session only
 after caller policy selects one; it maps the advertised root through the
 Session's `NamespaceArray` and verifies the root and Core version.

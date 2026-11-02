@@ -137165,7 +137165,7 @@
       "text": "5. Call `Close(fileHandle)` when finished. After every successful Open, the client MUST attempt Close on success, error, cancellation or limit exhaustion while the Session is usable. A failed Open does not allocate a handle to close. Session loss invalidates the handle. Reconnecting requires a new Open, not reuse of that handle or file position.",
       "review": {
         "status": "reviewed",
-        "note": "The selected FileTransfer read lifecycle was read with the replacement and creation-handle rules. ReadFileAsync retains its acquired handle through an uncancelled Close on success, native failure, cancellation and limit exhaustion. Writer replacement now observes ignored cancellation before positioning, after positioning and after every chunk, including empty and final-chunk cases, and closes transferred handles without replacing the original error. Completion of a creation-time handle also closes it on entry cancellation or byte-limit rejection before reopening for truncation. Reader cleanup and real Session file workflows have direct evidence. Session-loss/replacement lifetime behavior and prevention of all caller-directed stale-handle use are not fully established; keep the compound client obligation pending.",
+        "note": "The selected FileTransfer read lifecycle was read with the replacement and creation-handle rules. ReadFileAsync retains its acquired handle through an uncancelled Close on success, native failure, cancellation and limit exhaustion. A classified Close error after a completed read now retains its original outcome, diagnostic and cause instead of becoming unavailable; a prior read error still takes precedence and retains the Close error. Writer replacement observes cancellation before positioning, after positioning and after every chunk, including empty and final-chunk cases. Creation-time handles close on entry cancellation or byte-limit rejection before reopening for truncation. Session-loss/replacement lifetime behavior and prevention of all caller-directed stale-handle use remain pending.",
         "roles": [
           "client"
         ]
@@ -137178,6 +137178,7 @@
           "FileReadCancellationStopsIgnoredTokenAndClosesTransferredHandle",
           "ReadFailureIsRetainedWhenCloseAlsoFails",
           "CloseFailureAfterCompleteReadIsReported",
+          "FileReadPreservesClassifiedCloseFailureAndOriginalOperationError",
           "OversizedFileFailsWithLimitAndStillCloses",
           "DocumentWritePreCancellationAvoidsResolutionAndOpen",
           "DocumentWriteCancellationStopsChunksAndClosesTransferredHandle",

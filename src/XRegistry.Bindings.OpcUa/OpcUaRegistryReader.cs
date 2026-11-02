@@ -243,6 +243,10 @@ public sealed class OpcUaRegistryReader
         {
             failure.Data["OpcUa.FileCloseFailure"] = closeFailure;
         }
+        catch (FederationException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             throw new FederationException(FederationErrorCode.Unavailable,

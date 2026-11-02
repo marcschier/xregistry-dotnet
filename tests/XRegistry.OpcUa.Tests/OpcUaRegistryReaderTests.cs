@@ -118,6 +118,49 @@ public class OpcUaRegistryReaderTests
     }
 
     [Test]
+    [Arguments(FederationErrorCode.PolicyDenied, false)]
+    [Arguments(FederationErrorCode.NotFound, false)]
+    [Arguments(FederationErrorCode.Unavailable, false)]
+    [Arguments(FederationErrorCode.PolicyDenied, true)]
+    [Arguments(FederationErrorCode.NotFound, true)]
+    [Arguments(FederationErrorCode.Unavailable, true)]
+    public async Task FileReadPreservesClassifiedCloseFailureAndOriginalOperationError(
+        FederationErrorCode code, bool readFails)
+    {
+        var nativeFailure = new ServiceResultException(StatusCodes.BadSessionIdInvalid);
+        var closeFailure = new FederationException(code, "Close failed.", "Retained diagnostic.", nativeFailure);
+        var readFailure = readFails ? new InvalidOperationException("read") : null;
+        var session = new FakeSession
+        {
+            Chunks = { new byte[] { 1, 2 }, Array.Empty<byte>() },
+            ReadFailure = readFailure,
+            CloseFailure = closeFailure
+        };
+        var reader = await ValidatedReader(session);
+
+        if (readFails)
+        {
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+                await reader.ReadFileAsync(File));
+            await Assert.That(ReferenceEquals(error, readFailure)).IsTrue();
+            await Assert.That(ReferenceEquals(error!.Data["OpcUa.FileCloseFailure"], closeFailure)).IsTrue();
+        }
+        else
+        {
+            var error = await Assert.ThrowsAsync<FederationException>(async () =>
+                await reader.ReadFileAsync(File));
+            await Assert.That(ReferenceEquals(error, closeFailure)).IsTrue();
+            await Assert.That(error!.Code).IsEqualTo(code);
+            await Assert.That(error.Diagnostic).IsEqualTo("Retained diagnostic.");
+            await Assert.That(ReferenceEquals(error.InnerException, nativeFailure)).IsTrue();
+        }
+        await Assert.That(session.Closed).IsEqualTo(1);
+        await Assert.That(session.ClosedFiles.Single()).IsEqualTo(File);
+        await Assert.That(session.LastClosedHandle).IsEqualTo(7u);
+        await Assert.That(session.CloseToken.CanBeCanceled).IsFalse();
+    }
+
+    [Test]
     public async Task BrowseFailureRetainsContinuationReleaseFailureDiagnostic()
     {
         var session = new FakeSession
