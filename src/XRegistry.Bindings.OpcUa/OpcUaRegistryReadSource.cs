@@ -173,6 +173,7 @@ public sealed class OpcUaRegistryReadSource : IFederationReadSource
             throw new ArgumentOutOfRangeException(nameof(role));
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         var lease = await trustedProviderResolver(identity, cancellationToken).ConfigureAwait(false);
         if (lease is null)
         {

@@ -71,6 +71,67 @@ public class OpcUaTrustedProviderLeaseTests
     }
 
     [Test]
+    public async Task CancelledResolutionDoesNotAcquireProvider()
+    {
+        var lease = new TrackingLease();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var calls = 0;
+        OpcUaTrustedProviderResolver resolver = (_, _) =>
+        {
+            calls++;
+            return ValueTask.FromResult<IOpcUaTrustedProviderLease>(lease);
+        };
+
+        var error = await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+        {
+            await using var result = await OpcUaRegistryReadSource.ResolveExternalTargetAsync(
+                new OpcUaExternalNodeId(ServerUri, NamespaceUri, IdType.String, "schema-a"),
+                resolver, _ => true, OpcUaExternalTargetRole.LogicalResource, cancellation.Token);
+        });
+
+        await Assert.That(error!.CancellationToken).IsEqualTo(cancellation.Token);
+        await Assert.That(calls).IsEqualTo(0);
+        await Assert.That(lease.DisposeCalls).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task CancellationDuringAcquisitionDisposesTransferredLeaseAndRetainsCleanupError(
+        bool disposalFails)
+    {
+        var failure = new IOException("Synthetic provider disposal failure.");
+        var lease = new TrackingLease(disposalFails ? Task.FromException(failure) : null);
+        using var cancellation = new CancellationTokenSource();
+        var calls = 0;
+        OpcUaTrustedProviderResolver resolver = (_, _) =>
+        {
+            calls++;
+            cancellation.Cancel();
+            return ValueTask.FromResult<IOpcUaTrustedProviderLease>(lease);
+        };
+
+        var error = await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+        {
+            await using var result = await OpcUaRegistryReadSource.ResolveExternalTargetAsync(
+                new OpcUaExternalNodeId(ServerUri, NamespaceUri, IdType.String, "schema-a"),
+                resolver, _ => true, OpcUaExternalTargetRole.LogicalResource, cancellation.Token);
+        });
+
+        await Assert.That(error!.CancellationToken).IsEqualTo(cancellation.Token);
+        await Assert.That(calls).IsEqualTo(1);
+        await Assert.That(lease.DisposeCalls).IsEqualTo(1);
+        await Assert.That(lease.DisposalCompleted).IsEqualTo(!disposalFails);
+        await Assert.That(error.Data.Contains("OpcUa.TrustedProviderDisposeFailure")).IsEqualTo(disposalFails);
+        if (disposalFails)
+        {
+            await Assert.That(ReferenceEquals(error.Data["OpcUa.TrustedProviderDisposeFailure"], failure))
+                .IsTrue();
+        }
+    }
+
+    [Test]
     [Arguments(false)]
     [Arguments(true)]
     public async Task ResolvedExternalResourceDisposeAsyncReleasesLeaseOnce(bool disposalFails)

@@ -232,6 +232,10 @@ the successful result retains the checked role. An unknown role rejects before
 provider acquisition. The low-level resolver does not read or validate a
 Resource's `OriginRegistry` or pin an authoritative origin form. It is not the
 complete `XREG-Federation` proxy workflow.
+Cancellation already requested at resolver entry prevents provider acquisition.
+If acquisition returns a lease after cancellation, the resolver disposes that
+lease before propagating cancellation. A disposal failure is retained under
+`OpcUa.TrustedProviderDisposeFailure` without replacing the cancellation.
 Event type discovery, notification decoding and
 Subscription management provide client-side support for native xRegistry Events.
 Both native deprecation transitions map to Core's

@@ -140628,6 +140628,8 @@
           "ExplicitContinuationReleaseRejectsNonGoodStatus",
           "SdkServiceFailureMapsOutcomeAndRetainsOriginalException",
           "SdkCancellationRemainsCancellationInsteadOfNativeFailure",
+          "CancelledResolutionDoesNotAcquireProvider",
+          "CancellationDuringAcquisitionDisposesTransferredLeaseAndRetainsCleanupError",
           "BrowsePageBudgetRetainsReleaseFailureOnLimitError",
           "InternalBrowsePageBudgetRetainsReleaseFailureOnLimitError",
           "DiscoveryWorkBudgetReleasesOutstandingHandleAndRetainsCleanupFailure",
