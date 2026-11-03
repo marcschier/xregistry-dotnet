@@ -31,6 +31,7 @@ OPCUA_EVENTS = "f69085fb89b1204dd72d9dca00472a5f331be2d1"
 HTTP_PROTOCOL_MODELS = "a1da400e938b420da1f097b58a73fd9f75deb9e5"
 COMPATIBILITY_ADMISSION = "b0d2d81777dace4361227a9c37ddf5cd6629a563"
 XREF_CREATION_EVENTS = "9e103e2be4de6a7d90630bd2b346e4d08c029cf1"
+WOT_CLOSURE_CONTRACTS = "ab91328d0b210d054ed4278120fa949d13415ab2"
 
 
 def sources() -> list[dict]:
@@ -157,8 +158,21 @@ def sources() -> list[dict]:
             {"path": "core/events.md", "owner": "events", "kind": "normative", "role": "review-only"},
         ],
     }
+    wot_closure_contracts = {
+        "id": "pr571-ab91328d", "repository": "https://github.com/marcschier/xregistry-drafts",
+        "commit": WOT_CLOSURE_CONTRACTS, "status": "working-draft", "files": [
+            {"path": "workingdrafts/models/wot/spec.md", "owner": "wot",
+             "kind": "normative", "role": "review-only"},
+            {"path": "workingdrafts/models/wot/schemas/publication-closure.schema.json", "owner": "wot",
+             "kind": "artifact", "role": "review-only"},
+            {"path": "workingdrafts/models/wot/tests/test_wot_examples.py", "owner": "wot",
+             "kind": "artifact", "role": "review-only"},
+            {"path": "workingdrafts/publication/design/design.md", "owner": "wot",
+             "kind": "informative", "role": "review-only"},
+        ],
+    }
     result = [merged, draft, closure, api, media, current_merged, current_draft, opcua_events,
-              http_protocol_models, compatibility_admission, xref_creation_events]
+              http_protocol_models, compatibility_admission, xref_creation_events, wot_closure_contracts]
     for source in result:
         source["files"].append({"path": "LICENSE", "owner": "license", "kind": "license", "role": "review-only"})
     return result

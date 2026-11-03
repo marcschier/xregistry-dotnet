@@ -129,6 +129,35 @@ This selection changes neither the existing event-data epoch requirements nor
 the unresolved policy for monitoring target changes or obtaining data from an
 unavailable target. It is an open proposal, not merged Events conformance.
 
+## Partial WoT closure contract intake
+
+The W25 correction on
+[xregistry/spec#571](https://github.com/xregistry/spec/pull/571) at
+`ab91328d0b210d054ed4278120fa949d13415ab2` defines occurrence identity,
+canonical operator strings and the experimental projection-source mapping.
+Its exact WoT source, closure schema, shape tests, informative design and
+license are retained under `tests/Conformance/Successors/pr571-ab91328d`.
+All remain review-only inputs; this intake does not replace the active WoT
+source or establish runtime closure support.
+
+An occurrence uses the exact source Version and an authored JSON Pointer.
+Bindings preserve each occurrence separately, reject duplicate keys and use
+the specified operator strings rather than arbitrary prefix spellings.
+JSON-LD source members are interpreted using captured contexts; link relation
+names remain distinct. Projection source entries supply the bindings for
+their selectors, using the repository-controlled experimental vocabulary at
+`marcschier/wot-thing-description` commit
+`79ddf72d70eff97d9541afc83e20631cc3ba3567`. This is not a W3C or OPC
+Foundation vocabulary assignment. That branch is published, but its required
+tracking PR has not yet been created.
+
+Schema versus ordinary `tm:ref` classification and document-URL identity
+mapping remain unresolved. The source correction retains both gaps and does
+not permit live fallback or a completeness declaration without validated
+mappings. Its operator-schema checks establish representation constraints,
+not source-derived discovery, binding validation or offline reconstruction.
+Those runtime and semantic-vector obligations remain pending.
+
 ## Active Message artifact differences
 
 The merged `upstream-d290b1ec` Message model still differs from the packaged

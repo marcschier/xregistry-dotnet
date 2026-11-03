@@ -837,6 +837,49 @@
           "sha256": "c07c2bf22d1b6eadecdbc008b0693c9a876f85c1485c375ff57301085ffc8db9"
         }
       ]
+    },
+    {
+      "id": "pr571-ab91328d",
+      "repository": "https://github.com/marcschier/xregistry-drafts",
+      "commit": "ab91328d0b210d054ed4278120fa949d13415ab2",
+      "status": "working-draft",
+      "files": [
+        {
+          "path": "workingdrafts/models/wot/spec.md",
+          "owner": "wot",
+          "kind": "normative",
+          "bytes": 83492,
+          "sha256": "125bb202a2cc58fdb9e5a3d856bc0c686be87499ba043244a5a2d32d09c6e0b5"
+        },
+        {
+          "path": "workingdrafts/models/wot/schemas/publication-closure.schema.json",
+          "owner": "wot",
+          "kind": "artifact",
+          "bytes": 1635,
+          "sha256": "b40f6b1b8dea2b52ab45532432f0a327053dbcb61b4b3f9200c9375d15edbcbc"
+        },
+        {
+          "path": "workingdrafts/models/wot/tests/test_wot_examples.py",
+          "owner": "wot",
+          "kind": "artifact",
+          "bytes": 12001,
+          "sha256": "f85b95c9dcab4228645ed11c9ed46f4ad611c4ab64bdc9752150052240446b77"
+        },
+        {
+          "path": "workingdrafts/publication/design/design.md",
+          "owner": "wot",
+          "kind": "informative",
+          "bytes": 93620,
+          "sha256": "4da8a1306f7131b1607d05a673c68e51150c280c5e868f111dbeac6c6229890b"
+        },
+        {
+          "path": "LICENSE",
+          "owner": "license",
+          "kind": "license",
+          "bytes": 11349,
+          "sha256": "c07c2bf22d1b6eadecdbc008b0693c9a876f85c1485c375ff57301085ffc8db9"
+        }
+      ]
     }
   ],
   "composition": [
@@ -1372,6 +1415,31 @@
     },
     {
       "source": "pr686-9e103e2b",
+      "path": "LICENSE",
+      "role": "review-only"
+    },
+    {
+      "source": "pr571-ab91328d",
+      "path": "workingdrafts/models/wot/spec.md",
+      "role": "review-only"
+    },
+    {
+      "source": "pr571-ab91328d",
+      "path": "workingdrafts/models/wot/schemas/publication-closure.schema.json",
+      "role": "review-only"
+    },
+    {
+      "source": "pr571-ab91328d",
+      "path": "workingdrafts/models/wot/tests/test_wot_examples.py",
+      "role": "review-only"
+    },
+    {
+      "source": "pr571-ab91328d",
+      "path": "workingdrafts/publication/design/design.md",
+      "role": "review-only"
+    },
+    {
+      "source": "pr571-ab91328d",
       "path": "LICENSE",
       "role": "review-only"
     }

@@ -321,6 +321,7 @@ class ProvenanceAndReviewTests(unittest.TestCase):
             "upstream-4a7e7f5e", "pr571-811de7d2", "pr571-514f6eac",
             "pr715-5f9d0134", "pr716-9613f002", "upstream-d290b1ec", "pr571-d757328e",
             "pr571-f69085fb", "pr571-a1da400e", "pr677-b0d2d817", "pr686-9e103e2b",
+            "pr571-ab91328d",
         })
         prior = sources["pr571-811de7d2"]
         current = sources["pr571-514f6eac"]
@@ -353,6 +354,25 @@ class ProvenanceAndReviewTests(unittest.TestCase):
         self.assertEqual({(entry["path"], entry["role"]) for entry in events["files"]}, {
             ("core/events.md", "review-only"), ("LICENSE", "review-only"),
         })
+
+    def test_partial_w25_contracts_retain_exact_artifacts_without_replacing_active_wot_sources(self) -> None:
+        spec = importlib.util.spec_from_file_location("freeze_successors", ROOT / "eng/specification/freeze_successors.py")
+        freezer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(freezer)
+        sources = {source["id"]: source for source in freezer.sources()}
+        source = sources["pr571-ab91328d"]
+        self.assertEqual(source["repository"], "https://github.com/marcschier/xregistry-drafts")
+        self.assertEqual(source["commit"], "ab91328d0b210d054ed4278120fa949d13415ab2")
+        self.assertEqual({(entry["path"], entry["kind"], entry["role"]) for entry in source["files"]}, {
+            ("workingdrafts/models/wot/spec.md", "normative", "review-only"),
+            ("workingdrafts/models/wot/schemas/publication-closure.schema.json", "artifact", "review-only"),
+            ("workingdrafts/models/wot/tests/test_wot_examples.py", "artifact", "review-only"),
+            ("workingdrafts/publication/design/design.md", "informative", "review-only"),
+            ("LICENSE", "license", "review-only"),
+        })
+        active = {entry["path"]: entry["role"] for entry in sources["pr571-d757328e"]["files"]}
+        self.assertEqual(active["workingdrafts/models/wot/spec.md"], "normative")
+        self.assertEqual(active["workingdrafts/publication/design/design.md"], "selected-design")
 
     def test_http_selector_models_are_pinned_from_the_current_pr_head_as_review_only_artifacts(self) -> None:
         spec = importlib.util.spec_from_file_location("freeze_successors", ROOT / "eng/specification/freeze_successors.py")
