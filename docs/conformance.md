@@ -11,12 +11,12 @@ not evidence that the client/server implements them. Keyword extraction can
 combine multiple obligations and miss procedural or artifact-only requirements;
 each family requires explicit semantic coverage review.
 
-Historical pinned files: **318**. Historical normative documents: **17**. Combined extracted blocks: **4248**.
+Historical pinned files: **318**. Historical normative documents: **17**. Combined extracted blocks: **4259**.
 
 Historical sources and their reviews are retained separately from the
 successor composition; new source-qualified requirements do not inherit
 historical implementation claims.
-Successor files: **112**. Successor normative documents: **22**. Selected informative designs: **1**.
+Successor files: **114**. Successor normative documents: **22**. Selected informative designs: **1**.
 
 A selected informative design is an implementation target, not an adopted
 standard. Its obligations still require explicit semantic review.
@@ -57,7 +57,7 @@ it does not transfer historical qualification to a successor.
 | publication | 65 | 65 | 0 |
 | registry | 143 | 143 | 0 |
 | schema | 47 | 47 | 0 |
-| wot | 123 | 5 | 0 |
+| wot | 134 | 0 | 0 |
 
 ## Artifacts and procedural coverage
 

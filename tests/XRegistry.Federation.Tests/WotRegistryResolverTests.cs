@@ -93,6 +93,30 @@ public class WotRegistryResolverTests
     }
 
     [Test]
+    [Arguments("2.0.0", "2.0.0", "second")]
+    [Arguments(null, "1.0.0", "first")]
+    public async Task CloudEventsSubjectSelectsFromTheSelectedPublishedViewVersion(
+        string? pin, string selectedVersion, string expectedType)
+    {
+        var firstView = Encoding.UTF8.GetBytes(
+            """{"id":"urn:test:device:v1","events":{"overheated":{"type":"first"}}}""");
+        var secondView = Encoding.UTF8.GetBytes(
+            """{"id":"urn:test:device:v1","events":{"overheated":{"type":"second"}}}""");
+        var source = new Source(true) { FirstBytes = firstView, SecondBytes = secondView };
+        var query = WotCloudEventSourceQuery.Parse(WotCloudEventSourceQuery.Encode(Source.Identity, pin));
+        var selectedBytes = pin is null ? firstView : secondView;
+
+        var result = await WotRegistryResolver.AcquireCloudEventSubjectAsync(source, source.Collection,
+            query, "#/events/overheated");
+
+        await Assert.That(result.Value.GetProperty("type").GetString()).IsEqualTo(expectedType);
+        await Assert.That(result.ContainingDocument.Version.VersionId).IsEqualTo(selectedVersion);
+        await Assert.That(result.ContainingDocument.Version.ContentDigest).IsEqualTo(Digest(selectedBytes));
+        await Assert.That(source.Reads.Last().Target).IsEqualTo(source.Resource + "/versions/" + selectedVersion);
+        await Assert.That(source.Reads.Count(read => read.Operation == FederationOperation.Document)).IsEqualTo(1);
+    }
+
+    [Test]
     [Arguments(null, true)]
     [Arguments(null, false)]
     [Arguments("1.0.1", true)]

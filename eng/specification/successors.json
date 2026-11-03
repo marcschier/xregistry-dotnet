@@ -880,6 +880,28 @@
           "sha256": "c07c2bf22d1b6eadecdbc008b0693c9a876f85c1485c375ff57301085ffc8db9"
         }
       ]
+    },
+    {
+      "id": "pr571-890b4a62",
+      "repository": "https://github.com/marcschier/xregistry-drafts",
+      "commit": "890b4a62360f4b4869a16495523b7f7addba2e7e",
+      "status": "working-draft",
+      "files": [
+        {
+          "path": "workingdrafts/models/wot/spec.md",
+          "owner": "wot",
+          "kind": "normative",
+          "bytes": 85223,
+          "sha256": "a5bc2239956e16e3475c9702eba8705db013c21becfa5672d63f35dd58ce7853"
+        },
+        {
+          "path": "LICENSE",
+          "owner": "license",
+          "kind": "license",
+          "bytes": 11349,
+          "sha256": "c07c2bf22d1b6eadecdbc008b0693c9a876f85c1485c375ff57301085ffc8db9"
+        }
+      ]
     }
   ],
   "composition": [
@@ -1241,7 +1263,7 @@
     {
       "source": "pr571-d757328e",
       "path": "workingdrafts/models/wot/spec.md",
-      "role": "normative"
+      "role": "review-only"
     },
     {
       "source": "pr571-d757328e",
@@ -1440,6 +1462,16 @@
     },
     {
       "source": "pr571-ab91328d",
+      "path": "LICENSE",
+      "role": "review-only"
+    },
+    {
+      "source": "pr571-890b4a62",
+      "path": "workingdrafts/models/wot/spec.md",
+      "role": "normative"
+    },
+    {
+      "source": "pr571-890b4a62",
       "path": "LICENSE",
       "role": "review-only"
     }

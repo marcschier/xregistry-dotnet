@@ -321,14 +321,14 @@ class ProvenanceAndReviewTests(unittest.TestCase):
             "upstream-4a7e7f5e", "pr571-811de7d2", "pr571-514f6eac",
             "pr715-5f9d0134", "pr716-9613f002", "upstream-d290b1ec", "pr571-d757328e",
             "pr571-f69085fb", "pr571-a1da400e", "pr677-b0d2d817", "pr686-9e103e2b",
-            "pr571-ab91328d",
+            "pr571-ab91328d", "pr571-890b4a62",
         })
         prior = sources["pr571-811de7d2"]
         current = sources["pr571-514f6eac"]
         self.assertEqual(prior["commit"], "811de7d20711dd3edc8c676ae634adebee235188")
         self.assertEqual(current["commit"], "514f6eacd6297821e949dcb81a03e2943f5cb88e")
         expected = {
-            "workingdrafts/models/wot/spec.md": "normative",
+            "workingdrafts/models/wot/spec.md": "review-only",
             "workingdrafts/publication/spec.md": "normative",
             "workingdrafts/publication/design/design.md": "selected-design",
         }
@@ -344,6 +344,11 @@ class ProvenanceAndReviewTests(unittest.TestCase):
         self.assertEqual(sources["upstream-d290b1ec"]["commit"], freezer.CURRENT_MERGED)
         self.assertEqual(sources["pr571-d757328e"]["commit"], freezer.CURRENT_DRAFT)
         self.assertEqual(new_roles["workingdrafts/models/wot/samples/cloudevents.json"], "review-only")
+        selected_wot = sources["pr571-890b4a62"]
+        self.assertEqual(selected_wot["commit"], freezer.CLOUD_EVENT_VIEW)
+        self.assertEqual({(entry["path"], entry["role"]) for entry in selected_wot["files"]}, {
+            ("workingdrafts/models/wot/spec.md", "normative"), ("LICENSE", "review-only"),
+        })
         compatibility = sources["pr677-b0d2d817"]
         self.assertEqual(compatibility["commit"], "b0d2d81777dace4361227a9c37ddf5cd6629a563")
         self.assertEqual({(entry["path"], entry["role"]) for entry in compatibility["files"]}, {
@@ -371,8 +376,10 @@ class ProvenanceAndReviewTests(unittest.TestCase):
             ("LICENSE", "license", "review-only"),
         })
         active = {entry["path"]: entry["role"] for entry in sources["pr571-d757328e"]["files"]}
-        self.assertEqual(active["workingdrafts/models/wot/spec.md"], "normative")
+        self.assertEqual(active["workingdrafts/models/wot/spec.md"], "review-only")
         self.assertEqual(active["workingdrafts/publication/design/design.md"], "selected-design")
+        selected = {entry["path"]: entry["role"] for entry in sources["pr571-890b4a62"]["files"]}
+        self.assertEqual(selected["workingdrafts/models/wot/spec.md"], "normative")
 
     def test_http_selector_models_are_pinned_from_the_current_pr_head_as_review_only_artifacts(self) -> None:
         spec = importlib.util.spec_from_file_location("freeze_successors", ROOT / "eng/specification/freeze_successors.py")
@@ -411,7 +418,7 @@ class ProvenanceAndReviewTests(unittest.TestCase):
         for path, role in {
             "workingdrafts/models/registry/spec.md": "normative",
             "workingdrafts/models/registry/model.json": "review-only",
-            "workingdrafts/models/wot/spec.md": "normative",
+            "workingdrafts/models/wot/spec.md": "review-only",
             "workingdrafts/publication/spec.md": "normative",
             "workingdrafts/publication/design/design.md": "selected-design",
             "workingdrafts/bindings/oci.md": "normative",

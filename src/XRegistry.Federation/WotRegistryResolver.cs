@@ -312,6 +312,25 @@ public static class WotRegistryResolver
             useCoreDefaultSelection: true).RunAsync();
     }
 
+    /// <summary>Selects a CloudEvents subject from the resolved TD stored at the selected publication Version.</summary>
+    /// <remarks>
+    /// The selected Version must contain the published resolved TD view under the CloudEvents WoT profile.
+    /// This method does not compose authored sources or resolve live dependencies. The source and pointer
+    /// selection share one finite read budget.
+    /// </remarks>
+    public static async ValueTask<WotResolvedFragment> AcquireCloudEventSubjectAsync(
+        IFederationReadSource source, string resourceCollection, WotCloudEventSourceQuery query,
+        string subject, FederationReadBudget? budget = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentNullException.ThrowIfNull(subject);
+        var readBudget = budget ?? new();
+        var document = await AcquireCloudEventSourceAsync(source, resourceCollection, query,
+            readBudget, cancellationToken).ConfigureAwait(false);
+        return await SelectFragmentAsync(document, subject, readBudget, cancellationToken).ConfigureAwait(false);
+    }
+
     private sealed class Resolution
     {
         private readonly FederationReadRequest _collection;

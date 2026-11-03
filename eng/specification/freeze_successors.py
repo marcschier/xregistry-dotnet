@@ -32,6 +32,7 @@ HTTP_PROTOCOL_MODELS = "a1da400e938b420da1f097b58a73fd9f75deb9e5"
 COMPATIBILITY_ADMISSION = "b0d2d81777dace4361227a9c37ddf5cd6629a563"
 XREF_CREATION_EVENTS = "9e103e2be4de6a7d90630bd2b346e4d08c029cf1"
 WOT_CLOSURE_CONTRACTS = "ab91328d0b210d054ed4278120fa949d13415ab2"
+CLOUD_EVENT_VIEW = "890b4a62360f4b4869a16495523b7f7addba2e7e"
 
 
 def sources() -> list[dict]:
@@ -114,6 +115,8 @@ def sources() -> list[dict]:
     current_roles = {entry["path"]: entry["role"] for entry in closure["files"]}
     for entry in current_draft["files"]:
         entry["role"] = current_roles.get(entry["path"], entry["role"])
+        if entry["path"] == "workingdrafts/models/wot/spec.md":
+            entry["role"] = "review-only"
     for path in (
         "workingdrafts/models/wot/samples/README.md",
         "workingdrafts/models/wot/samples/cloudevents.json",
@@ -171,8 +174,16 @@ def sources() -> list[dict]:
              "kind": "informative", "role": "review-only"},
         ],
     }
+    cloud_event_view = {
+        "id": "pr571-890b4a62", "repository": "https://github.com/marcschier/xregistry-drafts",
+        "commit": CLOUD_EVENT_VIEW, "status": "working-draft", "files": [
+            {"path": "workingdrafts/models/wot/spec.md", "owner": "wot",
+             "kind": "normative", "role": "normative"},
+        ],
+    }
     result = [merged, draft, closure, api, media, current_merged, current_draft, opcua_events,
-              http_protocol_models, compatibility_admission, xref_creation_events, wot_closure_contracts]
+              http_protocol_models, compatibility_admission, xref_creation_events, wot_closure_contracts,
+              cloud_event_view]
     for source in result:
         source["files"].append({"path": "LICENSE", "owner": "license", "kind": "license", "role": "review-only"})
     return result
