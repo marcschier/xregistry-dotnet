@@ -61393,11 +61393,13 @@
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "CollectionAndNestedErrorsRetainPrecisePointers",
           "WildcardsDoNotPermitInvalidNamesOrBypassDeclaredTypes",
-          "AnyScopedContentRequiresOnlyValidJsonSyntax"
+          "AnyScopedContentRequiresOnlyValidJsonSyntax",
+          "EnforcesNamingAndSystemAttributeOverlayRules",
+          "DocumentAndCollectionAttributeNamesRespectSystemReservations"
         ],
         "nativeEvidence": []
       }
@@ -61431,8 +61433,11 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EnforcesNamingAndSystemAttributeOverlayRules",
+          "DocumentAndCollectionAttributeNamesRespectSystemReservations"
+        ],
         "nativeEvidence": []
       }
     },
