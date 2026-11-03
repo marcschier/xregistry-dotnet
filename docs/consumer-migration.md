@@ -2264,6 +2264,30 @@ source locator, follow external descriptors or consult closure bindings.
 Automatic association extraction and independent closure validation remain
 unfinished.
 
+`WotJsonLdBaseResolver.DiscoverOrdinaryReferencesAsync` discovers ordinary
+`tm:ref` and `td:ref` members from captured JSON-LD bytes. It interprets member
+names through the captured effective contexts rather than recognizing a literal
+prefix. Each result retains the authored object pointer, property name and exact
+href, together with the resolved URI and document-local classification.
+Property- and type-scoped contexts, context resets and non-propagating contexts
+apply during expansion. JSON literals do not become reference occurrences.
+
+The resolver reads remote contexts only from the supplied captured set and
+rejects duplicate JSON names, unavailable contexts, invalid expansion or an
+exhausted operation budget. Relative imports use the context document's declared
+base when present. URI resolution also applies a reference member's own
+property-scoped base, including an empty href's inherited fragment. Internal
+expansion markers are checked against the authored and expanded data; an
+authored alias cannot supply a synthetic result. Neither source nor context
+bytes are changed.
+
+This discovery method returns ordinary references before target-kind
+classification. It retains local references and multiple members at one object
+so the caller can apply Schema exclusions and reject competing in-scope
+occurrences after matching captured identities. It does not discover literal
+link relations or projection source entries, select target Versions, validate
+closure bindings or establish domain-complete closure.
+
 `AcquireCloudEventSubjectAsync` takes a parsed CloudEvents WoT source query, a
 subject pointer and one authorized Thing Description Resource collection.
 Complete Version metadata establishes each Resource's `wotid`, so an explicit

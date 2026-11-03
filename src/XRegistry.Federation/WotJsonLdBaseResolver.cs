@@ -3,18 +3,16 @@
 
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using VDS.RDF.JsonLd;
-using VDS.RDF.JsonLd.Syntax;
 
 namespace XRegistry.Federation;
 
 /// <summary>Resolves WoT URI-references with JSON-LD 1.1 base processing and no live context retrieval.</summary>
-public static class WotJsonLdBaseResolver
+public static partial class WotJsonLdBaseResolver
 {
-    private const string ProbePredicatePrefix = "urn:xregistry:resolved-reference:";
+    private const string ProbePredicatePrefix = "https://xregistry.invalid/.well-known/jsonld-probe/reference/";
 
     /// <summary>Resolves a URI-reference against its JSON-LD base at an authored JSON Pointer.</summary>
     /// <param name="document">The exact captured WoT document bytes.</param>
@@ -58,62 +56,34 @@ public static class WotJsonLdBaseResolver
             return WotReferenceUriResolver.Resolve(reference, documentBase, documentUri);
         }
 
+        var contextDocuments = CaptureContextDocuments(capturedContexts, readBudget, cancellationToken);
+
+        var loadedContexts = new Dictionary<string, JToken>(StringComparer.Ordinal);
+        var baseline = ExpandCapturedDocument(root, documentBase, contextDocuments, loadedContexts,
+            readBudget, cancellationToken);
+        var scopedTarget = ResolveReferenceValue(root, occurrence, sourcePointer, referencePropertyName,
+            reference, documentBase, contextDocuments, loadedContexts, baseline, readBudget, cancellationToken);
+        if (scopedTarget is not null)
+        {
+            return WotReferenceUriResolver.ResolveTarget(scopedTarget, documentUri);
+        }
         var marker = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
             sourcePointer + "\n" + referencePropertyName + "\n" + reference))).ToLowerInvariant();
         var predicate = ProbePredicatePrefix + marker;
         var suffix = 0;
-        while (ContainsProperty(root, predicate, readBudget, cancellationToken))
+        while (ContainsProperty(root, predicate, readBudget, cancellationToken) ||
+            ContainsProperty(baseline, predicate, readBudget, cancellationToken) ||
+            loadedContexts.Values.Any(context => ContainsProperty(context, predicate, readBudget, cancellationToken)))
         {
             suffix++;
             predicate = ProbePredicatePrefix + marker + ":" + suffix.ToString(
                 System.Globalization.CultureInfo.InvariantCulture);
         }
 
-        var contextDocuments = new Dictionary<string, FederationDocument>(StringComparer.Ordinal);
-        foreach (var (uri, context) in capturedContexts)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            ArgumentNullException.ThrowIfNull(uri);
-            ArgumentNullException.ThrowIfNull(context);
-            var normalized = FederationJson.AbsoluteUri(uri.AbsoluteUri).AbsoluteUri;
-            if (!contextDocuments.TryAdd(normalized, context))
-            {
-                throw FederationJson.Invalid("The captured JSON-LD context set contains duplicate URI identities.");
-            }
-        }
-
         occurrence[predicate] = new JObject { ["@id"] = reference };
-        var loadedContexts = new Dictionary<string, JToken>(StringComparer.Ordinal);
-        FederationException? contextFailure = null;
-        var options = new JsonLdProcessorOptions
-        {
-            Base = documentBase,
-            ProcessingMode = JsonLdProcessingMode.JsonLd11,
-            DocumentLoader = (uri, _) => LoadContext(uri, contextDocuments, loadedContexts,
-                readBudget, failure => contextFailure = failure, cancellationToken)
-        };
-
-        JArray expanded;
-        try
-        {
-            var warnings = new List<JsonLdProcessorWarning>();
-            expanded = JsonLdProcessor.Expand(root, options, warnings);
-            if (warnings.Count != 0)
-            {
-                throw FederationJson.Invalid("The captured WoT document produced incomplete JSON-LD expansion.");
-            }
-        }
-        catch (JsonLdProcessorException exception)
-        {
-            if (contextFailure is not null) { throw contextFailure; }
-            throw new FederationException(FederationErrorCode.InvalidPackage,
-                "The captured WoT document or its JSON-LD contexts could not be expanded.",
-                innerException: exception);
-        }
-
-        cancellationToken.ThrowIfCancellationRequested();
-        var expandedText = expanded.ToString(Formatting.None);
-        readBudget.CheckResultBytes(Encoding.UTF8.GetByteCount(expandedText));
+        readBudget.CheckResultBytes(Encoding.UTF8.GetByteCount(root.ToString(Formatting.None)));
+        var expanded = ExpandCapturedDocument(root, documentBase, contextDocuments, loadedContexts,
+            readBudget, cancellationToken);
         var probeUris = new HashSet<string>(StringComparer.Ordinal);
         CollectProbeUris(expanded, predicate, probeUris, readBudget, cancellationToken);
         if (probeUris.Count != 1)
@@ -151,16 +121,29 @@ public static class WotJsonLdBaseResolver
 
     private static RemoteDocument LoadContext(Uri uri, Dictionary<string, FederationDocument> contexts,
         Dictionary<string, JToken> loaded, FederationReadBudget budget, Action<FederationException> setFailure,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, Action<JToken>? transform = null)
+    {
+        try
+        {
+            return LoadContextCore(uri, contexts, loaded, budget, transform, cancellationToken);
+        }
+        catch (FederationException exception)
+        {
+            setFailure(exception);
+            throw;
+        }
+    }
+
+    private static RemoteDocument LoadContextCore(Uri uri, Dictionary<string, FederationDocument> contexts,
+        Dictionary<string, JToken> loaded, FederationReadBudget budget,
+        Action<JToken>? transform, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var normalized = FederationJson.AbsoluteUri(uri.AbsoluteUri);
         if (!contexts.TryGetValue(normalized.AbsoluteUri, out var document))
         {
-            var exception = new FederationException(FederationErrorCode.UnsupportedOperation,
+            throw new FederationException(FederationErrorCode.UnsupportedOperation,
                 "A JSON-LD context was not present in the captured context set.");
-            setFailure(exception);
-            throw exception;
         }
 
         if (!loaded.TryGetValue(normalized.AbsoluteUri, out var context))
@@ -171,26 +154,32 @@ public static class WotJsonLdBaseResolver
             using var stream = document.OpenRead();
             try
             {
-                using var json = JsonDocument.Parse(stream, new JsonDocumentOptions
+                var bytes = new byte[(int)document.Length];
+                stream.ReadExactly(bytes);
+                var json = RegistryJson.Parse(bytes, new RegistryJsonLimits
                 {
-                    MaxDepth = budget.Limits.MaxJsonDepth
+                    MaxBytes = budget.Limits.MaxObjectBytes,
+                    MaxDepth = budget.Limits.MaxJsonDepth,
+                    MaxNodes = (int)Math.Min(int.MaxValue, budget.Limits.MaxWork)
                 });
                 FederationJson.RequireObject(json.RootElement);
                 FederationJson.CountWork(json.RootElement, budget, cancellationToken);
                 context = JToken.Parse(json.RootElement.GetRawText());
             }
-            catch (System.Text.Json.JsonException exception)
+            catch (RegistryException exception)
             {
-                throw new FederationException(FederationErrorCode.InvalidPackage,
-                    "A captured JSON-LD context is not valid JSON.", innerException: exception);
+                throw FederationJson.FromCore(exception);
             }
             loaded.Add(normalized.AbsoluteUri, context);
         }
 
+        var ownedContext = context.DeepClone();
+        transform?.Invoke(ownedContext);
+        budget.CheckResultBytes(Encoding.UTF8.GetByteCount(ownedContext.ToString(Formatting.None)));
         return new RemoteDocument
         {
-            DocumentUrl = normalized,
-            Document = context.DeepClone()
+            DocumentUrl = FederationJson.AbsoluteUri(document.Base ?? normalized.AbsoluteUri),
+            Document = ownedContext
         };
     }
 
@@ -266,6 +255,7 @@ public static class WotJsonLdBaseResolver
         budget.ChargeWork();
         if (node is JObject obj)
         {
+            if (obj.Property("@value", StringComparison.Ordinal) is not null) { return; }
             if (obj.TryGetValue(predicate, StringComparison.Ordinal, out var probe) && probe is JArray entries)
             {
                 foreach (var entry in entries.OfType<JObject>())

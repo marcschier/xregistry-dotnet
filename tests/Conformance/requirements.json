@@ -141404,13 +141404,26 @@
       ],
       "text": "A Consumer MUST compare canonical operators as exact strings and MUST reject unknown or mismatched operators. Member names MUST be interpreted under their captured effective JSON-LD contexts; the literal prefix alone does not establish a member's meaning. Link relations in the table are literal `rel` values. A prefix declaration MUST NOT turn another relation string into one of these values. In particular, `type` is a link relation, not `@type` or an IRI formed by appending `type` to the TD namespace. These representation rules do not change the composition semantics of the named operators.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Ordinary-reference discovery obtains tm:ref and td:ref meaning through captured JSON-LD expansion, preserving authored member names and pointers. Tests distinguish alternate prefixes, unrelated literal prefixes, keyword aliases, property/type-scoped contexts, context resets, non-propagating contexts and JSON literals. Source and captured-context aliases cannot impersonate synthetic expansion results. Literal link relations, projection entries and independent closure operator comparison are not implemented; this compound requirement stays pending.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "WotReferenceUriResolverTests.DiscoversOrdinaryReferencesByExpandedMeaningAndPreservesAuthoredPointersAndHrefs",
+          "WotReferenceUriResolverTests.MemberMeaningHonorsPropertyAndTypeScopedContexts",
+          "WotReferenceUriResolverTests.MemberMeaningSurvivesContextResetWithoutRestoringRemovedAliases",
+          "WotReferenceUriResolverTests.MemberMeaningDoesNotInterpretReferenceShapedMembersInsideJsonLiterals",
+          "WotReferenceUriResolverTests.NonPropagatingContextAppliesOnlyToTheObjectWhereItWasDeclared",
+          "WotReferenceUriResolverTests.ReferenceDiscoveryPreservesAuthoredContainerKeys",
+          "WotReferenceUriResolverTests.ContextAliasesForKeywordsDoNotBecomeOrdinaryReferenceMembers",
+          "WotReferenceUriResolverTests.AuthoredAliasesCannotImpersonateASyntheticMemberMeaning",
+          "WotReferenceUriResolverTests.OrdinaryDiscoveryDoesNotTurnLiteralPrefixesOrContextDefinitionsIntoOccurrences"
+        ],
         "nativeEvidence": []
       }
     },
@@ -141556,13 +141569,25 @@
       ],
       "text": "For each external reference occurrence, the Producer and Consumer MUST resolve the authored `href` against the source document's captured base and remove its fragment before matching captured URI identities. The operator's resolution rules determine whether a Resource or exact Version is selected. For `tm:ref` and `td:ref` references that identify a Resource by `wotid`, Section 5.4.2 determines the selected Version. A document-view URI recorded as identifying an exact Version selects that Version; a Resource-level URI uses the captured view's selection state. The closure binding still MUST preserve the authored `href` unchanged. In every case, its target MUST identify the resulting Resource and exact Version.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Ordinary-reference discovery retains exact authored href strings and pointers while resolving fragment-free document URIs and preserving the fragment separately. URI resolution applies the original reference term's property-scoped base without reverting a scalar identifier's non-propagating context; empty references retain inherited fragments. Captured URI lookup separately distinguishes Resource and exact-Version scope. Link/projection discovery, transitive capture and independent exact closure binding verification remain incomplete, so the compound requirement stays pending.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "WotReferenceUriResolverTests.DiscoversOrdinaryReferencesByExpandedMeaningAndPreservesAuthoredPointersAndHrefs",
+          "WotReferenceUriResolverTests.OrdinaryReferenceUsesItsOwnPropertyScopedBaseAndPreservesEmptyReferenceFragment",
+          "WotReferenceUriResolverTests.ScalarReferenceRetainsTheContainingNonPropagatingBaseDuringScopedExpansion",
+          "WotReferenceUriResolverTests.AuthoredAliasesCannotImpersonateASyntheticResolvedTarget",
+          "WotReferenceUriResolverTests.OrdinaryDiscoveryUsesCapturedRemoteContextsAndRejectsAnUnavailableContext",
+          "WotReferenceUriResolverTests.OrdinaryDiscoveryRetainsBothAliasesForLaterTargetKindAndAmbiguityChecks",
+          "WotRegistryResolverTests.CapturedExactVersionUriPinsTheMappedResourceAndAppliesFragment",
+          "WotRegistryResolverTests.CapturedResourceUriUsesTheMappedViewsDefaultVersion"
+        ],
         "nativeEvidence": []
       }
     },
