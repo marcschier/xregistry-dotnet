@@ -2477,8 +2477,9 @@ members report `invalid-floor`. Incremental targets require an explicit
 `uav:compatibilityLine` and accept an optional numeric floor. Neither the root
 line nor TD version fields supply a dependency requirement. Unknown profiles
 abort selection. Exact-Version URI associations bypass these selectors, but
-still select only retained bytes. Projection requirements, unsupported-selector
-location checks and full closure acceptance remain unfinished.
+still select only retained bytes. Projection-source requirements use the
+separate reader below. Unsupported requirement locations outside projection
+selectors and full closure acceptance remain unfinished.
 
 `ReadProjectionSourceRequirementsAsync` reads requirements from the selected
 manifest entry, using its declared and captured TD/TM kind rather than the
@@ -2499,6 +2500,26 @@ including aliases, so a rebound literal prefix does not create a requirement.
 Both standalone selector discovery and the combined inventory apply the same
 check before returning selectors. This does not yet validate the complete
 annotation or routing grammar.
+
+`ReadProjectionSelectionRulesAsync` reads routing, bulk name prefixes,
+`selectAll` and closed selection filters from the manifest. Routing defaults to
+`source`. Each filter combines its category and expanded type requirements;
+filters on one source are alternatives. Type matching requires every listed
+expanded IRI, uses exact case-sensitive membership and performs no subclass
+inference. Malformed rules, competing aliases and unknown filter operators
+reject before acquisition.
+
+`SelectCapturedProjectionAffordancesAsync` acquires every constrained source
+and returns the winning definitions with their retained owner and original
+pointer. Manifest position takes priority over explicit-versus-bulk selection;
+within one source, explicit selections precede bulk imports. Bulk name prefixes
+uppercase the first Unicode code point, and ordering uses code points rather
+than UTF-16 code units. Local definitions replace imports. Even displaced
+selectors must identify existing affordances. Shared work, aggregate selected
+definition-size limits and cancellation apply. This is a selection inventory,
+not a resolved TD/TM: nested plans currently report `UnsupportedOperation`.
+Annotation merging, complete envelope admission, dependency relocation,
+context/security preservation and final ordinary validation remain unfinished.
 
 `WotPublicationClosure.Parse` reads the selected closed representation without
 registering the WoT extension as supported. Entries and binding endpoints must

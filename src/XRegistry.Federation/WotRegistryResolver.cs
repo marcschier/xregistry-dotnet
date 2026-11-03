@@ -51,7 +51,7 @@ public sealed class WotResolvedFragment
 }
 
 /// <summary>Resolves parsed profile-aware WoT references through a selected native source or retained revision.</summary>
-public static class WotRegistryResolver
+public static partial class WotRegistryResolver
 {
     /// <summary>Selects an object-valued affordance from an already acquired projection source.</summary>
     /// <remarks>
@@ -85,7 +85,13 @@ public static class WotRegistryResolver
         }
         var name = DecodePointerToken(parts[2], readBudget, cancellationToken);
         var root = await ParseAcquiredDocumentAsync(document, readBudget, cancellationToken).ConfigureAwait(false);
-        if (!root.TryGetProperty(parts[1], out var map))
+        return new(document, SelectProjectionMapAffordance(root, parts[1], name, readBudget, cancellationToken));
+    }
+
+    private static JsonElement SelectProjectionMapAffordance(JsonElement root, string category, string name,
+        FederationReadBudget readBudget, CancellationToken cancellationToken)
+    {
+        if (!root.TryGetProperty(category, out var map))
         {
             throw new RegistryException(new("not-found", "", "The projection source has no selected affordance map."));
         }
@@ -97,7 +103,7 @@ public static class WotRegistryResolver
         FederationJson.RequireObject(value);
         readBudget.CheckResultBytes(Encoding.UTF8.GetByteCount(value.GetRawText()));
         cancellationToken.ThrowIfCancellationRequested();
-        return new(document, value);
+        return value;
     }
 
     /// <summary>Applies an RFC 6901 URI-fragment pointer after Version or local-revision selection.</summary>

@@ -266,6 +266,11 @@ public static partial class WotJsonLdBaseResolver
 
     private static JObject ExpandProjectionRoot(JObject root, JArray baseline, Uri documentBase,
         Dictionary<string, FederationDocument> contexts, Dictionary<string, JToken> loaded,
+        FederationReadBudget budget, CancellationToken cancellationToken) =>
+        ExpandProjectionObject(root, "", baseline, documentBase, contexts, loaded, budget, cancellationToken);
+
+    private static JObject ExpandProjectionObject(JObject root, string pointer, JArray baseline, Uri documentBase,
+        Dictionary<string, FederationDocument> contexts, Dictionary<string, JToken> loaded,
         FederationReadBudget budget, CancellationToken cancellationToken)
     {
         var predicate = "https://xregistry.invalid/.well-known/jsonld-probe/root/" +
@@ -277,23 +282,36 @@ public static partial class WotJsonLdBaseResolver
         {
             predicate += ":probe";
         }
-        // A root-only property distinguishes the authored envelope from nodes lifted out of @graph.
-        root[predicate] = "root";
+        var occurrence = ObjectAtPointer(root, pointer, budget, cancellationToken);
+        // Mark only the authored object, rather than a node lifted out of another graph or list.
+        occurrence[predicate] = "object";
         budget.CheckResultBytes(Encoding.UTF8.GetByteCount(root.ToString(Formatting.None)));
         var expanded = ExpandCapturedDocument(root, documentBase, contexts, loaded, budget, cancellationToken);
-        root.Remove(predicate);
+        occurrence.Remove(predicate);
         JObject? selected = null;
-        foreach (var node in expanded.OfType<JObject>())
+        void Find(JToken token)
         {
             cancellationToken.ThrowIfCancellationRequested();
             budget.ChargeWork();
-            if (node.Property(predicate, StringComparison.Ordinal) is null) { continue; }
-            if (selected is not null)
+            if (token is JObject node)
             {
-                throw FederationJson.Invalid("The authored projection root has competing expanded identities.");
+                if (node.Property("@value", StringComparison.Ordinal) is not null) { return; }
+                if (node.Property(predicate, StringComparison.Ordinal) is not null)
+                {
+                    if (selected is not null)
+                    {
+                        throw FederationJson.Invalid("The authored projection object has competing expanded identities.");
+                    }
+                    selected = node;
+                }
+                foreach (var member in node.Properties()) { Find(member.Value); }
             }
-            selected = node;
+            else if (token is JArray array)
+            {
+                foreach (var item in array) { Find(item); }
+            }
         }
-        return selected ?? throw FederationJson.Invalid("The authored projection root could not be identified.");
+        Find(expanded);
+        return selected ?? throw FederationJson.Invalid("The authored projection object could not be identified.");
     }
 }

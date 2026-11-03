@@ -15,6 +15,479 @@ namespace XRegistry.Federation.Tests;
 public class CapturedRegistryReadSourceTests
 {
     [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task CapturedProjectionBulkTiesUseOriginalNamesAndCategoryOrder(bool reverse)
+    {
+        var source = await SelectionSource(reverse
+            ? """{"Alpha":{"const":"upper"},"alpha":{"const":"lower"}}"""
+            : """{"alpha":{"const":"lower"},"Alpha":{"const":"upper"}}""", """{"z":{}}""", """{"a":{}}""");
+        var root = await SelectionRuleDocument();
+        root["p:projects"]![0]!["p:selectAll"] = true;
+        root["p:projects"]![0]!["p:namePrefix"] = "p";
+        var selected = await SelectProjection(root, source);
+        await Assert.That(selected.Count).IsEqualTo(3);
+        await Assert.That(selected[0].Name).IsEqualTo("pAlpha");
+        await Assert.That(selected[0].Definition.GetProperty("const").GetString()).IsEqualTo("upper");
+        await Assert.That(selected[1].Category).IsEqualTo("actions");
+        await Assert.That(selected[2].Category).IsEqualTo("events");
+    }
+
+    [Test]
+    [Arguments(-1)]
+    [Arguments(0)]
+    [Arguments(1)]
+    public async Task CapturedProjectionMembershipBoundsAggregateSelectedDefinitionBytes(int delta)
+    {
+        var source = await SelectionSource(new JsonObject
+        {
+            ["large"] = new JsonObject { ["const"] = new string('x', 4096) }
+        }.ToJsonString());
+        var root = await SelectionRuleDocument();
+        root["properties"] = JsonNode.Parse("""
+            {"a":{"tm:ref":"urn:inventory:tm#/properties/large"},
+             "b":{"tm:ref":"urn:inventory:tm#/properties/large"},
+             "c":{"tm:ref":"urn:inventory:tm#/properties/large"}}
+            """);
+        var containing = await RetainProjectionPlan(root);
+        var index = InventoryIndex(source);
+        async Task<IReadOnlyList<WotProjectionAffordanceSelection>> Select(FederationReadBudget budget) =>
+            await WotRegistryResolver.SelectCapturedProjectionAffordancesAsync(containing,
+                new("https://example.test/plan.json"), new Dictionary<Uri, FederationDocument>(), index, budget: budget);
+        var baseline = await Select(new());
+        var size = baseline.Sum(selection => Encoding.UTF8.GetByteCount(selection.Definition.GetRawText()) +
+            Encoding.UTF8.GetByteCount(selection.Name) + Encoding.UTF8.GetByteCount(selection.SourcePointer));
+        var budget = new FederationReadBudget(new(maxResultBytes: size + delta));
+        if (delta < 0)
+        {
+            var failure = await Assert.That(async () => { _ = await Select(budget); }).Throws<FederationException>() ??
+                throw new InvalidOperationException("Expected aggregate definition size rejection.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        }
+        else
+        {
+            await Assert.That((await Select(budget)).Count).IsEqualTo(3);
+        }
+    }
+
+    [Test]
+    public async Task ProjectionSelectionMatchingBoundsAllInspectedTypesAndHonorsCancellation()
+    {
+        var root = await SelectionRuleDocument();
+        root["p:projects"]![0]!["p:select"] = JsonNode.Parse("""[{"@type":"urn:test:A"}]""");
+        var rule = (await ReadSelectionRules(root))[0];
+        var types = new HashSet<string> { "urn:test:A", "urn:test:B" };
+        var baseline = new FederationReadBudget();
+        await Assert.That(rule.Matches("property", types, baseline)).IsTrue();
+        foreach (var delta in new[] { -1, 0, 1 })
+        {
+            var budget = new FederationReadBudget(new(maxWork: baseline.Work + delta));
+            if (delta < 0)
+            {
+                var failure = await Assert.That(() => rule.Matches("property", types, budget)).Throws<FederationException>() ??
+                    throw new InvalidOperationException("Expected predicate work exhaustion.");
+                await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+            }
+            else
+            {
+                await Assert.That(rule.Matches("property", types, budget)).IsTrue();
+                await Assert.That(budget.Work).IsEqualTo(baseline.Work);
+            }
+        }
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        await Assert.That(() => rule.Matches("property", types, cancellationToken: cancellation.Token))
+            .Throws<OperationCanceledException>();
+    }
+
+    [Test]
+    public async Task ProjectionRuleNamesUseEffectiveNamespacesAndRejectDuplicateFilterAliases()
+    {
+        var root = await SelectionRuleDocument();
+        root["@context"]!["unrelated"] = "urn:vendor:";
+        root["p:projects"]![0]!["unrelated:selectAll"] = "not-a-rule";
+        var rule = (await ReadSelectionRules(root))[0];
+        await Assert.That(rule.SelectAll).IsFalse();
+        root["@context"]!["kind"] = "p:affordanceKind";
+        root["p:projects"]![0]!["p:select"] = JsonNode.Parse("""
+            [{"kind":"property","p:affordanceKind":"property"}]
+            """);
+        await Assert.That(async () => { _ = await ReadSelectionRules(root); }).Throws<FederationException>();
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task CapturedProjectionMembershipRanksExplicitBeforeBulkAndLocalAfterImports(bool reverse)
+    {
+        var source = await SelectionSource("""
+            {"same":{"const":"bulk"},"other":{"const":"explicit"},"local":{"const":"source"}}
+            """);
+        var root = await SelectionRuleDocument();
+        root["p:projects"]![0]!["p:selectAll"] = true;
+        root["properties"] = JsonNode.Parse(reverse
+            ? """{"local":{"const":"plan"},"same":{"tm:ref":"urn:inventory:tm#/properties/other"}}"""
+            : """{"same":{"tm:ref":"urn:inventory:tm#/properties/other"},"local":{"const":"plan"}}""");
+        var selected = await SelectProjection(root, source);
+        await Assert.That(selected.Count).IsEqualTo(3);
+        await Assert.That(selected.Single(value => value.Name == "same").Definition.GetProperty("const").GetString())
+            .IsEqualTo("explicit");
+        await Assert.That(selected.Single(value => value.Name == "same").Selector).IsNotNull();
+        await Assert.That(selected.Single(value => value.Name == "local").Definition.GetProperty("const").GetString())
+            .IsEqualTo("plan");
+        await Assert.That(selected.Single(value => value.Name == "local").Source).IsNull();
+        await Assert.That(selected.Single(value => value.Name == "other").SourcePointer).IsEqualTo("/properties/other");
+        await Assert.That(selected.Single(value => value.Name == "other").Owner.Version.ContentDigest)
+            .IsEqualTo(selected.Single(value => value.Name == "same").Owner.Version.ContentDigest);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task CapturedProjectionMembershipUsesManifestPriorityAndChecksDisplacedTargets(bool missing)
+    {
+        var first = await SelectionSource("""{"same":{"const":"first"}}""");
+        var second = await SelectionSource("""{"other":{"const":"second"}}""");
+        var root = await SelectionRuleDocument();
+        root["p:projects"]![0]!["p:selectAll"] = true;
+        root["p:projects"]!.AsArray().Add(new JsonObject
+        {
+            ["p:sourceName"] = "second", ["href"] = "urn:source:second", ["type"] = "application/tm+json"
+        });
+        root["properties"] = JsonNode.Parse("""{"same":{"tm:ref":"urn:source:second#/properties/"""
+            + (missing ? "missing" : "other") + "\"}}");
+        var index = InventoryIndex(first);
+        var identities = new WotCapturedUriIdentityIndex(new[]
+        {
+            new WotCapturedUriIdentity(new("urn:inventory:tm"), WotCapturedUriIdentityKind.DocumentView,
+                index.Resolve(new("urn:inventory:tm"))),
+            new WotCapturedUriIdentity(new("urn:source:second"), WotCapturedUriIdentityKind.DocumentView,
+                new(second, "/sets/team", Fixture.Collection, Fixture.Resource, "thingmodel", Fixture.WotId))
+        });
+        var containing = await RetainProjectionPlan(root);
+        async Task<IReadOnlyList<WotProjectionAffordanceSelection>> Select() =>
+            await WotRegistryResolver.SelectCapturedProjectionAffordancesAsync(containing,
+                new("https://example.test/plan.json"), new Dictionary<Uri, FederationDocument>(), identities);
+        if (missing)
+        {
+            var failure = await Assert.That(async () => { _ = await Select(); }).Throws<RegistryException>() ??
+                throw new InvalidOperationException("Expected even a displaced target to be checked.");
+            await Assert.That(failure.Diagnostic.Code).IsEqualTo("not-found");
+        }
+        else
+        {
+            var selected = await Select();
+            await Assert.That(selected.Count).IsEqualTo(1);
+            await Assert.That(selected[0].Definition.GetProperty("const").GetString()).IsEqualTo("first");
+            await Assert.That(selected[0].Source!.Source.SourceName).IsEqualTo("base");
+            await Assert.That(selected[0].Selector).IsNull();
+        }
+    }
+
+    [Test]
+    public async Task CapturedProjectionBulkNamesUseUnicodeCodePointsAndRetainOriginalPointers()
+    {
+        var source = await SelectionSource("""
+            {"\ud801\udc28name":{"const":"supplementary"},"\ue000name":{"const":"bmp"},
+             "a/b~c":{"const":"escaped"}}
+            """);
+        var root = await SelectionRuleDocument();
+        root["p:projects"]![0]!["p:selectAll"] = true;
+        root["p:projects"]![0]!["p:namePrefix"] = "pre";
+        var selected = await SelectProjection(root, source);
+        await Assert.That(selected.Count).IsEqualTo(3);
+        await Assert.That(selected[0].Name).IsEqualTo("preA/b~c");
+        await Assert.That(selected[0].SourcePointer).IsEqualTo("/properties/a~1b~0c");
+        await Assert.That(selected[1].Name).IsEqualTo("pre\ue000name");
+        await Assert.That(selected[2].Name).IsEqualTo("pre\U00010400name");
+        await Assert.That(selected[2].Definition.GetProperty("const").GetString()).IsEqualTo("supplementary");
+    }
+
+    [Test]
+    public async Task CapturedProjectionPredicatesCompareExpandedSourceTypesAcrossAllCategories()
+    {
+        var source = await SelectionSource("""
+            {"match":{"@type":["semantic:A","semantic:B"]},"partial":{"@type":"semantic:A"},
+             "lexical":{"@type":"different:A"}}
+            """, """{"action":{"@type":["semantic:A","semantic:B"]}}""",
+            """{"alarm":{"@type":"semantic:Alarm"}}""");
+        var root = await SelectionRuleDocument();
+        root["@context"]!["tag"] = "urn:shared:";
+        root["p:projects"]![0]!["p:select"] = JsonNode.Parse("""
+            [{"p:affordanceKind":"property","@type":["tag:A","tag:B"]},
+             {"p:affordanceKind":"event","@type":"tag:Alarm"}]
+            """);
+        var selected = await SelectProjection(root, source);
+        await Assert.That(selected.Count).IsEqualTo(2);
+        await Assert.That(selected[0].Category).IsEqualTo("properties");
+        await Assert.That(selected[0].Name).IsEqualTo("match");
+        await Assert.That(selected[1].Category).IsEqualTo("events");
+        await Assert.That(selected[1].Name).IsEqualTo("alarm");
+    }
+
+    [Test]
+    public async Task CapturedProjectionSelectionChecksUnusedSourcesAndRejectsNestedPlansExplicitly()
+    {
+        var source = await SelectionSource("""{"a":{}}""");
+        var root = await SelectionRuleDocument();
+        root["p:projects"]![0]!["tm:minVersion"] = "2.0.0";
+        var failure = await Assert.That(async () => { _ = await SelectProjection(root, source); })
+            .Throws<RegistryException>() ?? throw new InvalidOperationException("Expected all source constraints to apply.");
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo("unsatisfied");
+        root["p:projects"]![0]!.AsObject().Remove("tm:minVersion");
+        var nestedRoot = await SelectionRuleDocument();
+        nestedRoot["id"] = Fixture.WotId;
+        nestedRoot["version"] = JsonNode.Parse("""{"model":"1.0.0"}""");
+        var nestedFixture = new Fixture();
+        nestedFixture.Root["sets"]!["team"]!["things"]!["a"]!["meta"]!["defaultversionsticky"] = true;
+        nestedFixture.Documents[Fixture.Resource + "/versions/1.0.0"] =
+            new(Encoding.UTF8.GetBytes(nestedRoot.ToJsonString()));
+        var nested = await Assert.That(async () => { _ = await SelectProjection(root, nestedFixture.Open()); })
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected explicit nested-plan limitation.");
+        await Assert.That(nested.Code).IsEqualTo(FederationErrorCode.UnsupportedOperation);
+    }
+
+    [Test]
+    [Arguments(-1)]
+    [Arguments(0)]
+    [Arguments(1)]
+    public async Task CapturedProjectionMembershipSharesInclusiveWorkAndCancellation(int delta)
+    {
+        var source = await SelectionSource("""{"b":{},"a":{}}""");
+        var root = await SelectionRuleDocument();
+        root["p:projects"]![0]!["p:selectAll"] = true;
+        var containing = await RetainProjectionPlan(root);
+        var index = InventoryIndex(source);
+        async Task<IReadOnlyList<WotProjectionAffordanceSelection>> Select(FederationReadBudget budget,
+            CancellationToken token = default) =>
+            await WotRegistryResolver.SelectCapturedProjectionAffordancesAsync(containing,
+                new("https://example.test/plan.json"), new Dictionary<Uri, FederationDocument>(), index,
+                budget: budget, cancellationToken: token);
+        var baseline = new FederationReadBudget();
+        _ = await Select(baseline);
+        var budget = new FederationReadBudget(new(maxWork: baseline.Work + delta));
+        if (delta < 0)
+        {
+            var failure = await Assert.That(async () => { _ = await Select(budget); }).Throws<FederationException>() ??
+                throw new InvalidOperationException("Expected shared selection budget.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        }
+        else
+        {
+            var result = await Select(budget);
+            await Assert.That(result.Count).IsEqualTo(2);
+            await Assert.That(budget.Work).IsEqualTo(baseline.Work);
+        }
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        await Assert.That(async () => { _ = await Select(new(), cancellation.Token); }).Throws<OperationCanceledException>();
+    }
+
+    private static async Task<CapturedRegistryReadSource> SelectionSource(string properties,
+        string actions = "{}", string events = "{}")
+    {
+        var root = JsonNode.Parse(await Bytes(InventoryDocument(properties, "[]")))!;
+        root["@context"]!["semantic"] = "urn:shared:";
+        root["@context"]!["different"] = "urn:other:";
+        root["@context"]!["actions"] = JsonNode.Parse("""{"@id":"td:hasActionAffordance","@container":"@index"}""");
+        root["@context"]!["events"] = JsonNode.Parse("""{"@id":"td:hasEventAffordance","@container":"@index"}""");
+        root["actions"] = JsonNode.Parse(actions);
+        root["events"] = JsonNode.Parse(events);
+        root["id"] = Fixture.WotId;
+        root["version"] = JsonNode.Parse("""{"model":"1.0.0"}""");
+        var fixture = new Fixture();
+        fixture.Root["sets"]!["team"]!["things"]!["a"]!["meta"]!["defaultversionsticky"] = true;
+        fixture.Documents[Fixture.Resource + "/versions/1.0.0"] = new(Encoding.UTF8.GetBytes(root.ToJsonString()));
+        return fixture.Open();
+    }
+
+    private static async Task<IReadOnlyList<WotProjectionAffordanceSelection>> SelectProjection(JsonNode root,
+        CapturedRegistryReadSource source) =>
+        await WotRegistryResolver.SelectCapturedProjectionAffordancesAsync(await RetainProjectionPlan(root),
+            new("https://example.test/plan.json"), new Dictionary<Uri, FederationDocument>(), InventoryIndex(source));
+
+    [Test]
+    public async Task ProjectionSelectionRulesRetainDefaultsAndDoNotImplicitlySelectSources()
+    {
+        var rules = await ReadSelectionRules(await SelectionRuleDocument());
+        await Assert.That(rules.Count).IsEqualTo(1);
+        await Assert.That(rules[0].Source.SourceName).IsEqualTo("base");
+        await Assert.That(rules[0].Routing).IsEqualTo("source");
+        await Assert.That(rules[0].NamePrefix).IsNull();
+        await Assert.That(rules[0].Filters.Count).IsEqualTo(0);
+        await Assert.That(rules[0].Matches("property", new HashSet<string>())).IsFalse();
+    }
+
+    [Test]
+    public async Task ProjectionSelectionRulesExpandTypesAndApplyConjunctiveDisjunctivePredicates()
+    {
+        var root = await SelectionRuleDocument();
+        root["@context"]!["choose"] = "p:select";
+        root["@context"]!["kind"] = "p:affordanceKind";
+        root["@context"]!["domain"] = "https://example.test/types/";
+        var entry = root["p:projects"]![0]!;
+        entry["p:routing"] = "projection";
+        entry["p:namePrefix"] = "\U00010428device";
+        entry["choose"] = JsonNode.Parse("""
+            [{"kind":"property","@type":["domain:Sensor","domain:Temperature"]},
+             {"kind":"event","@type":"domain:Alarm"}]
+            """);
+        var rule = (await ReadSelectionRules(root))[0];
+        await Assert.That(rule.Routing).IsEqualTo("projection");
+        await Assert.That(rule.NamePrefix).IsEqualTo("\U00010428device");
+        await Assert.That(rule.Filters.Count).IsEqualTo(2);
+        await Assert.That(rule.Filters[0].TypeIris.Count).IsEqualTo(2);
+        await Assert.That(rule.Filters[0].TypeIris[0]).IsEqualTo("https://example.test/types/Sensor");
+        await Assert.That(rule.Filters[0].TypeIris[1]).IsEqualTo("https://example.test/types/Temperature");
+        await Assert.That(rule.Matches("property", new HashSet<string>
+            { "https://example.test/types/Sensor", "https://example.test/types/Temperature" })).IsTrue();
+        await Assert.That(rule.Matches("property", new HashSet<string>
+            { "https://example.test/types/Sensor" })).IsFalse();
+        await Assert.That(rule.Matches("action", new HashSet<string>
+            { "https://example.test/types/Sensor", "https://example.test/types/Temperature" })).IsFalse();
+        await Assert.That(rule.Matches("event", new HashSet<string>
+            { "https://example.test/types/Alarm" })).IsTrue();
+        await Assert.That(rule.Matches("event", new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            { "https://example.test/types/alarm" })).IsFalse();
+        await Assert.That(rule.Matches("event", new HashSet<string>
+            { "https://example.test/types/SpecialAlarm" })).IsFalse();
+    }
+
+    [Test]
+    [Arguments("""{"p:routing":false}""")]
+    [Arguments("""{"p:routing":"SOURCE"}""")]
+    [Arguments("""{"p:routing":"proxy"}""")]
+    [Arguments("""{"p:namePrefix":null}""")]
+    [Arguments("""{"p:namePrefix":42}""")]
+    [Arguments("""{"p:selectAll":"true"}""")]
+    [Arguments("""{"p:select":{}}""")]
+    [Arguments("""{"p:select":[false]}""")]
+    [Arguments("""{"p:select":[{"p:affordanceKind":"properties"}]}""")]
+    [Arguments("""{"p:select":[{"p:affordanceKind":true}]}""")]
+    [Arguments("""{"p:select":[{"pattern":"*"}]}""")]
+    [Arguments("""{"p:select":[{"vendor:pattern":"*"}]}""")]
+    [Arguments("""{"p:select":[{"@id":"urn:filter"}]}""")]
+    [Arguments("""{"p:select":[{"@type":false}]}""")]
+    [Arguments("""{"p:select":[{"@type":["urn:type",false]}]}""")]
+    public async Task ProjectionSelectionRulesRejectUnboundedOrMalformedGrammar(string fields)
+    {
+        var root = await SelectionRuleDocument();
+        foreach (var field in JsonNode.Parse(fields)!.AsObject())
+        {
+            root["p:projects"]![0]![field.Key] = field.Value?.DeepClone();
+        }
+        var failure = await Assert.That(async () => { _ = await ReadSelectionRules(root); })
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected bounded projection grammar.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    public async Task ProjectionTypeFiltersResolveRelativeClassesAgainstTheirCapturedBase()
+    {
+        var root = await SelectionRuleDocument();
+        root["p:projects"]![0]!["p:select"] = JsonNode.Parse("""[{"@type":"relative"}]""");
+        var rule = (await ReadSelectionRules(root))[0];
+        await Assert.That(rule.Filters[0].TypeIris[0]).IsEqualTo("https://example.test/relative");
+        await Assert.That(rule.Matches("property", new HashSet<string>
+            { "https://example.test/relative" })).IsTrue();
+    }
+
+    [Test]
+    public async Task ProjectionTypeFiltersHonorKeywordAliasesAndCapturedRemoteContexts()
+    {
+        var root = await SelectionRuleDocument();
+        var local = root["@context"]!.DeepClone();
+        root["@context"] = new JsonArray("https://example.test/context", local);
+        root["p:projects"]![0]!["p:select"] = JsonNode.Parse("""[{"classes":["remote:A","remote:B"]}]""");
+        var rules = await WotJsonLdBaseResolver.ReadProjectionSelectionRulesAsync(
+            new(Encoding.UTF8.GetBytes(root.ToJsonString())), new("https://example.test/plan.json"),
+            WotReferenceTargetKind.ThingModel, new Dictionary<Uri, FederationDocument>
+            {
+                [new("https://example.test/context")] = new(Encoding.UTF8.GetBytes("""
+                    {"@context":{"classes":"@type","remote":"urn:captured:"}}
+                    """))
+            });
+        await Assert.That(rules[0].Filters[0].TypeIris.Count).IsEqualTo(2);
+        await Assert.That(rules[0].Filters[0].TypeIris[0]).IsEqualTo("urn:captured:A");
+        await Assert.That(rules[0].Filters[0].TypeIris[1]).IsEqualTo("urn:captured:B");
+    }
+
+    [Test]
+    [Arguments("routing", "\"source\"")]
+    [Arguments("selectAll", "false")]
+    [Arguments("namePrefix", "\"prefix\"")]
+    [Arguments("select", "[]")]
+    public async Task ProjectionSelectionRulesRejectCompetingAliases(string term, string json)
+    {
+        var root = await SelectionRuleDocument();
+        root["@context"]!["duplicate"] = "p:" + term;
+        var entry = root["p:projects"]![0]!;
+        entry["p:" + term] = JsonNode.Parse(json);
+        entry["duplicate"] = JsonNode.Parse(json);
+        await Assert.That(async () => { _ = await ReadSelectionRules(root); }).Throws<FederationException>();
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task ProjectionSelectionRulesHandleEmptyPredicatesAndExplicitWholeSourceSelection(bool all)
+    {
+        var root = await SelectionRuleDocument();
+        var entry = root["p:projects"]![0]!;
+        entry["p:selectAll"] = all;
+        entry["p:namePrefix"] = "";
+        entry["p:select"] = JsonNode.Parse("""[{},{"@type":[]} ]""");
+        var rule = (await ReadSelectionRules(root))[0];
+        await Assert.That(rule.SelectAll).IsEqualTo(all);
+        await Assert.That(rule.NamePrefix).IsEqualTo("");
+        await Assert.That(rule.Filters.Count).IsEqualTo(2);
+        await Assert.That(rule.Filters[1].TypeIris.Count).IsEqualTo(0);
+        await Assert.That(rule.Matches("action", new HashSet<string>())).IsTrue();
+        entry["p:select"] = new JsonArray();
+        rule = (await ReadSelectionRules(root))[0];
+        await Assert.That(rule.Matches("event", new HashSet<string>())).IsEqualTo(all);
+    }
+
+    [Test]
+    [Arguments(-1)]
+    [Arguments(0)]
+    [Arguments(1)]
+    public async Task ProjectionSelectionRulesShareInclusiveWorkAndHonorCancellation(int delta)
+    {
+        var root = await SelectionRuleDocument();
+        root["p:projects"]![0]!["p:select"] = JsonNode.Parse("""[{"@type":"urn:test:class"}]""");
+        var baseline = new FederationReadBudget();
+        _ = await ReadSelectionRules(root, baseline);
+        var budget = new FederationReadBudget(new(maxWork: baseline.Work + delta));
+        if (delta < 0)
+        {
+            var failure = await Assert.That(async () => { _ = await ReadSelectionRules(root, budget); })
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected shared rule work limit.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        }
+        else
+        {
+            _ = await ReadSelectionRules(root, budget);
+            await Assert.That(budget.Work).IsEqualTo(baseline.Work);
+        }
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        await Assert.That(async () => { _ = await ReadSelectionRules(root, token: cancellation.Token); })
+            .Throws<OperationCanceledException>();
+    }
+
+    private static async Task<JsonNode> SelectionRuleDocument() => await ProjectionDocument(new()
+    {
+        ["p:sourceName"] = "base", ["href"] = "urn:inventory:tm", ["type"] = "application/tm+json"
+    });
+
+    private static ValueTask<IReadOnlyList<WotProjectionSourceSelectionRule>> ReadSelectionRules(
+        JsonNode root, FederationReadBudget? budget = null, CancellationToken token = default) =>
+        WotJsonLdBaseResolver.ReadProjectionSelectionRulesAsync(
+            new(Encoding.UTF8.GetBytes(root.ToJsonString())), new("https://example.test/plan.json"),
+            WotReferenceTargetKind.ThingModel, new Dictionary<Uri, FederationDocument>(), budget, token);
+
+    [Test]
     [Arguments("tm:minVersion", "invalid-floor", false)]
     [Arguments("td:minVersion", "invalid-floor", true)]
     [Arguments("uav:minVersion", "invalid-floor", true)]

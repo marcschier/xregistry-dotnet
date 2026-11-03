@@ -184,6 +184,12 @@ public static partial class WotJsonLdBaseResolver
             throw new FederationException(FederationErrorCode.InvalidPackage,
                 "The captured member or its contexts could not be expanded.", innerException: exception);
         }
+        catch (InvalidOperationException exception) when (exception.InnerException is FormatException)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            throw new FederationException(FederationErrorCode.InvalidPackage,
+                "Captured JSON-LD expansion could not compare incompatible input values.", innerException: exception);
+        }
         cancellationToken.ThrowIfCancellationRequested();
         readBudget.CheckResultBytes(Encoding.UTF8.GetByteCount(expanded.ToString(Formatting.None)));
         return expanded;
