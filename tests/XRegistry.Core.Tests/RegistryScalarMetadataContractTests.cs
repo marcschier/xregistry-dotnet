@@ -54,6 +54,29 @@ public class RegistryScalarMetadataContractTests
     }
 
     [Test]
+    [Arguments(3, true)]
+    [Arguments(4, false)]
+    public async Task ScalarDescriptionCountsUtf8BytesAtThe4096ByteBoundary(int asciiSuffixLength, bool accepted)
+    {
+        var text = new string('\u00e9', 2041) + new string('x', asciiSuffixLength);
+        var input = RegistryJson.Parse("{\"description\":\"" + text + "\"}");
+        var definitions = s_model.Groups["gs"].Attributes;
+        var options = new RegistryMetadataValidationOptions { Mode = RegistryMetadataMode.ClientInput };
+
+        if (accepted)
+        {
+            var result = RegistryMetadataValidator.Validate(input, definitions, options);
+            await Assert.That(result.Metadata.RootElement.GetProperty("description").GetString()).IsEqualTo(text);
+        }
+        else
+        {
+            var diagnostic = TestErrors.Capture(() => RegistryMetadataValidator.Validate(input, definitions, options));
+            await Assert.That(diagnostic.Code).IsEqualTo("invalid_attribute");
+            await Assert.That(diagnostic.Path).IsEqualTo("/description");
+        }
+    }
+
+    [Test]
     [Arguments("name", false)]
     [Arguments("documentation", false)]
     [Arguments("icon", false)]

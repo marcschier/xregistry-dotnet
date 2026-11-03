@@ -61140,7 +61140,8 @@
       "implementation": {
         "status": "pending",
         "testIds": [
-          "ScalarDescriptionCountsItsNameAtTheInclusive4096ByteBoundary"
+          "ScalarDescriptionCountsItsNameAtTheInclusive4096ByteBoundary",
+          "ScalarDescriptionCountsUtf8BytesAtThe4096ByteBoundary"
         ],
         "nativeEvidence": []
       }
