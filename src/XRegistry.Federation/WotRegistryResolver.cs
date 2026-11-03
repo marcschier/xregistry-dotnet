@@ -185,6 +185,21 @@ public static class WotRegistryResolver
             throw new ArgumentException("The WoT reference does not identify its containing document.", nameof(reference));
         }
 
+        return await ResolveLocalTargetAsync(containingRevision, reference, target, request, budget,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async ValueTask<WotResolvedFragment> ResolveLocalTargetAsync(
+        WotResolvedDocument containingRevision, string reference, WotReferenceUri target,
+        WotVersionResolutionRequest request, FederationReadBudget? budget, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(containingRevision);
+        ArgumentNullException.ThrowIfNull(request);
+        if (!target.IsDocumentLocal)
+        {
+            throw new ArgumentException("The WoT reference does not identify its containing document.", nameof(reference));
+        }
+
         var readBudget = budget ?? new();
         var localRequest = request with
         {
@@ -318,6 +333,29 @@ public static class WotRegistryResolver
         return new Resolution(source, collection, request, budget ?? new(), cancellationToken).RunAsync();
     }
 
+    /// <summary>Resolves a WoT URI-reference with its captured JSON-LD context, selects its Version, and applies its fragment.</summary>
+    /// <remarks>
+    /// The caller supplies an authorized Group Resource collection, the exact source pointer and only remote
+    /// contexts already captured for this operation. This method does not retrieve live contexts. A local
+    /// reference uses the retained containing revision; an external reference looks up its resolved
+    /// fragment-free URI as a <c>wotid</c>. Source authorization and URI-to-alias mapping remain the caller's responsibility.
+    /// </remarks>
+    public static async ValueTask<WotResolvedFragment> ResolveReferenceAsync(
+        IFederationReadSource source, string resourceCollection, WotResolvedDocument containingRevision,
+        string sourcePointer, string referencePropertyName, string reference, Uri containingDocumentUri,
+        IReadOnlyDictionary<Uri, FederationDocument> capturedContexts, WotVersionResolutionRequest request,
+        FederationReadBudget? budget = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(containingRevision);
+        ArgumentNullException.ThrowIfNull(capturedContexts);
+        var readBudget = budget ?? new();
+        var target = await WotJsonLdBaseResolver.ResolveReferenceUriAsync(containingRevision.Document,
+            sourcePointer, referencePropertyName, reference, containingDocumentUri, capturedContexts,
+            readBudget, cancellationToken).ConfigureAwait(false);
+        return await ResolveReferenceTargetAsync(source, resourceCollection, containingRevision, reference,
+            target, request, readBudget, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Resolves a WoT URI-reference, selects its Version, and applies its fragment.</summary>
     /// <remarks>
     /// The caller supplies an authorized Group Resource collection and the effective base and containing
@@ -335,11 +373,23 @@ public static class WotRegistryResolver
         ArgumentNullException.ThrowIfNull(containingRevision);
         ArgumentNullException.ThrowIfNull(request);
         var target = WotReferenceUriResolver.Resolve(reference, effectiveBaseUri, containingDocumentUri);
+        return await ResolveReferenceTargetAsync(source, resourceCollection, containingRevision, reference,
+            target, request, budget, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async ValueTask<WotResolvedFragment> ResolveReferenceTargetAsync(
+        IFederationReadSource source, string resourceCollection, WotResolvedDocument containingRevision,
+        string reference, WotReferenceUri target, WotVersionResolutionRequest request,
+        FederationReadBudget? budget, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(containingRevision);
+        ArgumentNullException.ThrowIfNull(request);
         var readBudget = budget ?? new();
         if (target.IsDocumentLocal)
         {
-            return await ResolveLocalReferenceAsync(containingRevision, reference, effectiveBaseUri,
-                containingDocumentUri, request, readBudget, cancellationToken).ConfigureAwait(false);
+            return await ResolveLocalTargetAsync(containingRevision, reference, target, request, readBudget,
+                cancellationToken).ConfigureAwait(false);
         }
 
         var resolvedRequest = request with

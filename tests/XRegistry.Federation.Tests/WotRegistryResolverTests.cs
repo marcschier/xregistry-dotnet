@@ -852,6 +852,26 @@ public class WotRegistryResolverTests
     }
 
     [Test]
+    public async Task JsonLdReferenceResolutionUsesTheCapturedDocumentAndContextSet()
+    {
+        var bytes = Encoding.UTF8.GetBytes(
+            """{"ref":"#/properties/status","properties":{"status":{"type":"string"}}}""");
+        var source = new Source { FirstBytes = bytes, SecondBytes = bytes };
+        var containing = await WotRegistryResolver.ResolveAsync(source, source.Collection,
+            source.Request with { VersionIdPin = "1.0.0" });
+        var documentUri = new Uri("https://example.test/models/model.json");
+        var reads = source.Reads.Count;
+
+        var result = await WotRegistryResolver.ResolveReferenceAsync(source, source.Collection, containing,
+            "", "ref", "#/properties/status", documentUri,
+            new Dictionary<Uri, FederationDocument>(), source.Request);
+
+        await Assert.That(result.Value.GetProperty("type").GetString()).IsEqualTo("string");
+        await Assert.That(result.ContainingDocument.Version.VersionId).IsEqualTo("1.0.0");
+        await Assert.That(source.Reads.Count).IsEqualTo(reads);
+    }
+
+    [Test]
     public async Task LocalReferenceWithoutFragmentSelectsTheContainingDocument()
     {
         var bytes = Encoding.UTF8.GetBytes("""{"properties":{"status":{"type":"string"}}}""");

@@ -29,7 +29,24 @@ public static class WotReferenceUriResolver
             throw FederationJson.Invalid("A WoT URI-reference could not be resolved against its captured absolute base.");
         }
 
-        var absolute = FederationJson.AbsoluteUri(resolved.AbsoluteUri);
+        return ResolveTarget(resolved, containingUri);
+    }
+
+    /// <summary>Classifies an absolute resolved target against the containing document URI.</summary>
+    /// <param name="resolvedTarget">The absolute target URI, including any fragment.</param>
+    /// <param name="containingDocumentUri">The absolute URI identifying the containing document.</param>
+    /// <returns>The resolved fragment-free document URI, fragment and locality classification.</returns>
+    public static WotReferenceUri ResolveTarget(Uri resolvedTarget, Uri containingDocumentUri)
+    {
+        ArgumentNullException.ThrowIfNull(resolvedTarget);
+        ArgumentNullException.ThrowIfNull(containingDocumentUri);
+        if (!resolvedTarget.IsAbsoluteUri)
+        {
+            throw FederationJson.Invalid("A resolved WoT reference target must be absolute.");
+        }
+
+        var absolute = FederationJson.AbsoluteUri(resolvedTarget.AbsoluteUri);
+        var containingUri = FederationJson.AbsoluteUri(containingDocumentUri.AbsoluteUri);
         var fragment = absolute.Fragment.Length == 0 ? null : absolute.Fragment;
         var documentText = fragment is null
             ? absolute.AbsoluteUri
