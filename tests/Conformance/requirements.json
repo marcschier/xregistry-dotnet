@@ -60003,8 +60003,11 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DefaultPointerTransitionsChangeOnlyMetaAndPersist",
+          "ChangingDefaultVersionDoesNotTouchEitherVersionAndDeletingLastRemovesResource"
+        ],
         "nativeEvidence": []
       }
     },
