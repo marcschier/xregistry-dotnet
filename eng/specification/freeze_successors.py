@@ -26,6 +26,7 @@ CLOSURE = "514f6eacd6297821e949dcb81a03e2943f5cb88e"
 API = "5f9d0134407927c0fae3b95e0aa844548e3756d6"
 MEDIA = "9613f002c82c9568fbefc5f1f0cf0490d6df572a"
 CURRENT_MERGED = "d290b1ec38d9e5436decb5ba0854f2321401a118"
+FROZEN_MERGED = "801aaf218a3d954c87f5014eb00c37aff93c001b"
 CURRENT_DRAFT = "d757328e4e3ca70761244b4a77cacba6bfb5599b"
 OPCUA_EVENTS = "f69085fb89b1204dd72d9dca00472a5f331be2d1"
 HTTP_PROTOCOL_MODELS = "a1da400e938b420da1f097b58a73fd9f75deb9e5"
@@ -181,9 +182,25 @@ def sources() -> list[dict]:
              "kind": "normative", "role": "normative"},
         ],
     }
+    frozen_merged = deepcopy(current_merged)
+    frozen_merged.update(id="upstream-801aaf21", commit=FROZEN_MERGED)
+    for entry in frozen_merged["files"]:
+        entry["role"] = "review-only"
+    for owner in ("endpoint", "message", "schema", "cloudevents"):
+        for filename in ("document-schema.json", "document-schema.avsc",
+                         "document-schema.struct.json", "openapi.json"):
+            frozen_merged["files"].append({
+                "path": f"{owner}/schemas/{filename}", "owner": owner,
+                "kind": "artifact", "role": "review-only",
+            })
+    for path in ("tools/schema-generator.py", "tools/test_schema_generator.py",
+                 "core/templates/xregistry_openapi_template.json"):
+        frozen_merged["files"].append({
+            "path": path, "owner": "model", "kind": "artifact", "role": "review-only",
+        })
     result = [merged, draft, closure, api, media, current_merged, current_draft, opcua_events,
               http_protocol_models, compatibility_admission, xref_creation_events, wot_closure_contracts,
-              cloud_event_view]
+              cloud_event_view, frozen_merged]
     for source in result:
         source["files"].append({"path": "LICENSE", "owner": "license", "kind": "license", "role": "review-only"})
     return result
@@ -205,6 +222,14 @@ def freeze(root: Path = ROOT) -> None:
     # Finish acquisition before writing any source or changing the selected composition.
     with ThreadPoolExecutor(max_workers=4) as executor:
         acquired = list(executor.map(lambda pair: acquire(*pair), requests))
+    frozen = {entry["path"]: data for source, entry, data in acquired
+              if source["id"] == "upstream-801aaf21"}
+    for source, entry, data in acquired:
+        if source["status"] == "merged" and entry["role"] == "normative" and frozen:
+            if frozen.get(entry["path"]) != data:
+                raise tool.SpecificationError(
+                    f"Frozen merged normative source differs; select its composition explicitly: {entry['path']}"
+                )
     for source, entry, data in acquired:
         path = tool.contained(root / tool.SUCCESSOR_CORPUS, f"{source['id']}/{entry['path']}")
         if path.exists() and path.read_bytes() != data:

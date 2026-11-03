@@ -76,6 +76,37 @@ that corpus only; it does not qualify package behavior, native platforms,
 interoperability, or release status. Current extracted requirement counts and
 qualification status are in [conformance evidence](conformance.md).
 
+## Frozen merged-source reconciliation
+
+The merged specification boundary is
+`801aaf218a3d954c87f5014eb00c37aff93c001b`. The exact files and license are
+retained under `tests/Conformance/Successors/upstream-801aaf21`; the successor
+manifest pins their hashes and composition roles. Its nine normative documents
+match the selected `upstream-d290b1ec` bytes, so existing clause reviews stay
+attached to their original source rather than becoming duplicate obligations.
+The acquisition tool rejects normative drift before changing the composition.
+Later upstream commits require a separate intake.
+
+The fifteen commits since `d290b1ec` change thirteen files: generated domain
+schemas, their generator/tests and the OpenAPI template. The following
+corrections are merged and included in the frozen snapshot:
+
+| Correction | Merged proposal |
+| --- | --- |
+| Emit Group collection routes and collection POST operations in OpenAPI | [xregistry/spec#778](https://github.com/xregistry/spec/pull/778) |
+| Materialize Avro object-valued array/map items | [xregistry/spec#779](https://github.com/xregistry/spec/pull/779) |
+| Retain Avro named definitions for structured wildcard values | [xregistry/spec#780](https://github.com/xregistry/spec/pull/780) |
+| Admit relative references in generated URI fields | [xregistry/spec#781](https://github.com/xregistry/spec/pull/781) |
+| Permit a document carrier to be absent in a generated Version schema | [xregistry/spec#787](https://github.com/xregistry/spec/pull/787) |
+| Project strict array-item enums, retaining advisory item behavior | [xregistry/spec#790](https://github.com/xregistry/spec/pull/790) |
+
+`test_frozen_merged_generator_reproduces_every_selected_domain_schema`
+regenerates all sixteen Endpoint, Message, Schema and CloudEvents outputs and
+compares parsed schema contents with the retained artifacts. The frozen
+upstream generator tests also run independently. These checks cover source
+artifacts; they do not supply .NET implementation or native qualification.
+The original corpus and local correction history remain unchanged.
+
 ## Selected compatibility-admission proposal
 
 The implementation selects the W27 compatibility-admission correction from

@@ -6,6 +6,8 @@ from __future__ import annotations
 import importlib.util
 import copy
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -321,7 +323,7 @@ class ProvenanceAndReviewTests(unittest.TestCase):
             "upstream-4a7e7f5e", "pr571-811de7d2", "pr571-514f6eac",
             "pr715-5f9d0134", "pr716-9613f002", "upstream-d290b1ec", "pr571-d757328e",
             "pr571-f69085fb", "pr571-a1da400e", "pr677-b0d2d817", "pr686-9e103e2b",
-            "pr571-ab91328d", "pr571-890b4a62",
+            "pr571-ab91328d", "pr571-890b4a62", "upstream-801aaf21",
         })
         prior = sources["pr571-811de7d2"]
         current = sources["pr571-514f6eac"]
@@ -359,6 +361,117 @@ class ProvenanceAndReviewTests(unittest.TestCase):
         self.assertEqual({(entry["path"], entry["role"]) for entry in events["files"]}, {
             ("core/events.md", "review-only"), ("LICENSE", "review-only"),
         })
+
+    def test_frozen_merged_sources_pin_reproduction_inputs_without_replacing_clause_reviews(self) -> None:
+        spec = importlib.util.spec_from_file_location("freeze_successors", ROOT / "eng/specification/freeze_successors.py")
+        freezer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(freezer)
+        sources = {source["id"]: source for source in freezer.sources()}
+        frozen = sources["upstream-801aaf21"]
+        self.assertEqual(frozen["commit"], "801aaf218a3d954c87f5014eb00c37aff93c001b")
+        self.assertEqual(frozen["commit"], freezer.FROZEN_MERGED)
+        self.assertEqual(frozen["repository"], "https://github.com/xregistry/spec")
+        self.assertEqual(frozen["status"], "merged")
+        self.assertTrue(all(entry["role"] == "review-only" for entry in frozen["files"]))
+        paths = {entry["path"] for entry in frozen["files"]}
+        self.assertEqual(paths, {entry["path"] for entry in sources["upstream-d290b1ec"]["files"]} | {
+            f"{owner}/schemas/{name}"
+            for owner in ("endpoint", "message", "schema", "cloudevents")
+            for name in ("document-schema.json", "document-schema.avsc",
+                         "document-schema.struct.json", "openapi.json")
+        } | {
+            "tools/schema-generator.py", "tools/test_schema_generator.py",
+            "core/templates/xregistry_openapi_template.json",
+        })
+        normative = {entry["path"] for entry in sources["upstream-d290b1ec"]["files"]
+                     if entry["role"] == "normative"}
+        self.assertEqual(normative, {
+            "core/spec.md", "core/model.md", "core/http.md", "core/events.md",
+            "endpoint/spec.md", "message/spec.md", "schema/spec.md",
+            "cloudevents/spec.md", "pagination/spec.md",
+        })
+
+    def test_frozen_merged_normative_drift_rejects_before_writing_sources_or_composition(self) -> None:
+        manifest = self.pin_successors()
+        spec = importlib.util.spec_from_file_location("freeze_successors", ROOT / "eng/specification/freeze_successors.py")
+        freezer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(freezer)
+        sources = copy.deepcopy(manifest["sources"])
+        for source in sources:
+            for entry in source["files"]:
+                entry["role"] = next(item["role"] for item in manifest["composition"]
+                                     if item["source"] == source["id"] and item["path"] == entry["path"])
+        merged = sources[0]
+        merged["status"] = "merged"
+        frozen = copy.deepcopy(merged)
+        frozen["id"] = "upstream-801aaf21"
+        for entry in frozen["files"]:
+            entry["role"] = "review-only"
+        sources.append(frozen)
+        before = (self.root / tool.SUCCESSORS).read_bytes()
+        lock_before = (self.root / tool.LOCK).read_bytes()
+        scope_before = (self.root / "eng/specification/scope.json").read_bytes()
+
+        def acquire(source, entry):
+            path = self.root / tool.SUCCESSOR_CORPUS / merged["id"] / entry["path"]
+            data = path.read_bytes()
+            if source["id"] == frozen["id"] and entry["kind"] == "normative":
+                data += b"\nA changed normative clause MUST be explicitly selected.\n"
+            return source, entry, data
+
+        with mock.patch.object(freezer, "sources", return_value=sources), \
+                mock.patch.object(freezer, "acquire", side_effect=acquire):
+            with self.assertRaisesRegex(freezer.tool.SpecificationError, "Frozen merged normative source differs"):
+                freezer.freeze(self.root)
+        self.assertFalse((self.root / tool.SUCCESSOR_CORPUS / frozen["id"]).exists())
+        self.assertEqual((self.root / tool.SUCCESSORS).read_bytes(), before)
+        self.assertEqual((self.root / tool.LOCK).read_bytes(), lock_before)
+        self.assertEqual((self.root / "eng/specification/scope.json").read_bytes(), scope_before)
+
+    def test_frozen_merged_normative_bytes_match_the_retained_selected_clause_sources(self) -> None:
+        records = tool.successor_sources(ROOT, tool.load_scope(ROOT))
+        frozen = {entry["path"]: entry for entry in records
+                  if entry["sourceId"] == "upstream-801aaf21" and entry["kind"] == "normative"}
+        selected = {entry["path"]: entry for entry in records
+                    if entry["status"] == "merged" and entry["role"] == "normative"}
+        self.assertEqual(set(frozen), set(selected))
+        self.assertEqual(len(selected), 9)
+        for path, entry in selected.items():
+            with self.subTest(path=path):
+                self.assertEqual(frozen[path]["sha256"], entry["sha256"])
+                self.assertEqual(frozen[path]["bytes"], entry["bytes"])
+                self.assertEqual((ROOT / frozen[path]["file"]).read_bytes(),
+                                 (ROOT / entry["file"]).read_bytes())
+
+    def test_frozen_merged_generator_reproduces_every_selected_domain_schema(self) -> None:
+        source = ROOT / tool.SUCCESSOR_CORPUS / "upstream-801aaf21"
+        formats = {
+            "json-schema": "document-schema.json",
+            "json-structure": "document-schema.struct.json",
+            "avro-schema": "document-schema.avsc",
+            "openapi": "openapi.json",
+        }
+        for owner in ("endpoint", "message", "schema", "cloudevents"):
+            models = ("endpoint", "message", "schema") if owner == "cloudevents" else (owner,)
+            for format_name, filename in formats.items():
+                with self.subTest(owner=owner, format=format_name):
+                    output = self.root / f"{owner}-{filename}"
+                    arguments = [sys.executable, "-B", str(source / "tools/schema-generator.py"),
+                                 "--type", format_name, "--output", str(output)]
+                    if format_name in ("json-schema", "json-structure"):
+                        arguments.extend([
+                            "--schema-id",
+                            f"https://xregistry.io/xreg/xregistryspecs/{owner}-v1/schemas/{filename}",
+                        ])
+                    if format_name == "json-structure":
+                        schema_name = "CloudEvents" if owner == "cloudevents" else owner.title()
+                        arguments.extend(["--schema-name", f"{schema_name}RegistryDocument"])
+                    arguments.extend(str(Path(model) / "model.json") for model in models)
+                    result = subprocess.run(arguments, cwd=source, capture_output=True,
+                                            text=True, timeout=30)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(tool.read_json(output),
+                                     tool.read_json(source / owner / "schemas" / filename))
 
     def test_partial_w25_contracts_retain_exact_artifacts_without_replacing_active_wot_sources(self) -> None:
         spec = importlib.util.spec_from_file_location("freeze_successors", ROOT / "eng/specification/freeze_successors.py")

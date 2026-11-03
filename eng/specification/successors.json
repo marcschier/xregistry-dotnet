@@ -902,6 +902,259 @@
           "sha256": "c07c2bf22d1b6eadecdbc008b0693c9a876f85c1485c375ff57301085ffc8db9"
         }
       ]
+    },
+    {
+      "id": "upstream-801aaf21",
+      "repository": "https://github.com/xregistry/spec",
+      "commit": "801aaf218a3d954c87f5014eb00c37aff93c001b",
+      "status": "merged",
+      "files": [
+        {
+          "path": "core/spec.md",
+          "owner": "core",
+          "kind": "normative",
+          "bytes": 244359,
+          "sha256": "77b0cf133996ae6c28316177e834e468c22e61b9c7e0aa49f8766b73218068b5"
+        },
+        {
+          "path": "core/model.md",
+          "owner": "model",
+          "kind": "normative",
+          "bytes": 68205,
+          "sha256": "2c073fc7a3b8252a77f2ea6cf1ddd1596770fa72fe86d54f93bd8fdcaea2eaa3"
+        },
+        {
+          "path": "core/http.md",
+          "owner": "http",
+          "kind": "normative",
+          "bytes": 104420,
+          "sha256": "5d2db740d225ee9e854a291007c55c44867fa6c3a27335e3e29dcdf41f65534e"
+        },
+        {
+          "path": "core/events.md",
+          "owner": "events",
+          "kind": "normative",
+          "bytes": 29273,
+          "sha256": "2c72e989e130b31de549fb1a4dbe034dcca43bace260eb0b816bee27215b699e"
+        },
+        {
+          "path": "endpoint/spec.md",
+          "owner": "endpoint",
+          "kind": "normative",
+          "bytes": 54561,
+          "sha256": "5bea51b69b83679fe322b94670f182812312394141d12627e9c05c99cab93e23"
+        },
+        {
+          "path": "message/spec.md",
+          "owner": "message",
+          "kind": "normative",
+          "bytes": 60967,
+          "sha256": "1cf2eab86d3d961bb0df6f5c0c24b4de92d3adcb4d5d5e16ded332a5f1eab3c1"
+        },
+        {
+          "path": "schema/spec.md",
+          "owner": "schema",
+          "kind": "normative",
+          "bytes": 30665,
+          "sha256": "86e857460eb832820483b424e2358138e161729909a26cce3a06ec7f624982a5"
+        },
+        {
+          "path": "cloudevents/spec.md",
+          "owner": "cloudevents",
+          "kind": "normative",
+          "bytes": 19097,
+          "sha256": "4782afe82bbd538d94721f6c97ad69931112500cc07e40846598a0ecfd90a905"
+        },
+        {
+          "path": "pagination/spec.md",
+          "owner": "pagination",
+          "kind": "normative",
+          "bytes": 12981,
+          "sha256": "ee8b6637949336c63906cdcf6150e10c87fb29c7cada9210ce8c6083bfafafec"
+        },
+        {
+          "path": "core/model.json",
+          "owner": "core",
+          "kind": "artifact",
+          "bytes": 1623,
+          "sha256": "00f9342b7ef4f65fcf3859632c909dacd3cb7f6d8b8c019e03ea1936cc307e6e"
+        },
+        {
+          "path": "endpoint/model.json",
+          "owner": "endpoint",
+          "kind": "artifact",
+          "bytes": 46033,
+          "sha256": "866663068e77a1a3a09489e4008f9e2ff7b7bbb5b0e1ff0c75bccec4390d3c74"
+        },
+        {
+          "path": "message/model.json",
+          "owner": "message",
+          "kind": "artifact",
+          "bytes": 66256,
+          "sha256": "0796b8f2c2134b27fbce34f00f73475b052ba109e386ed5b2b0df112239f90f8"
+        },
+        {
+          "path": "schema/model.json",
+          "owner": "schema",
+          "kind": "artifact",
+          "bytes": 1132,
+          "sha256": "b2e7efd1a89512c6a0a9731c6e868ce1785ec1923d0348527667d8e191e484f7"
+        },
+        {
+          "path": "cloudevents/model.json",
+          "owner": "cloudevents",
+          "kind": "artifact",
+          "bytes": 249,
+          "sha256": "8000babf16b868ff97144b534b0639a68d408285c9ced823e5d5c3414eff08f7"
+        },
+        {
+          "path": "core/model.schema.json",
+          "owner": "model",
+          "kind": "artifact",
+          "bytes": 16329,
+          "sha256": "37cfac8ad69a00976c10dc1f612ed8de1f059a832fd0750d75d05795a782c69e"
+        },
+        {
+          "path": "endpoint/schemas/document-schema.json",
+          "owner": "endpoint",
+          "kind": "artifact",
+          "bytes": 93490,
+          "sha256": "57b2dca6f9c7a5692776c8e5716683f37c1880170c3f68a4736d83b19d979fed"
+        },
+        {
+          "path": "endpoint/schemas/document-schema.avsc",
+          "owner": "endpoint",
+          "kind": "artifact",
+          "bytes": 22601,
+          "sha256": "ae58bed8a6d2abb0ae8dbbe1c4ae7af241deeb9ccee52c4660b08aec525aede8"
+        },
+        {
+          "path": "endpoint/schemas/document-schema.struct.json",
+          "owner": "endpoint",
+          "kind": "artifact",
+          "bytes": 48596,
+          "sha256": "9d50de0c0bfbaf9cc93023939e702b770fa289eb699399467f9332ad6c605344"
+        },
+        {
+          "path": "endpoint/schemas/openapi.json",
+          "owner": "endpoint",
+          "kind": "artifact",
+          "bytes": 147442,
+          "sha256": "0f2b240fb6a632f1a4f71020e8a625dc4edf51b95713925a3309f62d07052926"
+        },
+        {
+          "path": "message/schemas/document-schema.json",
+          "owner": "message",
+          "kind": "artifact",
+          "bytes": 51259,
+          "sha256": "91ce163431cd3bbcb562ae3b213e057644144619f9bef079f60688ef544ff666"
+        },
+        {
+          "path": "message/schemas/document-schema.avsc",
+          "owner": "message",
+          "kind": "artifact",
+          "bytes": 14780,
+          "sha256": "c76e825c2f6d2ea560be57564e9bf7362d8a99767c3171693fb305b37181a1c8"
+        },
+        {
+          "path": "message/schemas/document-schema.struct.json",
+          "owner": "message",
+          "kind": "artifact",
+          "bytes": 36453,
+          "sha256": "40240296c9f4620aedbe0c6a1b006b345633cc85cbdf91bd9672c0ccb6562f5a"
+        },
+        {
+          "path": "message/schemas/openapi.json",
+          "owner": "message",
+          "kind": "artifact",
+          "bytes": 109830,
+          "sha256": "3fc850f4863b3cba8933d6ed712b57e506181c42ee63b88b51d514fde474539d"
+        },
+        {
+          "path": "schema/schemas/document-schema.json",
+          "owner": "schema",
+          "kind": "artifact",
+          "bytes": 7582,
+          "sha256": "65038222268ccbd517cf81d25bdacf897c8a7d8d88ccbb25571073e72cacefac"
+        },
+        {
+          "path": "schema/schemas/document-schema.avsc",
+          "owner": "schema",
+          "kind": "artifact",
+          "bytes": 7571,
+          "sha256": "8e3a3664e98f6213b2fb2e34926e20cfd5d98c6639cb30f9e5099822c6faa73d"
+        },
+        {
+          "path": "schema/schemas/document-schema.struct.json",
+          "owner": "schema",
+          "kind": "artifact",
+          "bytes": 5830,
+          "sha256": "fe4f775e2ae9b913f91fa112e534b286aad2ddfd9fe968fe10899a9c57fe2352"
+        },
+        {
+          "path": "schema/schemas/openapi.json",
+          "owner": "schema",
+          "kind": "artifact",
+          "bytes": 74721,
+          "sha256": "b6a5f33ddf60278e0123b6c8f7505098066df13bff12c981eba76ced65b1c57f"
+        },
+        {
+          "path": "cloudevents/schemas/document-schema.json",
+          "owner": "cloudevents",
+          "kind": "artifact",
+          "bytes": 100880,
+          "sha256": "4617e71da8f6a50cb9e62bde606ffb2cd9eb115e25f0db356237e0cdbb7879dd"
+        },
+        {
+          "path": "cloudevents/schemas/document-schema.avsc",
+          "owner": "cloudevents",
+          "kind": "artifact",
+          "bytes": 28863,
+          "sha256": "49a6e0fe055035dc4001d50aa8ebf36de878f7457bb0d57afce5cc7ebdde7571"
+        },
+        {
+          "path": "cloudevents/schemas/document-schema.struct.json",
+          "owner": "cloudevents",
+          "kind": "artifact",
+          "bytes": 54083,
+          "sha256": "d685a232b3522ba0b9ad085e55100816f7cef6831952e6eb3caa59ffcf41f2a0"
+        },
+        {
+          "path": "cloudevents/schemas/openapi.json",
+          "owner": "cloudevents",
+          "kind": "artifact",
+          "bytes": 193114,
+          "sha256": "84e721a07ef9436fa0dfb1cba8980cb989c19e72ccc719bf1b2dd744b804f822"
+        },
+        {
+          "path": "tools/schema-generator.py",
+          "owner": "model",
+          "kind": "artifact",
+          "bytes": 74941,
+          "sha256": "9ad493e8386f52ebbb58889440cb204741a02f62832d13a1f903e893d613e5bb"
+        },
+        {
+          "path": "tools/test_schema_generator.py",
+          "owner": "model",
+          "kind": "artifact",
+          "bytes": 26363,
+          "sha256": "727a7a9261869c621f9b938d1ee8eacb23af8cfece97848b668bfe14a7c598df"
+        },
+        {
+          "path": "core/templates/xregistry_openapi_template.json",
+          "owner": "model",
+          "kind": "artifact",
+          "bytes": 87035,
+          "sha256": "e1cb9a0a38e11300990f49c0b17af19b5dbd6c0efdd031a06f29aeb1161b1c3c"
+        },
+        {
+          "path": "LICENSE",
+          "owner": "license",
+          "kind": "license",
+          "bytes": 11349,
+          "sha256": "c07c2bf22d1b6eadecdbc008b0693c9a876f85c1485c375ff57301085ffc8db9"
+        }
+      ]
     }
   ],
   "composition": [
@@ -1472,6 +1725,181 @@
     },
     {
       "source": "pr571-890b4a62",
+      "path": "LICENSE",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "core/spec.md",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "core/model.md",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "core/http.md",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "core/events.md",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "endpoint/spec.md",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "message/spec.md",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "schema/spec.md",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "cloudevents/spec.md",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "pagination/spec.md",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "core/model.json",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "endpoint/model.json",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "message/model.json",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "schema/model.json",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "cloudevents/model.json",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "core/model.schema.json",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "endpoint/schemas/document-schema.json",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "endpoint/schemas/document-schema.avsc",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "endpoint/schemas/document-schema.struct.json",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "endpoint/schemas/openapi.json",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "message/schemas/document-schema.json",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "message/schemas/document-schema.avsc",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "message/schemas/document-schema.struct.json",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "message/schemas/openapi.json",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "schema/schemas/document-schema.json",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "schema/schemas/document-schema.avsc",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "schema/schemas/document-schema.struct.json",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "schema/schemas/openapi.json",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "cloudevents/schemas/document-schema.json",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "cloudevents/schemas/document-schema.avsc",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "cloudevents/schemas/document-schema.struct.json",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "cloudevents/schemas/openapi.json",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "tools/schema-generator.py",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "tools/test_schema_generator.py",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
+      "path": "core/templates/xregistry_openapi_template.json",
+      "role": "review-only"
+    },
+    {
+      "source": "upstream-801aaf21",
       "path": "LICENSE",
       "role": "review-only"
     }

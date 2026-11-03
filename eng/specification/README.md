@@ -159,14 +159,32 @@ line-ending conversion.
 
 ## Review workflow
 
-Active successor requirements use merged upstream `d290b1ec` and draft PR #571
-`d757328e`, except for the OPC UA binding selected from `f69085fb`. That
-native-only refresh corrects the canonical `deprecated` event names and their
-field rules; it does not select later versions of other draft requirements.
-The HTTP selector models at `a1da400e` remain review-only inputs. PR #715 and
-#716 also remain separate review-only inputs. Refreshing the composition does
-not mark source-qualified requirements implemented or qualified, even when
-their text is unchanged.
+Merged-source intake is frozen at
+`801aaf218a3d954c87f5014eb00c37aff93c001b`. Its retained snapshot includes the
+nine merged normative documents, domain models, all sixteen domain schema
+outputs, the generator, its tests and the OpenAPI template. The nine normative
+documents are byte-identical to the selected `upstream-d290b1ec` sources, so
+their existing source-qualified clauses and reviews remain selected.
+`freeze_successors.py` verifies this equality before writing anything; a
+different normative document requires an explicit composition change rather
+than transferring its predecessor's evidence. The newer snapshot's files are
+review-only inputs, not duplicate requirements or an implicit override.
+
+The effective successor composition is:
+
+| Documents | Selected source |
+| --- | --- |
+| Core, model, HTTP, events, Endpoint, Message, Schema, CloudEvents and pagination | `upstream-d290b1ec`, verified byte-identical through frozen `801aaf21` |
+| Registry, OpenUSD, API, Media Endpoints, federation, HTTP federation, mapping, File, Git, OCI and Publication | `pr571-d757328e` |
+| OPC UA binding | `pr571-f69085fb`, including the canonical `deprecated` event correction |
+| WoT | `pr571-890b4a62` |
+| Publication design | `pr571-d757328e`, selected informative design rather than a normative document |
+
+The HTTP selector models at `a1da400e`, PR #715 and PR #716 remain separate
+review-only inputs. Approved clause-level proposal selections are documented in
+[specification feedback](../../docs/spec-feedback.md). Neither the newer merged
+artifact snapshot nor a composition refresh marks requirements implemented or
+qualified.
 
 After an intentional source refresh, use
 `python eng\specification\manage.py generate --retire-superseded` to archive
