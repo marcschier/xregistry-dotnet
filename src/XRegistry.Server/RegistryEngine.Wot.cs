@@ -295,6 +295,7 @@ public sealed partial class RegistryEngine
         private static JsonElement? WotCompatibilityLineDeclaration(JsonElement root, string lineIri, string path)
         {
             var hasBindingPrefix = false;
+            var hasUnresolvedContext = false;
             if (root.TryGetProperty("@context", out var context))
             {
                 var contexts = context.ValueKind == JsonValueKind.Array
@@ -305,6 +306,13 @@ public sealed partial class RegistryEngine
                     if (item.ValueKind != JsonValueKind.Object)
                     {
                         hasBindingPrefix = false;
+                        hasUnresolvedContext |= item.ValueKind != JsonValueKind.Null;
+                        continue;
+                    }
+                    if (item.TryGetProperty("@import", out _))
+                    {
+                        hasBindingPrefix = false;
+                        hasUnresolvedContext = true;
                         continue;
                     }
                     if (item.TryGetProperty("uav", out var prefix))
@@ -312,12 +320,9 @@ public sealed partial class RegistryEngine
                         hasBindingPrefix = prefix.ValueKind == JsonValueKind.String &&
                             prefix.GetString() == "http://opcfoundation.org/UA/WoT-Binding/";
                     }
-                    else if (item.TryGetProperty("@import", out _))
-                    {
-                        hasBindingPrefix = false;
-                    }
                 }
             }
+            hasBindingPrefix &= !hasUnresolvedContext;
 
             JsonElement? declaration = null;
             foreach (var property in root.EnumerateObject())

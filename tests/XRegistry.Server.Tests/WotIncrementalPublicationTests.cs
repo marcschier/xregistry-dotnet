@@ -203,6 +203,7 @@ public class WotIncrementalPublicationTests
     [Arguments(0)]
     [Arguments(1)]
     [Arguments(2)]
+    [Arguments(3)]
     public async Task CompactCompatibilityLineDoesNotTrustUnresolvedJsonLdContexts(int contextKind)
     {
         const string prefix = "http://opcfoundation.org/UA/WoT-Binding/";
@@ -210,7 +211,8 @@ public class WotIncrementalPublicationTests
         {
             0 => "\"https://example.invalid/context\"",
             1 => $$"""[{"uav":"{{prefix}}"},"https://example.invalid/context"]""",
-            _ => """{"@import":"https://example.invalid/context"}"""
+            2 => """{"@import":"https://example.invalid/context"}""",
+            _ => $$"""["https://example.invalid/context",{"uav":"{{prefix}}"}]"""
         };
         var document = $$"""{"@context":{{context}},"id":"urn:example:pump","uav:compatibilityLine":"urn:example:line:a"}""";
         var engine = CreateEngine();
