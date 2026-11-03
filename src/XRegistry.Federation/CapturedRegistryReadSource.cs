@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using XRegistry.Publication;
 
 namespace XRegistry.Federation;
 
@@ -98,18 +99,9 @@ public sealed class CapturedRegistryReadSource : IFederationReadSource
         foreach (var (xid, document) in documents)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            _budget.ChargeWork();
             ArgumentNullException.ThrowIfNull(document);
-            var parts = FederationSyntax.Xid(xid);
-            var key = DocumentTreeFormat.XidPath(parts);
-            if (parts.Length != 6 || !_entities.ContainsKey(key) ||
-                !DocumentTreeFormat.Resource(model, parts).HasDocument || !_documents.TryAdd(key, document))
-            {
-                throw FederationJson.Invalid("A document association must uniquely identify a captured document-bearing exact Version.");
-            }
-            _budget.CheckObjectBytes(document.Length);
-            _budget.ChargeBytes(document.Length);
-            _budget.ChargeObject();
+            var key = ReserveDocument(xid, document.Length);
+            _documents.Add(key, document);
         }
         cancellationToken.ThrowIfCancellationRequested();
     }
@@ -120,6 +112,57 @@ public sealed class CapturedRegistryReadSource : IFederationReadSource
     public RegistryModel Model { get; }
     /// <inheritdoc />
     public JsonElement Capabilities { get; }
+
+    /// <summary>Retains the documents of an already verified Publication snapshot without reopening its channel.</summary>
+    /// <remarks>
+    /// All association identities and declared sizes are checked before document acquisition. Later reads use
+    /// retained bytes only. Publication provenance remains in the supplied snapshot; originRegistry is not
+    /// interpreted as a document location. This does not establish domain closure or full graph conformance.
+    /// </remarks>
+    public static async ValueTask<CapturedRegistryReadSource> FromPublicationAsync(
+        PublicationOpenedSnapshot snapshot, RegistryModel model, FederationReadBudget? budget = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        ArgumentNullException.ThrowIfNull(model);
+        cancellationToken.ThrowIfCancellationRequested();
+        budget ??= new();
+        if (snapshot.Manifest.Registry.Size > budget.Limits.MaxObjectBytes)
+        {
+            throw new FederationException(FederationErrorCode.LimitExceeded, "Captured Registry bytes exceed the object limit.");
+        }
+        var context = new NativeRegistryContext("publication", snapshot.Manifest.Scope,
+            snapshot.Manifest.SnapshotId, true, snapshot.Manifest.Registry.Digest["sha256:".Length..]);
+        var source = new CapturedRegistryReadSource(snapshot.GetExactRegistryBytes(), model, context,
+            new Dictionary<string, FederationDocument>(StringComparer.Ordinal), budget, cancellationToken);
+        var associations = new Dictionary<string, PublicationDocument>(StringComparer.Ordinal);
+        foreach (var association in snapshot.Manifest.Documents)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (association.Content.Size > budget.Limits.MaxObjectBytes)
+            {
+                throw new FederationException(FederationErrorCode.LimitExceeded, "Captured document bytes exceed the object limit.");
+            }
+            var key = source.ReserveDocument(association.ViewVersion, (long)association.Content.Size);
+            if (!associations.TryAdd(key, association))
+            {
+                throw FederationJson.Invalid("A Publication document association repeats a captured exact Version.");
+            }
+            budget.ChargeRequest();
+        }
+        foreach (var (key, association) in associations)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var metadata = source.GetEntity(key).Value;
+            var contentType = metadata.TryGetProperty("contenttype", out _)
+                ? FederationJson.String(metadata, "contenttype") : null;
+            var bytes = await snapshot.ReadDocumentAsync(association.ViewVersion, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            source._documents.Add(key, new(bytes, contentType, association.Base));
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return source;
+    }
 
     /// <summary>Returns the original captured Registry representation, not a serialization of a read result.</summary>
     public byte[] GetExactRegistryBytes() => (byte[])_registryBytes.Clone();
@@ -379,6 +422,21 @@ public sealed class CapturedRegistryReadSource : IFederationReadSource
     }
 
     private Entity GetEntity(string xid) => _entities.TryGetValue(xid, out var value) ? value : throw NotFound();
+    private string ReserveDocument(string xid, long length)
+    {
+        _budget.ChargeWork();
+        var parts = FederationSyntax.Xid(xid);
+        var key = DocumentTreeFormat.XidPath(parts);
+        if (parts.Length != 6 || !_entities.ContainsKey(key) ||
+            !DocumentTreeFormat.Resource(Model, parts).HasDocument || _documents.ContainsKey(key))
+        {
+            throw FederationJson.Invalid("A document association must uniquely identify a captured document-bearing exact Version.");
+        }
+        _budget.CheckObjectBytes(length);
+        _budget.ChargeBytes(length);
+        _budget.ChargeObject();
+        return key;
+    }
     private static FederationException NotFound() => new(FederationErrorCode.NotFound, "The captured view has no selected metadata or associated document.");
     private JsonObject Copy(JsonElement value) => JsonNode.Parse(value.GetRawText(),
         documentOptions: new() { MaxDepth = _budget.Limits.MaxJsonDepth })!.AsObject();

@@ -12,5 +12,6 @@
     <ProjectReference Include="..\XRegistry\XRegistry.csproj" />
     <ProjectReference Include="..\XRegistry.Client\XRegistry.Client.csproj" />
     <ProjectReference Include="..\XRegistry.Models\XRegistry.Models.csproj" />
+    <ProjectReference Include="..\XRegistry.Publication\XRegistry.Publication.csproj" />
   </ItemGroup>
 </Project>

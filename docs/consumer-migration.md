@@ -2395,11 +2395,23 @@ associated bytes report `not-found`. API views and alias-Version document views
 are unsupported. The retained graph supports captured WoT identity construction
 and pinned document acquisition without live reads.
 
-This source does not open a Publication snapshot, verify its descriptors or
-immutable model-include provenance, or validate every Core metadata constraint.
-The caller still supplies those conditions. Domain closure validation and
-offline WoT composition remain unfinished; passing a graph to this source does
-not establish either condition.
+For an already verified `PublicationOpenedSnapshot`, use
+`CapturedRegistryReadSource.FromPublicationAsync`. It checks the graph and
+reserves the cumulative declared document sizes before acquiring any associated
+document. Acquisition uses the snapshot's exact Version descriptors, not its
+channel, and propagates missing-byte, digest and cancellation errors. The
+returned source retains every acquired document and performs no later binding
+reads. Its immutable revision is the manifest digest; its source identity is
+the declared publication scope, not a document-retrieval endpoint.
+
+The factory takes content type from captured Version metadata and the original
+base from the manifest association. `originRegistry` and `originVersion` remain
+provenance in the supplied snapshot; neither becomes an inferred document
+location. The caller still supplies the captured compiled model. The direct
+constructor also leaves descriptor verification to the caller. Neither entry
+point verifies immutable model-include provenance or every Core metadata
+constraint. Domain closure validation and offline WoT composition remain
+unfinished.
 
 `WotPublicationClosure.Parse` reads the selected closed representation without
 registering the WoT extension as supported. Entries and binding endpoints must

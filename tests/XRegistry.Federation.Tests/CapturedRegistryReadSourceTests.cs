@@ -8,11 +8,185 @@ using System.Text.Json.Nodes;
 using TUnit.Assertions;
 using TUnit.Core;
 using XRegistry.Models;
+using XRegistry.Publication;
 
 namespace XRegistry.Federation.Tests;
 
 public class CapturedRegistryReadSourceTests
 {
+    [Test]
+    public async Task PublicationCaptureRetainsVerifiedAssociationsWithoutReopeningTheChannel()
+    {
+        var fixture = new Fixture();
+        fixture.Root["sets"]!["team"]!["things"]!["a"]!["versions"]!["1.0.0"]!["contenttype"] = "application/tm+json";
+        var publication = new PublicationFixture(fixture);
+        var opened = await publication.OpenAsync();
+        var budget = new FederationReadBudget();
+        var source = await CapturedRegistryReadSource.FromPublicationAsync(opened, fixture.Model, budget);
+        await Assert.That(publication.ChannelReads).IsEqualTo(1);
+        await Assert.That(publication.OpenedVersions.SequenceEqual([
+            publication.ManifestDescriptor.Reference.Version, PublicationFixture.RegistryVersion,
+            PublicationFixture.FirstVersion, PublicationFixture.SecondVersion])).IsTrue();
+        await Assert.That(source.Context.Binding).IsEqualTo("publication");
+        await Assert.That(source.Context.Source).IsEqualTo(opened.Manifest.Scope);
+        await Assert.That(source.Context.Revision).IsEqualTo(opened.Manifest.SnapshotId);
+        await Assert.That(source.Context.RootSha256).IsEqualTo(Digest(fixture.Bytes()));
+        await Assert.That(source.GetExactRegistryBytes().SequenceEqual(opened.GetExactRegistryBytes())).IsTrue();
+        await Assert.That(budget.BytesRead).IsEqualTo((long)fixture.Bytes().Length + Fixture.First.Length + Fixture.Second.Length);
+        await Assert.That(budget.ObjectsRead).IsEqualTo(3L);
+        await Assert.That(budget.Requests).IsEqualTo(2L);
+        publication.FailOnRead = true;
+        var document = await source.ReadAsync(new(FederationOperation.Document, Fixture.Resource));
+        await Assert.That(document.Document!.ContentType).IsEqualTo("application/tm+json");
+        await Assert.That(document.Document.Base).IsEqualTo("https://example.test/relocated/model.json");
+        await Assert.That(document.Document.Origin).IsNull();
+        await Assert.That(opened.Manifest.Documents[0].OriginRegistry).IsEqualTo("urn:test:original-registry");
+        await Assert.That(opened.Manifest.Documents[0].OriginVersion).IsEqualTo("/originals/site/models/model/versions/old");
+        using var stream = document.Document.OpenRead();
+        using var bytes = new MemoryStream();
+        await stream.CopyToAsync(bytes);
+        await Assert.That(bytes.ToArray().SequenceEqual(Fixture.First)).IsTrue();
+        var selected = await WotRegistryResolver.ResolveAsync(source, Fixture.Collection,
+            new(Fixture.WotId, WotReferenceTargetKind.ThingModel, WotReferenceOperator.ThingModel, VersionIdPin: "1.0.0"));
+        await Assert.That(selected.Version.VersionId).IsEqualTo("1.0.0");
+        await Assert.That(selected.Document.Base).IsEqualTo("https://example.test/relocated/model.json");
+        await Assert.That(publication.OpenedVersions.Count).IsEqualTo(4);
+        await Assert.That(publication.DisposedBindings).IsEqualTo(5);
+    }
+
+    [Test]
+    [Arguments("missing-version")]
+    [Arguments("resource")]
+    [Arguments("size")]
+    [Arguments("total-bytes")]
+    [Arguments("objects")]
+    [Arguments("model")]
+    [Arguments("registry-size")]
+    public async Task PublicationCaptureChecksGraphAndCumulativeLimitsBeforeAcquiringDocuments(string change)
+    {
+        var fixture = new Fixture();
+        var publication = new PublicationFixture(fixture, manifest =>
+        {
+            if (change == "missing-version") { manifest["documents"]![0]!["viewVersion"] = Fixture.Resource + "/versions/9.0.0"; }
+            if (change == "resource") { manifest["documents"]![0]!["viewVersion"] = "/missing/team/things/a/versions/1.0.0"; }
+            if (change == "size") { manifest["documents"]![0]!["content"]!["size"] = 1_000_000; }
+        });
+        var opened = await publication.OpenAsync();
+        var limits = new FederationReadLimits(
+            maxTotalBytes: change == "total-bytes" ? fixture.Bytes().Length + Fixture.First.Length + Fixture.Second.Length - 1 : 64 * 1024 * 1024,
+            maxObjects: change == "objects" ? 2 : 4096,
+            maxObjectBytes: change == "registry-size" ? fixture.Bytes().Length - 1 : 100_000);
+        var model = change == "model" ? RegistryModel.Compile(RegistryJson.Parse("""{"groups":{}}""")) : fixture.Model;
+        var failure = await Assert.That(async () => await CapturedRegistryReadSource.FromPublicationAsync(opened, model, new(limits)))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected pre-acquisition rejection.");
+        await Assert.That(failure.Code).IsEqualTo(change is "total-bytes" or "objects" or "registry-size" or "size"
+            ? FederationErrorCode.LimitExceeded : FederationErrorCode.InvalidPackage);
+        await Assert.That(publication.OpenedVersions.Count).IsEqualTo(2);
+        await Assert.That(publication.ChannelReads).IsEqualTo(1);
+    }
+
+    [Test]
+    [Arguments("size")]
+    [Arguments("digest")]
+    [Arguments("missing")]
+    [Arguments("cancel")]
+    public async Task PublicationCapturePropagatesByteFailuresAndNeverSubstitutesDocuments(string change)
+    {
+        var fixture = new Fixture();
+        var publication = new PublicationFixture(fixture);
+        var opened = await publication.OpenAsync();
+        using var cancellation = new CancellationTokenSource();
+        if (change == "size") { publication.Objects[PublicationFixture.FirstVersion] = [1, 2, 3]; }
+        if (change == "digest")
+        {
+            var changed = (byte[])Fixture.First.Clone();
+            changed[0] = (byte)'X';
+            publication.Objects[PublicationFixture.FirstVersion] = changed;
+        }
+        if (change == "missing") { publication.Objects.Remove(PublicationFixture.FirstVersion); }
+        if (change == "cancel") { publication.OnOpen = _ => cancellation.Cancel(); }
+        if (change == "cancel")
+        {
+            await Assert.That(async () => await CapturedRegistryReadSource.FromPublicationAsync(opened, fixture.Model,
+                cancellationToken: cancellation.Token)).Throws<OperationCanceledException>();
+        }
+        else
+        {
+            var failure = await Assert.That(async () => await CapturedRegistryReadSource.FromPublicationAsync(opened, fixture.Model))
+                .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected exact descriptor failure.");
+            await Assert.That(failure.Code).IsEqualTo(change switch
+            {
+                "size" => "size_mismatch", "digest" => "digest_mismatch", _ => "object_not_found"
+            });
+        }
+        await Assert.That(publication.ChannelReads).IsEqualTo(1);
+        await Assert.That(publication.OpenedVersions.Count).IsEqualTo(3);
+        await Assert.That(publication.OpenedVersions[^1]).IsEqualTo(PublicationFixture.FirstVersion);
+        await Assert.That(publication.DisposedBindings).IsEqualTo(4);
+    }
+
+    [Test]
+    [Arguments("bytes", -1)]
+    [Arguments("bytes", 0)]
+    [Arguments("bytes", 1)]
+    [Arguments("objects", -1)]
+    [Arguments("objects", 0)]
+    [Arguments("objects", 1)]
+    [Arguments("work", -1)]
+    [Arguments("work", 0)]
+    [Arguments("work", 1)]
+    [Arguments("requests", -1)]
+    [Arguments("requests", 0)]
+    [Arguments("requests", 1)]
+    public async Task PublicationCaptureReservationsHaveInclusiveCumulativeBoundaries(string limit, int delta)
+    {
+        var fixture = new Fixture();
+        var baselinePublication = new PublicationFixture(fixture);
+        var baseline = new FederationReadBudget();
+        _ = await CapturedRegistryReadSource.FromPublicationAsync(await baselinePublication.OpenAsync(), fixture.Model, baseline);
+        var publication = new PublicationFixture(fixture);
+        var opened = await publication.OpenAsync();
+        var budget = new FederationReadBudget(new(
+            maxTotalBytes: limit == "bytes" ? baseline.BytesRead + delta : 64 * 1024 * 1024,
+            maxObjects: limit == "objects" ? baseline.ObjectsRead + delta : 4096,
+            maxRequests: limit == "requests" ? baseline.Requests + delta : 4096,
+            maxWork: limit == "work" ? baseline.Work + delta : 1_000_000));
+        if (delta < 0)
+        {
+            var failure = await Assert.That(async () => await CapturedRegistryReadSource.FromPublicationAsync(opened, fixture.Model, budget))
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected reservation exhaustion.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+            await Assert.That(publication.OpenedVersions.Count).IsEqualTo(2);
+        }
+        else
+        {
+            var source = await CapturedRegistryReadSource.FromPublicationAsync(opened, fixture.Model, budget);
+            await Assert.That(source.GetExactRegistryBytes().SequenceEqual(fixture.Bytes())).IsTrue();
+            await Assert.That(budget.BytesRead).IsEqualTo(baseline.BytesRead);
+            await Assert.That(budget.ObjectsRead).IsEqualTo(baseline.ObjectsRead);
+            await Assert.That(budget.Work).IsEqualTo(baseline.Work);
+            await Assert.That(budget.Requests).IsEqualTo(baseline.Requests);
+            await Assert.That(publication.OpenedVersions.Count).IsEqualTo(4);
+        }
+    }
+
+    [Test]
+    public async Task PublicationCaptureHonorsCancellationBeforeRetainingOrAcquiringBytes()
+    {
+        var fixture = new Fixture();
+        var publication = new PublicationFixture(fixture);
+        var opened = await publication.OpenAsync();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var budget = new FederationReadBudget();
+        await Assert.That(async () => await CapturedRegistryReadSource.FromPublicationAsync(opened, fixture.Model,
+            budget, cancellation.Token)).Throws<OperationCanceledException>();
+        await Assert.That(budget.BytesRead).IsEqualTo(0L);
+        await Assert.That(budget.ObjectsRead).IsEqualTo(0L);
+        await Assert.That(budget.Work).IsEqualTo(0L);
+        await Assert.That(publication.OpenedVersions.Count).IsEqualTo(2);
+    }
+
     [Test]
     public async Task CapturedReadsPreserveOriginalBytesMetadataAndResponseLocalNavigation()
     {
@@ -434,6 +608,93 @@ public class CapturedRegistryReadSourceTests
     }
 
     private static string Digest(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+
+    private sealed class PublicationFixture
+    {
+        internal const string RegistryVersion = "/captures/team/objects/registry/versions/fixed";
+        internal const string FirstVersion = "/captures/team/objects/one/versions/fixed";
+        internal const string SecondVersion = "/captures/team/objects/two/versions/fixed";
+        private static readonly PublicationRegistryAccess Access = new("http", "https://publisher.example.test",
+            new Dictionary<string, string>(StringComparer.Ordinal));
+        internal Dictionary<string, byte[]> Objects { get; } = new(StringComparer.Ordinal);
+        internal List<string> OpenedVersions { get; } = [];
+        internal int ChannelReads { get; private set; }
+        internal int DisposedBindings { get; private set; }
+        internal PublicationByteDescriptor ManifestDescriptor { get; }
+        internal bool FailOnRead { get; set; }
+        internal Action<string>? OnOpen { get; set; }
+
+        internal PublicationFixture(Fixture fixture, Action<JsonObject>? change = null)
+        {
+            var registry = fixture.Bytes();
+            Objects[RegistryVersion] = registry;
+            Objects[FirstVersion] = Fixture.First;
+            Objects[SecondVersion] = Fixture.Second;
+            var manifest = new JsonObject
+            {
+                ["format"] = "xregistry-publication/1", ["scope"] = "urn:test:scope",
+                ["capture"] = "assembled", ["completeness"] = "linked",
+                ["registry"] = Descriptor(RegistryVersion, registry),
+                ["documents"] = new JsonArray(
+                    Association("1.0.0", FirstVersion, Fixture.First),
+                    Association("2.0.0", SecondVersion, Fixture.Second))
+            };
+            change?.Invoke(manifest);
+            var manifestBytes = Encoding.UTF8.GetBytes(manifest.ToJsonString());
+            var manifestXid = "/publications/team/snapshots/" + Digest(manifestBytes) + "/versions/manifest";
+            ManifestDescriptor = new(new(Access, manifestXid), "sha256:" + Digest(manifestBytes), manifestBytes.Length);
+            Objects[manifestXid] = manifestBytes;
+        }
+
+        internal ValueTask<PublicationOpenedSnapshot> OpenAsync() =>
+            new PublicationReadClient((_, _) => ValueTask.FromResult<IPublicationReadBinding>(new Binding(this)))
+                .OpenChannelAsync(Access, "/publications/team/channels/stable");
+
+        private static JsonObject Association(string version, string storage, byte[] bytes) => new()
+        {
+            ["viewVersion"] = Fixture.Resource + "/versions/" + version,
+            ["originRegistry"] = "urn:test:original-registry",
+            ["originVersion"] = "/originals/site/models/model/versions/old",
+            ["base"] = "https://example.test/relocated/model.json", ["content"] = Descriptor(storage, bytes)
+        };
+
+        private static JsonObject Descriptor(string version, byte[] bytes) => new()
+        {
+            ["reference"] = new JsonObject
+            {
+                ["registry"] = new JsonObject { ["binding"] = Access.Binding, ["endpoint"] = Access.Endpoint, ["parameters"] = new JsonObject() },
+                ["version"] = version
+            },
+            ["digest"] = "sha256:" + Digest(bytes), ["size"] = bytes.Length
+        };
+
+        private sealed class Binding(PublicationFixture owner) : IPublicationReadBinding
+        {
+            public PublicationRegistryAccess Access => PublicationFixture.Access;
+            public ValueTask<PublicationChannelMetadata> ReadChannelMetadataAsync(string channelResource, CancellationToken cancellationToken = default)
+            {
+                if (owner.FailOnRead) { throw new InvalidOperationException("The selected channel must not reopen."); }
+                owner.ChannelReads++;
+                return ValueTask.FromResult(new PublicationChannelMetadata("urn:test:scope", owner.ManifestDescriptor, 1));
+            }
+            public ValueTask<Stream> OpenVersionDocumentAsync(string version, CancellationToken cancellationToken = default)
+            {
+                if (owner.FailOnRead) { throw new InvalidOperationException("Retained document reads must not reopen a binding."); }
+                owner.OpenedVersions.Add(version);
+                owner.OnOpen?.Invoke(version);
+                if (!owner.Objects.TryGetValue(version, out var bytes))
+                {
+                    throw new PublicationException("object_not_found", "", "The exact stored Version is unavailable.");
+                }
+                return ValueTask.FromResult<Stream>(new MemoryStream(bytes, false));
+            }
+            public ValueTask DisposeAsync()
+            {
+                owner.DisposedBindings++;
+                return ValueTask.CompletedTask;
+            }
+        }
+    }
 
     private sealed class Fixture
     {
