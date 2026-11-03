@@ -129095,7 +129095,7 @@
       "text": "When a view is served from another location, the origin fields preserve the document's source identity and `base` preserves the base for its relative references. View Version XIDs MUST be unique, including under Core's case-insensitive uniqueness rules. The association MUST NOT change the document's authored identifiers.",
       "review": {
         "status": "reviewed",
-        "note": "The parser preserves originRegistry, originVersion, base and viewVersion as supplied. It rejects duplicate view Version entity identities using Core Resource identity while retaining case-sensitive Version IDs.",
+        "note": "The parser preserves originRegistry, originVersion, base and viewVersion as supplied. It rejects duplicate view Version identities under Core's case-insensitive ID uniqueness rule, including percent-encoded equivalents. Equal Version IDs remain valid on different Resources. Exact document lookup still uses case-sensitive Version IDs and never opens a binding for a wrong-case Version request.",
         "roles": [
           "producer",
           "client"
@@ -129105,7 +129105,9 @@
         "status": "implemented",
         "testIds": [
           "ParsesManifestAndRetainsItsExactBytes",
-          "EnforcesEntityIdentityUniquenessButKeepsVersionIdsCaseSensitive",
+          "EnforcesCaseInsensitiveViewVersionUniqueness",
+          "AllowsDistinctVersionsAndEqualVersionIdsOnDifferentResources",
+          "ExactDocumentLookupRemainsVersionCaseSensitiveAfterUniquenessValidation",
           "CapturedDocumentsUseExactAssociationsAndTheRecordedDefaultWithoutRewriting",
           "CapturedPointerTokensUseRfc6901AndUriFragmentEncoding",
           "CapturedCollectionIdsUseCoreGrammarRatherThanArbitraryJsonPointerKeys"

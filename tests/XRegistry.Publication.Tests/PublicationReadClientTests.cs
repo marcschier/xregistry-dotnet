@@ -18,6 +18,24 @@ public class PublicationReadClientTests
         new Dictionary<string, string>(StringComparer.Ordinal));
 
     [Test]
+    public async Task ExactDocumentLookupRemainsVersionCaseSensitiveAfterUniquenessValidation()
+    {
+        var fixture = Fixture.Create();
+        var binding = fixture.Binding();
+        var opened = await fixture.Client(binding).OpenChannelAsync(Access, ChannelResource);
+        var bytes = await opened.ReadDocumentAsync("/groups/g/resources/r/versions/v1");
+        await Assert.That(bytes.SequenceEqual(fixture.DocumentBytes)).IsTrue();
+        var reads = binding.OpenedVersions.Count;
+        var failure = await Assert.That(async () => await opened.ReadDocumentAsync("/groups/g/resources/r/versions/V1"))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected a case-sensitive Version lookup.");
+        await Assert.That(failure.Code).IsEqualTo("object_not_found");
+        await Assert.That(binding.OpenedVersions.Count).IsEqualTo(reads);
+        var escaped = await opened.ReadDocumentAsync("/groups/g/resources/r/versions/%761");
+        await Assert.That(escaped.SequenceEqual(fixture.DocumentBytes)).IsTrue();
+        await Assert.That(binding.OpenedVersions[^1]).IsEqualTo("/groups/g/resources/r/versions/v1");
+    }
+
+    [Test]
     [Arguments(false, "https://reader:password@publisher.example.test", "credentialed_endpoint")]
     [Arguments(true, "https://reader:password@publisher.example.test", "credentialed_endpoint")]
     [Arguments(false, "https://@publisher.example.test", "credentialed_endpoint")]

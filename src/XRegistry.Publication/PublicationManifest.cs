@@ -123,7 +123,7 @@ public sealed class PublicationManifest
     {
         var array = PublicationJson.RequireArray(PublicationJson.RequireProperty(root, "documents", ""), "/documents");
         var documents = new PublicationDocument[array.GetArrayLength()];
-        var viewVersions = new HashSet<string>(StringComparer.Ordinal);
+        var viewVersions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var index = 0;
         foreach (var item in array.EnumerateArray())
         {

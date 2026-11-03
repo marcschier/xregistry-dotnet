@@ -2404,6 +2404,10 @@ returned source retains every acquired document and performs no later binding
 reads. Its immutable revision is the manifest digest; its source identity is
 the declared publication scope, not a document-retrieval endpoint.
 
+Publication manifest document associations reject Version IDs that differ only
+by case, including alternate percent encodings. Exact-Version lookup remains
+case-sensitive; a wrong-case Version request does not acquire document bytes.
+
 The factory takes content type from captured Version metadata and the original
 base from the manifest association. `originRegistry` and `originVersion` remain
 provenance in the supplied snapshot; neither becomes an inferred document

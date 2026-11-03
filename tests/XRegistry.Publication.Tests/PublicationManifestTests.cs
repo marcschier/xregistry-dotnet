@@ -688,28 +688,41 @@ public class PublicationManifestTests
     }
 
     [Test]
-    public async Task EnforcesEntityIdentityUniquenessButKeepsVersionIdsCaseSensitive()
+    [Arguments("/sets/manual/documents/intro/versions/7", "/sets/MANUAL/documents/INTRO/versions/7")]
+    [Arguments("/sets/manual/documents/intro/versions/7", "/sets/manual/documents/intro/versions/%37")]
+    [Arguments("/sets/manual/documents/intro/versions/A", "/sets/manual/documents/intro/versions/a")]
+    [Arguments("/sets/manual/documents/intro/versions/A", "/sets/manual/documents/intro/versions/%61")]
+    [Arguments("/sets/manual/documents/intro/versions/A", "/sets/manual/documents/intro/versions/%41")]
+    public async Task EnforcesCaseInsensitiveViewVersionUniqueness(string first, string repeated)
     {
         var duplicate = JsonNode.Parse(ValidManifest)!.AsObject();
         var duplicateDocuments = duplicate["documents"]!.AsArray();
+        duplicateDocuments[0]!["viewVersion"] = first;
         var entityCollision = duplicateDocuments[0]!.DeepClone();
-        entityCollision["viewVersion"] = "/sets/MANUAL/documents/INTRO/versions/7";
+        entityCollision["viewVersion"] = repeated;
         duplicateDocuments.Add(entityCollision);
         var duplicateError = await Assert.That(() =>
                 PublicationManifest.Parse(Encoding.UTF8.GetBytes(duplicate.ToJsonString())))
             .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected entity identity collision.");
         await Assert.That(duplicateError.Code).IsEqualTo("duplicate_view_version");
+        await Assert.That(duplicateError.Path).IsEqualTo("/documents/1/viewVersion");
+    }
 
+    [Test]
+    public async Task AllowsDistinctVersionsAndEqualVersionIdsOnDifferentResources()
+    {
         var distinctVersions = JsonNode.Parse(ValidManifest)!.AsObject();
         var distinctDocuments = distinctVersions["documents"]!.AsArray();
         var upperVersion = distinctDocuments[0]!.DeepClone();
         upperVersion["viewVersion"] = "/sets/MANUAL/documents/INTRO/versions/A";
         distinctDocuments.Add(upperVersion);
         var lowerVersion = distinctDocuments[0]!.DeepClone();
-        lowerVersion["viewVersion"] = "/sets/manual/documents/intro/versions/a";
+        lowerVersion["viewVersion"] = "/sets/manual/documents/other/versions/a";
         distinctDocuments.Add(lowerVersion);
         var parsed = PublicationManifest.Parse(Encoding.UTF8.GetBytes(distinctVersions.ToJsonString()));
         await Assert.That(parsed.Documents.Count).IsEqualTo(3);
+        await Assert.That(parsed.Documents[1].ViewVersion).IsEqualTo("/sets/MANUAL/documents/INTRO/versions/A");
+        await Assert.That(parsed.Documents[2].ViewVersion).IsEqualTo("/sets/manual/documents/other/versions/a");
     }
 
     [Test]
