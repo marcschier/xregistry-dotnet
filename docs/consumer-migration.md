@@ -2378,6 +2378,29 @@ The caller still establishes the source association and checks Version
 requirements, source digest pins and nested-plan resolution. This selection
 method does not establish those conditions or compose the affordance into a view.
 
+`CapturedRegistryReadSource` reads complete Core document-view Registry JSON
+without importing it into a mutable engine. Supply the captured compiled model,
+an authorized immutable snapshot context and exact-Version document associations.
+The source owns the Registry bytes and association map; it retains each
+`FederationDocument`'s immutable bytes, original base and origin. A supplied root
+digest must match the captured bytes. Source locators and provenance are not
+retrieval instructions.
+
+Entity and collection reads rebase only Core navigation into their response.
+Optional collection counts and URLs can be absent, while included maps must be
+complete. Supplied counts, IDs, model material and pointers must agree with
+containment. Resource document reads use the recorded default, including one
+same-type alias; exact-Version reads never substitute another Version. Missing
+associated bytes report `not-found`. API views and alias-Version document views
+are unsupported. The retained graph supports captured WoT identity construction
+and pinned document acquisition without live reads.
+
+This source does not open a Publication snapshot, verify its descriptors or
+immutable model-include provenance, or validate every Core metadata constraint.
+The caller still supplies those conditions. Domain closure validation and
+offline WoT composition remain unfinished; passing a graph to this source does
+not establish either condition.
+
 `WotPublicationClosure.Parse` reads the selected closed representation without
 registering the WoT extension as supported. Entries and binding endpoints must
 be exact Version XIDs. Entry identities are unique, and binding keys combine

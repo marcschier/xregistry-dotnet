@@ -254,62 +254,9 @@ public sealed partial class HttpFederationReadSource
             {
                 throw FederationJson.Invalid("A document-view entity must retain its self pointer.");
             }
-            RebasePointers(result, parts, pointer, sourcePointer);
+            DocumentViewNavigation.Rebase(result, parts, Model, pointer, sourcePointer);
         }
         return result;
-    }
-
-    private void RebasePointers(JsonObject entity, string[] parts, string rootPointer, string sourcePointer,
-        JsonObject? parentResource = null)
-    {
-        var defaultIncluded = parentResource?["versions"] is JsonObject versions &&
-            entity["defaultversionid"] is JsonValue defaultId &&
-            defaultId.TryGetValue<string>(out var id) && id is not null && versions.ContainsKey(id);
-        var navigation = new Dictionary<string, bool>(StringComparer.Ordinal)
-        {
-            ["self"] = true, ["shortself"] = true,
-            ["metaurl"] = entity["meta"] is JsonObject, ["defaultversionurl"] = defaultIncluded
-        };
-        IEnumerable<string> collections = parts.Length switch
-        {
-            0 => Model.Groups.Keys,
-            2 => Model.Groups[parts[0]].Resources.Keys,
-            4 => ["versions"],
-            _ => []
-        };
-        foreach (var collection in collections)
-        {
-            navigation[collection + "url"] = entity[collection] is JsonObject;
-            if (entity[collection] is JsonObject members)
-            {
-                foreach (var member in members)
-                {
-                    if (member.Value is not JsonObject child)
-                    {
-                        throw FederationJson.Invalid("An inlined collection member must be an entity.");
-                    }
-                    RebasePointers(child, [.. parts, collection, member.Key], rootPointer, sourcePointer);
-                }
-            }
-        }
-        if (parts.Length == 4 && entity["meta"] is JsonObject meta)
-        {
-            RebasePointers(meta, [.. parts, "meta"], rootPointer, sourcePointer, entity);
-        }
-        foreach (var (name, included) in navigation)
-        {
-            if (entity[name] is JsonValue value && value.TryGetValue<string>(out var link))
-            {
-                if (!link.StartsWith('#') && !included) { continue; }
-                if (!link.StartsWith('#') || (sourcePointer.Length != 0 &&
-                    link != "#" + sourcePointer && !link.StartsWith("#" + sourcePointer + "/", StringComparison.Ordinal)))
-                {
-                    throw new FederationException(FederationErrorCode.InconsistentSnapshot,
-                        "The source did not return document-view navigation despite the requested flag.");
-                }
-                entity[name] = "#" + rootPointer + link[(1 + sourcePointer.Length)..];
-            }
-        }
     }
 
     private static string PointerToken(string token) => token.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal);

@@ -129049,7 +129049,7 @@
       "text": "The Registry descriptor covers the model, available model source and captured metadata. Registry JSON MUST use Core [document view](../../core/spec.md#doc-flag). It MUST contain a complete internal graph and sufficient model material, including immutable model includes, as specified by Federation. Its enabled capabilities MUST describe the captured view rather than the source server's write capabilities.",
       "review": {
         "status": "reviewed",
-        "note": "The generic parser checks and retains the Registry byte descriptor but does not parse the Registry graph, verify immutable model includes, or derive captured capabilities. The store and read client therefore cannot establish this requirement without the missing full Registry-view validation layer.",
+        "note": "The generic Publication parser retains the Registry descriptor without graph acceptance. CapturedRegistryReadSource now reads a complete Core document-view graph under a caller-supplied immutable context and compiled model. It checks containment, supplied model agreement, included navigation, optional collection hints and read-only capability declarations, and preserves metadata instead of importing it into an engine. Tests cover exact byte ownership, model disagreement, incomplete graphs, response-local pointers, finite limits and offline WoT acquisition. Automatic Publication reconstruction, immutable include provenance and the remaining Core metadata constraints are not verified; this compound requirement remains pending.",
         "roles": [
           "producer",
           "client"
@@ -129057,7 +129057,14 @@
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "CapturedReadsPreserveOriginalBytesMetadataAndResponseLocalNavigation",
+          "CapturedGraphsRejectIncompleteContradictoryOrUnretrievableState",
+          "CapturedGraphAcceptsOmittedOptionalCollectionHintsAndPresentEmptyDocumentBytes",
+          "CapturedGraphFeedsModelDerivedWotIdentityAndVersionResolutionWithoutLiveReads",
+          "CapturedInputLimitsHaveInclusiveBoundaries",
+          "CapturedResultByteLimitIsIndependentOfTheInputObjectLimit"
+        ],
         "nativeEvidence": []
       }
     },
@@ -129094,7 +129101,10 @@
         "status": "implemented",
         "testIds": [
           "ParsesManifestAndRetainsItsExactBytes",
-          "EnforcesEntityIdentityUniquenessButKeepsVersionIdsCaseSensitive"
+          "EnforcesEntityIdentityUniquenessButKeepsVersionIdsCaseSensitive",
+          "CapturedDocumentsUseExactAssociationsAndTheRecordedDefaultWithoutRewriting",
+          "CapturedPointerTokensUseRfc6901AndUriFragmentEncoding",
+          "CapturedCollectionIdsUseCoreGrammarRatherThanArbitraryJsonPointerKeys"
         ],
         "nativeEvidence": []
       }
