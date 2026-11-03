@@ -815,6 +815,28 @@
           "sha256": "c07c2bf22d1b6eadecdbc008b0693c9a876f85c1485c375ff57301085ffc8db9"
         }
       ]
+    },
+    {
+      "id": "pr686-9e103e2b",
+      "repository": "https://github.com/xregistry/spec",
+      "commit": "9e103e2be4de6a7d90630bd2b346e4d08c029cf1",
+      "status": "working-draft",
+      "files": [
+        {
+          "path": "core/events.md",
+          "owner": "events",
+          "kind": "normative",
+          "bytes": 29884,
+          "sha256": "53fa35dbed31217cd0099cef53ace78397fd5f7fece62a72245078ebf7bf4d66"
+        },
+        {
+          "path": "LICENSE",
+          "owner": "license",
+          "kind": "license",
+          "bytes": 11349,
+          "sha256": "c07c2bf22d1b6eadecdbc008b0693c9a876f85c1485c375ff57301085ffc8db9"
+        }
+      ]
     }
   ],
   "composition": [
@@ -1340,6 +1362,16 @@
     },
     {
       "source": "pr677-b0d2d817",
+      "path": "LICENSE",
+      "role": "review-only"
+    },
+    {
+      "source": "pr686-9e103e2b",
+      "path": "core/events.md",
+      "role": "review-only"
+    },
+    {
+      "source": "pr686-9e103e2b",
       "path": "LICENSE",
       "role": "review-only"
     }

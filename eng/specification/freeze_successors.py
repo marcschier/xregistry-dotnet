@@ -30,6 +30,7 @@ CURRENT_DRAFT = "d757328e4e3ca70761244b4a77cacba6bfb5599b"
 OPCUA_EVENTS = "f69085fb89b1204dd72d9dca00472a5f331be2d1"
 HTTP_PROTOCOL_MODELS = "a1da400e938b420da1f097b58a73fd9f75deb9e5"
 COMPATIBILITY_ADMISSION = "b0d2d81777dace4361227a9c37ddf5cd6629a563"
+XREF_CREATION_EVENTS = "9e103e2be4de6a7d90630bd2b346e4d08c029cf1"
 
 
 def sources() -> list[dict]:
@@ -150,8 +151,14 @@ def sources() -> list[dict]:
             {"path": "core/spec.md", "owner": "core", "kind": "normative", "role": "review-only"},
         ],
     }
+    xref_creation_events = {
+        "id": "pr686-9e103e2b", "repository": "https://github.com/xregistry/spec",
+        "commit": XREF_CREATION_EVENTS, "status": "working-draft", "files": [
+            {"path": "core/events.md", "owner": "events", "kind": "normative", "role": "review-only"},
+        ],
+    }
     result = [merged, draft, closure, api, media, current_merged, current_draft, opcua_events,
-              http_protocol_models, compatibility_admission]
+              http_protocol_models, compatibility_admission, xref_creation_events]
     for source in result:
         source["files"].append({"path": "LICENSE", "owner": "license", "kind": "license", "role": "review-only"})
     return result

@@ -320,7 +320,7 @@ class ProvenanceAndReviewTests(unittest.TestCase):
         self.assertEqual(set(sources), {
             "upstream-4a7e7f5e", "pr571-811de7d2", "pr571-514f6eac",
             "pr715-5f9d0134", "pr716-9613f002", "upstream-d290b1ec", "pr571-d757328e",
-            "pr571-f69085fb", "pr571-a1da400e", "pr677-b0d2d817",
+            "pr571-f69085fb", "pr571-a1da400e", "pr677-b0d2d817", "pr686-9e103e2b",
         })
         prior = sources["pr571-811de7d2"]
         current = sources["pr571-514f6eac"]
@@ -347,6 +347,11 @@ class ProvenanceAndReviewTests(unittest.TestCase):
         self.assertEqual(compatibility["commit"], "b0d2d81777dace4361227a9c37ddf5cd6629a563")
         self.assertEqual({(entry["path"], entry["role"]) for entry in compatibility["files"]}, {
             ("core/spec.md", "review-only"), ("LICENSE", "review-only"),
+        })
+        events = sources["pr686-9e103e2b"]
+        self.assertEqual(events["commit"], "9e103e2be4de6a7d90630bd2b346e4d08c029cf1")
+        self.assertEqual({(entry["path"], entry["role"]) for entry in events["files"]}, {
+            ("core/events.md", "review-only"), ("LICENSE", "review-only"),
         })
 
     def test_http_selector_models_are_pinned_from_the_current_pr_head_as_review_only_artifacts(self) -> None:

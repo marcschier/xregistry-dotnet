@@ -344,11 +344,35 @@ public class EventTests
         const string alias = "/teams/g/notes/alias";
         var result = await Send(engine, RegistryAction.Replace, alias,
             "{\"meta\":{\"xref\":\"" + target + "\"}}");
-        var resourceEvent = (await EventsFor(engine, result))
+        var events = await EventsFor(engine, result);
+        await Assert.That(events.Select(static item => item.GetProperty("type").GetString()!).ToArray())
+            .IsEquivalentTo(["io.xregistry.group.updated", "io.xregistry.resource.created"], StringComparer.Ordinal);
+        var resourceEvent = events
             .Single(item => item.GetProperty("subject").GetString() == alias);
 
         await Assert.That(resourceEvent.GetProperty("type").GetString()).IsEqualTo("io.xregistry.resource.created");
         await AssertEventEpochMatchesRead(engine, resourceEvent, alias, alias + "/meta");
+    }
+
+    [Test]
+    public async Task CrossReferenceAndLocalResourceCreationOnlyReportsTheNewLocalVersion()
+    {
+        var engine = Create();
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/target", """{"name":"target"}""");
+        var result = await Send(engine, RegistryAction.Patch, "/teams/g", """
+            {"notes":{"fresh":{"versionid":"local"},"alias":{"meta":{"xref":"/teams/g/notes/target"}}}}
+            """);
+        var events = await EventsFor(engine, result);
+        var resources = events.Where(static item => item.GetProperty("type").GetString() == "io.xregistry.resource.created").ToArray();
+        await Assert.That(resources.Select(static item => item.GetProperty("subject").GetString()!).ToArray())
+            .IsEquivalentTo(["/teams/g/notes/fresh", "/teams/g/notes/alias"], StringComparer.Ordinal);
+        var versions = events.Where(static item => item.GetProperty("type").GetString()!.StartsWith("io.xregistry.version.", StringComparison.Ordinal))
+            .ToArray();
+        await Assert.That(versions.Length).IsEqualTo(1);
+        await Assert.That(versions[0].GetProperty("type").GetString()).IsEqualTo("io.xregistry.version.created");
+        await Assert.That(versions[0].GetProperty("subject").GetString()).IsEqualTo("/teams/g/notes/fresh/versions/local");
+        await Assert.That(events.All(item => item.GetProperty("xregcorrelationid").GetString() == result.CorrelationId)).IsTrue();
+        await AssertEventEpochMatchesRead(engine, versions[0], "/teams/g/notes/fresh/versions/local");
     }
 
     [Test]

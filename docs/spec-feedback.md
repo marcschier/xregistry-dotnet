@@ -107,6 +107,28 @@ exercise these outcomes through the public engine API. This proposal selection
 does not convert the conflicting merged admission clause into implemented
 standard conformance or supply native qualification.
 
+## Selected cross-reference creation-event proposal
+
+The implementation selects the narrow creation-event exception in
+[xregistry/spec#686](https://github.com/xregistry/spec/pull/686) at
+`9e103e2be4de6a7d90630bd2b346e4d08c029cf1`. Its exact Events source and license
+are retained under `tests/Conformance/Successors/pr686-9e103e2b` as review-only
+inputs. Only the Resource-created Version-pairing exception is selected, not
+the whole older Events source or the PR's withdrawn proposals.
+
+Creating an xref Resource generates Resource-created without synthesizing
+Version-created events for its target's existing Versions. Versions actually
+created elsewhere in the same interaction retain their own events.
+`CrossReferenceResourceEventsUseTheFinalVisibleEpochs` checks the complete
+event-type set for direct and second-hop references.
+`CrossReferenceAndLocalResourceCreationOnlyReportsTheNewLocalVersion` checks
+that a sibling local Resource's Version-created event remains present in the
+same interaction. Ordinary Resource creation retains its required pairing.
+
+This selection changes neither the existing event-data epoch requirements nor
+the unresolved policy for monitoring target changes or obtaining data from an
+unavailable target. It is an open proposal, not merged Events conformance.
+
 ## Active Message artifact differences
 
 The merged `upstream-d290b1ec` Message model still differs from the packaged
