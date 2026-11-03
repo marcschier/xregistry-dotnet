@@ -531,6 +531,27 @@ public class WotReferenceUriResolverTests
     }
 
     [Test]
+    public async Task EmptyLinkHrefCanIdentifyAnExternalDocumentThroughItsCapturedEffectiveBase()
+    {
+        var root = System.Text.Json.Nodes.JsonNode.Parse(await ReadBytesAsync(
+            LinkDocument("""[{"rel":"tm:extends","href":""}]""")))!;
+        root["links"]![0]!["@context"] = System.Text.Json.Nodes.JsonNode.Parse(
+            """{"@base":"https://models.example.test/target.json"}""");
+        var document = new FederationDocument(Encoding.UTF8.GetBytes(root.ToJsonString()));
+        var references = await WotJsonLdBaseResolver.DiscoverLinkReferencesAsync(document,
+            new Uri("https://models.example.test/source.json"), WotReferenceTargetKind.ThingModel,
+            new Dictionary<Uri, FederationDocument>());
+
+        await Assert.That(references.Count).IsEqualTo(1);
+        await Assert.That(references[0].SourcePointer).IsEqualTo("/links/0");
+        await Assert.That(references[0].Operator).IsEqualTo("tm:extends");
+        await Assert.That(references[0].Href).IsEqualTo("");
+        await Assert.That(references[0].Target.DocumentUri.AbsoluteUri).IsEqualTo("https://models.example.test/target.json");
+        await Assert.That(references[0].Target.Fragment).IsNull();
+        await Assert.That(references[0].Target.IsDocumentLocal).IsFalse();
+    }
+
+    [Test]
     [Arguments("""{"rel":"tm:extends"}""")]
     [Arguments("""{"rel":"tm:extends","href":null}""")]
     [Arguments("""{"rel":"tm:extends","href":1}""")]

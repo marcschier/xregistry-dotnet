@@ -2297,7 +2297,9 @@ Repeated targets remain separate occurrences. Missing, malformed or competing
 reference-link members reject the operation rather than selecting one alias.
 `describedby` candidates are returned for subsequent Schema classification;
 their presence does not authorize a closure binding. Combined target
-classification remains unfinished.
+classification remains unfinished. An empty href can identify an external
+document when its captured effective base differs from the containing document
+URI; discovery retains the empty string.
 
 `DiscoverProjectionSourceReferencesAsync` recognizes the selected experiment's
 lowercase expanded `projection` type on the authored root. A nested node's
