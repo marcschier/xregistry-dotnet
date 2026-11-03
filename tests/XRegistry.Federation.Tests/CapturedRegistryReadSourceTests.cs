@@ -15,6 +15,314 @@ namespace XRegistry.Federation.Tests;
 public class CapturedRegistryReadSourceTests
 {
     [Test]
+    [Arguments("first", "1.0.0", "1.0.0", null)]
+    [Arguments("first", "2.0.0", null, "unsatisfied")]
+    [Arguments("second", "2.0.0", "2.0.0", null)]
+    [Arguments("missing", "1.0.0", null, "pin-mismatch")]
+    [Arguments(null, "2.0.0", "2.0.0", null)]
+    public async Task ProjectionSourceDigestAndFloorBothApplyWithoutFallback(
+        string? pin, string floor, string? expectedVersion, string? expectedError)
+    {
+        var target = new Fixture().Open();
+        var entry = new JsonObject
+        {
+            ["p:sourceName"] = "base", ["href"] = "urn:inventory:tm", ["type"] = "application/tm+json",
+            ["tm:minVersion"] = floor
+        };
+        if (pin is not null)
+        {
+            entry["p:sourceDigest"] = "sha-256:" + (pin == "missing" ? new string('0', 64) :
+                Digest(pin == "first" ? Fixture.First : Fixture.Second));
+        }
+        var containing = await RetainProjectionPlan(await ProjectionDocument(entry));
+        var uri = new Uri("https://example.test/plan.json");
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var index = InventoryIndex(target);
+        var source = (await WotJsonLdBaseResolver.DiscoverProjectionSourceReferencesAsync(containing.Document,
+            uri, containing.Kind, contexts)).Single();
+        if (expectedError is not null)
+        {
+            var failure = await Assert.That(async () => await WotRegistryResolver.ResolveCapturedProjectionSourceAsync(
+                containing, source, uri, contexts, index)).Throws<RegistryException>() ??
+                throw new InvalidOperationException("Expected a pinned projection requirement failure without fallback.");
+            await Assert.That(failure.Diagnostic.Code).IsEqualTo(expectedError);
+            await Assert.That(failure.Diagnostic.Path).IsEqualTo("/p:projects/0");
+            await Assert.That(failure.Diagnostic.Message.Contains("'base'", StringComparison.Ordinal)).IsTrue();
+        }
+        else
+        {
+            var selected = await WotRegistryResolver.ResolveCapturedProjectionSourceAsync(containing, source,
+                uri, contexts, index);
+            var expectedBytes = expectedVersion == "1.0.0" ? Fixture.First : Fixture.Second;
+            await Assert.That(selected.Version.VersionId).IsEqualTo(expectedVersion);
+            await Assert.That(selected.Version.ContentDigest).IsEqualTo("sha256:" + Digest(expectedBytes));
+            await Assert.That((await Bytes(selected.Document)).SequenceEqual(expectedBytes)).IsTrue();
+        }
+    }
+
+    [Test]
+    [Arguments("41", "urn:test:line:a", "42", null, "unsatisfied")]
+    [Arguments("45", "urn:test:line:a", null, null, "unsatisfied")]
+    [Arguments("45", "urn:test:line:b", null, "45", null)]
+    [Arguments("41", null, null, null, "compatibility-required")]
+    [Arguments(null, "urn:test:line:a", "42", "43", null)]
+    public async Task ProjectionSourcePinsRetainIncrementalLineAndFloorRequirements(
+        string? pinVersion, string? line, string? floor, string? expectedVersion, string? expectedError)
+    {
+        var fixture = IncrementalFixture();
+        var target = fixture.Open();
+        var entry = new JsonObject
+        {
+            ["p:sourceName"] = "base", ["href"] = "urn:inventory:tm", ["type"] = "application/tm+json"
+        };
+        if (line is not null) { entry["uav:compatibilityLine"] = line; }
+        if (floor is not null) { entry["uav:minVersion"] = floor; }
+        if (pinVersion is not null)
+        {
+            entry["p:sourceDigest"] = "sha-256:" +
+                Digest(await Bytes(fixture.Documents[Fixture.Resource + "/versions/" + pinVersion]));
+        }
+        var root = await ProjectionDocument(entry);
+        root["uav:compatibilityLine"] = "urn:test:line:a";
+        var containing = await RetainProjectionPlan(root);
+        var uri = new Uri("https://example.test/plan.json");
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var index = InventoryIndex(target);
+        var source = (await WotJsonLdBaseResolver.DiscoverProjectionSourceReferencesAsync(containing.Document,
+            uri, containing.Kind, contexts)).Single();
+        if (expectedError is not null)
+        {
+            var failure = await Assert.That(async () => await WotRegistryResolver.ResolveCapturedProjectionSourceAsync(
+                containing, source, uri, contexts, index)).Throws<RegistryException>() ??
+                throw new InvalidOperationException("Expected a projection pin not to waive the explicit line or floor.");
+            await Assert.That(failure.Diagnostic.Code).IsEqualTo(expectedError);
+        }
+        else
+        {
+            var selected = await WotRegistryResolver.ResolveCapturedProjectionSourceAsync(containing, source,
+                uri, contexts, index);
+            await Assert.That(selected.Version.VersionId).IsEqualTo(expectedVersion);
+            await Assert.That(selected.Version.CompatibilityLine).IsEqualTo(line);
+        }
+    }
+
+    [Test]
+    [Arguments(true)]
+    [Arguments(false)]
+    public async Task ProjectionSourceFloorsUseTheDeclaredAndCapturedKindRatherThanTheSelectorTerm(bool description)
+    {
+        var fixture = new Fixture();
+        if (description)
+        {
+            fixture.Root["modelsource"]!["groups"]!["sets"]!["resources"]!["things"]!["singular"] = "thingdescription";
+            fixture.Model = RegistryModel.Compile(RegistryJson.Parse(fixture.Root["modelsource"]!.ToJsonString()));
+            foreach (var id in new[] { "1.0.0", "2.0.0" })
+            {
+                fixture.Documents[Fixture.Resource + "/versions/" + id] = new(Encoding.UTF8.GetBytes(new JsonObject
+                {
+                    ["id"] = Fixture.WotId, ["version"] = new JsonObject { ["instance"] = id }
+                }.ToJsonString()));
+            }
+        }
+        var target = fixture.Open();
+        var entry = new JsonObject
+        {
+            ["p:sourceName"] = "base", ["href"] = "urn:inventory:target",
+            ["type"] = description ? "application/td+json" : "application/tm+json",
+            [description ? "td:minVersion" : "tm:minVersion"] = "1.0.0"
+        };
+        var containing = await RetainProjectionPlan(await ProjectionDocument(entry));
+        var uri = new Uri("https://example.test/plan.json");
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var index = new WotCapturedUriIdentityIndex([new(new("urn:inventory:target"), WotCapturedUriIdentityKind.WotId,
+            new(target, "/sets/team", Fixture.Collection, Fixture.Resource,
+                description ? "thingdescription" : "thingmodel", Fixture.WotId))]);
+        var source = (await WotJsonLdBaseResolver.DiscoverProjectionSourceReferencesAsync(containing.Document,
+            uri, containing.Kind, contexts)).Single();
+        var selected = await WotRegistryResolver.ResolveCapturedProjectionSourceAsync(containing, source,
+            uri, contexts, index);
+        await Assert.That(selected.Kind).IsEqualTo(description ? WotReferenceTargetKind.ThingDescription : WotReferenceTargetKind.ThingModel);
+        await Assert.That(selected.Version.VersionId).IsEqualTo(description ? "1.0.0" : "2.0.0");
+    }
+
+    [Test]
+    [Arguments("sha256:0123")]
+    [Arguments("sha-256:ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789")]
+    [Arguments("false")]
+    public async Task ProjectionSourceRequirementsRejectMalformedDigestPins(string digest)
+    {
+        var entry = new JsonObject
+        {
+            ["p:sourceName"] = "base", ["href"] = "urn:inventory:tm", ["type"] = "application/tm+json",
+            ["p:sourceDigest"] = digest == "false" ? JsonValue.Create(false) : JsonValue.Create(digest)
+        };
+        var containing = await RetainProjectionPlan(await ProjectionDocument(entry));
+        var uri = new Uri("https://example.test/plan.json");
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var source = (await WotJsonLdBaseResolver.DiscoverProjectionSourceReferencesAsync(containing.Document,
+            uri, containing.Kind, contexts)).Single();
+        var failure = await Assert.That(async () => await WotJsonLdBaseResolver.ReadProjectionSourceRequirementsAsync(
+            containing.Document, uri, containing.Kind, source, contexts, InventoryIndex(new Fixture().Open())))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected an exact-byte lowercase digest spelling.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    [Arguments("2.0.0", "second", null)]
+    [Arguments("3.0.0", "second", "unsatisfied")]
+    [Arguments("1.0.0", "first", "digest")]
+    public async Task ExactVersionProjectionSourcesStillCheckTheirOwnFloorAndDigest(
+        string floor, string pin, string? error)
+    {
+        var target = new Fixture().Open();
+        var entry = new JsonObject
+        {
+            ["p:sourceName"] = "base", ["href"] = "urn:inventory:exact", ["type"] = "application/tm+json",
+            ["tm:minVersion"] = floor, ["p:sourceDigest"] = "sha-256:" + Digest(pin == "first" ? Fixture.First : Fixture.Second)
+        };
+        var containing = await RetainProjectionPlan(await ProjectionDocument(entry));
+        var uri = new Uri("https://example.test/plan.json");
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var index = new WotCapturedUriIdentityIndex([new(new("urn:inventory:exact"), WotCapturedUriIdentityKind.DocumentView,
+            new(target, "/sets/team", Fixture.Collection, Fixture.Resource, "thingmodel", Fixture.WotId, "2.0.0"))]);
+        var source = (await WotJsonLdBaseResolver.DiscoverProjectionSourceReferencesAsync(containing.Document,
+            uri, containing.Kind, contexts)).Single();
+        if (error == "digest")
+        {
+            var failure = await Assert.That(async () => await WotRegistryResolver.ResolveCapturedProjectionSourceAsync(
+                containing, source, uri, contexts, index)).Throws<FederationException>() ??
+                throw new InvalidOperationException("Expected an exact URI association not to waive the byte digest.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        }
+        else if (error is not null)
+        {
+            var failure = await Assert.That(async () => await WotRegistryResolver.ResolveCapturedProjectionSourceAsync(
+                containing, source, uri, contexts, index)).Throws<RegistryException>() ??
+                throw new InvalidOperationException("Expected an exact URI association not to waive the source floor.");
+            await Assert.That(failure.Diagnostic.Code).IsEqualTo(error);
+        }
+        else
+        {
+            var result = await WotRegistryResolver.ResolveCapturedProjectionSourceAsync(containing, source, uri, contexts, index);
+            await Assert.That(result.Version.VersionId).IsEqualTo("2.0.0");
+            await Assert.That(result.Version.ContentDigest).IsEqualTo("sha256:" + Digest(Fixture.Second));
+        }
+    }
+
+    [Test]
+    [Arguments(-1)]
+    [Arguments(0)]
+    [Arguments(1)]
+    public async Task ProjectionSourceSelectionHasInclusiveSharedWorkAndCancellation(int delta)
+    {
+        var containing = await RetainProjectionPlan(await ProjectionDocument(new()
+        {
+            ["p:sourceName"] = "base", ["href"] = "urn:inventory:tm", ["type"] = "application/tm+json",
+            ["tm:minVersion"] = "1.0.0", ["p:sourceDigest"] = "sha-256:" + Digest(Fixture.Second)
+        }));
+        var uri = new Uri("https://example.test/plan.json");
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var index = InventoryIndex(new Fixture().Open());
+        var source = (await WotJsonLdBaseResolver.DiscoverProjectionSourceReferencesAsync(containing.Document,
+            uri, containing.Kind, contexts)).Single();
+        var baseline = new FederationReadBudget();
+        _ = await WotRegistryResolver.ResolveCapturedProjectionSourceAsync(containing, source, uri, contexts, index, budget: baseline);
+        var budget = new FederationReadBudget(new(maxWork: baseline.Work + delta));
+        if (delta < 0)
+        {
+            var failure = await Assert.That(async () => await WotRegistryResolver.ResolveCapturedProjectionSourceAsync(
+                containing, source, uri, contexts, index, budget: budget)).Throws<FederationException>() ??
+                throw new InvalidOperationException("Expected one shared traversal and selection work limit.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        }
+        else
+        {
+            var selected = await WotRegistryResolver.ResolveCapturedProjectionSourceAsync(containing, source, uri,
+                contexts, index, budget: budget);
+            await Assert.That(selected.Version.VersionId).IsEqualTo("2.0.0");
+            await Assert.That(budget.Work).IsEqualTo(baseline.Work);
+        }
+        using var canceled = new CancellationTokenSource();
+        canceled.Cancel();
+        var canceledBudget = new FederationReadBudget();
+        await Assert.That(async () => await WotRegistryResolver.ResolveCapturedProjectionSourceAsync(containing,
+            source, uri, contexts, index, budget: canceledBudget, cancellationToken: canceled.Token)).Throws<OperationCanceledException>();
+        await Assert.That(canceledBudget.Work).IsEqualTo(0L);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task ProjectionSourceDigestPinsDoNotWaiveWrongKindOrCompetingFloors(bool competing)
+    {
+        var entry = new JsonObject
+        {
+            ["p:sourceName"] = "base", ["href"] = "urn:inventory:tm", ["type"] = "application/tm+json",
+            ["p:sourceDigest"] = "sha-256:" + Digest(Fixture.First)
+        };
+        if (competing)
+        {
+            entry["tm:minVersion"] = "1.0.0";
+            entry["uav:minVersion"] = "1.0.0";
+        }
+        else { entry["td:minVersion"] = "1.0.0"; }
+        var containing = await RetainProjectionPlan(await ProjectionDocument(entry));
+        var uri = new Uri("https://example.test/plan.json");
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var source = (await WotJsonLdBaseResolver.DiscoverProjectionSourceReferencesAsync(containing.Document,
+            uri, containing.Kind, contexts)).Single();
+        var failure = await Assert.That(async () => await WotRegistryResolver.ResolveCapturedProjectionSourceAsync(
+            containing, source, uri, contexts, InventoryIndex(new Fixture().Open()))).Throws<RegistryException>() ??
+            throw new InvalidOperationException("Expected a source pin not to waive floor syntax and target kind.");
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo("invalid-floor");
+    }
+
+    [Test]
+    public async Task ProjectionSourceDigestAliasesCannotCreateCompetingPins()
+    {
+        var entry = new JsonObject
+        {
+            ["p:sourceName"] = "base", ["href"] = "urn:inventory:tm", ["type"] = "application/tm+json",
+            ["p:sourceDigest"] = "sha-256:" + Digest(Fixture.First),
+            ["digest"] = "sha-256:" + Digest(Fixture.First)
+        };
+        var root = await ProjectionDocument(entry);
+        root["@context"]!["digest"] = WotJsonLdBaseResolver.ProjectionVocabulary + "sourceDigest";
+        var containing = await RetainProjectionPlan(root);
+        var uri = new Uri("https://example.test/plan.json");
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var source = (await WotJsonLdBaseResolver.DiscoverProjectionSourceReferencesAsync(containing.Document,
+            uri, containing.Kind, contexts)).Single();
+        var failure = await Assert.That(async () => await WotJsonLdBaseResolver.ReadProjectionSourceRequirementsAsync(
+            containing.Document, uri, containing.Kind, source, contexts, InventoryIndex(new Fixture().Open())))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected a single authored source digest.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    private static async Task<JsonNode> ProjectionDocument(JsonObject entry)
+    {
+        var root = await RequirementDocument("{}", "[]");
+        root["@context"]!["p"] = WotJsonLdBaseResolver.ProjectionVocabulary;
+        root["@context"]!["p:projects"] = new JsonObject
+        {
+            ["@id"] = WotJsonLdBaseResolver.ProjectionVocabulary + "projects", ["@container"] = "@list"
+        };
+        root["@type"] = new JsonArray("tm:ThingModel", "p:projection");
+        root["p:projects"] = new JsonArray(entry);
+        return root;
+    }
+
+    private static async Task<WotResolvedDocument> RetainProjectionPlan(JsonNode root)
+    {
+        root["id"] = Fixture.WotId;
+        root["version"] = JsonNode.Parse("""{"model":"1.0.0"}""");
+        var fixture = new Fixture();
+        fixture.Documents[Fixture.Resource + "/versions/1.0.0"] = new(Encoding.UTF8.GetBytes(root.ToJsonString()));
+        return await WotRegistryResolver.ResolveAsync(fixture.Open(), Fixture.Collection,
+            new(Fixture.WotId, WotReferenceTargetKind.ThingModel, WotReferenceOperator.ThingModel, VersionIdPin: "1.0.0"));
+    }
+
+    [Test]
     [Arguments(false)]
     [Arguments(true)]
     public async Task RootLineDeclarationNeverSelectsTheTargetLineOfARootReference(bool incremental)

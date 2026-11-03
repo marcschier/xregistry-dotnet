@@ -2480,6 +2480,18 @@ abort selection. Exact-Version URI associations bypass these selectors, but
 still select only retained bytes. Projection requirements, unsupported-selector
 location checks and full closure acceptance remain unfinished.
 
+`ReadProjectionSourceRequirementsAsync` reads requirements from the selected
+manifest entry, using its declared and captured TD/TM kind rather than the
+affordance selector's `tm:ref` spelling. `ResolveCapturedProjectionSourceAsync`
+selects retained raw source bytes and checks the entry's optional
+`sha-256:<64 lowercase hexadecimal digits>` digest. A digest pin or exact-Version
+URI association cannot waive the source's floor, TD major cap or incremental
+line; a mismatch reports the source and does not retry another revision.
+The digest covers original bytes, including whitespace, rather than a
+canonicalized or resolved document. Shared limits and cancellation cover
+requirement extraction and selection. These methods do not validate the full
+projection envelope, resolve nested plans, detect graph cycles or compose a view.
+
 `WotPublicationClosure.Parse` reads the selected closed representation without
 registering the WoT extension as supported. Entries and binding endpoints must
 be exact Version XIDs. Entry identities are unique, and binding keys combine

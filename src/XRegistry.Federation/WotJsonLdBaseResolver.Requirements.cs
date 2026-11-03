@@ -22,7 +22,7 @@ public static partial class WotJsonLdBaseResolver
         FederationReadBudget? budget = null, CancellationToken cancellationToken = default)
     {
         return await ReadReferenceRequirementsCoreAsync(document, documentUri, sourceKind, dependency,
-            capturedContexts, null, true, budget, cancellationToken).ConfigureAwait(false);
+            capturedContexts, null, true, null, budget, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Derives deployed and legacy reference requirements using independently captured target profiles.</summary>
@@ -39,13 +39,37 @@ public static partial class WotJsonLdBaseResolver
     {
         ArgumentNullException.ThrowIfNull(capturedIdentities);
         return ReadReferenceRequirementsCoreAsync(document, documentUri, sourceKind, dependency,
-            capturedContexts, capturedIdentities, false, budget, cancellationToken);
+            capturedContexts, capturedIdentities, false, null, budget, cancellationToken);
+    }
+
+    /// <summary>Reads a projection source entry's profile-aware requirements and optional exact-byte digest pin.</summary>
+    /// <remarks>The returned digest pin uses the Registry digest spelling. It does not waive source requirements.</remarks>
+    public static async ValueTask<WotVersionResolutionRequest> ReadProjectionSourceRequirementsAsync(
+        FederationDocument document, Uri documentUri, WotReferenceTargetKind sourceKind,
+        WotProjectionSourceOccurrence source, IReadOnlyDictionary<Uri, FederationDocument> capturedContexts,
+        WotCapturedUriIdentityIndex capturedIdentities, FederationReadBudget? budget = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(capturedIdentities);
+        var readBudget = budget ?? new();
+        var sources = await DiscoverProjectionSourceReferencesAsync(document, documentUri, sourceKind,
+            capturedContexts, readBudget, cancellationToken).ConfigureAwait(false);
+        if (!sources.Contains(source))
+        {
+            throw FederationJson.Invalid("The supplied source does not match an authored projection manifest entry.");
+        }
+        var identity = capturedIdentities.ClassifyProjectionSource(source, readBudget, cancellationToken) ??
+            throw FederationJson.Invalid("A projection source cannot identify its containing plan.");
+        return await ReadReferenceRequirementsCoreAsync(document, documentUri, sourceKind,
+            new(source.Reference, identity), capturedContexts, capturedIdentities, false, source,
+            readBudget, cancellationToken).ConfigureAwait(false);
     }
 
     private static async ValueTask<WotVersionResolutionRequest> ReadReferenceRequirementsCoreAsync(
         FederationDocument document, Uri documentUri, WotReferenceTargetKind sourceKind,
         WotCapturedDependencyOccurrence dependency, IReadOnlyDictionary<Uri, FederationDocument> capturedContexts,
-        WotCapturedUriIdentityIndex? capturedIdentities, bool semVerOnly,
+        WotCapturedUriIdentityIndex? capturedIdentities, bool semVerOnly, WotProjectionSourceOccurrence? projectionSource,
         FederationReadBudget? budget, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(document);
@@ -64,6 +88,9 @@ public static partial class WotJsonLdBaseResolver
             "tm:ref" or "tm:extends" or "tm:submodel" => WotReferenceOperator.ThingModel,
             "td:ref" or "td:extends" or "td:subthing" => WotReferenceOperator.ThingDescription,
             "type" when sourceKind == WotReferenceTargetKind.ThingDescription => WotReferenceOperator.ThingModelTypeLink,
+            ProjectionVocabulary + "projects" when projectionSource is not null =>
+                projectionSource.TargetKind == WotReferenceTargetKind.ThingModel
+                    ? WotReferenceOperator.ThingModel : WotReferenceOperator.ThingDescription,
             _ => throw new FederationException(FederationErrorCode.UnsupportedOperation,
                 "This request reader requires an ordinary reference or a supported dependency link.")
         };
@@ -75,7 +102,9 @@ public static partial class WotJsonLdBaseResolver
             throw FederationJson.Invalid("The authored operator and captured target kind disagree.");
         }
         WotCapturedResourceIdentity? Classify(WotCapturedUriIdentityIndex index, WotAuthoredReferenceOccurrence occurrence) =>
-            occurrence.Operator is "tm:ref" or "td:ref"
+            projectionSource is not null && occurrence == projectionSource.Reference
+                ? index.ClassifyProjectionSource(projectionSource, readBudget, cancellationToken)
+                : occurrence.Operator is "tm:ref" or "td:ref"
                 ? index.ClassifyOrdinaryReference(occurrence, readBudget, cancellationToken)
                 : index.ClassifyDependencyLink(occurrence, sourceKind, readBudget, cancellationToken);
         if (capturedIdentities is not null && Classify(capturedIdentities, reference) != dependency.Target)
@@ -88,14 +117,17 @@ public static partial class WotJsonLdBaseResolver
             throw new FederationException(FederationErrorCode.UnsupportedOperation,
                 "The SemVer requirement reader does not accept an incremental target.");
         }
-        var authoredReferences = reference.Operator is "tm:ref" or "td:ref"
-            ? await DiscoverOrdinaryReferencesAsync(document, documentUri, contexts, readBudget, cancellationToken).ConfigureAwait(false)
-            : await DiscoverLinkReferencesAsync(document, documentUri, sourceKind, contexts, readBudget, cancellationToken).ConfigureAwait(false);
-        if (!authoredReferences.Contains(reference))
+        if (projectionSource is null)
         {
-            throw FederationJson.Invalid("The supplied reference does not match an authored occurrence under the captured contexts.");
+            var authoredReferences = reference.Operator is "tm:ref" or "td:ref"
+                ? await DiscoverOrdinaryReferencesAsync(document, documentUri, contexts, readBudget, cancellationToken).ConfigureAwait(false)
+                : await DiscoverLinkReferencesAsync(document, documentUri, sourceKind, contexts, readBudget, cancellationToken).ConfigureAwait(false);
+            if (!authoredReferences.Contains(reference))
+            {
+                throw FederationJson.Invalid("The supplied reference does not match an authored occurrence under the captured contexts.");
+            }
         }
-        if (dependency.Target.VersionId is { } exactVersion)
+        if (projectionSource is null && dependency.Target.VersionId is { } exactVersion)
         {
             return new(dependency.Target.WotId, targetKind, operation, VersionIdPin: exactVersion);
         }
@@ -209,6 +241,7 @@ public static partial class WotJsonLdBaseResolver
             minimum = floor.Value.Value<string>()!;
         }
         string? compatibilityLine = null;
+        string? sourceDigest = null;
         var lineCount = 0;
         foreach (var member in occurrence.Properties())
         {
@@ -217,6 +250,18 @@ public static partial class WotJsonLdBaseResolver
             if (member.Name.StartsWith('@')) { continue; }
             var iri = await ExpandMemberIriAsync(document, reference.SourcePointer, member.Name, documentUri,
                 contexts, readBudget, cancellationToken).ConfigureAwait(false);
+            if (projectionSource is not null && iri == ProjectionVocabulary + "sourceDigest")
+            {
+                if (sourceDigest is not null || member.Value.Type != JTokenType.String ||
+                    member.Value.Value<string>() is not { Length: 72 } digest ||
+                    !digest.StartsWith("sha-256:", StringComparison.Ordinal) ||
+                    digest.AsSpan(8).ContainsAnyExcept("0123456789abcdef".AsSpan()))
+                {
+                    throw FederationJson.Invalid("A projection source requires one sha-256 digest with 64 lowercase hexadecimal digits.");
+                }
+                sourceDigest = "sha256:" + digest[8..];
+                continue;
+            }
             if (iri != "http://opcfoundation.org/UA/WoT-Binding/compatibilityLine") { continue; }
             // A root line declares the containing document, even beside a root reference.
             if (reference.SourcePointer.Length == 0) { continue; }
@@ -230,7 +275,7 @@ public static partial class WotJsonLdBaseResolver
         }
         cancellationToken.ThrowIfCancellationRequested();
         return new(dependency.Target.WotId, targetKind, operation, minimum, minimumKind, implicitFloor,
-            typeLinkCount, allTypeLinksHaveFloor) { CompatibilityLine = compatibilityLine };
+            typeLinkCount, allTypeLinksHaveFloor, DigestPin: sourceDigest) { CompatibilityLine = compatibilityLine };
     }
 
     private static WotVersionProfile TargetProfile(WotCapturedResourceIdentity identity) =>

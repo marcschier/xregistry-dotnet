@@ -452,6 +452,68 @@ public static class WotRegistryResolver
         ResolveCapturedDependencyCoreAsync(containingRevision, reference, documentUri, capturedContexts,
             capturedIdentities, false, allowPrerelease, budget, cancellationToken);
 
+    /// <summary>Selects a projection source from retained bytes and verifies its authored requirements and digest.</summary>
+    /// <remarks>
+    /// A source digest selects raw source bytes, not a resolved view. Pins cannot waive an authored
+    /// source floor or incremental line; a mismatch does not trigger a different Version selection.
+    /// This does not resolve nested plans, detect graph cycles or compose the projected view.
+    /// </remarks>
+    public static async ValueTask<WotResolvedDocument> ResolveCapturedProjectionSourceAsync(
+        WotResolvedDocument containingRevision, WotProjectionSourceOccurrence source, Uri documentUri,
+        IReadOnlyDictionary<Uri, FederationDocument> capturedContexts, WotCapturedUriIdentityIndex capturedIdentities,
+        bool allowPrerelease = false, FederationReadBudget? budget = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(containingRevision);
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(capturedIdentities);
+        cancellationToken.ThrowIfCancellationRequested();
+        var readBudget = budget ?? new();
+        var requirement = await WotJsonLdBaseResolver.ReadProjectionSourceRequirementsAsync(containingRevision.Document,
+            documentUri, containingRevision.Kind, source, capturedContexts, capturedIdentities, readBudget,
+            cancellationToken).ConfigureAwait(false);
+        requirement = requirement with { AllowPrerelease = allowPrerelease };
+        var identity = capturedIdentities.ClassifyProjectionSource(source, readBudget, cancellationToken) ??
+            throw FederationJson.Invalid("A projection source cannot identify its containing plan.");
+        var request = identity.VersionId is { } exactVersion
+            ? requirement with { VersionIdPin = exactVersion, DigestPin = null } : requirement;
+        WotResolvedDocument selected;
+        try
+        {
+            selected = await new Resolution(identity.Source,
+                new(FederationOperation.Collection, identity.ResourceCollection), request, readBudget, cancellationToken,
+                resourceXidPin: identity.ResourceXid, exactVersionId: identity.VersionId).RunAsync().ConfigureAwait(false);
+            if ((identity.VersionId is not null || requirement.DigestPin is not null) &&
+                (selected.Version.Profile == WotVersionProfile.Incremental ||
+                 requirement.MinimumVersion is not null || requirement.CompatibilityLine is not null))
+            {
+                readBudget.ChargeWork();
+                var candidate = new WotVersionCandidate(selected.Version.VersionId,
+                    selected.Version.ContentDigest, selected.Version.Origin)
+                {
+                    Profile = selected.Version.Profile, CompatibilityLine = selected.Version.CompatibilityLine
+                };
+                _ = WotVersionResolver.SelectVersionId(new(selected.Version.WotId, selected.Kind,
+                    selected.Version.VersionId, false, [candidate]) { Profile = selected.Version.Profile },
+                    requirement with { VersionIdPin = null, DigestPin = null });
+            }
+        }
+        catch (RegistryException exception)
+        {
+            throw new RegistryException(exception.Diagnostic with
+            {
+                Path = source.Reference.SourcePointer,
+                Message = $"Projection source '{source.SourceName}': {exception.Diagnostic.Message}"
+            }, exception);
+        }
+        if (requirement.DigestPin is { } digest &&
+            !StringComparer.Ordinal.Equals(digest, selected.Version.ContentDigest))
+        {
+            throw FederationJson.Invalid($"Projection source '{source.SourceName}' does not match its exact-byte digest.");
+        }
+        capturedIdentities.CheckSource(identity.Source, cancellationToken);
+        return selected;
+    }
+
     private static async ValueTask<WotResolvedFragment> ResolveCapturedDependencyCoreAsync(
         WotResolvedDocument containingRevision, WotAuthoredReferenceOccurrence reference, Uri documentUri,
         IReadOnlyDictionary<Uri, FederationDocument> capturedContexts, WotCapturedUriIdentityIndex capturedIdentities,
