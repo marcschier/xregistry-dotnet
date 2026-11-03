@@ -141704,13 +141704,23 @@
       ],
       "text": "For an ordinary `tm:ref`, one unique identity match to a Thing Model Resource classifies the occurrence as an in-scope dependency. One unique match to a Schema Resource classifies it as a Schema reference outside this WoT closure profile; that occurrence MUST NOT have a closure binding. A match to another Resource kind is invalid. This classification uses captured model and URI identities, not a binding target. The Schema document itself is not thereby included in WoT closure or validated by this profile.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Ordinary-reference classification uses the fragment-free URI discovered from captured source bytes, then checks the unique target's model-derived Resource kind. It accepts a Thing Model or excluded Schema for tm:ref and rejects other kinds without acquiring target bytes. Results retain Resource versus exact-Version scope, and document-local references bypass external lookup. Duplicate equivalent records do not create ambiguity; competing identities cannot be resolved by selecting a kind permitted by the operator. Closure integration must still prevent bindings to excluded Schema occurrences and must not treat Schema documents as included or validated; this compound requirement stays pending.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "WotRegistryResolverTests.OrdinaryReferenceClassificationUsesCapturedKindsAndRetainsResourceOrVersionScope",
+          "WotRegistryResolverTests.OrdinaryLocalClassificationDoesNotConsultAnAmbiguousOrUnavailableIndex",
+          "WotRegistryResolverTests.OrdinaryReferenceClassificationRejectsKindsNotDefinedForItsOperator",
+          "WotRegistryResolverTests.OrdinaryClassificationCannotResolveAmbiguityByFilteringForAnOperatorKind",
+          "WotRegistryResolverTests.OrdinaryClassificationAcceptsDuplicateRecordsOnlyForTheSameCapturedIdentity",
+          "WotRegistryResolverTests.OrdinaryClassificationDoesNotConflateResourceScopeWithItsDefaultVersion"
+        ],
         "nativeEvidence": []
       }
     },
@@ -141768,7 +141778,7 @@
       "text": "For `td:ref`, `type`, and the other operators, the captured Resource kind MUST agree with the target kind defined for that operator. A `type` link MAY identify a Thing Model by its `wotid` or by a captured document-view URI, including an exact-Version URI. A captured document URI is usable only at the Resource or Version scope recorded for it. If the resolved URI identifies more than one distinct Resource or Version, the mapping is ambiguous. Duplicate records for the same identity do not create ambiguity.",
       "review": {
         "status": "reviewed",
-        "note": "Captured reference acquisition checks requested Resource kind and pin conflicts, preserves Resource versus exact-Version scope, and rejects competing targets before target reads. Duplicate associations compare decoded XID paths while retaining case-sensitive Version IDs. Equivalent immutable sources require matching context, original/effective model and resolution owner. Ordinary and link candidates are discovered from captured source bytes, but combined target-kind classification, projection roles and independent closure validation are not implemented; these helper cases do not complete the compound closure requirement.",
+        "note": "Captured reference acquisition checks requested Resource kind and pin conflicts, preserves Resource versus exact-Version scope, and rejects competing targets before target reads. Duplicate associations compare decoded XID paths while retaining case-sensitive Version IDs. Equivalent immutable sources require matching context, original/effective model and resolution owner. Ordinary classification now checks the unique captured identity before accepting a Thing Model, excluded Schema or Thing Description under its operator; it does not select a Version or acquire bytes. Combined link/projection classification and independent closure validation remain unfinished, so the compound closure requirement stays pending.",
         "roles": [
           "client",
           "producer"
@@ -141781,7 +141791,12 @@
           "WotRegistryResolverTests.CapturedResourceUriUsesTheMappedViewsDefaultVersion",
           "WotRegistryResolverTests.CapturedIdentityMustMatchTheRequestedResourceKindAndExactVersionPin",
           "WotRegistryResolverTests.CapturedUriIdentityMustBeUniqueBeforeAnyTargetAcquisition",
-          "WotRegistryResolverTests.DuplicateCapturedXidsCompareDecodedPathsButPreserveVersionCase"
+          "WotRegistryResolverTests.DuplicateCapturedXidsCompareDecodedPathsButPreserveVersionCase",
+          "WotRegistryResolverTests.OrdinaryReferenceClassificationUsesCapturedKindsAndRetainsResourceOrVersionScope",
+          "WotRegistryResolverTests.OrdinaryReferenceClassificationRejectsKindsNotDefinedForItsOperator",
+          "WotRegistryResolverTests.OrdinaryClassificationCannotResolveAmbiguityByFilteringForAnOperatorKind",
+          "WotRegistryResolverTests.OrdinaryClassificationAcceptsDuplicateRecordsOnlyForTheSameCapturedIdentity",
+          "WotRegistryResolverTests.OrdinaryClassificationDoesNotConflateResourceScopeWithItsDefaultVersion"
         ],
         "nativeEvidence": []
       }
@@ -141808,13 +141823,22 @@
       ],
       "text": "If no captured identity matches or the match is ambiguous, the Producer MUST NOT claim domain-complete closure and the Consumer MUST reject such a claim. The binding list cannot resolve the ambiguity. This profile does not include Schema Resource documents or OPC UA `uav:dataTypeDefinitions` materialization references; another closure profile is needed to cover those dependencies.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Ordinary-reference classification reports missing or ambiguous captured identities without consulting a binding target, reading another source or filtering candidates by the desired kind. Noncanonical operators reject before lookup; capture drift and cancellation propagate, and classification and identity matching share one work budget. Complete publication acceptance still needs independent occurrence and binding verification, including Schema and uav:dataTypeDefinitions exclusions. No WoT-complete extension validator is registered; this compound requirement stays pending.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "WotRegistryResolverTests.OrdinaryClassificationReportsMissingIdentityWithoutLookingUpARegistry",
+          "WotRegistryResolverTests.OrdinaryClassificationCannotResolveAmbiguityByFilteringForAnOperatorKind",
+          "WotRegistryResolverTests.OrdinaryClassificationRejectsNoncanonicalOrNonordinaryOperatorsBeforeLookup",
+          "WotRegistryResolverTests.OrdinaryClassificationUsesTheSameInclusiveWorkBudgetAsIdentityMatching",
+          "WotRegistryResolverTests.OrdinaryClassificationObservesCaptureDriftAndCancellation"
+        ],
         "nativeEvidence": []
       }
     },

@@ -2301,6 +2301,24 @@ classification remains unfinished. An empty href can identify an external
 document when its captured effective base differs from the containing document
 URI; discovery retains the empty string.
 
+`WotCapturedUriIdentityIndex.ClassifyOrdinaryReference` classifies discovered
+ordinary references before binding lookup. A local reference returns no external
+target and does not consult the index. An external `tm:ref` must identify one
+captured Thing Model or Schema Resource; a Schema result remains outside WoT
+closure and does not cause Schema document acquisition. An external `td:ref`
+must identify a Thing Description. The method matches the URI before checking
+kind, so an operator cannot choose between competing captured identities.
+Duplicate records for the same identity remain one match, but Resource scope
+and exact-Version scope remain distinct even when that Version is the default.
+
+Classification retains the captured target and its recorded scope without
+selecting a Version or reading another source. Missing and ambiguous matches
+remain errors. Source drift, cancellation and the cumulative lookup budget apply.
+Projection selectors must first be associated with their manifest entries,
+rather than classified as ordinary `tm:ref` dependencies. Link classification,
+combined occurrence admission and rejection of prohibited closure bindings
+remain separate unfinished work.
+
 `DiscoverProjectionSourceReferencesAsync` recognizes the selected experiment's
 lowercase expanded `projection` type on the authored root. A nested node's
 marker and the former placeholder namespace do not mark the envelope. A marked

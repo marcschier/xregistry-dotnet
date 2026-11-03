@@ -327,6 +327,37 @@ public sealed class WotCapturedUriIdentityIndex
         _identities = captured.ToArray();
     }
 
+    /// <summary>Classifies an ordinary reference against captured identities before closure binding lookup.</summary>
+    /// <returns>
+    /// Null for a document-local reference. An external tm:ref can identify a Thing Model or an excluded
+    /// Schema Resource; an external td:ref must identify a Thing Description. Schema results never authorize
+    /// a WoT closure binding. Resource-level results do not yet select a Version.
+    /// </returns>
+    /// <remarks>Projection selectors must first be associated with their manifest entries, not passed here as ordinary references.</remarks>
+    public WotCapturedResourceIdentity? ClassifyOrdinaryReference(WotAuthoredReferenceOccurrence reference,
+        FederationReadBudget? budget = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+        ArgumentNullException.ThrowIfNull(reference.Target);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (reference.Operator is not ("tm:ref" or "td:ref"))
+        {
+            throw FederationJson.Invalid("Ordinary reference classification requires a canonical tm:ref or td:ref operator.");
+        }
+        var readBudget = budget ?? new();
+        readBudget.ChargeWork();
+        if (reference.Target.IsDocumentLocal) { return null; }
+        var target = Resolve(reference.Target.DocumentUri, readBudget, cancellationToken);
+        if (reference.Operator == "tm:ref"
+            ? target.ResourceKind is not ("thingmodel" or "schema")
+            : target.ResourceKind != "thingdescription")
+        {
+            throw FederationJson.Invalid("The ordinary reference identifies an unsupported captured Resource kind.");
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return target;
+    }
+
     /// <summary>Returns the unique captured Resource or exact Version identified by an absolute URI.</summary>
     /// <exception cref="FederationException">No identity matches, or distinct targets share the URI.</exception>
     public WotCapturedResourceIdentity Resolve(Uri uri, FederationReadBudget? budget = null,

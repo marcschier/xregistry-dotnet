@@ -14,6 +14,257 @@ namespace XRegistry.Federation.Tests;
 public class WotRegistryResolverTests
 {
     [Test]
+    [Arguments("tm:ref", "thingmodel", false)]
+    [Arguments("tm:ref", "thingmodel", true)]
+    [Arguments("tm:ref", "schema", false)]
+    [Arguments("tm:ref", "schema", true)]
+    [Arguments("td:ref", "thingdescription", false)]
+    [Arguments("td:ref", "thingdescription", true)]
+    public async Task OrdinaryReferenceClassificationUsesCapturedKindsAndRetainsResourceOrVersionScope(
+        string operation, string kind, bool exact)
+    {
+        var source = ClassificationSource(kind);
+        var uri = new Uri("https://example.test/definition.td.json");
+        var index = await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(source, uri, WotCapturedUriIdentityKind.DocumentView,
+                source.Resource + (exact ? "/versions/2.0.0" : ""))]);
+        var plan = new JsonObject
+        {
+            ["@context"] = new JsonObject
+            {
+                ["data"] = "https://example.test/data",
+                ["authoredRef"] = "https://www.w3.org/2019/wot/" +
+                    (operation == "tm:ref" ? "tm" : "td") + "#ref"
+            },
+            ["data"] = new JsonObject { ["authoredRef"] = "./definition.td.json#/definitions/a" }
+        };
+        var occurrences = await WotJsonLdBaseResolver.DiscoverOrdinaryReferencesAsync(
+            new(Encoding.UTF8.GetBytes(plan.ToJsonString())), new Uri("https://example.test/plan.json"),
+            new Dictionary<Uri, FederationDocument>());
+        await Assert.That(occurrences.Count).IsEqualTo(1);
+        var reads = source.Reads.Count;
+        var budget = new FederationReadBudget();
+        var target = index.ClassifyOrdinaryReference(occurrences[0], budget) ??
+            throw new InvalidOperationException("Expected an external captured target.");
+
+        await Assert.That(target.ResourceKind).IsEqualTo(kind);
+        await Assert.That(target.ResourceXid).IsEqualTo(source.Resource);
+        await Assert.That(target.GroupXid).IsEqualTo("/thingmodelgroups/tenant");
+        await Assert.That(target.VersionId).IsEqualTo(exact ? "2.0.0" : null);
+        await Assert.That(target.WotId).IsEqualTo(kind == "schema" ? null : Source.Identity);
+        await Assert.That(ReferenceEquals(target.Source, source)).IsTrue();
+        await Assert.That(occurrences[0].SourcePointer).IsEqualTo("/data");
+        await Assert.That(occurrences[0].PropertyName).IsEqualTo("authoredRef");
+        await Assert.That(occurrences[0].Operator).IsEqualTo(operation);
+        await Assert.That(occurrences[0].Href).IsEqualTo("./definition.td.json#/definitions/a");
+        await Assert.That(source.Reads.Count).IsEqualTo(reads);
+        await Assert.That(budget.Requests).IsEqualTo(0L);
+    }
+
+    [Test]
+    [Arguments("tm:ref", "#/properties/a")]
+    [Arguments("td:ref", "")]
+    [Arguments("td:ref", "plan.json#/properties/a")]
+    public async Task OrdinaryLocalClassificationDoesNotConsultAnAmbiguousOrUnavailableIndex(
+        string operation, string href)
+    {
+        var first = ClassificationSource("thingmodel");
+        var second = ClassificationSource("schema");
+        var uri = new Uri("https://example.test/plan.json");
+        var index = await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(first, uri, WotCapturedUriIdentityKind.DocumentView, first.Resource + "/versions/1.0.0"),
+             new(second, uri, WotCapturedUriIdentityKind.DocumentView, second.Resource + "/versions/1.0.0")]);
+        var reads = first.Reads.Count + second.Reads.Count;
+        first.Model = null;
+        second.Model = null;
+        var reference = new WotAuthoredReferenceOccurrence("/data", "ref", operation, href,
+            WotReferenceUriResolver.Resolve(href, uri, uri));
+        var budget = new FederationReadBudget();
+
+        await Assert.That(index.ClassifyOrdinaryReference(reference, budget)).IsNull();
+        await Assert.That(budget.Work).IsEqualTo(1L);
+        await Assert.That(budget.Requests).IsEqualTo(0L);
+        await Assert.That(first.Reads.Count + second.Reads.Count).IsEqualTo(reads);
+    }
+
+    [Test]
+    [Arguments("tm:ref", "thingdescription")]
+    [Arguments("tm:ref", "message")]
+    [Arguments("td:ref", "thingmodel")]
+    [Arguments("td:ref", "schema")]
+    [Arguments("td:ref", "endpoint")]
+    public async Task OrdinaryReferenceClassificationRejectsKindsNotDefinedForItsOperator(string operation, string kind)
+    {
+        var source = ClassificationSource(kind);
+        var reference = ClassificationReference(operation);
+        var index = await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(source, reference.Target.DocumentUri, WotCapturedUriIdentityKind.DocumentView,
+                source.Resource + "/versions/2.0.0")]);
+        var reads = source.Reads.Count;
+        var failure = await Assert.That(() => index.ClassifyOrdinaryReference(reference))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected an unsupported target kind.");
+
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(source.Reads.Count).IsEqualTo(reads);
+    }
+
+    [Test]
+    [Arguments("tm:ref", "thingmodel", "schema")]
+    [Arguments("td:ref", "thingdescription", "thingmodel")]
+    public async Task OrdinaryClassificationCannotResolveAmbiguityByFilteringForAnOperatorKind(
+        string operation, string firstKind, string secondKind)
+    {
+        var first = ClassificationSource(firstKind);
+        var second = ClassificationSource(secondKind);
+        var reference = ClassificationReference(operation);
+        var index = await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(first, reference.Target.DocumentUri, WotCapturedUriIdentityKind.DocumentView,
+                first.Resource + "/versions/1.0.0"),
+             new(second, reference.Target.DocumentUri, WotCapturedUriIdentityKind.DocumentView,
+                second.Resource + "/versions/1.0.0")]);
+        var reads = first.Reads.Count + second.Reads.Count;
+        var failure = await Assert.That(() => index.ClassifyOrdinaryReference(reference))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected ambiguous captured identities.");
+
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.Ambiguous);
+        await Assert.That(first.Reads.Count + second.Reads.Count).IsEqualTo(reads);
+    }
+
+    [Test]
+    [Arguments("thingmodel")]
+    [Arguments("schema")]
+    public async Task OrdinaryClassificationAcceptsDuplicateRecordsOnlyForTheSameCapturedIdentity(string kind)
+    {
+        var source = ClassificationSource(kind);
+        var reference = ClassificationReference("tm:ref");
+        var index = await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(source, reference.Target.DocumentUri, WotCapturedUriIdentityKind.DocumentView,
+                source.Resource + "/versions/2.0.0"),
+             new(source, reference.Target.DocumentUri, WotCapturedUriIdentityKind.DocumentBase,
+                source.Resource + "/versions/2.0.0")]);
+        var target = index.ClassifyOrdinaryReference(reference) ??
+            throw new InvalidOperationException("Expected one deduplicated target.");
+        await Assert.That(target.ResourceKind).IsEqualTo(kind);
+        await Assert.That(target.VersionId).IsEqualTo("2.0.0");
+        await Assert.That(ReferenceEquals(target.Source, source)).IsTrue();
+    }
+
+    [Test]
+    public async Task OrdinaryClassificationDoesNotConflateResourceScopeWithItsDefaultVersion()
+    {
+        var source = ClassificationSource("thingmodel");
+        var reference = ClassificationReference("tm:ref");
+        var index = await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(source, reference.Target.DocumentUri, WotCapturedUriIdentityKind.DocumentView, source.Resource),
+             new(source, reference.Target.DocumentUri, WotCapturedUriIdentityKind.DocumentView,
+                source.Resource + "/versions/1.0.0")]);
+        var failure = await Assert.That(() => index.ClassifyOrdinaryReference(reference))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected ambiguous URI scopes.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.Ambiguous);
+    }
+
+    [Test]
+    [Arguments("tm:ref")]
+    [Arguments("td:ref")]
+    public async Task OrdinaryClassificationReportsMissingIdentityWithoutLookingUpARegistry(string operation)
+    {
+        var index = new WotCapturedUriIdentityIndex([]);
+        var budget = new FederationReadBudget();
+        var failure = await Assert.That(() => index.ClassifyOrdinaryReference(ClassificationReference(operation), budget))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected a missing captured identity.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.NotFound);
+        await Assert.That(budget.Requests).IsEqualTo(0L);
+    }
+
+    [Test]
+    [Arguments("model:ref", false)]
+    [Arguments("TM:ref", false)]
+    [Arguments("tm:extends", false)]
+    [Arguments("describedby", false)]
+    [Arguments("", false)]
+    [Arguments("model:ref", true)]
+    [Arguments("TM:ref", true)]
+    [Arguments("tm:extends", true)]
+    [Arguments("describedby", true)]
+    [Arguments("", true)]
+    public async Task OrdinaryClassificationRejectsNoncanonicalOrNonordinaryOperatorsBeforeLookup(
+        string operation, bool local)
+    {
+        var index = new WotCapturedUriIdentityIndex([]);
+        var budget = new FederationReadBudget();
+        var failure = await Assert.That(() => index.ClassifyOrdinaryReference(ClassificationReference(operation, local), budget))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected an invalid ordinary operator.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(budget.Work).IsEqualTo(0L);
+    }
+
+    [Test]
+    [Arguments(-1)]
+    [Arguments(0)]
+    [Arguments(1)]
+    public async Task OrdinaryClassificationUsesTheSameInclusiveWorkBudgetAsIdentityMatching(int delta)
+    {
+        var source = ClassificationSource("thingmodel");
+        var reference = ClassificationReference("tm:ref");
+        var index = await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(source, reference.Target.DocumentUri, WotCapturedUriIdentityKind.DocumentView,
+                source.Resource + "/versions/2.0.0")]);
+        var budget = new FederationReadBudget(new FederationReadLimits(maxWork: 2 + delta));
+        if (delta < 0)
+        {
+            var failure = await Assert.That(() => index.ClassifyOrdinaryReference(reference, budget))
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected cumulative work exhaustion.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        }
+        else
+        {
+            await Assert.That(index.ClassifyOrdinaryReference(reference, budget)?.VersionId).IsEqualTo("2.0.0");
+            await Assert.That(budget.Work).IsEqualTo(2L);
+        }
+        await Assert.That(budget.Requests).IsEqualTo(0L);
+    }
+
+    [Test]
+    public async Task OrdinaryClassificationObservesCaptureDriftAndCancellation()
+    {
+        var source = ClassificationSource("thingmodel");
+        var reference = ClassificationReference("tm:ref");
+        var index = await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(source, reference.Target.DocumentUri, WotCapturedUriIdentityKind.DocumentView,
+                source.Resource + "/versions/2.0.0")]);
+        var reads = source.Reads.Count;
+        source.Model = null;
+        var failure = await Assert.That(() => index.ClassifyOrdinaryReference(reference))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected captured source drift.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InconsistentSnapshot);
+
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var budget = new FederationReadBudget();
+        await Assert.That(() => index.ClassifyOrdinaryReference(reference, budget, cancellation.Token))
+            .Throws<OperationCanceledException>();
+        await Assert.That(budget.Work).IsEqualTo(0L);
+        await Assert.That(source.Reads.Count).IsEqualTo(reads);
+    }
+
+    private static Source ClassificationSource(string kind)
+    {
+        var model = JsonNode.Parse("""
+            {"groups":{"thingmodelgroups":{"singular":"thingmodelgroup",
+            "resources":{"thingmodels":{"singular":"thingmodel"}}}}}
+            """)!;
+        model["groups"]!["thingmodelgroups"]!["resources"]!["thingmodels"]!["singular"] = kind;
+        return new() { Model = RegistryModel.Compile(RegistryJson.Parse(model.ToJsonString())) };
+    }
+
+    private static WotAuthoredReferenceOccurrence ClassificationReference(string operation, bool local = false)
+    {
+        var href = local ? "#/definitions/a" : "definition.json#/definitions/a";
+        var uri = new Uri("https://example.test/plan.json");
+        return new("/data", "ref", operation, href, WotReferenceUriResolver.Resolve(href, uri, uri));
+    }
+
+    [Test]
     [Arguments(false, "properties")]
     [Arguments(false, "actions")]
     [Arguments(false, "events")]
