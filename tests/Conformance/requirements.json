@@ -60663,7 +60663,10 @@
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "AnyAttributesPreserveConcreteRuntimeJsonKinds",
+          "AnyScopedContentRequiresOnlyValidJsonSyntax"
+        ],
         "nativeEvidence": []
       }
     },
@@ -61167,8 +61170,10 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AnyHeadersUseStringFallbackAndComplexHeadersOnlyPermitExplicitDeletion"
+        ],
         "nativeEvidence": []
       }
     },
