@@ -15,6 +15,103 @@ namespace XRegistry.Federation.Tests;
 public class CapturedRegistryReadSourceTests
 {
     [Test]
+    [Arguments("local")]
+    [Arguments("alias")]
+    [Arguments("pair")]
+    [Arguments("nested")]
+    public async Task CapturedProjectionSourceGraphsRejectLocalAndTransitiveCycles(string cycle)
+    {
+        var (entry, identities) = cycle switch
+        {
+            "local" => await DependencyGraphFixture(configureFirst: root =>
+                MarkGraphProjection(root, "https://graph.test/1.0.0.json")),
+            "alias" => await DependencyGraphFixture(configureFirst: root =>
+                MarkGraphProjection(root, "urn:graph:1")),
+            "pair" => await DependencyGraphFixture(
+                configureFirst: root => MarkGraphProjection(root, "urn:graph:2"),
+                configureSecond: root => MarkGraphProjection(root, "urn:graph:1")),
+            _ => await DependencyGraphFixture("""{"a":{"tm:ref":"urn:graph:2"}}""",
+                configureSecond: root => MarkGraphProjection(root, "urn:graph:3"),
+                configureThird: root => MarkGraphProjection(root, "urn:graph:2"))
+        };
+        var failure = await Assert.That(async () =>
+        {
+            _ = await WotRegistryResolver.CaptureDependencyGraphAsync([entry],
+                new Dictionary<Uri, FederationDocument>(), identities);
+        }).Throws<FederationException>() ?? throw new InvalidOperationException("Expected a projection-source cycle rejection.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    public async Task CapturedProjectionSourceGraphsPermitOrdinaryDependencyCycles()
+    {
+        var (entry, identities) = await DependencyGraphFixture(third: """{"back":{"tm:ref":"urn:graph:1"}}""",
+            configureFirst: root => MarkGraphProjection(root, "urn:graph:2"),
+            configureSecond: root => MarkGraphProjection(root, "urn:graph:3"));
+        var graph = await WotRegistryResolver.CaptureDependencyGraphAsync([entry],
+            new Dictionary<Uri, FederationDocument>(), identities);
+        await Assert.That(graph.Nodes.Count).IsEqualTo(3);
+        await Assert.That(graph.Edges.Count).IsEqualTo(3);
+        await Assert.That(graph.Edges[0].Reference.Operator).IsEqualTo(WotJsonLdBaseResolver.ProjectionVocabulary + "projects");
+        await Assert.That(graph.Edges[1].Reference.Operator).IsEqualTo(WotJsonLdBaseResolver.ProjectionVocabulary + "projects");
+        await Assert.That(graph.Edges[2].Reference.Operator).IsEqualTo("tm:ref");
+        await Assert.That(ReferenceEquals(graph.Edges[2].Target, graph.Entries[0])).IsTrue();
+    }
+
+    [Test]
+    [Arguments(-1)]
+    [Arguments(0)]
+    [Arguments(1)]
+    public async Task CapturedProjectionSourceCycleChecksShareInclusiveWorkAndCancellation(int delta)
+    {
+        var (entry, identities) = await DependencyGraphFixture(
+            configureFirst: root => MarkGraphProjection(root, "urn:graph:2"),
+            configureSecond: root => MarkGraphProjection(root, "urn:graph:3"));
+        var baseline = new FederationReadBudget();
+        _ = await WotRegistryResolver.CaptureDependencyGraphAsync([entry],
+            new Dictionary<Uri, FederationDocument>(), identities, budget: baseline);
+        var budget = new FederationReadBudget(new(maxWork: baseline.Work + delta));
+        if (delta < 0)
+        {
+            var failure = await Assert.That(async () =>
+            {
+                _ = await WotRegistryResolver.CaptureDependencyGraphAsync([entry],
+                    new Dictionary<Uri, FederationDocument>(), identities, budget: budget);
+            }).Throws<FederationException>() ?? throw new InvalidOperationException("Expected bounded projection-cycle checking.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        }
+        else
+        {
+            var graph = await WotRegistryResolver.CaptureDependencyGraphAsync([entry],
+                new Dictionary<Uri, FederationDocument>(), identities, budget: budget);
+            await Assert.That(graph.Nodes.Count).IsEqualTo(3);
+            await Assert.That(graph.Edges.Count).IsEqualTo(2);
+            await Assert.That(budget.Work).IsEqualTo(baseline.Work);
+        }
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        await Assert.That(async () =>
+        {
+            _ = await WotRegistryResolver.CaptureDependencyGraphAsync([entry],
+                new Dictionary<Uri, FederationDocument>(), identities, cancellationToken: cancellation.Token);
+        }).Throws<OperationCanceledException>();
+    }
+
+    private static void MarkGraphProjection(JsonNode root, string source)
+    {
+        root["@context"]!["p"] = WotJsonLdBaseResolver.ProjectionVocabulary;
+        root["@context"]!["p:projects"] = new JsonObject
+        {
+            ["@id"] = WotJsonLdBaseResolver.ProjectionVocabulary + "projects", ["@container"] = "@list"
+        };
+        root["@type"] = new JsonArray("tm:ThingModel", "p:projection");
+        root["p:projects"] = new JsonArray(new JsonObject
+        {
+            ["p:sourceName"] = "base", ["href"] = source, ["type"] = "application/tm+json", ["p:selectAll"] = true
+        });
+    }
+
+    [Test]
     [Arguments("urn:test:line:a", null, null)]
     [Arguments("urn:test:line:a", "41", null)]
     [Arguments("urn:test:line:a", "40", null)]
@@ -709,7 +806,8 @@ public class CapturedRegistryReadSourceTests
 
     private static async Task<(WotCapturedGraphEntry Entry, WotCapturedUriIdentityIndex Identities)> DependencyGraphFixture(
         string first = "{}", string second = "{}", string third = "{}",
-        Action<JsonNode>? configureFirst = null, string registryId = "captured", bool description = false)
+        Action<JsonNode>? configureFirst = null, string registryId = "captured", bool description = false,
+        Action<JsonNode>? configureSecond = null, Action<JsonNode>? configureThird = null)
     {
         var fixture = new Fixture();
         fixture.Root["registryid"] = registryId;
@@ -732,6 +830,8 @@ public class CapturedRegistryReadSourceTests
             root["id"] = Fixture.WotId;
             root["version"] = new JsonObject { [description ? "instance" : "model"] = version };
             if (index == 0) { configureFirst?.Invoke(root); }
+            if (index == 1) { configureSecond?.Invoke(root); }
+            if (index == 2) { configureThird?.Invoke(root); }
             fixture.Documents[Fixture.Resource + "/versions/" + version] =
                 new(Encoding.UTF8.GetBytes(root.ToJsonString()), documentBase: "https://graph.test/" + version + ".json");
         }

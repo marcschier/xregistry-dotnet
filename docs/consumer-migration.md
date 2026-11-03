@@ -2545,6 +2545,9 @@ edge. Local references and ordinary Schema targets do not create edges. Empty
 or repeated entries, contradictory revision evidence, unavailable targets and
 live target providers reject the operation without returning a partial graph.
 Shared work, source-context, hop, input and aggregate graph-size limits apply.
+The graph rejects projection-source cycles, including document-local sources
+and aliases of the containing Version. Ordinary reference edges do not create
+projection-source cycles. This check does not compose nested plans.
 
 `WotPublicationClosure.ValidateAgainstGraph` compares entries and bindings with
 that independent graph. It requires the exact authored pointer, canonical

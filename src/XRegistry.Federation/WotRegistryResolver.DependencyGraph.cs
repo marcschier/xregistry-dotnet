@@ -150,6 +150,15 @@ public static partial class WotRegistryResolver
             }
             var rules = await WotJsonLdBaseResolver.ReadProjectionSelectionRulesAsync(node.Document.Document,
                 node.DocumentUri, node.Document.Kind, contexts, readBudget, cancellationToken).ConfigureAwait(false);
+            foreach (var rule in rules)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                readBudget.ChargeWork();
+                if (rule.Source.Reference.Target.IsDocumentLocal)
+                {
+                    throw FederationJson.Invalid("A projection plan cannot include itself as a source.");
+                }
+            }
             var projections = rules.ToDictionary(rule => rule.Source.Reference.SourcePointer,
                 rule => rule.Source, StringComparer.Ordinal);
             foreach (var dependency in node.Inventory.Dependencies)
@@ -187,7 +196,59 @@ public static partial class WotRegistryResolver
                 edges.Add(new(node, reference, target));
             }
         }
+        CheckCapturedProjectionCycles(nodes, edges, readBudget, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         return new(roots, nodes, edges);
+    }
+
+    private static void CheckCapturedProjectionCycles(List<WotCapturedDependencyNode> nodes,
+        List<WotCapturedDependencyEdge> edges, FederationReadBudget budget, CancellationToken token)
+    {
+        var incoming = new Dictionary<WotCapturedDependencyNode, int>();
+        var outgoing = new Dictionary<WotCapturedDependencyNode, List<WotCapturedDependencyNode>>();
+        foreach (var node in nodes)
+        {
+            token.ThrowIfCancellationRequested();
+            budget.ChargeWork();
+            incoming.Add(node, 0);
+        }
+        foreach (var edge in edges)
+        {
+            token.ThrowIfCancellationRequested();
+            budget.ChargeWork();
+            if (edge.Reference.Operator != WotJsonLdBaseResolver.ProjectionVocabulary + "projects") { continue; }
+            incoming[edge.Target]++;
+            if (!outgoing.TryGetValue(edge.Source, out var targets))
+            {
+                targets = [];
+                outgoing.Add(edge.Source, targets);
+            }
+            targets.Add(edge.Target);
+        }
+        var ready = new Queue<WotCapturedDependencyNode>();
+        foreach (var node in nodes)
+        {
+            token.ThrowIfCancellationRequested();
+            budget.ChargeWork();
+            if (incoming[node] == 0) { ready.Enqueue(node); }
+        }
+        var visited = 0;
+        while (ready.TryDequeue(out var node))
+        {
+            token.ThrowIfCancellationRequested();
+            budget.ChargeWork();
+            visited++;
+            if (!outgoing.TryGetValue(node, out var targets)) { continue; }
+            foreach (var target in targets)
+            {
+                token.ThrowIfCancellationRequested();
+                budget.ChargeWork();
+                if (--incoming[target] == 0) { ready.Enqueue(target); }
+            }
+        }
+        if (visited != nodes.Count)
+        {
+            throw FederationJson.Invalid("The captured projection-source graph contains a cycle.");
+        }
     }
 }
