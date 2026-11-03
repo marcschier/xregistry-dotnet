@@ -61247,8 +61247,10 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "NullValuesAreOmittedFromCompleteMetadataButPreservedAsClientDeletions"
+        ],
         "nativeEvidence": []
       }
     },
