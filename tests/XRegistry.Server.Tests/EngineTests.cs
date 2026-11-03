@@ -64,6 +64,32 @@ public class EngineTests
     }
 
     [Test]
+    public async Task XidValuesAreGeneratedAndCannotBeOverriddenOnAnyEntityPlane()
+    {
+        var engine = Create();
+        await Send(engine, RegistryAction.Replace, "/", """
+            {"xid":"/forged-root","teams":{"g":{"xid":"/forged-group","notes":{"n":{
+              "xid":"/forged-resource","meta":{"xid":"/forged-meta"},
+              "versions":{"1":{"xid":"/forged-version"}}
+            }}}}}
+            """);
+
+        var expected = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["/"] = "/",
+            ["/teams/g"] = "/teams/g",
+            ["/teams/g/notes/n"] = "/teams/g/notes/n",
+            ["/teams/g/notes/n/meta"] = "/teams/g/notes/n/meta",
+            ["/teams/g/notes/n/versions/1"] = "/teams/g/notes/n/versions/1"
+        };
+        foreach (var (path, xid) in expected)
+        {
+            var result = await Send(engine, RegistryAction.Read, path);
+            await Assert.That(result.Metadata!.RootElement.GetProperty("xid").GetString()).IsEqualTo(xid);
+        }
+    }
+
+    [Test]
     public async Task NestedFailureRollsBackEveryEntity()
     {
         var engine = Create();

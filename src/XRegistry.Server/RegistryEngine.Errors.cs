@@ -21,7 +21,7 @@ public sealed partial class RegistryEngine
             catch (RegistryException exception)
             {
                 if (exception.Diagnostic.Code == "invalid_attribute" &&
-                    InvalidXid(input.RootElement, definitions, exception.Diagnostic.Path) is { } xid)
+                    InvalidXid(input.RootElement, definitions, _model, exception.Diagnostic.Path) is { } xid)
                 {
                     throw ServerErrors.Wrap(exception, "malformed_xid", _engine.Url(ServerJson.Key(_operation.Path)), ("xid", xid));
                 }
@@ -59,7 +59,8 @@ public sealed partial class RegistryEngine
             return current.ValueKind == JsonValueKind.Null && previous is not null;
         }
 
-        private static string? InvalidXid(JsonElement value, IReadOnlyDictionary<string, RegistryAttributeDefinition> definitions, string pointer)
+        private static string? InvalidXid(JsonElement value, IReadOnlyDictionary<string, RegistryAttributeDefinition> definitions,
+            RegistryModel model, string pointer)
         {
             RegistryAttributeDefinition? definition = null;
             foreach (var escaped in pointer.Split('/', StringSplitOptions.RemoveEmptyEntries))
@@ -104,8 +105,15 @@ public sealed partial class RegistryEngine
             try
             {
                 var path = RegistryPath.Parse(text);
-                return !path.IsDetails && path.Kind is RegistryPathKind.Registry or RegistryPathKind.Group or
-                    RegistryPathKind.Resource or RegistryPathKind.Meta or RegistryPathKind.Version ? null : text;
+                if (path.IsDetails || path.Kind is not (RegistryPathKind.Registry or RegistryPathKind.Group or
+                    RegistryPathKind.Resource or RegistryPathKind.Meta or RegistryPathKind.Version))
+                {
+                    return text;
+                }
+
+                return path.GroupType is not null &&
+                    (!model.Groups.TryGetValue(path.GroupType, out var group) ||
+                    path.ResourceType is not null && !group.Resources.ContainsKey(path.ResourceType)) ? text : null;
             }
             catch (RegistryException)
             {

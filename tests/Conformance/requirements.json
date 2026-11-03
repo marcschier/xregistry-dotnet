@@ -62734,8 +62734,17 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "PreservesEscapedPathAndCase",
+          "RejectsTraversalAndDoubleDecoding",
+          "RecognizesOnlyDefinedProtocolShapes",
+          "ConstructsEscapedPathsWithoutWindowsFilenameRestrictions",
+          "XidTargetsUseModelTypesButAllowDanglingEntityIds",
+          "TargetsRejectTheWrongEntityKindOrDeclaredModelType",
+          "MalformedTypedXidsUseTheXidCatalogWithoutASecondUriDecode",
+          "InvalidTypedXidsUseMalformedXidWhileValidTargetMismatchRemainsInvalidAttribute"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62768,8 +62777,10 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "InvalidTypedXidsUseMalformedXidWhileValidTargetMismatchRemainsInvalidAttribute"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62801,8 +62812,11 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CoreXidAttributesAreRequiredImmutableReadonlyXidsAcrossEntityPlanes",
+          "XidValuesAreGeneratedAndCannotBeOverriddenOnAnyEntityPlane"
+        ],
         "nativeEvidence": []
       }
     },

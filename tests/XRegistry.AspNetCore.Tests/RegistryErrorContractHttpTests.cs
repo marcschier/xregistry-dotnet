@@ -437,6 +437,35 @@ public class RegistryErrorContractHttpTests
     }
 
     [Test]
+    [Arguments("teams/id", "malformed_xid")]
+    [Arguments("/unknown/id", "malformed_xid")]
+    [Arguments("/teams/id/unknown/resource", "malformed_xid")]
+    [Arguments("/teams/id", "invalid_attribute")]
+    public async Task InvalidTypedXidsUseMalformedXidWhileValidTargetMismatchRemainsInvalidAttribute(
+        string xid, string expectedCode)
+    {
+        var model = RegistryModel.Compile(RegistryJson.Parse("""
+            {"attributes":{"ref":{"type":"xid","target":"/teams/notes"}},
+             "groups":{"teams":{"singular":"team","resources":{"notes":{"singular":"note"}}}}}
+            """));
+        await using var host = await HttpTests.TestHost.StartAsync(model: model);
+        using var response = await host.Client.PatchAsync("/",
+            new StringContent("{\"ref\":\"" + xid + "\"}", Encoding.UTF8, "application/json"));
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.BadRequest);
+        var problem = RegistryJson.Parse(await response.Content.ReadAsByteArrayAsync()).RootElement;
+        await Assert.That(problem.GetProperty("code").GetString()).IsEqualTo(expectedCode);
+        if (expectedCode == "malformed_xid")
+        {
+            await Assert.That(problem.GetProperty("args").GetProperty("xid").GetString()).IsEqualTo(xid);
+        }
+
+        using var unchanged = await host.Client.GetAsync("/");
+        await Assert.That(RegistryJson.Parse(await unchanged.Content.ReadAsByteArrayAsync()).RootElement
+            .GetProperty("epoch").GetInt32()).IsEqualTo(0);
+    }
+
+    [Test]
     public async Task ReadInfrastructureFailuresUseDataRetrievalErrorWithoutLeakingStorageDetails()
     {
         await using var host = await HttpTests.TestHost.StartAsync(persistence: new FailingReadPersistence());
