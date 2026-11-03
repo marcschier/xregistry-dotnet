@@ -61278,8 +61278,11 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SubmittedReadonlyValuesAreIgnoredWithoutResettingDefaultsOrNullDeletions",
+          "ReadonlyDiscriminatorUsesServerValueInsteadOfSubmittedValue"
+        ],
         "nativeEvidence": []
       }
     },
