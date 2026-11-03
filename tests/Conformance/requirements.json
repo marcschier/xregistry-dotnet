@@ -62848,8 +62848,12 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EmptyUpdatesAdvanceEpochForEveryEntityPlane",
+          "IdenticalWritesTouchOnlyTheEntity",
+          "EpochCreationIgnoresSubmittedValuesAndCollectionChangesTouchOnlyTheirOwner"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62881,8 +62885,10 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EpochCreationIgnoresSubmittedValuesAndCollectionChangesTouchOnlyTheirOwner"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62915,8 +62921,11 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EpochZeroNullMissingAndHugeGuardsAreExact",
+          "PostCollectionsReturnsOnlyProcessedChildrenAndDeleteGuardsAreAtomic"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62949,8 +62958,11 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EpochCreationIgnoresSubmittedValuesAndCollectionChangesTouchOnlyTheirOwner",
+          "IdenticalWritesTouchOnlyTheEntity"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62982,8 +62994,10 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CoreEpochAttributesAreRequiredReadonlyUnsignedIntegersAcrossEntityKinds"
+        ],
         "nativeEvidence": []
       }
     },
@@ -63015,8 +63029,12 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CoreEpochAttributesAreRequiredReadonlyUnsignedIntegersAcrossEntityKinds",
+          "EpochCreationIgnoresSubmittedValuesAndCollectionChangesTouchOnlyTheirOwner",
+          "EpochZeroNullMissingAndHugeGuardsAreExact"
+        ],
         "nativeEvidence": []
       }
     },
@@ -63048,8 +63066,12 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CoreEpochAttributesAreRequiredReadonlyUnsignedIntegersAcrossEntityKinds",
+          "EpochGuardsRejectValuesOutsideUnsignedIntegerRange",
+          "HugeValidEpochGuardAdvancesWithoutNarrowing"
+        ],
         "nativeEvidence": []
       }
     },

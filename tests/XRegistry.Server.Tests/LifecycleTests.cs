@@ -158,6 +158,30 @@ public class LifecycleTests
     }
 
     [Test]
+    public async Task EmptyUpdatesAdvanceEpochForEveryEntityPlane()
+    {
+        var engine = Create();
+        await Send(engine, RegistryAction.Replace, "/teams/g", "{}");
+        await Send(engine, RegistryAction.Replace, "/teams/g/notes/n", """{"versionid":"v1"}""");
+
+        foreach (var path in new[]
+        {
+            "/",
+            "/teams/g",
+            "/teams/g/notes/n/meta",
+            "/teams/g/notes/n/versions/v1"
+        })
+        {
+            var before = await EpochAt(path);
+            await Send(engine, RegistryAction.Patch, path, "{}");
+            await Assert.That(await EpochAt(path)).IsGreaterThan(before);
+        }
+
+        async Task<int> EpochAt(string path) =>
+            (await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetProperty("epoch").GetInt32();
+    }
+
+    [Test]
     public async Task EpochCreationIgnoresSubmittedValuesAndCollectionChangesTouchOnlyTheirOwner()
     {
         var engine = Create();
