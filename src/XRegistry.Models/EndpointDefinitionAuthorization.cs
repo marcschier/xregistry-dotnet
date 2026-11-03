@@ -85,7 +85,7 @@ internal static partial class EndpointDefinitionSemantics
                     "The consumer must select an authorization alternative, verify provider-specific metadata, and supply credentials separately.");
             }
         }
-        if (Protocol(endpoint) != "HTTP")
+        if (!HttpProtocolSemantics.IsHttp(Protocol(endpoint)))
         {
             return;
         }
@@ -219,7 +219,7 @@ internal static partial class EndpointDefinitionSemantics
             return;
         }
         var expected = MediaTypeHeaderValue.Parse(format.GetString()!);
-        if (Protocol(endpoint) == "HTTP" && options.ValueKind == JsonValueKind.Object &&
+        if (HttpProtocolSemantics.IsHttp(Protocol(endpoint)) && options.ValueKind == JsonValueKind.Object &&
             options.TryGetProperty("headers", out var headers))
         {
             var index = 0;

@@ -181,6 +181,49 @@ public class BuiltInRegistryModelsTests
     }
 
     [Test]
+    [Arguments("HTTP/1.1")]
+    [Arguments("HTTP/2")]
+    [Arguments("HTTP/3")]
+    public async Task CompiledEndpointModelsExposeVersionedHttpOptions(string protocol)
+    {
+        var endpoint = BuiltInRegistryModels.Compile(RegistryModelKind.Endpoint)
+            .Groups["endpoints"].Attributes["protocol"].IfValues[protocol]["protocoloptions"];
+
+        await Assert.That(endpoint.Type).IsEqualTo(RegistryValueType.Any);
+    }
+
+    [Test]
+    [Arguments("HTTP/1.1")]
+    [Arguments("HTTP/2")]
+    [Arguments("HTTP/3")]
+    public async Task CompiledMessageModelsRetainOpaqueHttpDeclarationsForVersionedProtocols(string protocol)
+    {
+        var message = BuiltInRegistryModels.Compile(RegistryModelKind.Message)
+            .Groups["messagegroups"].Resources["messages"].Attributes["protocol"].IfValues[protocol]["protocoloptions"];
+
+        await Assert.That(message.Type).IsEqualTo(RegistryValueType.Object);
+        await Assert.That(message.Attributes["headers"].Type).IsEqualTo(RegistryValueType.Array);
+        await Assert.That(message.Attributes["headers"].Item!.Type).IsEqualTo(RegistryValueType.Any);
+        await Assert.That(message.Attributes["path"].Type).IsEqualTo(RegistryValueType.UriTemplate);
+        await Assert.That(message.Attributes["method"].Type).IsEqualTo(RegistryValueType.String);
+        await Assert.That(message.Attributes["status"].Type).IsEqualTo(RegistryValueType.String);
+    }
+
+    [Test]
+    [Arguments("HTTP/1.1")]
+    [Arguments("HTTP/2")]
+    [Arguments("HTTP/3")]
+    public async Task CompiledMediaModelExposesVersionedHttpEndpointOptions(string protocol)
+    {
+        var endpoint = BuiltInRegistryModels.Compile(RegistryModelKind.Media)
+            .Groups["endpoints"].Attributes["protocol"].IfValues[protocol]["protocoloptions"];
+
+        await Assert.That(endpoint.Type).IsEqualTo(RegistryValueType.Object);
+        await Assert.That(endpoint.Attributes.ContainsKey("endpoints")).IsTrue();
+        await Assert.That(endpoint.Attributes.ContainsKey("authorization")).IsTrue();
+    }
+
+    [Test]
     [Arguments("media-endpoints-options", "4fcf905ad2ca26ea8ce03d5ee0a92338622733f313bbca8dd7543a7b2f04d8fb")]
     [Arguments("media-endpoints-endpoint-source", "e1acb299119866671bcc2b8561ddc240c7c85261740f91b732e13a799bd04f4b")]
     [Arguments("media-endpoints-message-source", "473ad3ea899db6ea4cf5c9a11014901be1eb947ec117fc750c40628f54fde2d9")]

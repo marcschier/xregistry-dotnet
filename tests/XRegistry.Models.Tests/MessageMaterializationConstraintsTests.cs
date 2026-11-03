@@ -10,6 +10,31 @@ namespace XRegistry.Models.Tests;
 public class MessageMaterializationConstraintsTests
 {
     [Test]
+    [Arguments("HTTP")]
+    [Arguments("HTTP/1.1")]
+    [Arguments("HTTP/2")]
+    [Arguments("HTTP/3")]
+    public async Task HttpSelectorsDeriveRepresentationAndPayloadTypesFromTheFirstValuedContentTypeHeader(string protocol)
+    {
+        var metadata = RegistryJson.Parse($$$"""
+            {"protocol":"{{{protocol}}}","protocoloptions":{"headers":[
+             {"name":"Content-Type"},{"name":"content-type","value":"application/json"}]}}
+            """);
+        // Explicit test-only model isolates runtime behavior from the packaged schema blocker.
+        var result = await MessageDefinitionMaterializer.MaterializeAsync(
+            new(metadata, new Uri("https://registry.example/message"), model: HttpSelectorRuntimeModel()));
+        await Assert.That(result.IsComplete).IsTrue();
+        await Assert.That(result.Constraints.Protocol).IsEqualTo(protocol);
+        await Assert.That(result.Constraints.BindingKind).IsEqualTo(MessageDefinitionBindingKind.ExplicitProtocol);
+        await Assert.That(result.Constraints.RepresentationContentType).IsEqualTo("application/json");
+        await Assert.That(result.Constraints.PayloadContentType).IsEqualTo("application/json");
+        var headers = result.Constraints.ProtocolOptions.GetProperty("headers");
+        await Assert.That(headers.GetArrayLength()).IsEqualTo(2);
+        await Assert.That(headers[0].TryGetProperty("value", out _)).IsFalse();
+        await Assert.That(headers[1].GetProperty("value").GetString()).IsEqualTo("application/json");
+    }
+
+    [Test]
     [Arguments("""{"dataschemaformat":"JSONSchema/draft-07","dataschema":{}}""",
         """{"dataschemauri":"https://schema.example/new"}""", "/dataschemauri")]
     [Arguments("""{"protocol":"HTTP","protocoloptions":{"method":"POST"}}""",
@@ -227,6 +252,21 @@ public class MessageMaterializationConstraintsTests
         var result = await MessageDefinitionMaterializer.MaterializeAsync(new(metadata, new Uri("https://registry.example/message")));
         await Assert.That(result.Constraints.RepresentationContentType).IsEqualTo("application/json");
         await Assert.That(result.Constraints.ProtocolOptions.GetProperty("headers").GetArrayLength()).IsEqualTo(2);
+    }
+
+    private static RegistryModel HttpSelectorRuntimeModel()
+    {
+        using var packaged = BuiltInRegistryModels.LoadSource(RegistryModelKind.Message);
+        var source = JsonNode.Parse(packaged.RootElement.GetRawText())!;
+        var branches = source["groups"]!["messagegroups"]!["resources"]!["messages"]!["attributes"]!
+            ["protocol"]!["ifvalues"]!.AsObject();
+        foreach (var protocol in new[] { "HTTP/1.1", "HTTP/2", "HTTP/3" })
+        {
+            // Clone SPEC-020's opaque header items as well as the HTTP options.
+            // This fixture does NOT establish admission by shipped model resources.
+            branches[protocol] = branches["HTTP"]!.DeepClone();
+        }
+        return RegistryModel.Compile(RegistryJson.Parse(source.ToJsonString()));
     }
 
     private static ValueTask<MessageMaterializationResult> Compose(string baseline, string overlay)

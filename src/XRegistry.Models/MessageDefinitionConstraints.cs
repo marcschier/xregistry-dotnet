@@ -68,6 +68,9 @@ public sealed class MessageDefinitionConstraints
         switch (Protocol?.ToUpperInvariant())
         {
             case "HTTP":
+            case "HTTP/1.1":
+            case "HTTP/2":
+            case "HTTP/3":
             case "NATS":
                 var headers = Value(options, "headers");
                 if (headers.ValueKind == JsonValueKind.Array)

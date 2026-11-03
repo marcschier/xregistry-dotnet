@@ -12,7 +12,8 @@ internal static partial class EndpointDefinitionSemantics
     internal static string? ValidateConsumer(JsonElement endpoint, EndpointDefinitionEvaluation evaluation)
     {
         var protocol = Protocol(endpoint);
-        var known = protocol is "HTTP" or "AMQP/1.0" or "MQTT/3.1.1" or "MQTT/5.0" or "KAFKA" or "NATS" ||
+        var known = HttpProtocolSemantics.IsHttp(protocol) ||
+            protocol is "AMQP/1.0" or "MQTT/3.1.1" or "MQTT/5.0" or "KAFKA" or "NATS" ||
             MediaEndpointSemantics.IsDraftMediaProtocol(protocol);
         if (!known)
         {
@@ -210,6 +211,11 @@ internal static partial class EndpointDefinitionSemantics
         {
             return true;
         }
+        if (HttpProtocolSemantics.IsHttp(protocol))
+        {
+            return name is "method" or "headers" or "query" or "apikeyname" or "apikeyin" or "plainscheme" or
+                "plainusernamefield" or "plainpasswordfield";
+        }
         if (MediaEndpointSemantics.IsDraftMediaProtocol(protocol) &&
             name is "streamformat" or "videocodec" or "audiocodec" or "streamid" or "signaling" or
                 "signalingreference" or "sessiondescription" or "application" or "streamname")
@@ -218,8 +224,6 @@ internal static partial class EndpointDefinitionSemantics
         }
         return protocol switch
         {
-            "HTTP" => name is "method" or "headers" or "query" or "apikeyname" or "apikeyin" or "plainscheme" or
-                "plainusernamefield" or "plainpasswordfield",
             "AMQP/1.0" => name is "node" or "durable" or "link-properties" or "connection-properties" or "distribution-mode" or
                 "connection-capabilities" or "node-capabilities" or "source-filters" or "dynamic" or "terminus-durability" or
                 "expiry-policy" or "timeout" or "sender-settle-mode" or "receiver-settle-mode",

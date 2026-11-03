@@ -64,4 +64,48 @@ public class MessageEndpointModelCorrectionTests
         await Assert.That(result.Obligations.Count).IsEqualTo(1);
         await Assert.That(result.Obligations[0].Kind).IsEqualTo("target");
     }
+
+    [Test]
+    [Arguments("HTTP/1.1", "method", "POST")]
+    [Arguments("HTTP/2", "status", "201")]
+    [Arguments("HTTP/3", "method", "PUT")]
+    public async Task VersionedHttpSelectorsAdmitTypedProtocolOptions(string protocol, string field, string value)
+    {
+        var metadata = RegistryJson.Parse(
+            "{\"protocol\":" + JsonSerializer.Serialize(protocol) +
+            ",\"protocoloptions\":{\"headers\":[{\"name\":\"content-type\",\"value\":\"application/json\"}],\"query\":{\"tenant\":\"north\"},\"path\":\"/orders/{orderid}\",\"" +
+            field + "\":" + JsonSerializer.Serialize(value) + "}}");
+        var authoredOptions = metadata.RootElement.GetProperty("protocoloptions").GetRawText();
+        var model = BuiltInRegistryModels.Compile(RegistryModelKind.Message);
+        var result = RegistryMetadataValidator.Validate(metadata,
+            model.Groups["messagegroups"].Resources["messages"].Attributes,
+            new() { Mode = RegistryMetadataMode.ClientInput, Model = model });
+
+        await Assert.That(result.Metadata.RootElement.GetProperty("protocol").GetString()).IsEqualTo(protocol);
+        await Assert.That(result.Metadata.RootElement.GetProperty("protocoloptions").GetRawText())
+            .IsEqualTo(authoredOptions);
+        await Assert.That(result.Metadata.RootElement.GetProperty("protocoloptions")
+            .GetProperty("path").GetString()).IsEqualTo("/orders/{orderid}");
+        await Assert.That(result.Metadata.RootElement.GetProperty("protocoloptions")
+            .GetProperty(field).GetString()).IsEqualTo(value);
+    }
+
+    [Test]
+    [Arguments("HTTP/1.1")]
+    [Arguments("HTTP/2")]
+    [Arguments("HTTP/3")]
+    public async Task VersionedHttpSelectorsRejectInvalidTypedPath(string protocol)
+    {
+        var metadata = RegistryJson.Parse(
+            "{\"protocol\":" + JsonSerializer.Serialize(protocol) +
+            ",\"protocoloptions\":{\"headers\":[],\"query\":{\"tenant\":\"north\"},\"path\":17,\"method\":\"POST\"}}");
+        var model = BuiltInRegistryModels.Compile(RegistryModelKind.Message);
+
+        var failure = await Assert.That(() => RegistryMetadataValidator.Validate(metadata,
+            model.Groups["messagegroups"].Resources["messages"].Attributes,
+            new() { Mode = RegistryMetadataMode.ClientInput, Model = model })).Throws<RegistryException>()
+            ?? throw new InvalidOperationException("Expected an invalid typed Message HTTP path diagnostic.");
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo("invalid_attribute");
+        await Assert.That(failure.Diagnostic.Path).IsEqualTo("/protocoloptions/path");
+    }
 }

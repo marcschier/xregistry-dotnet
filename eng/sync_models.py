@@ -32,6 +32,13 @@ MODELS = {
 }
 DRAFT_MODELS = "eng/draft-models.json"
 SUCCESSOR_MODELS = {"registry": "pr571-d757328e"}
+HTTP_SELECTOR_MODELS = {
+    "http-endpoint-model": "endpoint/model.json",
+    "http-message-model": "message/model.json",
+    "http-media-endpoint-source": "workingdrafts/models/media-endpoints/sources/endpoint-model.source.json",
+    "http-media-message-source": "workingdrafts/models/media-endpoints/sources/message-model.source.json",
+}
+HTTP_SELECTOR_SOURCE = "pr571-a1da400e"
 
 
 def synchronize(root: Path, check: bool) -> int:
@@ -52,6 +59,13 @@ def synchronize(root: Path, check: bool) -> int:
             if selected is None:
                 raise source_tool.SpecificationError(f"The selected successor model is missing: {source_id}/{path}")
             expected[filename] = source_tool.contained(root, selected["file"]).read_bytes()
+    for name, path in HTTP_SELECTOR_MODELS.items():
+        selected = next((entry for entry in successors
+            if entry["sourceId"] == HTTP_SELECTOR_SOURCE and entry["path"] == path and entry["kind"] == "artifact"), None)
+        if selected is None:
+            raise source_tool.SpecificationError(
+                f"The selected HTTP selector model is missing: {HTTP_SELECTOR_SOURCE}/{path}")
+        expected[name + ".json"] = source_tool.contained(root, selected["file"]).read_bytes()
     draft_manifest = source_tool.read_json(source_tool.contained(root, DRAFT_MODELS))
     if (
         not isinstance(draft_manifest, dict)

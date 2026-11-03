@@ -10,6 +10,78 @@ namespace XRegistry.Models.Tests;
 public class EndpointDefinitionProtocolTests
 {
     [Test]
+    [Arguments("HTTP/1.0")]
+    [Arguments("HTTP/2.0")]
+    [Arguments("HTTP/4")]
+    public async Task UnassignedHttpEndpointVersionsRemainExtensionsWithoutHttpDefaults(string protocol)
+    {
+        const string options = """{"method":"two words","endpoints":[{"uri":"ftp://extension.example.test/events"}]}""";
+        var result = EndpointDefinition.Materialize(Input(protocol, options));
+        await Assert.That(result.Protocol).IsEqualTo(protocol);
+        await Assert.That(result.Resolved.RootElement.GetProperty("protocoloptions").GetRawText()).IsEqualTo(options);
+        await Assert.That(result.GetProtocolOption("apikeyin").ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        await Assert.That(result.GetProtocolOption("plainscheme").ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        await Assert.That(result.DeferredChecks.Any(check =>
+            check.Code == "protocol_contract" && check.Path == "/protocol")).IsTrue();
+    }
+
+    [Test]
+    [Arguments("HTTP")]
+    [Arguments("HTTP/1.1")]
+    [Arguments("HTTP/2")]
+    [Arguments("HTTP/3")]
+    public async Task HttpSelectorsApplyDefaultsWithoutRewritingAuthoredSelectorsOrOptions(string protocol)
+    {
+        var result = EndpointDefinition.Materialize(Input(protocol, "{}"));
+        await Assert.That(result.Protocol).IsEqualTo(protocol);
+        await Assert.That(result.Authored.RootElement.GetProperty("protocol").GetString()).IsEqualTo(protocol);
+        await Assert.That(result.Resolved.RootElement.GetProperty("protocol").GetString()).IsEqualTo(protocol);
+        await Assert.That(result.GetProtocolOption("method").GetString()).IsEqualTo("POST");
+        await Assert.That(result.GetProtocolOption("apikeyin").GetString()).IsEqualTo("header");
+        await Assert.That(result.GetProtocolOption("plainscheme").GetString()).IsEqualTo("basic");
+        await Assert.That(result.IsDeployed).IsTrue();
+        await Assert.That(result.Authored.RootElement.GetProperty("protocoloptions").GetRawText()).IsEqualTo("{}");
+        await Assert.That(result.Resolved.RootElement.GetProperty("protocoloptions").GetRawText()).IsEqualTo("{}");
+        await Assert.That(result.GetProtocolOption("unspecified").ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        await Assert.That(result.DeferredChecks.Any(check => check.Code == "protocol_contract")).IsFalse();
+
+        const string explicitOptions = """{"method":"PUT","apikeyin":"query","plainscheme":"form","deployed":false}""";
+        var overridden = EndpointDefinition.Materialize(Input(protocol, explicitOptions));
+        await Assert.That(overridden.GetProtocolOption("method").GetString()).IsEqualTo("PUT");
+        await Assert.That(overridden.GetProtocolOption("apikeyin").GetString()).IsEqualTo("query");
+        await Assert.That(overridden.GetProtocolOption("plainscheme").GetString()).IsEqualTo("form");
+        await Assert.That(overridden.IsDeployed).IsFalse();
+        await Assert.That(overridden.Resolved.RootElement.GetProperty("protocoloptions").GetRawText()).IsEqualTo(explicitOptions);
+        await Assert.That(overridden.DeferredChecks.Any(check => check.Code == "extension_option")).IsFalse();
+    }
+
+    [Test]
+    [Arguments("HTTP")]
+    [Arguments("HTTP/1.1")]
+    [Arguments("HTTP/2")]
+    [Arguments("HTTP/3")]
+    public async Task HttpSelectorsValidateEndpointOptionsWithExactDiagnostics(string protocol)
+    {
+        (string Options, string Path)[] cases =
+        [
+            ("""{"method":"two words"}""", "/protocoloptions/method"),
+            ("""{"method":1}""", "/protocoloptions/method"),
+            ("""{"query":{"a~/b":3}}""", "/protocoloptions/query/a~0~1b"),
+            ("""{"headers":{}}""", "/protocoloptions/headers"),
+            ("""{"headers":[{"name":"X-A"}]}""", "/protocoloptions/headers/0/value"),
+            ("""{"headers":[{"value":"missing name"}]}""", "/protocoloptions/headers/0/name"),
+            ("""{"headers":[{"name":"bad name","value":"x"}]}""", "/protocoloptions/headers/0/name"),
+            ("""{"headers":[{"name":"X-A","value":"one\r\ntwo"}]}""", "/protocoloptions/headers/0/value"),
+            ("""{"apikeyin":"cookie"}""", "/protocoloptions/apikeyin"),
+            ("""{"plainscheme":"bearer"}""", "/protocoloptions/plainscheme")
+        ];
+        foreach (var (options, path) in cases)
+        {
+            await Rejects(Input(protocol, options), path);
+        }
+    }
+
+    [Test]
     [Arguments("HTTP", """{"method":"POST","headers":[{"name":"X-A","value":"one"},{"name":"x-a","value":"two"}],"query":{"name":"value"},"apikeyname":"x-api-key","apikeyin":"header","plainscheme":"basic","plainusernamefield":"user","plainpasswordfield":"pass"}""")]
     [Arguments("AMQP/1.0", """{"node":"orders","durable":false,"link-properties":{"a":"b"},"connection-properties":{"a":"b"},"distribution-mode":"copy","connection-capabilities":["one"],"node-capabilities":["two"],"source-filters":{"selector":{"count":123456789012345678901234567890}},"dynamic":true,"terminus-durability":"unsettled-state","expiry-policy":"never","timeout":0,"sender-settle-mode":"mixed","receiver-settle-mode":"second"}""")]
     [Arguments("MQTT/3.1.1", """{"topic":"orders/created","qos":2e0,"retain":true,"cleansession":false,"willtopic":"client/status","willmessage":"/messagegroups/g/messages/will"}""")]

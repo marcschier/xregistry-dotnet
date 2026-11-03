@@ -320,7 +320,7 @@ class ProvenanceAndReviewTests(unittest.TestCase):
         self.assertEqual(set(sources), {
             "upstream-4a7e7f5e", "pr571-811de7d2", "pr571-514f6eac",
             "pr715-5f9d0134", "pr716-9613f002", "upstream-d290b1ec", "pr571-d757328e",
-            "pr571-f69085fb",
+            "pr571-f69085fb", "pr571-a1da400e",
         })
         prior = sources["pr571-811de7d2"]
         current = sources["pr571-514f6eac"]
@@ -343,6 +343,22 @@ class ProvenanceAndReviewTests(unittest.TestCase):
         self.assertEqual(sources["upstream-d290b1ec"]["commit"], freezer.CURRENT_MERGED)
         self.assertEqual(sources["pr571-d757328e"]["commit"], freezer.CURRENT_DRAFT)
         self.assertEqual(new_roles["workingdrafts/models/wot/samples/cloudevents.json"], "review-only")
+
+    def test_http_selector_models_are_pinned_from_the_current_pr_head_as_review_only_artifacts(self) -> None:
+        spec = importlib.util.spec_from_file_location("freeze_successors", ROOT / "eng/specification/freeze_successors.py")
+        freezer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(freezer)
+        source = next(item for item in freezer.sources() if item["id"] == "pr571-a1da400e")
+
+        self.assertEqual(source["repository"], "https://github.com/marcschier/xregistry-drafts")
+        self.assertEqual(source["commit"], "a1da400e938b420da1f097b58a73fd9f75deb9e5")
+        self.assertEqual({(item["path"], item["kind"], item["role"]) for item in source["files"]}, {
+            ("endpoint/model.json", "artifact", "review-only"),
+            ("message/model.json", "artifact", "review-only"),
+            ("workingdrafts/models/media-endpoints/sources/endpoint-model.source.json", "artifact", "review-only"),
+            ("workingdrafts/models/media-endpoints/sources/message-model.source.json", "artifact", "review-only"),
+            ("LICENSE", "license", "review-only"),
+        })
 
     def test_native_events_refresh_selects_only_opcua_and_preserves_other_sources(self) -> None:
         spec = importlib.util.spec_from_file_location("freeze_successors", ROOT / "eng/specification/freeze_successors.py")

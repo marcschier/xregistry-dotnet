@@ -49,7 +49,8 @@ internal static partial class EndpointDefinitionSemantics
                 ValidateKafkaAddress(endpoint, itemPath, evaluation, authored);
                 continue;
             }
-            var known = protocol is "HTTP" or "AMQP/1.0" or "MQTT/3.1.1" or "MQTT/5.0" or "NATS" ||
+            var known = HttpProtocolSemantics.IsHttp(protocol) ||
+                protocol is "AMQP/1.0" or "MQTT/3.1.1" or "MQTT/5.0" or "NATS" ||
                 MediaEndpointSemantics.IsDraftMediaProtocol(protocol);
             var text = Text(endpoint, "uri", itemPath, required: known && !authored);
             if (text is null || authored)
@@ -60,7 +61,7 @@ internal static partial class EndpointDefinitionSemantics
             var address = ParseNetworkAddress(text, uriPath, evaluation.CancellationToken);
             var allowed = protocol switch
             {
-                "HTTP" => address.Scheme is "http" or "https",
+                _ when HttpProtocolSemantics.IsHttp(protocol) => address.Scheme is "http" or "https",
                 "AMQP/1.0" => address.Scheme is "amqp" or "amqps",
                 "MQTT/3.1.1" or "MQTT/5.0" => address.Scheme is "mqtt" or "mqtts" or "tcp" or "ssl" or "wss",
                 "NATS" => address.Scheme is "nats" or "tls" or "ws",

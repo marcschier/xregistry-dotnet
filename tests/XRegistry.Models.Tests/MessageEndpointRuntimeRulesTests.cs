@@ -10,6 +10,180 @@ namespace XRegistry.Models.Tests;
 public class MessageEndpointRuntimeRulesTests
 {
     [Test]
+    [Arguments("HTTP")]
+    [Arguments("HTTP/1.1")]
+    [Arguments("HTTP/2")]
+    [Arguments("HTTP/3")]
+    public async Task HttpSelectorsPreserveRequestOptionsAndCompleteHeaderDeclarations(string protocol)
+    {
+        var metadata = RegistryJson.Parse($$$"""
+            {"protocol":"{{{protocol}}}","protocoloptions":{"method":"POST","path":"/orders/{device}",
+             "query":{"q":"","a~/b":"orders/{device}"},
+             "headers":[{"name":"X-Json","value":"{\"count\":1}"},{"name":"x-json","required":true,"value":"second"}]}}
+            """);
+        var completed = RegistryDomainRules.CompleteMessageMetadata(metadata);
+        await Assert.That(completed.RootElement.GetProperty("protocol").GetString()).IsEqualTo(protocol);
+        var options = completed.RootElement.GetProperty("protocoloptions");
+        await Assert.That(options.GetProperty("method").GetString()).IsEqualTo("POST");
+        await Assert.That(options.GetProperty("path").GetString()).IsEqualTo("/orders/{device}");
+        await Assert.That(options.GetProperty("query").GetProperty("q").GetString()).IsEqualTo("");
+        await Assert.That(options.GetProperty("query").GetProperty("a~/b").GetString()).IsEqualTo("orders/{device}");
+        var headers = options.GetProperty("headers");
+        await Assert.That(headers.GetArrayLength()).IsEqualTo(2);
+        await Assert.That(headers[0].GetProperty("type").GetString()).IsEqualTo("string");
+        await Assert.That(headers[0].GetProperty("required").GetBoolean()).IsFalse();
+        await Assert.That(headers[0].GetProperty("value").GetString()).IsEqualTo("""{"count":1}""");
+        await Assert.That(headers[1].GetProperty("name").GetString()).IsEqualTo("x-json");
+        await Assert.That(headers[1].GetProperty("required").GetBoolean()).IsTrue();
+        await Assert.That(headers[1].GetProperty("value").GetString()).IsEqualTo("second");
+        await Assert.That(metadata.RootElement.GetProperty("protocoloptions").GetProperty("headers")[0]
+            .TryGetProperty("type", out _)).IsFalse();
+    }
+
+    [Test]
+    [Arguments("HTTP")]
+    [Arguments("HTTP/1.1")]
+    [Arguments("HTTP/2")]
+    [Arguments("HTTP/3")]
+    public async Task HttpSelectorsRejectInvalidOptionsAtExactPaths(string protocol)
+    {
+        (string Options, string Path)[] cases =
+        [
+            ("""{"query":[]}""", "/protocoloptions/query"),
+            ("""{"query":{"a~/b":false}}""", "/protocoloptions/query/a~0~1b"),
+            ("""{"query":{"q":null}}""", "/protocoloptions/query/q"),
+            ("""{"query":{"q":"{+device}"}}""", "/protocoloptions/query/q"),
+            ("""{"method":"POST","status":"200"}""", "/protocoloptions/status"),
+            ("""{"status":"099"}""", "/protocoloptions/status"),
+            ("""{"status":"000"}""", "/protocoloptions/status"),
+            ("""{"status":"600"}""", "/protocoloptions/status"),
+            ("""{"status":"700"}""", "/protocoloptions/status"),
+            ("""{"status":""}""", "/protocoloptions/status"),
+            ("""{"status":"20"}""", "/protocoloptions/status"),
+            ("""{"status":"2000"}""", "/protocoloptions/status"),
+            ("""{"status":"2a0"}""", "/protocoloptions/status"),
+            ("""{"status":"{+status}"}""", "/protocoloptions/status"),
+            ("""{"status":200}""", "/protocoloptions/status"),
+            ("""{"method":"two words"}""", "/protocoloptions/method"),
+            ("""{"path":false}""", "/protocoloptions/path"),
+            ("""{"path":"/orders/{device*}"}""", "/protocoloptions/path"),
+            ("""{"headers":{}}""", "/protocoloptions/headers"),
+            ("""{"headers":[{"value":"missing name"}]}""", "/protocoloptions/headers/0/name"),
+            ("""{"headers":[{"name":"bad name","value":"x"}]}""", "/protocoloptions/headers/0/name"),
+            ("""{"headers":[{"name":"X-A","type":"integer","value":"1"}]}""", "/protocoloptions/headers/0/type"),
+            ("""{"headers":[{"name":"X-A","required":"true"}]}""", "/protocoloptions/headers/0/required"),
+            ("""{"headers":[{"name":"X-A","value":null}]}""", "/protocoloptions/headers/0/value"),
+            ("""{"headers":[{"name":"X-A","extra":true}]}""", "/protocoloptions/headers/0/extra")
+        ];
+        foreach (var (options, path) in cases)
+        {
+            await Rejects($$"""{"protocol":"{{protocol}}","protocoloptions":{{options}}}""", path);
+        }
+    }
+
+    [Test]
+    [Arguments("HTTP")]
+    [Arguments("HTTP/1.1")]
+    [Arguments("HTTP/2")]
+    [Arguments("HTTP/3")]
+    public async Task HttpSelectorsPreserveResponseStatusBoundariesAndOptionalQuery(string protocol)
+    {
+        foreach (var status in new[] { "100", "200", "599", "{status}" })
+        {
+            var completed = RegistryDomainRules.CompleteMessageMetadata(RegistryJson.Parse($$$"""
+                {"protocol":"{{{protocol}}}","protocoloptions":{"status":"{{{status}}}","query":{}
+                }}
+                """));
+            await Assert.That(completed.RootElement.GetProperty("protocol").GetString()).IsEqualTo(protocol);
+            var options = completed.RootElement.GetProperty("protocoloptions");
+            await Assert.That(options.GetProperty("status").GetString()).IsEqualTo(status);
+            await Assert.That(options.GetProperty("query").EnumerateObject().Count()).IsEqualTo(0);
+            await Assert.That(options.TryGetProperty("method", out _)).IsFalse();
+        }
+        foreach (var options in new[] { "{}", """{"query":null}""" })
+        {
+            var completed = RegistryDomainRules.CompleteMessageMetadata(RegistryJson.Parse($$"""
+                {"protocol":"{{protocol}}","protocoloptions":{{options}}}
+                """));
+            await Assert.That(completed.RootElement.GetProperty("protocoloptions").GetRawText()).IsEqualTo(options);
+        }
+    }
+
+    [Test]
+    [Arguments("HTTP")]
+    [Arguments("HTTP/1.1")]
+    [Arguments("HTTP/2")]
+    [Arguments("HTTP/3")]
+    public async Task HttpSelectorsCompareContentTypeHeadersWithoutRewritingValues(string protocol)
+    {
+        var completed = RegistryDomainRules.CompleteMessageMetadata(RegistryJson.Parse($$$"""
+            {"protocol":"{{{protocol}}}","datacontenttype":"text/plain; charset=utf-8",
+             "protocoloptions":{"headers":[{"name":"cOnTeNt-TyPe","value":"TEXT/PLAIN; CHARSET=UTF-8"}]}}
+            """));
+        await Assert.That(completed.RootElement.GetProperty("protocol").GetString()).IsEqualTo(protocol);
+        await Assert.That(completed.RootElement.GetProperty("datacontenttype").GetString()).IsEqualTo("text/plain; charset=utf-8");
+        await Assert.That(completed.RootElement.GetProperty("protocoloptions").GetProperty("headers")[0]
+            .GetProperty("value").GetString()).IsEqualTo("TEXT/PLAIN; CHARSET=UTF-8");
+        foreach (var value in new[] { "application/json", "text/plain; charset=us-ascii", "not a media type" })
+        {
+            await Rejects($$$"""
+                {"protocol":"{{{protocol}}}","datacontenttype":"text/plain; charset=utf-8",
+                 "protocoloptions":{"headers":[{"name":"Content-Type","value":"{{{value}}}"}]}}
+                """, "/protocoloptions/headers/0/value");
+        }
+    }
+
+    [Test]
+    [Arguments(RegistryModelKind.Message)]
+    [Arguments(RegistryModelKind.Endpoint)]
+    public async Task HttpGroupConstraintsMatchOnlyTheSameSelectorVersion(RegistryModelKind kind)
+    {
+        var group = BuiltInRegistryModels.Compile(kind).Groups[
+            kind == RegistryModelKind.Message ? "messagegroups" : "endpoints"];
+        var resource = group.Resources["messages"];
+        await Assert.That(RegistryDomainRules.HasMessageGroupContract(group, resource)).IsTrue();
+        var protocols = new[] { "HTTP", "HTTP/1.1", "HTTP/2", "HTTP/3" };
+        foreach (var parentProtocol in protocols)
+        {
+            var parent = RegistryJson.Parse($$"""{"protocol":"{{parentProtocol}}"}""");
+            foreach (var childProtocol in protocols)
+            {
+                var child = RegistryJson.Parse($$"""{"protocol":"{{childProtocol.ToLowerInvariant()}}"}""");
+                Action validate = () => RegistryDomainRules.ValidateMessageGroupConstraints(
+                    child.RootElement, group, resource, parent.RootElement);
+                if (parentProtocol == childProtocol)
+                {
+                    await Assert.That(validate).ThrowsNothing();
+                    await Assert.That(child.RootElement.GetProperty("protocol").GetString()).IsEqualTo(childProtocol.ToLowerInvariant());
+                    await Assert.That(parent.RootElement.GetProperty("protocol").GetString()).IsEqualTo(parentProtocol);
+                }
+                else
+                {
+                    var error = await Assert.That(validate).Throws<RegistryException>();
+                    await Assert.That(error!.Diagnostic.Code).IsEqualTo("invalid_attribute");
+                    await Assert.That(error.Diagnostic.Path).IsEqualTo("/protocol");
+                }
+            }
+            var unbound = RegistryJson.Parse("{}");
+            RegistryDomainRules.ValidateMessageGroupConstraints(unbound.RootElement, group, resource, parent.RootElement);
+            await Assert.That(unbound.RootElement.TryGetProperty("protocol", out _)).IsFalse();
+        }
+    }
+
+    [Test]
+    [Arguments("HTTP/1.0")]
+    [Arguments("HTTP/2.0")]
+    [Arguments("HTTP/4")]
+    public async Task UnassignedHttpMessageVersionsDoNotAcquireNativeHttpValidation(string protocol)
+    {
+        const string options = """{"method":"two words","status":"not a status","query":{"q":false},"headers":{}}""";
+        var completed = RegistryDomainRules.CompleteMessageMetadata(RegistryJson.Parse(
+            $$"""{"protocol":"{{protocol}}","protocoloptions":{{options}}}"""));
+        await Assert.That(completed.RootElement.GetProperty("protocol").GetString()).IsEqualTo(protocol);
+        await Assert.That(completed.RootElement.GetProperty("protocoloptions").GetRawText()).IsEqualTo(options);
+    }
+
+    [Test]
     [Arguments("[]", "/envelopeoptions")]
     [Arguments("true", "/envelopeoptions")]
     [Arguments("\"structured\"", "/envelopeoptions")]

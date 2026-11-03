@@ -31,7 +31,8 @@ public static class BuiltInRegistryModels
     public static RegistryModel Compile(RegistryModelKind kind)
     {
         using var source = LoadSource(kind);
-        return CompileSource(RegistryJson.FromElement(source.RootElement), SourceUri(kind));
+        return CompileSource(WithHttpProtocolBranches(
+            RegistryJson.FromElement(source.RootElement), HttpSelectorOverlayName(kind)), SourceUri(kind));
     }
 
     /// <summary>Opens an independently owned stream containing the original model-source bytes.</summary>
@@ -146,14 +147,21 @@ public static class BuiltInRegistryModels
             {
                 using var stream = OpenPackagedSource(mediaDependency);
                 using var source = JsonDocument.Parse(stream, new JsonDocumentOptions { MaxDepth = 128 });
-                return RegistryJson.FromElement(source.RootElement);
+                var overlay = mediaDependency switch
+                {
+                    "media-endpoints-endpoint-source" => "http-media-endpoint-source",
+                    "media-endpoints-message-source" => "http-media-message-source",
+                    _ => null
+                };
+                return WithHttpProtocolBranches(RegistryJson.FromElement(source.RootElement), overlay);
             }
             foreach (var kind in Enum.GetValues<RegistryModelKind>())
             {
                 if (documentUri == SourceUri(kind))
                 {
                     using var source = LoadSource(kind);
-                    return RegistryJson.FromElement(source.RootElement);
+                    return WithHttpProtocolBranches(
+                        RegistryJson.FromElement(source.RootElement), HttpSelectorOverlayName(kind));
                 }
             }
 
@@ -161,4 +169,54 @@ public static class BuiltInRegistryModels
                 "The requested include is not an explicitly packaged model source."));
         }
     }
+
+    private static RegistryJson WithHttpProtocolBranches(RegistryJson source, string? overlayName)
+    {
+        if (overlayName is null)
+        {
+            return source;
+        }
+
+        using var overlayStream = OpenPackagedSource(overlayName);
+        using var overlayDocument = JsonDocument.Parse(overlayStream, new JsonDocumentOptions { MaxDepth = 128 });
+        var root = JsonNode.Parse(source.RootElement.GetRawText())!.AsObject();
+        var overlay = JsonNode.Parse(overlayDocument.RootElement.GetRawText())!.AsObject();
+        var groups = root["groups"] as JsonObject;
+        var overlayGroups = overlay["groups"] as JsonObject;
+        var changed = AddHttpProtocolBranches(
+            groups?["endpoints"]?["attributes"]?["protocol"],
+            overlayGroups?["endpoints"]?["attributes"]?["protocol"]);
+        changed |= AddHttpProtocolBranches(
+            groups?["messagegroups"]?["resources"]?["messages"]?["attributes"]?["protocol"],
+            overlayGroups?["messagegroups"]?["resources"]?["messages"]?["attributes"]?["protocol"]);
+        return changed ? RegistryJson.Parse(root.ToJsonString()) : source;
+    }
+
+    private static bool AddHttpProtocolBranches(JsonNode? protocol, JsonNode? overlayProtocol)
+    {
+        if (protocol?["ifvalues"] is not JsonObject values || values["HTTP"] is not JsonObject http ||
+            overlayProtocol?["ifvalues"] is not JsonObject overlayValues)
+        {
+            return false;
+        }
+
+        var changed = false;
+        foreach (var selector in overlayValues.Select(static pair => pair.Key)
+            .Where(static selector => selector is "HTTP/1.1" or "HTTP/2" or "HTTP/3"))
+        {
+            if (!values.ContainsKey(selector))
+            {
+                values[selector] = http.DeepClone();
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    private static string? HttpSelectorOverlayName(RegistryModelKind kind) => kind switch
+    {
+        RegistryModelKind.Endpoint => "http-endpoint-model",
+        RegistryModelKind.Message => "http-message-model",
+        _ => null
+    };
 }

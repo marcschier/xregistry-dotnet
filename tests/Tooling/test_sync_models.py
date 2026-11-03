@@ -13,6 +13,7 @@ from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
+HTTP_SELECTOR_SOURCE_ID = "pr571-a1da400e"
 SPEC = importlib.util.spec_from_file_location("model_sync", ROOT / "eng" / "sync_models.py")
 assert SPEC is not None and SPEC.loader is not None
 tool = importlib.util.module_from_spec(SPEC)
@@ -79,10 +80,34 @@ class ModelResourceSynchronizationTests(unittest.TestCase):
             target = self.root / tool.source_tool.CORPUS / path
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(data)
+        self.http_selector_sources = self.create_http_selector_sources()
         self.enterContext(mock.patch.object(tool.source_tool, "successor_sources", return_value=[{
             "sourceId": "pr571-d757328e", "path": tool.MODELS["registry"],
             "kind": "artifact", "file": (tool.source_tool.CORPUS / tool.MODELS["registry"]).as_posix(),
-        }]))
+        }, *self.http_selector_sources]))
+
+    def create_http_selector_sources(self) -> list[dict[str, str]]:
+        files = {
+            "endpoint/model.json": b'{"protocol":"HTTP/2"}\n',
+            "message/model.json": b'{"protocol":"HTTP/3"}\n',
+            "workingdrafts/models/media-endpoints/sources/endpoint-model.source.json":
+                b'{"protocol":"HTTP/1.1"}\n',
+            "workingdrafts/models/media-endpoints/sources/message-model.source.json":
+                b'{"protocol":"HTTP/2"}\n',
+        }
+        sources = []
+        for path, data in files.items():
+            relative = f"tests/Conformance/Successors/{HTTP_SELECTOR_SOURCE_ID}/" + path
+            target = self.root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+            sources.append({
+                "sourceId": HTTP_SELECTOR_SOURCE_ID,
+                "path": path,
+                "kind": "artifact",
+                "file": relative,
+            })
+        return sources
 
     def write_draft_manifest(self) -> None:
         draft_path = self.root / self.api_source_path
@@ -119,6 +144,10 @@ class ModelResourceSynchronizationTests(unittest.TestCase):
         for name, path in tool.MODELS.items():
             with self.subTest(name=name):
                 self.assertEqual((directory / (name + ".json")).read_bytes(), self.sources[path])
+        for name, entry in zip(tool.HTTP_SELECTOR_MODELS, self.http_selector_sources, strict=True):
+            with self.subTest(name=name):
+                self.assertEqual((directory / (name + ".json")).read_bytes(),
+                                 (self.root / entry["file"]).read_bytes())
         self.assertEqual((directory / "api.json").read_bytes(), self.api_source)
         self.assertEqual((directory / "LICENSE").read_bytes(), b"Independent fixture license.\r\n")
 
@@ -161,7 +190,7 @@ class ModelResourceSynchronizationTests(unittest.TestCase):
             mock.patch.object(tool.source_tool, "successor_sources", return_value=[{
                 "sourceId": "pr571-d757328e", "path": tool.MODELS["registry"],
                 "kind": "artifact", "file": relative,
-            }]),
+            }, *self.http_selector_sources]),
         ):
             tool.synchronize(self.root, False)
             tool.synchronize(self.root, True)
@@ -174,6 +203,18 @@ class ModelResourceSynchronizationTests(unittest.TestCase):
             mock.patch.object(tool.source_tool, "successor_sources", return_value=[]),
         ):
             with self.assertRaisesRegex(tool.source_tool.SpecificationError, "successor model is missing"):
+                tool.synchronize(self.root, False)
+
+    def test_selected_http_selector_model_cannot_silently_fall_back_to_historical_model(self) -> None:
+        selected = [{
+            "sourceId": "pr571-d757328e", "path": tool.MODELS["registry"],
+            "kind": "artifact", "file": (tool.source_tool.CORPUS / tool.MODELS["registry"]).as_posix(),
+        }, *self.http_selector_sources[:-1]]
+        with (
+            mock.patch.object(tool.source_tool, "verify_corpus", return_value=self.lock),
+            mock.patch.object(tool.source_tool, "successor_sources", return_value=selected),
+        ):
+            with self.assertRaisesRegex(tool.source_tool.SpecificationError, "selected HTTP selector model is missing"):
                 tool.synchronize(self.root, False)
 
     def test_draft_repository_must_be_a_canonical_github_repository_url(self) -> None:

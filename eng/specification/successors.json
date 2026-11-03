@@ -750,6 +750,49 @@
           "sha256": "c07c2bf22d1b6eadecdbc008b0693c9a876f85c1485c375ff57301085ffc8db9"
         }
       ]
+    },
+    {
+      "id": "pr571-a1da400e",
+      "repository": "https://github.com/marcschier/xregistry-drafts",
+      "commit": "a1da400e938b420da1f097b58a73fd9f75deb9e5",
+      "status": "working-draft",
+      "files": [
+        {
+          "path": "endpoint/model.json",
+          "owner": "endpoint",
+          "kind": "artifact",
+          "bytes": 66768,
+          "sha256": "e7f4eed0d3e671bf5cb438a8c1bd7437e9d74256109c8cfd621b58c237dcbe5c"
+        },
+        {
+          "path": "message/model.json",
+          "owner": "message",
+          "kind": "artifact",
+          "bytes": 73831,
+          "sha256": "889bf1d8f215745aac5cbef470452f75f8dad00fbd45246c7b5a6716e5f54d0e"
+        },
+        {
+          "path": "workingdrafts/models/media-endpoints/sources/endpoint-model.source.json",
+          "owner": "media-endpoints",
+          "kind": "artifact",
+          "bytes": 66767,
+          "sha256": "a4f33c5f8d5a52202e523eb292340ddb2013a898c9197e1e3581f036dcb82442"
+        },
+        {
+          "path": "workingdrafts/models/media-endpoints/sources/message-model.source.json",
+          "owner": "media-endpoints",
+          "kind": "artifact",
+          "bytes": 73836,
+          "sha256": "7355faa56cebe030f08810dd7766f2321a4f4be30152d906be5948e8b74cec25"
+        },
+        {
+          "path": "LICENSE",
+          "owner": "license",
+          "kind": "license",
+          "bytes": 11349,
+          "sha256": "c07c2bf22d1b6eadecdbc008b0693c9a876f85c1485c375ff57301085ffc8db9"
+        }
+      ]
     }
   ],
   "composition": [
@@ -1240,6 +1283,31 @@
     },
     {
       "source": "pr571-f69085fb",
+      "path": "LICENSE",
+      "role": "review-only"
+    },
+    {
+      "source": "pr571-a1da400e",
+      "path": "endpoint/model.json",
+      "role": "review-only"
+    },
+    {
+      "source": "pr571-a1da400e",
+      "path": "message/model.json",
+      "role": "review-only"
+    },
+    {
+      "source": "pr571-a1da400e",
+      "path": "workingdrafts/models/media-endpoints/sources/endpoint-model.source.json",
+      "role": "review-only"
+    },
+    {
+      "source": "pr571-a1da400e",
+      "path": "workingdrafts/models/media-endpoints/sources/message-model.source.json",
+      "role": "review-only"
+    },
+    {
+      "source": "pr571-a1da400e",
       "path": "LICENSE",
       "role": "review-only"
     }

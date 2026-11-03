@@ -9,6 +9,107 @@ namespace XRegistry.Models.Tests;
 public class EndpointDefinitionConsumerTests
 {
     [Test]
+    [Arguments("HTTP")]
+    [Arguments("HTTP/1.1")]
+    [Arguments("HTTP/2")]
+    [Arguments("HTTP/3")]
+    public async Task HttpSelectorsKeepHeaderRecordMemberNamesStructuralDuringExpansion(string protocol)
+    {
+        var error = await Assert.That(() => EndpointDefinition.Materialize(
+            Input(protocol, """{"headers":[{"{field}":"X-Tenant","value":"west"}]}"""),
+            RegistryJson.Parse("""{"field":"name"}"""))).Throws<RegistryException>();
+        await Assert.That(error!.Diagnostic.Code).IsEqualTo("invalid_endpoint_template");
+        await Assert.That(error.Diagnostic.Path).IsEqualTo("/protocoloptions/headers/0/{field}");
+    }
+
+    [Test]
+    [Arguments("HTTP", "HTTP")]
+    [Arguments("hTtP/1.1", "HTTP/1.1")]
+    [Arguments("http/2", "HTTP/2")]
+    [Arguments("http/3", "HTTP/3")]
+    public async Task HttpSelectorsRenderHttpAndHttpsAddressesWithoutRewritingAuthoredMetadata(string authored, string canonical)
+    {
+        var input = Input(authored, """
+            {"method":"{verb}","query":{"q":"{tenant}"},
+             "headers":[{"name":"X-Tenant","value":"{tenant}"},{"name":"x-tenant","value":"second"}],
+             "endpoints":[{"uri":"http://{host}/events/{tenant}"},
+                          {"uri":"https://{host}/events/{tenant}","priority":2}]}
+            """);
+        var before = input.RootElement.GetRawText();
+        var result = EndpointDefinition.Materialize(input,
+            RegistryJson.Parse("""{"verb":"GET","host":"api.example.test","tenant":"west / east"}"""));
+        await Assert.That(result.Protocol).IsEqualTo(canonical);
+        await Assert.That(result.Authored.RootElement.GetProperty("protocol").GetString()).IsEqualTo(authored);
+        await Assert.That(result.Resolved.RootElement.GetProperty("protocol").GetString()).IsEqualTo(authored);
+        await Assert.That(result.GetProtocolOption("method").GetString()).IsEqualTo("GET");
+        await Assert.That(result.GetProtocolOption("query").GetProperty("q").GetString()).IsEqualTo("west%20%2F%20east");
+        var headers = result.GetProtocolOption("headers");
+        await Assert.That(headers.GetArrayLength()).IsEqualTo(2);
+        await Assert.That(headers[0].GetProperty("value").GetString()).IsEqualTo("west%20%2F%20east");
+        await Assert.That(headers[1].GetProperty("name").GetString()).IsEqualTo("x-tenant");
+        await Assert.That(headers[1].GetProperty("value").GetString()).IsEqualTo("second");
+        var addresses = result.GetProtocolOption("endpoints");
+        await Assert.That(addresses.GetArrayLength()).IsEqualTo(2);
+        await Assert.That(addresses[0].GetProperty("uri").GetString()).IsEqualTo("http://api.example.test/events/west%20%2F%20east");
+        await Assert.That(addresses[1].GetProperty("uri").GetString()).IsEqualTo("https://api.example.test/events/west%20%2F%20east");
+        await Assert.That(addresses[1].GetProperty("priority").GetInt32()).IsEqualTo(2);
+        await Assert.That(result.Authored.RootElement.GetRawText()).IsEqualTo(before);
+        await Assert.That(input.RootElement.GetRawText()).IsEqualTo(before);
+        await Assert.That(result.DeferredChecks.Any(check => check.Code is "protocol_contract" or "extension_option" or "endpoint_address")).IsFalse();
+    }
+
+    [Test]
+    [Arguments("HTTP")]
+    [Arguments("HTTP/1.1")]
+    [Arguments("HTTP/2")]
+    [Arguments("HTTP/3")]
+    public async Task HttpSelectorsRejectNonHttpAddressesAndMissingUris(string protocol)
+    {
+        foreach (var address in new[] { "ftp://api.example.test/events", "amqp://api.example.test/events" })
+        {
+            await Rejects(Input(protocol, $$$"""{"endpoints":[{"uri":"{{{address}}}"}]}"""),
+                "/protocoloptions/endpoints/0/uri", "invalid_endpoint_address");
+        }
+        await Rejects(Input(protocol, """{"endpoints":[{}]}"""), "/protocoloptions/endpoints/0/uri");
+    }
+
+    [Test]
+    [Arguments("HTTP")]
+    [Arguments("HTTP/1.1")]
+    [Arguments("HTTP/2")]
+    [Arguments("HTTP/3")]
+    public async Task HttpSelectorsRejectCredentialCarriersAtTheirExactPaths(string protocol)
+    {
+        await Rejects(Input(protocol, """{"headers":[{"name":"Authorization","value":"runtime-only"}]}"""),
+            "/protocoloptions/headers/0/value", "endpoint_credentials");
+        await Rejects(Input(protocol, """{"apikeyname":"custom-key","query":{"custom-key":"runtime-only"},"apikeyin":"query"}"""),
+            "/protocoloptions/query/custom-key", "endpoint_credentials");
+        await Rejects(Input(protocol, """{"apikeyname":"custom-key","endpoints":[{"uri":"https://api.example.test/?custom-key=runtime-only"}],"apikeyin":"query"}"""),
+            "/protocoloptions/endpoints/0/uri", "endpoint_credentials");
+    }
+
+    [Test]
+    [Arguments("HTTP")]
+    [Arguments("HTTP/1.1")]
+    [Arguments("HTTP/2")]
+    [Arguments("HTTP/3")]
+    public async Task HttpSelectorsRequireContentTypeToMatchTheEndpointEnvelope(string protocol)
+    {
+        RegistryJson Metadata(string value) => RegistryJson.Parse($$$"""
+            {"usage":["producer"],"protocol":"{{{protocol}}}","envelope":"CloudEvents/1.0",
+             "envelopeoptions":{"mode":"structured","format":"application/cloudevents+json"},
+             "protocoloptions":{"headers":[{"name":"content-type","value":"{{{value}}}"}]}}
+            """);
+        var result = EndpointDefinition.Materialize(Metadata("application/cloudevents+json"));
+        await Assert.That(result.GetProtocolOption("headers")[0].GetProperty("value").GetString())
+            .IsEqualTo("application/cloudevents+json");
+        await Assert.That(result.Resolved.RootElement.GetProperty("protocol").GetString()).IsEqualTo(protocol);
+        await Assert.That(result.DeferredChecks.Any(check =>
+            check.Code == "envelope_content_type" && check.Path == "/envelopeoptions/format")).IsTrue();
+        await Rejects(Metadata("application/json"), "/protocoloptions/headers/0/value");
+    }
+
+    [Test]
     [Arguments("hTtP", "HTTP", true)]
     [Arguments("amqp", "AMQP/1.0", true)]
     [Arguments("amqp/1.0", "AMQP/1.0", true)]

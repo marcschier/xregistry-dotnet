@@ -12,6 +12,67 @@ namespace XRegistry.Models.Tests;
 public class MediaEndpointDefinitionTests
 {
     [Test]
+    [Arguments("HTTP")]
+    [Arguments("HTTP/1.1")]
+    [Arguments("HTTP/2")]
+    [Arguments("HTTP/3")]
+    public async Task HttpMediaSelectorsAcceptConsumerHttpAndHttpsAddresses(string protocol)
+    {
+        foreach (var address in new[] { "http://media.example.test/live", "https://media.example.test/live" })
+        {
+            var input = Endpoint(protocol, "consumer",
+                $$$"""{"method":"GET","endpoints":[{"uri":"{{{address}}}"}]}""");
+            await Assert.That(() => RegistryDomainRules.ValidateMediaEndpointMetadata(input.RootElement)).ThrowsNothing();
+            var result = EndpointDefinition.MaterializeMedia(input);
+            await Assert.That(result.Protocol).IsEqualTo(protocol);
+            await Assert.That(result.Authored.RootElement.GetProperty("protocol").GetString()).IsEqualTo(protocol);
+            await Assert.That(result.Resolved.RootElement.GetProperty("protocol").GetString()).IsEqualTo(protocol);
+            await Assert.That(result.GetProtocolOption("endpoints")[0].GetProperty("uri").GetString()).IsEqualTo(address);
+            await Assert.That(result.GetProtocolOption("method").GetString()).IsEqualTo("GET");
+            await Assert.That(result.GetProtocolOption("streamformat").ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            await Assert.That(result.GetProtocolOption("videocodec").ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            await Assert.That(result.GetProtocolOption("audiocodec").ValueKind).IsEqualTo(JsonValueKind.Undefined);
+            await Assert.That(result.Messages).IsEmpty();
+            await Assert.That(result.DeferredChecks.Any(check => check.Code == "protocol_contract")).IsFalse();
+            await Assert.That(result.DeferredChecks.Any(check =>
+                check.Code == "media_session_setup" && check.Path == "/protocol")).IsTrue();
+        }
+    }
+
+    [Test]
+    [Arguments("HTTP")]
+    [Arguments("HTTP/1.1")]
+    [Arguments("HTTP/2")]
+    [Arguments("HTTP/3")]
+    public async Task HttpMediaSelectorsRejectProducerUsageWithoutRestrictingMessageEndpoints(string protocol)
+    {
+        var input = Endpoint(protocol, "producer", """{"endpoints":[{"uri":"https://media.example.test/live"}]}""");
+        await Rejects(input, "/usage");
+        await RejectsCanonicalMediaMetadata(input, "/usage");
+        // HTTP producer usage remains valid for a Message Endpoint; Media is an explicit opt-in.
+        var messaging = EndpointDefinition.Materialize(input);
+        await Assert.That(messaging.Protocol).IsEqualTo(protocol);
+        await Assert.That(messaging.Resolved.RootElement.GetProperty("usage")[0].GetString()).IsEqualTo("producer");
+        await Assert.That(messaging.GetProtocolOption("endpoints")[0].GetProperty("uri").GetString())
+            .IsEqualTo("https://media.example.test/live");
+    }
+
+    [Test]
+    [Arguments("HTTP")]
+    [Arguments("HTTP/1.1")]
+    [Arguments("HTTP/2")]
+    [Arguments("HTTP/3")]
+    public async Task HttpMediaSelectorsRejectNonHttpAddressSchemes(string protocol)
+    {
+        foreach (var address in new[] { "ftp://media.example.test/live", "srt://media.example.test:9000" })
+        {
+            await Rejects(Endpoint(protocol, "consumer",
+                $$$"""{"endpoints":[{"uri":"{{{address}}}"}]}"""),
+                "/protocoloptions/endpoints/0/uri", "invalid_endpoint_address");
+        }
+    }
+
+    [Test]
     [Arguments("SRT", "producer", "mpegts", "H264", "AAC")]
     [Arguments("WebRTC", "producer", "srtp", "H264", "Opus")]
     [Arguments("RTSP/1.0", "producer", "rtp", "H264", "AAC")]

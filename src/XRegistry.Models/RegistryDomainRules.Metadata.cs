@@ -254,9 +254,18 @@ public static partial class RegistryDomainRules
         return value.GetString();
     }
 
-    private static bool SelectorIs(JsonElement metadata, string name, string expected) =>
-        metadata.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String &&
-        string.Equals(value.GetString(), expected, StringComparison.OrdinalIgnoreCase);
+    private static bool SelectorIs(JsonElement metadata, string name, string expected)
+    {
+        if (!metadata.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+        var selected = value.GetString();
+        return string.Equals(name, "protocol", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(expected, "HTTP", StringComparison.OrdinalIgnoreCase)
+            ? HttpProtocolSemantics.IsHttp(selected)
+            : string.Equals(selected, expected, StringComparison.OrdinalIgnoreCase);
+    }
 
     private static bool TryObject(JsonElement metadata, string name, out JsonElement value) =>
         metadata.TryGetProperty(name, out value) && value.ValueKind == JsonValueKind.Object;

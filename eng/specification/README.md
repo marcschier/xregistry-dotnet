@@ -133,6 +133,14 @@ A packaged draft model is an implementation input, not a released requirement
 or conformance result. Its API validation and operation behavior still require
 separate implementation and tests.
 
+The HTTP/1.1, HTTP/2 and HTTP/3 model branches are pinned as review-only
+artifacts from PR #571 head `a1da400e` in `eng/specification/successors.json`.
+`sync_models.py` packages those source files without changing them.
+`BuiltInRegistryModels` applies their versioned selectors to the local HTTP
+branches during compilation, preserving the `SPEC-020` Message correction.
+This composition does not change the correction manifest or mark the model
+artifacts as normative requirements.
+
 The Registry model uses a separately frozen successor artifact.
 `SUCCESSOR_MODELS` in `eng/sync_models.py` selects
 `pr571-d757328e/workingdrafts/models/registry/model.json` from the verified
@@ -151,14 +159,14 @@ line-ending conversion.
 
 ## Review workflow
 
-The active successor composition uses merged upstream `d290b1ec` and draft
-PR #571 `d757328e`, except for the OPC UA binding selected from `f69085fb`.
-That native-only refresh corrects the canonical `deprecated` event names and
-their field rules; it does not select later versions of other drafts or models.
-Earlier source sets remain review-only evidence. PR #715 and #716 remain
-separate review-only inputs. Refreshing the
-composition does not transfer implementation or qualification claims to the
-new source-qualified requirements, even when their text is unchanged.
+Active successor requirements use merged upstream `d290b1ec` and draft PR #571
+`d757328e`, except for the OPC UA binding selected from `f69085fb`. That
+native-only refresh corrects the canonical `deprecated` event names and their
+field rules; it does not select later versions of other draft requirements.
+The HTTP selector models at `a1da400e` remain review-only inputs. PR #715 and
+#716 also remain separate review-only inputs. Refreshing the composition does
+not mark source-qualified requirements implemented or qualified, even when
+their text is unchanged.
 
 After an intentional source refresh, use
 `python eng\specification\manage.py generate --retire-superseded` to archive

@@ -276,7 +276,7 @@ internal sealed class EndpointTemplateExpansion(EndpointTemplateOptions options,
                 return true;
             }
         }
-        return protocol == "HTTP" && IsArrayRecord(path, "/protocoloptions/headers/");
+        return HttpProtocolSemantics.IsHttp(protocol) && IsArrayRecord(path, "/protocoloptions/headers/");
     }
 
     private static bool IsArrayRecord(string path, string prefix) =>

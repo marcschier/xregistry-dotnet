@@ -27,9 +27,9 @@ public static partial class RegistryDomainRules
         }
 
         var protocol = OptionalText(message, "protocol", "/protocol");
-        string[] textFields = protocol?.ToUpperInvariant() switch
+        string[] textFields = HttpProtocolSemantics.IsHttp(protocol) ? ["path", "method", "status"] :
+            protocol?.ToUpperInvariant() switch
         {
-            "HTTP" => ["path", "method", "status"],
             "MQTT/3.1.1" => ["topic_name"],
             "MQTT/5.0" => ["topic_name", "response_topic", "content_type"],
             "KAFKA" => ["topic", "key"],
@@ -40,9 +40,9 @@ public static partial class RegistryDomainRules
         {
             _ = OptionalText(options, name, At("/protocoloptions", name), nonempty: false);
         }
-        string[] fields = protocol?.ToUpperInvariant() switch
+        string[] fields = HttpProtocolSemantics.IsHttp(protocol) ? ["headers", "path", "method", "status"] :
+            protocol?.ToUpperInvariant() switch
         {
-            "HTTP" => ["headers", "path", "method", "status"],
             "AMQP/1.0" => ["properties", "application-properties", "message-annotations", "delivery-annotations", "header", "footer"],
             "MQTT/3.1.1" => ["topic_name"],
             "MQTT/5.0" => ["topic_name", "response_topic", "content_type", "user_properties"],

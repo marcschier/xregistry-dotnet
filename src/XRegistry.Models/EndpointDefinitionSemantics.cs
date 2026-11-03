@@ -31,6 +31,9 @@ internal static partial class EndpointDefinitionSemantics
         "MQTT" or "MQTT/5.0" => "MQTT/5.0",
         "MQTT/3.1.1" => "MQTT/3.1.1",
         "HTTP" => "HTTP",
+        "HTTP/1.1" => "HTTP/1.1",
+        "HTTP/2" => "HTTP/2",
+        "HTTP/3" => "HTTP/3",
         "KAFKA" => "KAFKA",
         "NATS" => "NATS",
         _ => value
@@ -56,7 +59,8 @@ internal static partial class EndpointDefinitionSemantics
                 ? MediaEndpointSemantics.GetDefaultOption(protocol, name)
                 : default;
         }
-        return Defaults.RootElement.TryGetProperty(protocol, out var protocolDefaults) &&
+        var defaultsName = HttpProtocolSemantics.IsHttp(protocol) ? "HTTP" : protocol;
+        return Defaults.RootElement.TryGetProperty(defaultsName, out var protocolDefaults) &&
             protocolDefaults.TryGetProperty(name, out value) ? value : default;
     }
 
@@ -99,11 +103,13 @@ internal static partial class EndpointDefinitionSemantics
         RequireKind(options, JsonValueKind.Object, OptionsPath);
         ValidateAuthorizationShape(options, cancellationToken);
         Boolean(options, "deployed");
-        switch (Protocol(endpoint))
+        var protocol = Protocol(endpoint);
+        if (HttpProtocolSemantics.IsHttp(protocol))
         {
-            case "HTTP":
-                ValidateHttpOptions(options, resolved, cancellationToken);
-                break;
+            ValidateHttpOptions(options, resolved, cancellationToken);
+        }
+        else switch (protocol)
+        {
             case "AMQP/1.0":
                 Strings(options, ["node"], cancellationToken);
                 Booleans(options, ["durable", "dynamic"], cancellationToken);

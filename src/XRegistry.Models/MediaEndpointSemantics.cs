@@ -24,7 +24,7 @@ internal static class MediaEndpointSemantics
         "SRT" or "WebRTC" or "RTSP/1.0" or "RTSP/2.0" or "RTP/2" or "MPEGTS-UDP" or
         "RTMP/1.0" or "HLS" or "DASH" or "RIST-Simple/2020" or "RIST-Main/2024";
 
-    internal static bool IsMediaProtocol(string? protocol) => protocol == "HTTP" || IsDraftMediaProtocol(protocol);
+    internal static bool IsMediaProtocol(string? protocol) => HttpProtocolSemantics.IsHttp(protocol) || IsDraftMediaProtocol(protocol);
 
     internal static bool IsProducer(JsonElement endpoint) =>
         endpoint.TryGetProperty("usage", out var usage) && usage.ValueKind == JsonValueKind.Array &&
@@ -94,7 +94,8 @@ internal static class MediaEndpointSemantics
         RejectDeclared(endpoint, "envelope");
         RejectDeclared(endpoint, "envelopeoptions");
         ValidateMessageAssociations(endpoint, cancellationToken);
-        if ((protocol is "HTTP" or "RTSP/2.0" or "HLS" or "DASH") && IsProducer(endpoint))
+        if ((HttpProtocolSemantics.IsHttp(protocol) || protocol is "RTSP/2.0" or "HLS" or "DASH") &&
+            IsProducer(endpoint))
         {
             throw Invalid("/usage", "The selected media protocol does not define producer usage.");
         }
