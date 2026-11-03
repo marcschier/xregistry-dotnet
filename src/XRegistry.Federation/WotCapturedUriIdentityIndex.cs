@@ -373,6 +373,26 @@ public sealed class WotCapturedUriIdentityIndex
         return ClassifyTarget(reference, targetKind, false, budget, cancellationToken);
     }
 
+    /// <summary>Checks a discovered projection source's declared media kind against its unique captured URI identity.</summary>
+    /// <returns>Null for a document-local source; otherwise its correctly typed captured Resource or exact Version.</returns>
+    /// <remarks>Local sources still require cycle validation. Source requirements, pins and complete projection admission remain separate.</remarks>
+    public WotCapturedResourceIdentity? ClassifyProjectionSource(WotProjectionSourceOccurrence source,
+        FederationReadBudget? budget = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(source.Reference);
+        ArgumentNullException.ThrowIfNull(source.Reference.Target);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!Enum.IsDefined(source.TargetKind)) { throw new ArgumentOutOfRangeException(nameof(source)); }
+        if (source.Reference.Operator != WotJsonLdBaseResolver.ProjectionVocabulary + "projects" ||
+            source.Reference.Target.Fragment is not null)
+        {
+            throw FederationJson.Invalid("Projection source classification requires its canonical operator and a fragment-free href.");
+        }
+        return ClassifyTarget(source.Reference, source.TargetKind == WotReferenceTargetKind.ThingModel
+            ? "thingmodel" : "thingdescription", false, budget, cancellationToken);
+    }
+
     private WotCapturedResourceIdentity? ClassifyTarget(WotAuthoredReferenceOccurrence reference,
         string targetKind, bool allowSchema, FederationReadBudget? budget, CancellationToken cancellationToken)
     {

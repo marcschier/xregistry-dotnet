@@ -2339,6 +2339,16 @@ does not perform complete projection admission, verify captured target kinds,
 check source requirements or digest pins, associate selectors with entries,
 compose affordances or validate closure bindings.
 
+`ClassifyProjectionSource` checks a discovered source entry against the captured
+URI index before bytes are acquired. Its declared TD/TM media kind must agree
+with the unique captured Resource kind; the declaration cannot resolve URI
+ambiguity or turn a Schema Resource into a projection source. Classification
+preserves Resource or exact-Version scope without selecting a Version. It
+requires the canonical projection operator and a fragment-free reference.
+A local source returns no external target and still requires cycle validation.
+Source requirements, digest pins and complete projection admission remain
+separate work.
+
 `DiscoverProjectionSelectorReferencesAsync` associates authored `tm:ref`
 selections in root affordance maps with source entries by resolved document
 URI. Map and reference aliases use their captured meanings. URI-fragment

@@ -14,6 +14,245 @@ namespace XRegistry.Federation.Tests;
 public class WotRegistryResolverTests
 {
     [Test]
+    [Arguments(false, false)]
+    [Arguments(false, true)]
+    [Arguments(true, false)]
+    [Arguments(true, true)]
+    public async Task ProjectionSourceClassificationUsesDiscoveredMediaKindAndCapturedIdentityScope(bool description, bool exact)
+    {
+        var source = ClassificationSource(description ? "thingdescription" : "thingmodel");
+        var plan = new JsonObject
+        {
+            ["@context"] = JsonNode.Parse("""
+                {"Thing":"https://www.w3.org/2019/wot/td#Thing",
+                 "p":"https://raw.githubusercontent.com/marcschier/wot-thing-description/main/proposals/wot-projections/context.experimental-v1.jsonld#"}
+                """),
+            ["@type"] = new JsonArray("Thing", "p:projection"),
+            ["p:projects"] = new JsonArray(new JsonObject
+            {
+                ["p:sourceName"] = "captured", ["href"] = "./definition.td.json",
+                ["type"] = description ? "application/td+json" : "application/tm+json"
+            })
+        };
+        var occurrences = await WotJsonLdBaseResolver.DiscoverProjectionSourceReferencesAsync(
+            new(Encoding.UTF8.GetBytes(plan.ToJsonString())), new Uri("https://example.test/plan.json"),
+            WotReferenceTargetKind.ThingDescription, new Dictionary<Uri, FederationDocument>());
+        await Assert.That(occurrences.Count).IsEqualTo(1);
+        var occurrence = occurrences[0];
+        var index = await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(source, occurrence.Reference.Target.DocumentUri, WotCapturedUriIdentityKind.DocumentView,
+                source.Resource + (exact ? "/versions/2.0.0" : ""))]);
+        var reads = source.Reads.Count;
+        var budget = new FederationReadBudget();
+        var target = index.ClassifyProjectionSource(occurrence, budget) ??
+            throw new InvalidOperationException("Expected an external projection source.");
+
+        await Assert.That(target.ResourceKind).IsEqualTo(description ? "thingdescription" : "thingmodel");
+        await Assert.That(target.ResourceXid).IsEqualTo(source.Resource);
+        await Assert.That(target.VersionId).IsEqualTo(exact ? "2.0.0" : null);
+        await Assert.That(ReferenceEquals(target.Source, source)).IsTrue();
+        await Assert.That(occurrence.SourceName).IsEqualTo("captured");
+        await Assert.That(occurrence.Reference.SourcePointer).IsEqualTo("/p:projects/0");
+        await Assert.That(occurrence.Reference.PropertyName).IsEqualTo("href");
+        await Assert.That(occurrence.Reference.Operator).IsEqualTo(WotJsonLdBaseResolver.ProjectionVocabulary + "projects");
+        await Assert.That(occurrence.Reference.Href).IsEqualTo("./definition.td.json");
+        await Assert.That(source.Reads.Count).IsEqualTo(reads);
+        await Assert.That(budget.Requests).IsEqualTo(0L);
+    }
+
+    [Test]
+    [Arguments(false, "thingdescription")]
+    [Arguments(false, "schema")]
+    [Arguments(false, "message")]
+    [Arguments(true, "thingmodel")]
+    [Arguments(true, "schema")]
+    [Arguments(true, "endpoint")]
+    public async Task ProjectionSourceClassificationRejectsDeclaredAndCapturedKindMismatch(bool description, string kind)
+    {
+        var source = ClassificationSource(kind);
+        var occurrence = ProjectionClassificationReference(description);
+        var index = await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(source, occurrence.Reference.Target.DocumentUri, WotCapturedUriIdentityKind.DocumentView,
+                source.Resource + "/versions/2.0.0")]);
+        var reads = source.Reads.Count;
+        var failure = await Assert.That(() => index.ClassifyProjectionSource(occurrence))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected a declared/captured kind mismatch.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(source.Reads.Count).IsEqualTo(reads);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task ProjectionSourceClassificationCannotFilterAmbiguousUrisByDeclaredKind(bool description)
+    {
+        var first = ClassificationSource("thingmodel");
+        var second = ClassificationSource("thingdescription");
+        var occurrence = ProjectionClassificationReference(description);
+        var index = await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(first, occurrence.Reference.Target.DocumentUri, WotCapturedUriIdentityKind.DocumentView, first.Resource),
+             new(second, occurrence.Reference.Target.DocumentUri, WotCapturedUriIdentityKind.DocumentView, second.Resource)]);
+        var failure = await Assert.That(() => index.ClassifyProjectionSource(occurrence))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected ambiguous projection source identities.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.Ambiguous);
+    }
+
+    [Test]
+    [Arguments(false, false)]
+    [Arguments(false, true)]
+    [Arguments(true, false)]
+    [Arguments(true, true)]
+    public async Task ProjectionSourceClassificationSeparatesEquivalentRecordsFromResourceVersionAmbiguity(
+        bool description, bool competingScope)
+    {
+        var source = ClassificationSource(description ? "thingdescription" : "thingmodel");
+        var occurrence = ProjectionClassificationReference(description);
+        var index = await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(source, occurrence.Reference.Target.DocumentUri, WotCapturedUriIdentityKind.DocumentView,
+                source.Resource + "/versions/1.0.0"),
+             new(source, occurrence.Reference.Target.DocumentUri, WotCapturedUriIdentityKind.DocumentBase,
+                source.Resource + (competingScope ? "" : "/versions/1.0.0"))]);
+        if (competingScope)
+        {
+            var failure = await Assert.That(() => index.ClassifyProjectionSource(occurrence))
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected competing captured scopes.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.Ambiguous);
+        }
+        else
+        {
+            var target = index.ClassifyProjectionSource(occurrence) ??
+                throw new InvalidOperationException("Expected one deduplicated projection target.");
+            await Assert.That(target.VersionId).IsEqualTo("1.0.0");
+            await Assert.That(target.ResourceKind).IsEqualTo(description ? "thingdescription" : "thingmodel");
+        }
+    }
+
+    [Test]
+    [Arguments(false, "")]
+    [Arguments(false, "plan.json")]
+    [Arguments(true, "")]
+    [Arguments(true, "plan.json")]
+    public async Task LocalProjectionSourceClassificationDoesNotConsultCapturedIdentities(bool description, string href)
+    {
+        var source = ClassificationSource("thingmodel");
+        var other = ClassificationSource("thingdescription");
+        var occurrence = ProjectionClassificationReference(description, href);
+        var index = await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(source, occurrence.Reference.Target.DocumentUri, WotCapturedUriIdentityKind.DocumentView, source.Resource),
+             new(other, occurrence.Reference.Target.DocumentUri, WotCapturedUriIdentityKind.DocumentView, other.Resource)]);
+        var reads = source.Reads.Count + other.Reads.Count;
+        source.Model = null;
+        other.Model = null;
+        var budget = new FederationReadBudget();
+        await Assert.That(index.ClassifyProjectionSource(occurrence, budget)).IsNull();
+        await Assert.That(budget.Work).IsEqualTo(1L);
+        await Assert.That(budget.Requests).IsEqualTo(0L);
+        await Assert.That(source.Reads.Count + other.Reads.Count).IsEqualTo(reads);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task ProjectionSourceClassificationReportsMissingIdentityWithoutAcquisition(bool description)
+    {
+        var index = new WotCapturedUriIdentityIndex([]);
+        var budget = new FederationReadBudget();
+        var failure = await Assert.That(() => index.ClassifyProjectionSource(ProjectionClassificationReference(description), budget))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected a missing captured projection identity.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.NotFound);
+        await Assert.That(budget.Requests).IsEqualTo(0L);
+    }
+
+    [Test]
+    [Arguments("tm:ref", "definition.json")]
+    [Arguments("p:projects", "definition.json")]
+    [Arguments("projects", "definition.json")]
+    [Arguments("http://example.test/projection#projects", "definition.json")]
+    [Arguments("", "definition.json")]
+    [Arguments(WotJsonLdBaseResolver.ProjectionVocabulary + "Projects", "definition.json")]
+    [Arguments(WotJsonLdBaseResolver.ProjectionVocabulary + "projects", "definition.json#")]
+    [Arguments(WotJsonLdBaseResolver.ProjectionVocabulary + "projects", "definition.json#/properties/a")]
+    [Arguments("p:projects", "")]
+    [Arguments(WotJsonLdBaseResolver.ProjectionVocabulary + "projects", "#")]
+    public async Task ProjectionSourceClassificationRejectsWrongOperatorsAndFragmentsBeforeLookup(string operation, string href)
+    {
+        var original = ProjectionClassificationReference(false, href);
+        var occurrence = original with { Reference = original.Reference with { Operator = operation } };
+        var index = new WotCapturedUriIdentityIndex([]);
+        var budget = new FederationReadBudget();
+        var failure = await Assert.That(() => index.ClassifyProjectionSource(occurrence, budget))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected an invalid projection source occurrence.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(budget.Work).IsEqualTo(0L);
+        await Assert.That(budget.Requests).IsEqualTo(0L);
+    }
+
+    [Test]
+    [Arguments(-1, false)]
+    [Arguments(0, false)]
+    [Arguments(1, false)]
+    [Arguments(-1, true)]
+    [Arguments(0, true)]
+    [Arguments(1, true)]
+    public async Task ProjectionSourceClassificationSharesInclusiveWorkBoundaries(int delta, bool local)
+    {
+        var source = ClassificationSource("thingmodel");
+        var occurrence = ProjectionClassificationReference(false, local ? "" : "definition.json");
+        var index = await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(source, occurrence.Reference.Target.DocumentUri, WotCapturedUriIdentityKind.DocumentView,
+                source.Resource + "/versions/2.0.0")]);
+        var required = local ? 2L : 3L;
+        var budget = new FederationReadBudget(new FederationReadLimits(maxWork: required + delta));
+        budget.ChargeWork();
+        if (delta < 0)
+        {
+            var failure = await Assert.That(() => index.ClassifyProjectionSource(occurrence, budget))
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected cumulative work exhaustion.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        }
+        else
+        {
+            var target = index.ClassifyProjectionSource(occurrence, budget);
+            await Assert.That(target?.VersionId).IsEqualTo(local ? null : "2.0.0");
+            await Assert.That(budget.Work).IsEqualTo(required);
+        }
+        await Assert.That(budget.Requests).IsEqualTo(0L);
+    }
+
+    [Test]
+    public async Task ProjectionSourceClassificationChecksSourceDriftCancellationAndInvalidDeclaredKind()
+    {
+        var source = ClassificationSource("thingmodel");
+        var occurrence = ProjectionClassificationReference(false);
+        var index = await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(source, occurrence.Reference.Target.DocumentUri, WotCapturedUriIdentityKind.DocumentView,
+                source.Resource + "/versions/2.0.0")]);
+        var reads = source.Reads.Count;
+        source.Model = null;
+        var failure = await Assert.That(() => index.ClassifyProjectionSource(occurrence))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected captured source drift.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InconsistentSnapshot);
+
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var budget = new FederationReadBudget();
+        await Assert.That(() => index.ClassifyProjectionSource(occurrence, budget, cancellation.Token))
+            .Throws<OperationCanceledException>();
+        await Assert.That(() => index.ClassifyProjectionSource(occurrence with { TargetKind = (WotReferenceTargetKind)42 }, budget))
+            .Throws<ArgumentOutOfRangeException>();
+        await Assert.That(budget.Work).IsEqualTo(0L);
+        await Assert.That(source.Reads.Count).IsEqualTo(reads);
+    }
+
+    private static WotProjectionSourceOccurrence ProjectionClassificationReference(bool description, string href = "definition.json")
+    {
+        var uri = new Uri("https://example.test/plan.json");
+        return new(new("/p:projects/0", "href", WotJsonLdBaseResolver.ProjectionVocabulary + "projects", href,
+            WotReferenceUriResolver.Resolve(href, uri, uri)), "captured",
+            description ? WotReferenceTargetKind.ThingDescription : WotReferenceTargetKind.ThingModel);
+    }
+
+    [Test]
     [Arguments("tm:extends", "thingmodel", false)]
     [Arguments("tm:extends", "thingmodel", true)]
     [Arguments("tm:submodel", "thingmodel", false)]

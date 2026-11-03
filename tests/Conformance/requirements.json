@@ -141541,7 +141541,7 @@
       "text": "In a marked projection plan, each external source-manifest entry is a dependency occurrence, in its authored array order. Its binding MUST record that entry's `href` and the projection operator above. The entry's expected media `type` determines whether the target is a TD or TM; the Consumer MUST verify the captured target's actual kind. A `tm:ref` affordance selector matched to that source under the selected proposal MUST use the entry's binding and MUST NOT have a second binding of its own. Ordinary `td:ref` occurrences remain separate dependencies. A marker, source entry or selector that fails the selected proposal's rules MUST NOT be accepted by supplying an otherwise well-shaped closure binding.",
       "review": {
         "status": "reviewed",
-        "note": "Projection manifest discovery retains authored entry order and pointers, exact hrefs, the canonical experimental projects operator and the expected kind from the declared TD/TM media type. It rejects competing manifest/sourceName aliases, malformed entries, duplicate names or resolved URIs, and fragment-bearing source references. It checks the captured root kind without inferring source kinds from filenames. Selector discovery associates root-affordance tm:ref occurrences with declared entries by resolved URI, using captured map/member meanings and decoded JSON Pointer categories; wrong categories, undeclared sources and competing selectors reject. Ordinary td:ref and non-selector references remain separate. Affordance selection compares an already acquired revision's captured model kind with the manifest kind and requires an existing object-valued member of a root affordance map. It preserves the exact revision and digest without fallback, under shared limits and cancellation. Source association, requirements and digest pins, annotations and cycles, full admission and independent binding verification remain unfinished; this compound requirement stays pending.",
+        "note": "Projection manifest discovery retains authored entry order and pointers, exact hrefs, the canonical experimental projects operator and the expected kind from the declared TD/TM media type. It rejects competing manifest/sourceName aliases, malformed entries, duplicate names or resolved URIs, and fragment-bearing source references. It checks the captured root kind without inferring source kinds from filenames. Selector discovery associates root-affordance tm:ref occurrences with declared entries by resolved URI, using captured map/member meanings and decoded JSON Pointer categories; wrong categories, undeclared sources and competing selectors reject. Ordinary td:ref and non-selector references remain separate. Projection-source classification resolves one captured URI identity before verifying its declared TD/TM kind, preserves Resource/exact-Version scope and rejects Schema, wrong-kind or competing targets without bytes. Local sources bypass the index but still require cycle validation. Affordance selection compares an already acquired revision's captured model kind with the manifest kind and requires an existing object-valued member of a root affordance map. It preserves the exact revision and digest without fallback, under shared limits and cancellation. Automatic URI associations, requirements and digest pins, annotations and cycles, full admission and independent binding verification remain unfinished; this compound requirement stays pending.",
         "roles": [
           "client",
           "producer"
@@ -141560,6 +141560,14 @@
           "WotReferenceUriResolverTests.ExpandedProjectionManifestNamesRetainJsonPointerSlashEscaping",
           "WotReferenceUriResolverTests.ProjectionSourceMediaTypesUseMimeCaseAndParameterRules",
           "WotReferenceUriResolverTests.ProjectionSourceDiscoveryUsesSharedInclusiveWorkLimitsAndCancellation",
+          "WotRegistryResolverTests.ProjectionSourceClassificationUsesDiscoveredMediaKindAndCapturedIdentityScope",
+          "WotRegistryResolverTests.ProjectionSourceClassificationRejectsDeclaredAndCapturedKindMismatch",
+          "WotRegistryResolverTests.ProjectionSourceClassificationCannotFilterAmbiguousUrisByDeclaredKind",
+          "WotRegistryResolverTests.ProjectionSourceClassificationSeparatesEquivalentRecordsFromResourceVersionAmbiguity",
+          "WotRegistryResolverTests.LocalProjectionSourceClassificationDoesNotConsultCapturedIdentities",
+          "WotRegistryResolverTests.ProjectionSourceClassificationRejectsWrongOperatorsAndFragmentsBeforeLookup",
+          "WotRegistryResolverTests.ProjectionSourceClassificationSharesInclusiveWorkBoundaries",
+          "WotRegistryResolverTests.ProjectionSourceClassificationChecksSourceDriftCancellationAndInvalidDeclaredKind",
           "WotReferenceUriResolverTests.ProjectionSelectorsRetainOccurrencesAndShareTheirDeclaredSourceEntry",
           "WotReferenceUriResolverTests.ProjectionSelectorsMatchResolvedSourceUrisRatherThanManifestPositions",
           "WotReferenceUriResolverTests.ProjectionSelectorCategoriesUseCapturedExpandedMapMeanings",
@@ -141779,7 +141787,7 @@
       "text": "For `td:ref`, `type`, and the other operators, the captured Resource kind MUST agree with the target kind defined for that operator. A `type` link MAY identify a Thing Model by its `wotid` or by a captured document-view URI, including an exact-Version URI. A captured document URI is usable only at the Resource or Version scope recorded for it. If the resolved URI identifies more than one distinct Resource or Version, the mapping is ambiguous. Duplicate records for the same identity do not create ambiguity.",
       "review": {
         "status": "reviewed",
-        "note": "Captured reference acquisition checks requested Resource kind and pin conflicts, preserves Resource versus exact-Version scope, and rejects competing targets before target reads. Duplicate associations compare decoded XID paths while retaining case-sensitive Version IDs. Equivalent immutable sources require matching context, original/effective model and resolution owner. Ordinary classification checks the unique captured identity before accepting a Thing Model, excluded Schema or Thing Description under its operator. Dependency-link classification applies the TM/TD target-kind rules, including type through a captured wotid or document-view URI, and rejects Schema targets. Both preserve recorded scope without selecting Versions or acquiring bytes. Combined occurrence admission, projection-source classification and independent closure validation remain unfinished, so the compound requirement stays pending.",
+        "note": "Captured reference acquisition checks requested Resource kind and pin conflicts, preserves Resource versus exact-Version scope, and rejects competing targets before target reads. Duplicate associations compare decoded XID paths while retaining case-sensitive Version IDs. Equivalent immutable sources require matching context, original/effective model and resolution owner. Ordinary classification checks the unique captured identity before accepting a Thing Model, excluded Schema or Thing Description under its operator. Dependency-link classification applies the TM/TD target-kind rules, including type through a captured wotid or document-view URI, and rejects Schema targets. Projection-source classification compares the unique captured kind with the declared TD/TM media kind. These operations preserve recorded scope without selecting Versions or acquiring bytes. Combined occurrence admission and independent closure validation remain unfinished, so the compound requirement stays pending.",
         "roles": [
           "client",
           "producer"
@@ -141802,7 +141810,11 @@
           "WotRegistryResolverTests.DependencyLinksResolveCapturedWotIdsFromTmAndTdSources",
           "WotRegistryResolverTests.DependencyLinkClassificationRejectsWrongKindsIncludingSchema",
           "WotRegistryResolverTests.DependencyLinkClassificationCannotUseKindToDisambiguateUris",
-          "WotRegistryResolverTests.DependencyLinkClassificationDistinguishesDuplicateRecordsFromCompetingScopes"
+          "WotRegistryResolverTests.DependencyLinkClassificationDistinguishesDuplicateRecordsFromCompetingScopes",
+          "WotRegistryResolverTests.ProjectionSourceClassificationUsesDiscoveredMediaKindAndCapturedIdentityScope",
+          "WotRegistryResolverTests.ProjectionSourceClassificationRejectsDeclaredAndCapturedKindMismatch",
+          "WotRegistryResolverTests.ProjectionSourceClassificationCannotFilterAmbiguousUrisByDeclaredKind",
+          "WotRegistryResolverTests.ProjectionSourceClassificationSeparatesEquivalentRecordsFromResourceVersionAmbiguity"
         ],
         "nativeEvidence": []
       }
@@ -141830,7 +141842,7 @@
       "text": "If no captured identity matches or the match is ambiguous, the Producer MUST NOT claim domain-complete closure and the Consumer MUST reject such a claim. The binding list cannot resolve the ambiguity. This profile does not include Schema Resource documents or OPC UA `uav:dataTypeDefinitions` materialization references; another closure profile is needed to cover those dependencies.",
       "review": {
         "status": "reviewed",
-        "note": "Ordinary-reference and dependency-link classification report missing or ambiguous captured identities without consulting a binding target, reading another source or filtering candidates by the desired kind. Noncanonical operators reject before lookup; local occurrences bypass the index, capture drift and cancellation propagate, and classification and identity matching share one work budget. Complete publication acceptance still needs independent occurrence and binding verification, including Schema and uav:dataTypeDefinitions exclusions. No WoT-complete extension validator is registered; this compound requirement stays pending.",
+        "note": "Ordinary-reference, dependency-link and projection-source classification report missing or ambiguous captured identities without consulting a binding target, reading another source or filtering candidates by the desired kind. Noncanonical operators reject before lookup; local occurrences bypass the index, capture drift and cancellation propagate, and classification and identity matching share one work budget. Complete publication acceptance still needs independent occurrence and binding verification, including Schema and uav:dataTypeDefinitions exclusions. No WoT-complete extension validator is registered; this compound requirement stays pending.",
         "roles": [
           "client",
           "producer"
@@ -141848,7 +141860,9 @@
           "WotRegistryResolverTests.DependencyLinkClassificationCannotUseKindToDisambiguateUris",
           "WotRegistryResolverTests.LocalDependencyLinksDoNotConsultCapturedIdentities",
           "WotRegistryResolverTests.DependencyLinkClassificationSharesInclusiveWorkBoundaries",
-          "WotRegistryResolverTests.DependencyLinkClassificationChecksSourceDriftCancellationAndInvalidSourceKind"
+          "WotRegistryResolverTests.DependencyLinkClassificationChecksSourceDriftCancellationAndInvalidSourceKind",
+          "WotRegistryResolverTests.ProjectionSourceClassificationReportsMissingIdentityWithoutAcquisition",
+          "WotRegistryResolverTests.ProjectionSourceClassificationCannotFilterAmbiguousUrisByDeclaredKind"
         ],
         "nativeEvidence": []
       }
