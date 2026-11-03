@@ -13,19 +13,19 @@ public sealed record WotCapturedDependencyOccurrence(WotAuthoredReferenceOccurre
 public sealed class WotCapturedReferenceInventory
 {
     internal WotCapturedReferenceInventory(List<WotCapturedDependencyOccurrence> dependencies,
-        IReadOnlyList<WotProjectionSelectorOccurrence> selectors, List<WotAuthoredReferenceOccurrence> descriptions)
+        IReadOnlyList<WotProjectionSelectorOccurrence> selectors, List<WotCapturedDependencyOccurrence> descriptions)
     {
         Dependencies = dependencies.AsReadOnly();
         ProjectionSelectors = selectors;
-        SchemaDescriptionCandidates = descriptions.AsReadOnly();
+        SchemaDescriptions = descriptions.AsReadOnly();
     }
 
     /// <summary>Gets external canonical dependencies, excluding local references and ordinary Schema targets.</summary>
     public IReadOnlyList<WotCapturedDependencyOccurrence> Dependencies { get; }
     /// <summary>Gets selectors that reuse their manifest source's eventual binding.</summary>
     public IReadOnlyList<WotProjectionSelectorOccurrence> ProjectionSelectors { get; }
-    /// <summary>Gets describedby candidates that still require separate Schema exclusion handling.</summary>
-    public IReadOnlyList<WotAuthoredReferenceOccurrence> SchemaDescriptionCandidates { get; }
+    /// <summary>Gets captured Schema describedby links excluded from WoT closure dependencies.</summary>
+    public IReadOnlyList<WotCapturedDependencyOccurrence> SchemaDescriptions { get; }
 }
 
 public static partial class WotJsonLdBaseResolver
@@ -34,7 +34,7 @@ public static partial class WotJsonLdBaseResolver
     /// <remarks>
     /// Rejects competing external dependency members at one authored object pointer after local and Schema
     /// exclusions. Projection selectors reuse source-entry dependencies rather than creating duplicate bindings.
-    /// Describedby candidates are retained separately; source requirements, pins, annotations, cycles,
+    /// Captured Schema describedby links are excluded; source requirements, pins, annotations, cycles,
     /// exact-Version selection and closure completeness remain unverified.
     /// </remarks>
     public static async ValueTask<WotCapturedReferenceInventory> DiscoverCapturedReferenceInventoryAsync(
@@ -67,7 +67,7 @@ public static partial class WotJsonLdBaseResolver
         }
         var pointers = new HashSet<string>(StringComparer.Ordinal);
         var dependencies = new List<WotCapturedDependencyOccurrence>();
-        var descriptions = new List<WotAuthoredReferenceOccurrence>();
+        var descriptions = new List<WotCapturedDependencyOccurrence>();
 
         void Add(WotAuthoredReferenceOccurrence reference, WotCapturedResourceIdentity? target)
         {
@@ -94,7 +94,12 @@ public static partial class WotJsonLdBaseResolver
         {
             cancellationToken.ThrowIfCancellationRequested();
             readBudget.ChargeWork();
-            if (reference.Operator == "describedby") { descriptions.Add(reference); continue; }
+            if (reference.Operator == "describedby")
+            {
+                var schema = capturedIdentities.ClassifySchemaDescription(reference, readBudget, cancellationToken);
+                if (schema is not null) { descriptions.Add(new(reference, schema)); }
+                continue;
+            }
             Add(reference, capturedIdentities.ClassifyDependencyLink(reference, sourceKind, readBudget, cancellationToken));
         }
         foreach (var source in sources)

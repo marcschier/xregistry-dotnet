@@ -15,15 +15,84 @@ namespace XRegistry.Federation.Tests;
 public class CapturedRegistryReadSourceTests
 {
     [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task SchemaDescriptionExclusionRetainsResourceOrExactVersionScopeWithoutReads(bool exact)
+    {
+        var source = InventorySource("schema");
+        var index = new WotCapturedUriIdentityIndex(
+        [
+            new(new("urn:inventory:schema"), WotCapturedUriIdentityKind.DocumentView,
+                new(source, "/sets/team", Fixture.Collection, Fixture.Resource, "schema", null, exact ? "1.0.0" : null))
+        ]);
+        var document = InventoryDocument("{}", """[{"rel":"describedby","href":"urn:inventory:schema#/definitions/value"}]""");
+        var budget = new FederationReadBudget();
+        var inventory = await WotJsonLdBaseResolver.DiscoverCapturedReferenceInventoryAsync(document,
+            new("https://example.test/entry.json"), WotReferenceTargetKind.ThingDescription,
+            new Dictionary<Uri, FederationDocument>(), index, budget);
+        await Assert.That(inventory.Dependencies.Count).IsEqualTo(0);
+        var description = inventory.SchemaDescriptions.Single();
+        await Assert.That(description.Reference.SourcePointer).IsEqualTo("/links/0");
+        await Assert.That(description.Reference.Href).IsEqualTo("urn:inventory:schema#/definitions/value");
+        await Assert.That(description.Target.VersionId).IsEqualTo(exact ? "1.0.0" : null);
+        await Assert.That(description.Target.ResourceKind).IsEqualTo("schema");
+        await Assert.That(budget.Requests).IsEqualTo(0L);
+    }
+
+    [Test]
+    [Arguments("urn:inventory:tm", FederationErrorCode.InvalidPackage)]
+    [Arguments("urn:inventory:absent", FederationErrorCode.NotFound)]
+    public async Task SchemaDescriptionExclusionRejectsUnestablishedSchemaTargets(string href, FederationErrorCode code)
+    {
+        var index = InventoryIndex(new Fixture().Open());
+        var failure = await Assert.That(async () => await WotJsonLdBaseResolver.DiscoverCapturedReferenceInventoryAsync(
+            InventoryDocument("{}", "[{\"rel\":\"describedby\",\"href\":" + JsonSerializer.Serialize(href) + "}]"),
+            new("https://example.test/entry.json"), WotReferenceTargetKind.ThingDescription,
+            new Dictionary<Uri, FederationDocument>(), index)).Throws<FederationException>() ??
+            throw new InvalidOperationException("Expected no Schema exclusion without captured Schema identity.");
+        await Assert.That(failure.Code).IsEqualTo(code);
+    }
+
+    [Test]
+    public async Task SchemaDescriptionExclusionRejectsAmbiguousIdentityAndWrongOperatorButBypassesLocalLookup()
+    {
+        var source = InventorySource("schema");
+        var target = new WotCapturedResourceIdentity(source, "/sets/team", Fixture.Collection, Fixture.Resource, "schema", null);
+        var exact = new WotCapturedResourceIdentity(source, "/sets/team", Fixture.Collection, Fixture.Resource, "schema", null, "1.0.0");
+        var index = new WotCapturedUriIdentityIndex(
+        [
+            new(new("urn:inventory:schema"), WotCapturedUriIdentityKind.DocumentView, target),
+            new(new("urn:inventory:schema"), WotCapturedUriIdentityKind.DocumentView, exact)
+        ]);
+        var uri = new Uri("https://example.test/entry.json");
+        var external = new WotAuthoredReferenceOccurrence("/links/0", "href", "describedby", "urn:inventory:schema",
+            WotReferenceUriResolver.Resolve("urn:inventory:schema", uri, uri));
+        var failure = await Assert.That(() => index.ClassifySchemaDescription(external)).Throws<FederationException>() ??
+            throw new InvalidOperationException("Expected competing captured Schema scopes.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.Ambiguous);
+        var wrong = await Assert.That(() => index.ClassifySchemaDescription(external with { Operator = "type" }))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected literal operator validation.");
+        await Assert.That(wrong.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        var local = external with { Href = "#/definitions/value", Target = WotReferenceUriResolver.Resolve("#/definitions/value", uri, uri) };
+        var budget = new FederationReadBudget(new(maxWork: 1));
+        await Assert.That(index.ClassifySchemaDescription(local, budget)).IsNull();
+        await Assert.That(budget.Work).IsEqualTo(1L);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        await Assert.That(() => index.ClassifySchemaDescription(local, cancellationToken: cancellation.Token))
+            .Throws<OperationCanceledException>();
+    }
+
+    [Test]
     public async Task CombinedInventoryPreservesDistinctOccurrencesAndSeparatesSchemaDescriptionCandidates()
     {
         var sourceBudget = new FederationReadBudget();
         var source = new Fixture().Open(budget: sourceBudget);
-        var index = InventoryIndex(source);
+        var index = InventoryIndex(source, InventorySource("schema"));
         var work = sourceBudget.Work;
         var document = InventoryDocument("""
             {"a/b~c":{"tm:ref":"urn:inventory:tm#/properties/value"},"other":{"again":"urn:inventory:tm"}}
-            """, """[{"rel":"tm:extends","href":"urn:inventory:tm"},{"rel":"describedby","href":"https://uncaptured.test/schema"}]""");
+            """, """[{"rel":"tm:extends","href":"urn:inventory:tm"},{"rel":"describedby","href":"urn:inventory:schema"}]""");
         var original = await Bytes(document);
         var inventory = await WotJsonLdBaseResolver.DiscoverCapturedReferenceInventoryAsync(document,
             new("https://example.test/entry.json"), WotReferenceTargetKind.ThingModel, new Dictionary<Uri, FederationDocument>(), index);
@@ -34,8 +103,9 @@ public class CapturedRegistryReadSourceTests
         await Assert.That(inventory.Dependencies[1].Reference.PropertyName).IsEqualTo("again");
         await Assert.That(inventory.Dependencies[1].Reference.Operator).IsEqualTo("tm:ref");
         await Assert.That(inventory.Dependencies.All(value => value.Target.ResourceXid == Fixture.Resource)).IsTrue();
-        await Assert.That(inventory.SchemaDescriptionCandidates.Single().SourcePointer).IsEqualTo("/links/1");
-        await Assert.That(inventory.SchemaDescriptionCandidates.Single().Href).IsEqualTo("https://uncaptured.test/schema");
+        await Assert.That(inventory.SchemaDescriptions.Single().Reference.SourcePointer).IsEqualTo("/links/1");
+        await Assert.That(inventory.SchemaDescriptions.Single().Reference.Href).IsEqualTo("urn:inventory:schema");
+        await Assert.That(inventory.SchemaDescriptions.Single().Target.ResourceKind).IsEqualTo("schema");
         await Assert.That(inventory.ProjectionSelectors.Count).IsEqualTo(0);
         await Assert.That(sourceBudget.Work).IsEqualTo(work);
         await Assert.That((await Bytes(document)).SequenceEqual(original)).IsTrue();
@@ -154,7 +224,7 @@ public class CapturedRegistryReadSourceTests
         var inventory = await WotJsonLdBaseResolver.DiscoverCapturedReferenceInventoryAsync(document, new("https://example.test/entry.json"),
             WotReferenceTargetKind.ThingModel, contexts, index);
         await Assert.That(inventory.Dependencies.Count).IsEqualTo(0);
-        await Assert.That(inventory.SchemaDescriptionCandidates.Count).IsEqualTo(0);
+        await Assert.That(inventory.SchemaDescriptions.Count).IsEqualTo(0);
         await Assert.That(inventory.ProjectionSelectors.Count).IsEqualTo(0);
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();

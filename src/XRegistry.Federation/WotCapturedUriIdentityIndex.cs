@@ -426,6 +426,21 @@ public sealed class WotCapturedUriIdentityIndex
         return ClassifyTarget(reference, targetKind, false, budget, cancellationToken);
     }
 
+    /// <summary>Classifies a describedby link as an excluded Schema reference using captured identities.</summary>
+    /// <returns>Null for a document-local link; otherwise the unique captured Schema identity.</returns>
+    public WotCapturedResourceIdentity? ClassifySchemaDescription(WotAuthoredReferenceOccurrence reference,
+        FederationReadBudget? budget = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+        ArgumentNullException.ThrowIfNull(reference.Target);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (reference.Operator != "describedby")
+        {
+            throw FederationJson.Invalid("Schema description classification requires a literal describedby relation.");
+        }
+        return ClassifyTarget(reference, "schema", false, budget, cancellationToken);
+    }
+
     /// <summary>Checks a discovered projection source's declared media kind against its unique captured URI identity.</summary>
     /// <returns>Null for a document-local source; otherwise its correctly typed captured Resource or exact Version.</returns>
     /// <remarks>Local sources still require cycle validation. Source requirements, pins and complete projection admission remain separate.</remarks>

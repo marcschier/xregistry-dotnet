@@ -141390,7 +141390,7 @@
       "text": "Each reachable in-scope external occurrence MUST have exactly one binding. A Consumer MUST reject duplicate binding keys, including duplicates with the same target, and MUST reject bindings to local, unreachable or nonexistent occurrences. Two different occurrences referring to the same target remain distinct bindings. If one pointed-to object contains several in-scope reference members, including aliases for the same expanded member, a Consumer MUST reject it as an ambiguous occurrence rather than choosing one. The binding's `href` MUST equal the source reference's JSON string value, including its fragment, without URI resolution or percent decoding.",
       "review": {
         "status": "reviewed",
-        "note": "The closure reader rejects duplicate source/pointer keys even when targets agree or source XIDs use equivalent escapes. It retains distinct pointers and exact href strings, including empty strings. The combined captured reference inventory classifies ordinary references, dependency links and projection sources, excludes local and ordinary Schema targets before duplicate-pointer checks, and rejects competing dependencies including ordinary/link collisions. Distinct occurrences with one target remain distinct. Projection selectors reuse manifest dependencies while ordinary td:ref members remain separate; describedby candidates still require Schema exclusion handling. This inventory does not compare bindings with source occurrences, establish syntactic-subtree coverage, complete projection admission or determine transitive reachability. Those semantic checks and exactly one binding per reachable external occurrence keep this compound requirement pending.",
+        "note": "The closure reader rejects duplicate source/pointer keys even when targets agree or source XIDs use equivalent escapes. It retains distinct pointers and exact href strings, including empty strings. The combined captured reference inventory classifies ordinary references, dependency links and projection sources, excludes local and ordinary Schema targets before duplicate-pointer checks, and rejects competing dependencies including ordinary/link collisions. Distinct occurrences with one target remain distinct. Projection selectors reuse manifest dependencies while ordinary td:ref members remain separate. Describedby links are classified against captured Schema identities and excluded from dependencies; missing, ambiguous or non-Schema external targets reject. This inventory does not compare bindings with source occurrences, establish syntactic-subtree coverage, complete projection admission or determine transitive reachability. Those semantic checks and exactly one binding per reachable external occurrence keep this compound requirement pending.",
         "roles": [
           "client",
           "producer"
@@ -141795,13 +141795,20 @@
       ],
       "text": "A `links` occurrence with `rel: \"describedby\"` that identifies a Schema Resource is also outside this profile and MUST NOT have a closure binding.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "ClassifySchemaDescription and the combined source-derived inventory use captured URI identities to establish Schema kind before excluding describedby from dependencies. Resource/exact-Version scope and authored href/pointer survive; local links bypass lookup. Missing, ambiguous and non-Schema external targets reject rather than assuming exclusion or acquiring documents. Independent binding verification must still reject bindings to excluded occurrences, so this clause remains pending.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "CapturedRegistryReadSourceTests.SchemaDescriptionExclusionRetainsResourceOrExactVersionScopeWithoutReads",
+          "CapturedRegistryReadSourceTests.SchemaDescriptionExclusionRejectsUnestablishedSchemaTargets",
+          "CapturedRegistryReadSourceTests.SchemaDescriptionExclusionRejectsAmbiguousIdentityAndWrongOperatorButBypassesLocalLookup"
+        ],
         "nativeEvidence": []
       }
     },

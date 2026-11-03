@@ -2447,8 +2447,10 @@ before checking for competing dependency members at the same authored object
 pointer. Distinct pointers remain distinct occurrences even when targets agree.
 Projection selectors retain their source-entry association rather than creating
 another dependency; ordinary `td:ref` members remain separate dependencies.
-`describedby` candidates are returned separately and still require Schema
-exclusion handling. This inventory does not select exact Versions, validate
+`describedby` links use captured URI identities to establish Schema kind and
+are returned in `SchemaDescriptions`, outside the dependency list. Local links
+do not consult the index; missing, ambiguous or non-Schema external targets
+reject the inventory. This inventory does not select exact Versions, validate
 projection requirements or establish reachability, syntactic-subtree coverage
 or closure completeness. It does not acquire target documents.
 
