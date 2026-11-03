@@ -1,6 +1,9 @@
 // Copyright (c) 2026 xregistry-dotnet contributors.
 // SPDX-License-Identifier: MIT
 
+using System.Text.Json;
+using System.Text.Json.Nodes;
+
 namespace XRegistry.Federation;
 
 /// <summary>Identifies which captured Registry value supplied a URI identity.</summary>
@@ -116,21 +119,57 @@ public sealed record WotCapturedUriIdentity
 public sealed class WotCapturedUriIdentityIndex
 {
     private readonly WotCapturedUriIdentity[] _identities;
+    private readonly Dictionary<IFederationReadSource, CapturedSource> _sources =
+        new(ReferenceEqualityComparer.Instance);
 
     /// <summary>Captures the URI identities supplied by the already selected Registry views.</summary>
-    public WotCapturedUriIdentityIndex(IEnumerable<WotCapturedUriIdentity> identities)
+    public WotCapturedUriIdentityIndex(IEnumerable<WotCapturedUriIdentity> identities,
+        FederationReadBudget? budget = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(identities);
-        _identities = identities.ToArray();
-        if (_identities.Any(static identity => identity is null))
+        var readBudget = budget ?? new();
+        cancellationToken.ThrowIfCancellationRequested();
+        var captured = new List<WotCapturedUriIdentity>();
+        var immutableContexts = new HashSet<NativeRegistryContext>();
+        var sourceCount = 0;
+        foreach (var identity in identities)
         {
-            throw new ArgumentException("Captured URI identities cannot contain null entries.", nameof(identities));
+            cancellationToken.ThrowIfCancellationRequested();
+            readBudget.ChargeWork();
+            if (identity is null)
+            {
+                throw new ArgumentException("Captured URI identities cannot contain null entries.", nameof(identities));
+            }
+            if (!_sources.TryGetValue(identity.Target.Source, out var source))
+            {
+                source = new(identity.Target.Source, _sources.Count);
+                if (!source.Context.IsImmutable || immutableContexts.Add(source.Context))
+                {
+                    if (sourceCount >= readBudget.Limits.MaxSources)
+                    {
+                        throw new FederationException(FederationErrorCode.LimitExceeded,
+                            "The captured URI index exceeds the configured source limit.");
+                    }
+                    sourceCount++;
+                }
+                _sources.Add(identity.Target.Source, source);
+            }
+            source.Check(cancellationToken);
+            captured.Add(identity);
         }
+        foreach (var source in _sources.Values)
+        {
+            readBudget.ChargeWork();
+            source.Check(cancellationToken);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        _identities = captured.ToArray();
     }
 
     /// <summary>Returns the unique captured Resource or exact Version identified by an absolute URI.</summary>
     /// <exception cref="FederationException">No identity matches, or distinct targets share the URI.</exception>
-    public WotCapturedResourceIdentity Resolve(Uri uri)
+    public WotCapturedResourceIdentity Resolve(Uri uri, FederationReadBudget? budget = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(uri);
         if (!uri.IsAbsoluteUri || uri.Fragment.Length != 0)
@@ -138,23 +177,26 @@ public sealed class WotCapturedUriIdentityIndex
             throw FederationJson.Invalid("A captured identity lookup requires an absolute fragment-free URI.");
         }
 
-        var matches = _identities.Where(identity => identity.Uri == uri).ToArray();
-        if (matches.Length == 0)
-        {
-            throw new FederationException(FederationErrorCode.NotFound,
-                "No captured Registry identity matches the resolved document URI.");
-        }
-
+        var readBudget = budget ?? new();
+        cancellationToken.ThrowIfCancellationRequested();
         var targets = new Dictionary<TargetKey, WotCapturedResourceIdentity>();
-        foreach (var match in matches)
+        foreach (var match in _identities)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            readBudget.ChargeWork();
+            if (match.Uri != uri) { continue; }
             var target = match.Target;
-            var key = new TargetKey(FederationJson.AbsoluteUri(target.Source.Context.Source).AbsoluteUri,
-                target.GroupXid, target.ResourceXid, target.VersionId);
+            var source = _sources[target.Source];
+            source.Check(cancellationToken);
+            var key = new TargetKey(source.Context, source.Context.IsImmutable ? null : source.Id,
+                DocumentTreeFormat.XidPath(FederationSyntax.Xid(target.GroupXid)),
+                DocumentTreeFormat.XidPath(FederationSyntax.Xid(target.ResourceXid)), target.VersionId);
             if (targets.TryGetValue(key, out var prior))
             {
                 if (prior.ResourceKind != target.ResourceKind || prior.WotId != target.WotId ||
-                    prior.ResourceCollection != target.ResourceCollection)
+                    !FederationSyntax.SameXid(prior.ResourceCollection, target.ResourceCollection, collection: true) ||
+                    _sources[prior.Source].Owner != source.Owner ||
+                    !ModelsEqual(_sources[prior.Source].Model, source.Model, readBudget, cancellationToken))
                 {
                     throw new FederationException(FederationErrorCode.InconsistentSnapshot,
                         "Duplicate captured records disagree about one Resource or Version identity.");
@@ -164,13 +206,92 @@ public sealed class WotCapturedUriIdentityIndex
             targets.Add(key, target);
         }
 
+        if (targets.Count == 0)
+        {
+            throw new FederationException(FederationErrorCode.NotFound,
+                "No captured Registry identity matches the resolved document URI.");
+        }
         if (targets.Count != 1)
         {
             throw new FederationException(FederationErrorCode.Ambiguous,
                 "Several distinct captured Resources or Versions match the resolved document URI.");
         }
-        return targets.Values.Single();
+        readBudget.ChargeSource();
+        var selected = targets.Values.Single();
+        _sources[selected.Source].Check(cancellationToken);
+        return selected;
     }
 
-    private readonly record struct TargetKey(string Source, string GroupXid, string ResourceXid, string? VersionId);
+    internal void CheckSource(IFederationReadSource source, CancellationToken cancellationToken) =>
+        _sources[source].Check(cancellationToken);
+
+    private static bool ModelsEqual(RegistryModel? left, RegistryModel? right,
+        FederationReadBudget budget, CancellationToken cancellationToken)
+    {
+        if (ReferenceEquals(left, right)) { return true; }
+        return left is not null && right is not null &&
+            EqualJson(left.Source.RootElement, right.Source.RootElement, budget, cancellationToken) &&
+            EqualJson(left.EffectiveModel.RootElement, right.EffectiveModel.RootElement, budget, cancellationToken);
+    }
+
+    private static bool EqualJson(JsonElement left, JsonElement right, FederationReadBudget budget,
+        CancellationToken cancellationToken) =>
+        JsonNode.DeepEquals(ModelNode(left, budget, cancellationToken), ModelNode(right, budget, cancellationToken));
+
+    private static JsonNode? ModelNode(JsonElement value, FederationReadBudget budget,
+        CancellationToken cancellationToken)
+    {
+        FederationJson.CountWork(value, budget, cancellationToken);
+        RegistryJson bounded;
+        try
+        {
+            bounded = RegistryJson.FromElement(value, new RegistryJsonLimits
+            {
+                MaxBytes = budget.Limits.MaxObjectBytes,
+                MaxDepth = budget.Limits.MaxJsonDepth,
+                MaxNodes = (int)Math.Min(int.MaxValue, budget.Limits.MaxWork)
+            });
+        }
+        catch (RegistryException exception)
+        {
+            throw FederationJson.FromCore(exception);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return JsonNode.Parse(bounded.RootElement.GetRawText(),
+            documentOptions: new() { MaxDepth = budget.Limits.MaxJsonDepth });
+    }
+
+    private readonly record struct TargetKey(NativeRegistryContext Context, int? MutableSourceId,
+        string GroupXid, string ResourceXid, string? VersionId);
+
+    private sealed class CapturedSource
+    {
+        private readonly IFederationReadSource _source;
+
+        internal CapturedSource(IFederationReadSource source, int id)
+        {
+            _source = source;
+            Id = id;
+            Context = source.Context;
+            Model = source.Model;
+            Owner = FederationCapabilities.GetResolutionOwner(source.Capabilities);
+        }
+
+        internal int Id { get; }
+        internal NativeRegistryContext Context { get; }
+        internal RegistryModel? Model { get; }
+        internal FederationResolutionOwner Owner { get; }
+
+        internal void Check(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (_source.Context != Context || !ReferenceEquals(_source.Model, Model) ||
+                FederationCapabilities.GetResolutionOwner(_source.Capabilities) != Owner)
+            {
+                throw new FederationException(FederationErrorCode.InconsistentSnapshot,
+                    "A captured URI identity's source context, model or resolution owner changed.");
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+    }
 }

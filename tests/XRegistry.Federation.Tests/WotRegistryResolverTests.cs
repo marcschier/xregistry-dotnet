@@ -1042,6 +1042,324 @@ public class WotRegistryResolverTests
     }
 
     [Test]
+    [Arguments(0)]
+    [Arguments(1)]
+    [Arguments(2)]
+    public async Task CapturedIdentityRejectsContextOwnerOrModelDriftBeforeAcquisition(int change)
+    {
+        var source = new Source();
+        var containing = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var target = new Source();
+        var index = new WotCapturedUriIdentityIndex([CapturedIdentity(target)]);
+        if (change == 0) { target.Context = new("test", target.Context.Source, revision: "changed"); }
+        if (change == 1) { target.Capabilities = RegistryJson.Parse("""{"federation":{"resolution":"producer"}}""").RootElement; }
+        if (change == 2) { target.Model = LoadModel(); }
+        var reads = source.Reads.Count;
+
+        var failure = await Assert.That(async () =>
+            await WotRegistryResolver.ResolveCapturedReferenceAsync(containing, Source.Identity,
+                new Uri("https://example.test/consumer.json"), new Uri("https://example.test/consumer.json"),
+                index, source.Request)).Throws<FederationException>()
+            ?? throw new InvalidOperationException("Expected captured source drift rejection.");
+
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InconsistentSnapshot);
+        await Assert.That(target.Reads.Count).IsEqualTo(0);
+        await Assert.That(source.Reads.Count).IsEqualTo(reads);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task CapturedIdentityCaptureChecksFinalEnumerationDriftAndCancellation(bool cancel)
+    {
+        var source = new Source();
+        using var cancellation = new CancellationTokenSource();
+        IEnumerable<WotCapturedUriIdentity> Identities()
+        {
+            yield return CapturedIdentity(source);
+            if (cancel) { cancellation.Cancel(); }
+            else { source.Model = LoadModel(); }
+        }
+
+        if (cancel)
+        {
+            await Assert.That(() => new WotCapturedUriIdentityIndex(Identities(),
+                cancellationToken: cancellation.Token)).Throws<OperationCanceledException>();
+        }
+        else
+        {
+            var failure = await Assert.That(() => new WotCapturedUriIdentityIndex(Identities()))
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected capture drift rejection.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InconsistentSnapshot);
+        }
+        await Assert.That(source.Reads.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task DistinctSourceObjectsRequireEquivalentImmutableCapturesToCollapse(bool immutable)
+    {
+        var context = new NativeRegistryContext("test", "urn:test:authorized", "revision", immutable);
+        var first = new Source { Context = context };
+        var second = new Source { Context = context, Model = LoadModel() };
+        var firstIdentity = CapturedIdentity(first);
+        var budget = new FederationReadBudget(new(maxSources: immutable ? 1 : 2));
+        var index = new WotCapturedUriIdentityIndex([firstIdentity, CapturedIdentity(second)], budget);
+
+        if (immutable)
+        {
+            var selected = index.Resolve(new Uri(Source.Identity), budget);
+            await Assert.That(ReferenceEquals(selected, firstIdentity.Target)).IsTrue();
+        }
+        else
+        {
+            var failure = await Assert.That(() => index.Resolve(new Uri(Source.Identity), budget))
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected distinct mutable captures.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.Ambiguous);
+        }
+        await Assert.That(first.Reads.Count + second.Reads.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(0)]
+    [Arguments(1)]
+    [Arguments(2)]
+    public async Task SameLocatorCannotCollapseDifferentCapturedRevisionsRootsOrStoragePaths(int difference)
+    {
+        var first = new Source
+        {
+            Context = new("test", "urn:test:authorized", "revision", true, new string('a', 64))
+        };
+        var second = new Source
+        {
+            Context = difference switch
+            {
+                0 => new("test", "urn:test:authorized", "other", true, new string('a', 64)),
+                1 => new("test", "urn:test:authorized", "revision", true, new string('b', 64)),
+                _ => first.Context with { RootPath = "other" }
+            }
+        };
+        var index = new WotCapturedUriIdentityIndex([CapturedIdentity(first), CapturedIdentity(second)]);
+
+        var failure = await Assert.That(() => index.Resolve(new Uri(Source.Identity)))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected distinct captured views.");
+
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.Ambiguous);
+        await Assert.That(first.Reads.Count + second.Reads.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task EquivalentImmutableSourceEvidenceCannotDisagreeAboutModelsOrOwnership(bool owner)
+    {
+        var context = new NativeRegistryContext("test", "urn:test:authorized", "revision", true);
+        var first = new Source { Context = context };
+        var second = new Source { Context = context };
+        if (owner) { second.Capabilities = RegistryJson.Parse("""{"federation":{"resolution":"producer"}}""").RootElement; }
+        else { second.Model = RegistryModel.Compile(RegistryJson.Parse("""{"groups":{}}""")); }
+        var index = new WotCapturedUriIdentityIndex([CapturedIdentity(first), CapturedIdentity(second)]);
+
+        var failure = await Assert.That(() => index.Resolve(new Uri(Source.Identity)))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected inconsistent immutable evidence.");
+
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InconsistentSnapshot);
+        await Assert.That(first.Reads.Count + second.Reads.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task DuplicateCapturedXidsCompareDecodedPathsButPreserveVersionCase()
+    {
+        var source = new Source();
+        var first = CapturedIdentity(source, "v1");
+        var escaped = new WotCapturedResourceIdentity(source, "/thingmodelgroups/t%65nant",
+            "/thingmodelgroups/t%65nant/thingmodels", "/thingmodelgroups/t%65nant/thingmodels/ass%69gned",
+            "thingmodel", Source.Identity, "v1");
+        var index = new WotCapturedUriIdentityIndex(
+        [
+            first, new(new Uri(Source.Identity), WotCapturedUriIdentityKind.DocumentView, escaped)
+        ]);
+        await Assert.That(ReferenceEquals(index.Resolve(new Uri(Source.Identity)), first.Target)).IsTrue();
+
+        var distinctVersion = new WotCapturedUriIdentityIndex([first, CapturedIdentity(source, "V1")]);
+        var failure = await Assert.That(() => distinctVersion.Resolve(new Uri(Source.Identity)))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected case-sensitive Version identities.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.Ambiguous);
+        await Assert.That(source.Reads.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task CapturedIdentityEnumerationAndLookupShareInclusiveWorkBudgets()
+    {
+        var source = new Source();
+        var identity = CapturedIdentity(source);
+        var captureBudget = new FederationReadBudget(new(maxWork: 3));
+        var index = new WotCapturedUriIdentityIndex([identity, identity], captureBudget);
+        await Assert.That(captureBudget.Work).IsEqualTo(3);
+        var captureFailure = await Assert.That(() => new WotCapturedUriIdentityIndex(
+            Enumerable.Repeat(identity, int.MaxValue), new(new(maxWork: 2))))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected bounded enumeration.");
+        await Assert.That(captureFailure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+
+        var lookupBudget = new FederationReadBudget(new(maxWork: 3));
+        lookupBudget.ChargeWork();
+        await Assert.That(ReferenceEquals(index.Resolve(identity.Uri, lookupBudget), identity.Target)).IsTrue();
+        await Assert.That(lookupBudget.Work).IsEqualTo(3);
+        var exhausted = new FederationReadBudget(new(maxWork: 2));
+        exhausted.ChargeWork();
+        var lookupFailure = await Assert.That(() => index.Resolve(identity.Uri, exhausted))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected a shared traversal limit.");
+        await Assert.That(lookupFailure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        await Assert.That(source.Reads.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(0)]
+    [Arguments(1)]
+    [Arguments(2)]
+    public async Task CapturedIdentityModelEquivalenceHonorsWorkByteAndDepthBudgets(int limit)
+    {
+        var context = new NativeRegistryContext("test", "urn:test:authorized", "revision", true);
+        var first = new Source { Context = context };
+        var second = new Source { Context = context, Model = LoadModel() };
+        var index = new WotCapturedUriIdentityIndex([CapturedIdentity(first), CapturedIdentity(second)]);
+        var budget = new FederationReadBudget(limit switch
+        {
+            0 => new(maxWork: 2),
+            1 => new(maxObjectBytes: 1),
+            _ => new(maxJsonDepth: 1)
+        });
+
+        var failure = await Assert.That(() => index.Resolve(new Uri(Source.Identity), budget))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected bounded model comparison.");
+
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        await Assert.That(first.Reads.Count + second.Reads.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task CapturedReferenceLookupConsumesTheResolversSharedWorkBudgetBeforeAcquisition()
+    {
+        var source = new Source();
+        var containing = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var target = new Source();
+        var identity = CapturedIdentity(target);
+        var index = new WotCapturedUriIdentityIndex([identity, identity]);
+        var reads = source.Reads.Count;
+        var budget = new FederationReadBudget(new(maxWork: 2));
+        budget.ChargeWork();
+
+        var failure = await Assert.That(async () =>
+            await WotRegistryResolver.ResolveCapturedReferenceAsync(containing, Source.Identity,
+                new Uri("https://example.test/consumer.json"), new Uri("https://example.test/consumer.json"),
+                index, source.Request, budget)).Throws<FederationException>()
+            ?? throw new InvalidOperationException("Expected shared lookup budget exhaustion.");
+
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        await Assert.That(target.Reads.Count).IsEqualTo(0);
+        await Assert.That(source.Reads.Count).IsEqualTo(reads);
+        await Assert.That(budget.Requests).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task CapturedIdentitySourceLimitsApplyDuringCaptureAndLookup()
+    {
+        var source = new Source();
+        var identity = CapturedIdentity(source);
+        var captureFailure = await Assert.That(() => new WotCapturedUriIdentityIndex(
+            [identity, CapturedIdentity(new Source())], new(new(maxSources: 1))))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected a capture source limit.");
+        await Assert.That(captureFailure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+
+        var index = new WotCapturedUriIdentityIndex([identity]);
+        var budget = new FederationReadBudget(new(maxSources: 1));
+        await Assert.That(ReferenceEquals(index.Resolve(identity.Uri, budget), identity.Target)).IsTrue();
+        var lookupFailure = await Assert.That(() => index.Resolve(identity.Uri, budget))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected cumulative source accounting.");
+        await Assert.That(lookupFailure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        await Assert.That(source.Reads.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task CapturedIdentityCancellationIsPerOperationRatherThanRetainedByTheIndex()
+    {
+        var source = new Source();
+        var identity = CapturedIdentity(source);
+        using var cancellation = new CancellationTokenSource();
+        var index = new WotCapturedUriIdentityIndex([identity], cancellationToken: cancellation.Token);
+        cancellation.Cancel();
+        await Assert.That(() => index.Resolve(identity.Uri, cancellationToken: cancellation.Token))
+            .Throws<OperationCanceledException>();
+        await Assert.That(() => new WotCapturedUriIdentityIndex([], cancellationToken: cancellation.Token))
+            .Throws<OperationCanceledException>();
+        await Assert.That(ReferenceEquals(index.Resolve(identity.Uri), identity.Target)).IsTrue();
+        await Assert.That(source.Reads.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task CapturedIdentityOwnsItsAssociationListAndRejectsNullEntries()
+    {
+        var source = new Source();
+        var identity = CapturedIdentity(source);
+        var associations = new List<WotCapturedUriIdentity> { identity };
+        var index = new WotCapturedUriIdentityIndex(associations);
+        associations.Clear();
+        associations.Add(CapturedIdentity(new Source()));
+        await Assert.That(ReferenceEquals(index.Resolve(identity.Uri), identity.Target)).IsTrue();
+        await Assert.That(() => new WotCapturedUriIdentityIndex([null!])).Throws<ArgumentException>();
+        await Assert.That(source.Reads.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task CapturedReferenceRejectsSourceDriftDuringAcquisitionWithoutFallback()
+    {
+        var source = new Source();
+        var containing = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var target = new Source();
+        var index = new WotCapturedUriIdentityIndex([CapturedIdentity(target)]);
+        target.AfterRead = () => target.Context = new("test", "urn:test:changed");
+        var reads = source.Reads.Count;
+
+        var failure = await Assert.That(async () =>
+            await WotRegistryResolver.ResolveCapturedReferenceAsync(containing, Source.Identity,
+                new Uri("https://example.test/consumer.json"), new Uri("https://example.test/consumer.json"),
+                index, source.Request)).Throws<FederationException>()
+            ?? throw new InvalidOperationException("Expected captured source drift during acquisition.");
+
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InconsistentSnapshot);
+        await Assert.That(target.Reads.Count).IsEqualTo(1);
+        await Assert.That(source.Reads.Count).IsEqualTo(reads);
+    }
+
+    [Test]
+    public async Task CapturedLocalReferenceBypassesADriftedExternalIdentityIndex()
+    {
+        var source = new Source();
+        var containing = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var target = new Source();
+        var index = new WotCapturedUriIdentityIndex([CapturedIdentity(target)]);
+        target.Model = LoadModel();
+        var reads = source.Reads.Count;
+        var documentUri = new Uri("https://example.test/consumer.json");
+        var budget = new FederationReadBudget(new(maxSources: 1));
+        budget.ChargeSource();
+
+        var result = await WotRegistryResolver.ResolveCapturedReferenceAsync(containing, "#/revision",
+            documentUri, documentUri, index, source.Request, budget);
+
+        await Assert.That(result.Value.GetInt32()).IsEqualTo(2);
+        await Assert.That(ReferenceEquals(result.ContainingDocument, containing)).IsTrue();
+        await Assert.That(target.Reads.Count).IsEqualTo(0);
+        await Assert.That(source.Reads.Count).IsEqualTo(reads);
+    }
+
+    private static WotCapturedUriIdentity CapturedIdentity(Source source, string? versionId = null) =>
+        new(new Uri(Source.Identity), WotCapturedUriIdentityKind.WotId,
+            new(source, "/thingmodelgroups/tenant", source.Collection, source.Resource,
+                "thingmodel", Source.Identity, versionId));
+
+    [Test]
     public async Task MissingCapturedUriIdentityDoesNotReadAnotherRegistryView()
     {
         var source = new Source();

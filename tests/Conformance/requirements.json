@@ -141501,13 +141501,25 @@
       ],
       "text": "Before validating closure bindings, the Producer and Consumer MUST determine candidate targets from the captured Registry model, Registry view and document associations. Target matching MUST use each candidate's Group and Resource identity, Resource kind, applicable `wotid`, original document URI base and document-view URI from the captured Registry metadata. Each URI identity MUST distinguish a Resource from an exact Version. `originRegistry` is provenance, not a document URI identity, and MUST NOT be used for target matching. Neither side MAY use closure binding targets, unrecorded retrieval locations or requests to a live Registry to choose a target.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The caller-supplied captured URI index distinguishes Resource and exact-Version scope without consulting bindings or originRegistry. Source context, model and resolution owner are captured and rechecked; bounded lookup rejects drift before acquisition. Distinct mutable source objects remain separate, while equivalent immutable context/model/owner records can represent one identity. Different revisions, root hashes or storage roots cannot collapse under one locator. Automatic identity construction from the captured model, view and document associations and independent closure verification remain unimplemented; this compound requirement stays pending.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "WotRegistryResolverTests.CapturedIdentityRejectsContextOwnerOrModelDriftBeforeAcquisition",
+          "WotRegistryResolverTests.CapturedIdentityCaptureChecksFinalEnumerationDriftAndCancellation",
+          "WotRegistryResolverTests.DistinctSourceObjectsRequireEquivalentImmutableCapturesToCollapse",
+          "WotRegistryResolverTests.SameLocatorCannotCollapseDifferentCapturedRevisionsRootsOrStoragePaths",
+          "WotRegistryResolverTests.EquivalentImmutableSourceEvidenceCannotDisagreeAboutModelsOrOwnership",
+          "WotRegistryResolverTests.CapturedIdentityEnumerationAndLookupShareInclusiveWorkBudgets",
+          "WotRegistryResolverTests.CapturedIdentitySourceLimitsApplyDuringCaptureAndLookup",
+          "WotRegistryResolverTests.CapturedIdentityCancellationIsPerOperationRatherThanRetainedByTheIndex"
+        ],
         "nativeEvidence": []
       }
     },
@@ -141626,13 +141638,22 @@
       ],
       "text": "For `td:ref`, `type`, and the other operators, the captured Resource kind MUST agree with the target kind defined for that operator. A `type` link MAY identify a Thing Model by its `wotid` or by a captured document-view URI, including an exact-Version URI. A captured document URI is usable only at the Resource or Version scope recorded for it. If the resolved URI identifies more than one distinct Resource or Version, the mapping is ambiguous. Duplicate records for the same identity do not create ambiguity.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Captured reference acquisition checks requested Resource kind and pin conflicts, preserves Resource versus exact-Version scope, and rejects competing targets before target reads. Duplicate associations compare decoded XID paths while retaining case-sensitive Version IDs. Equivalent immutable sources require matching context, original/effective model and resolution owner. Authored occurrence discovery and operator-specific link/type/projection validation are not implemented; these helper cases do not complete the compound closure requirement.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "WotRegistryResolverTests.CapturedExactVersionUriPinsTheMappedResourceAndAppliesFragment",
+          "WotRegistryResolverTests.CapturedResourceUriUsesTheMappedViewsDefaultVersion",
+          "WotRegistryResolverTests.CapturedIdentityMustMatchTheRequestedResourceKindAndExactVersionPin",
+          "WotRegistryResolverTests.CapturedUriIdentityMustBeUniqueBeforeAnyTargetAcquisition",
+          "WotRegistryResolverTests.DuplicateCapturedXidsCompareDecodedPathsButPreserveVersionCase"
+        ],
         "nativeEvidence": []
       }
     },

@@ -2217,6 +2217,31 @@ Version. A digest pin hashes candidate bytes and selects the highest matching
 Version, ignoring advisory digest fields. Denied, unavailable or inconsistent
 reads fail without trying another Version or source.
 
+`ResolveCapturedReferenceAsync` resolves external document URIs through an
+explicit `WotCapturedUriIdentityIndex` of caller-authorized Registry views.
+Each association distinguishes a Resource from an exact Version; an exact-Version
+URI does not require the Resource's default. Index construction captures each
+source's context, model and resolution owner, and checks them again after
+enumeration. Lookup rejects later changes before acquiring a target.
+The resolver checks the captured source again after acquisition.
+
+Associations to the same identity do not compete. Decoded XID paths compare
+ordinally, and Version IDs remain case-sensitive. Distinct source objects can
+represent the same captured identity only when their immutable contexts,
+original and effective models, and resolution owners agree. Matching locators
+with different revisions, root hashes or storage roots remain distinct views.
+Mutable source objects remain distinct even when their locators agree, since
+neither a locator nor a root hash establishes snapshot isolation.
+
+Index construction and lookup accept an operation budget and cancellation
+token. Enumeration and lookup consume cumulative work; capture bounds the
+number of source contexts, and a successful external lookup charges one selected
+source context. The index does not retain the construction token for later
+operations. Local references bypass the external index and retain the containing
+revision. The caller still supplies the identity associations; automatic
+construction from captured Registry models, views and document associations
+remains unfinished, as does independent closure validation.
+
 `AcquireCloudEventSubjectAsync` takes a parsed CloudEvents WoT source query, a
 subject pointer and one authorized Thing Description Resource collection.
 Complete Version metadata establishes each Resource's `wotid`, so an explicit
@@ -2252,11 +2277,12 @@ recharged as acquired input. The output limit applies to the selected value's
 encoded JSON bytes. Fragment selection does not change the full-document digest
 or require a live source.
 
-The caller still processes URI references, document bases and JSON-LD contexts
-to establish locality, then names the containing WoT identity in a local
-request. `ResolveAsync` rejects local requests; `ResolveLocalAsync` rejects
-Registry pins. Resource aliases must first be resolved to an authorized source,
-and external document descriptors are not dereferenced. Publication closure
+The URI-reference overloads establish locality before selecting a Registry
+Version. Their JSON-LD overloads use the captured source bytes and explicit
+captured contexts; they do not fetch contexts from a live endpoint.
+`ResolveAsync` rejects local requests; `ResolveLocalAsync` rejects Registry
+pins. Acquisition stays within caller-authorized sources, and external document
+descriptors are not dereferenced. Publication closure
 remains unimplemented. SemVer acquisition, local
 resolution and fragment cases passed managed execution on both frameworks and
 native execution in the complete Federation suite on .NET 10/Windows x64 at

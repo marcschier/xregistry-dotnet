@@ -456,7 +456,7 @@ public static class WotRegistryResolver
                 cancellationToken).ConfigureAwait(false);
         }
 
-        var identity = capturedIdentities.Resolve(target.DocumentUri);
+        var identity = capturedIdentities.Resolve(target.DocumentUri, budget, cancellationToken);
         var expectedKind = request.TargetKind switch
         {
             WotReferenceTargetKind.ThingModel => "thingmodel",
@@ -488,6 +488,7 @@ public static class WotRegistryResolver
         var resolved = await new Resolution(identity.Source, collection, resolvedRequest, budget,
             cancellationToken, resourceXidPin: identity.ResourceXid,
             exactVersionId: identity.VersionId).RunAsync().ConfigureAwait(false);
+        capturedIdentities.CheckSource(identity.Source, cancellationToken);
         return await SelectFragmentAsync(resolved, target.Fragment ?? "#", budget, cancellationToken)
             .ConfigureAwait(false);
     }
