@@ -14,6 +14,301 @@ namespace XRegistry.Federation.Tests;
 public class WotRegistryResolverTests
 {
     [Test]
+    [Arguments("tm:extends", "thingmodel", false)]
+    [Arguments("tm:extends", "thingmodel", true)]
+    [Arguments("tm:submodel", "thingmodel", false)]
+    [Arguments("tm:submodel", "thingmodel", true)]
+    [Arguments("td:extends", "thingdescription", false)]
+    [Arguments("td:extends", "thingdescription", true)]
+    [Arguments("td:subthing", "thingdescription", false)]
+    [Arguments("td:subthing", "thingdescription", true)]
+    [Arguments("type", "thingmodel", false)]
+    [Arguments("type", "thingmodel", true)]
+    public async Task DependencyLinkClassificationComposesAuthoredDiscoveryWithCapturedKindsAndScope(
+        string operation, string kind, bool exact)
+    {
+        var source = ClassificationSource(kind);
+        var plan = new JsonObject
+        {
+            ["@context"] = JsonNode.Parse("""
+                {"edges":"https://www.w3.org/2019/wot/td#hasLink",
+                 "relation":"https://www.w3.org/2019/wot/hypermedia#hasRelationType",
+                 "target":{"@id":"https://www.w3.org/2019/wot/hypermedia#hasTarget","@type":"@id"}}
+                """),
+            ["edges"] = new JsonArray(new JsonObject
+            {
+                ["relation"] = operation, ["target"] = "./definition.json#/properties/a%2Fb"
+            })
+        };
+        var occurrences = await WotJsonLdBaseResolver.DiscoverLinkReferencesAsync(
+            new(Encoding.UTF8.GetBytes(plan.ToJsonString())), new Uri("https://example.test/plan.json"),
+            WotReferenceTargetKind.ThingDescription, new Dictionary<Uri, FederationDocument>());
+        await Assert.That(occurrences.Count).IsEqualTo(1);
+        var occurrence = occurrences[0];
+        var index = await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(source, occurrence.Target.DocumentUri, WotCapturedUriIdentityKind.DocumentView,
+                source.Resource + (exact ? "/versions/2.0.0" : ""))]);
+        var reads = source.Reads.Count;
+        var budget = new FederationReadBudget();
+        var target = index.ClassifyDependencyLink(occurrence, WotReferenceTargetKind.ThingDescription, budget) ??
+            throw new InvalidOperationException("Expected an external dependency link.");
+
+        await Assert.That(target.ResourceKind).IsEqualTo(kind);
+        await Assert.That(target.ResourceXid).IsEqualTo(source.Resource);
+        await Assert.That(target.VersionId).IsEqualTo(exact ? "2.0.0" : null);
+        await Assert.That(ReferenceEquals(target.Source, source)).IsTrue();
+        await Assert.That(occurrence.SourcePointer).IsEqualTo("/edges/0");
+        await Assert.That(occurrence.PropertyName).IsEqualTo("target");
+        await Assert.That(occurrence.Operator).IsEqualTo(operation);
+        await Assert.That(occurrence.Href).IsEqualTo("./definition.json#/properties/a%2Fb");
+        await Assert.That(source.Reads.Count).IsEqualTo(reads);
+        await Assert.That(budget.Requests).IsEqualTo(0L);
+    }
+
+    [Test]
+    [Arguments("tm:extends", false)]
+    [Arguments("tm:extends", true)]
+    [Arguments("tm:submodel", false)]
+    [Arguments("tm:submodel", true)]
+    [Arguments("td:extends", true)]
+    [Arguments("td:subthing", true)]
+    [Arguments("type", true)]
+    public async Task DependencyLinksResolveCapturedWotIdsFromTmAndTdSources(string operation, bool description)
+    {
+        var kind = operation.StartsWith("td:", StringComparison.Ordinal) ? "thingdescription" : "thingmodel";
+        var source = ClassificationSource(kind);
+        var index = await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(source, new Uri(Source.Identity), WotCapturedUriIdentityKind.WotId, source.Resource)]);
+        var uri = new Uri("https://example.test/plan.json");
+        var href = Source.Identity + "#/properties/a";
+        var reference = new WotAuthoredReferenceOccurrence("/links/0", "href", operation, href,
+            WotReferenceUriResolver.Resolve(href, uri, uri));
+        var reads = source.Reads.Count;
+        var target = index.ClassifyDependencyLink(reference, description
+            ? WotReferenceTargetKind.ThingDescription : WotReferenceTargetKind.ThingModel) ??
+            throw new InvalidOperationException("Expected a captured wotid target.");
+
+        await Assert.That(target.WotId).IsEqualTo(Source.Identity);
+        await Assert.That(target.ResourceKind).IsEqualTo(kind);
+        await Assert.That(target.ResourceXid).IsEqualTo(source.Resource);
+        await Assert.That(target.VersionId).IsNull();
+        await Assert.That(source.Reads.Count).IsEqualTo(reads);
+    }
+
+    [Test]
+    [Arguments("tm:extends", "thingdescription")]
+    [Arguments("tm:extends", "schema")]
+    [Arguments("tm:submodel", "thingdescription")]
+    [Arguments("tm:submodel", "schema")]
+    [Arguments("td:extends", "thingmodel")]
+    [Arguments("td:extends", "schema")]
+    [Arguments("td:subthing", "thingmodel")]
+    [Arguments("td:subthing", "schema")]
+    [Arguments("type", "thingdescription")]
+    [Arguments("type", "schema")]
+    [Arguments("type", "message")]
+    public async Task DependencyLinkClassificationRejectsWrongKindsIncludingSchema(string operation, string kind)
+    {
+        var source = ClassificationSource(kind);
+        var reference = ClassificationReference(operation);
+        var index = await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(source, reference.Target.DocumentUri, WotCapturedUriIdentityKind.DocumentView,
+                source.Resource + "/versions/2.0.0")]);
+        var reads = source.Reads.Count;
+        var failure = await Assert.That(() =>
+            index.ClassifyDependencyLink(reference, WotReferenceTargetKind.ThingDescription))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected the wrong captured kind.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(source.Reads.Count).IsEqualTo(reads);
+    }
+
+    [Test]
+    [Arguments("tm:extends", "thingmodel")]
+    [Arguments("tm:submodel", "thingmodel")]
+    [Arguments("td:extends", "thingdescription")]
+    [Arguments("td:subthing", "thingdescription")]
+    [Arguments("type", "thingmodel")]
+    public async Task DependencyLinkClassificationCannotUseKindToDisambiguateUris(string operation, string kind)
+    {
+        var first = ClassificationSource(kind);
+        var second = ClassificationSource("schema");
+        var reference = ClassificationReference(operation);
+        var index = await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(first, reference.Target.DocumentUri, WotCapturedUriIdentityKind.DocumentView,
+                first.Resource + "/versions/2.0.0"),
+             new(second, reference.Target.DocumentUri, WotCapturedUriIdentityKind.DocumentView,
+                second.Resource + "/versions/2.0.0")]);
+        var failure = await Assert.That(() =>
+            index.ClassifyDependencyLink(reference, WotReferenceTargetKind.ThingDescription))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected competing captured identities.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.Ambiguous);
+    }
+
+    [Test]
+    [Arguments("tm:extends")]
+    [Arguments("tm:submodel")]
+    [Arguments("td:extends")]
+    [Arguments("td:subthing")]
+    [Arguments("type")]
+    public async Task LocalDependencyLinksDoNotConsultCapturedIdentities(string operation)
+    {
+        var first = ClassificationSource("thingmodel");
+        var second = ClassificationSource("thingdescription");
+        var reference = ClassificationReference(operation, local: true);
+        var index = await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(first, reference.Target.DocumentUri, WotCapturedUriIdentityKind.DocumentView, first.Resource),
+             new(second, reference.Target.DocumentUri, WotCapturedUriIdentityKind.DocumentView, second.Resource)]);
+        var reads = first.Reads.Count + second.Reads.Count;
+        first.Model = null;
+        second.Model = null;
+        var budget = new FederationReadBudget();
+
+        await Assert.That(index.ClassifyDependencyLink(reference, WotReferenceTargetKind.ThingDescription, budget)).IsNull();
+        await Assert.That(budget.Work).IsEqualTo(1L);
+        await Assert.That(budget.Requests).IsEqualTo(0L);
+        await Assert.That(first.Reads.Count + second.Reads.Count).IsEqualTo(reads);
+    }
+
+    [Test]
+    [Arguments("tm:extends")]
+    [Arguments("tm:submodel")]
+    [Arguments("td:extends")]
+    [Arguments("td:subthing")]
+    [Arguments("type")]
+    public async Task DependencyLinksReportMissingCapturedIdentities(string operation)
+    {
+        var index = new WotCapturedUriIdentityIndex([]);
+        var budget = new FederationReadBudget();
+        var failure = await Assert.That(() => index.ClassifyDependencyLink(ClassificationReference(operation),
+            WotReferenceTargetKind.ThingDescription, budget))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected a missing captured identity.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.NotFound);
+        await Assert.That(budget.Requests).IsEqualTo(0L);
+    }
+
+    [Test]
+    [Arguments("tm:extends", "thingmodel", false)]
+    [Arguments("tm:submodel", "thingmodel", false)]
+    [Arguments("td:extends", "thingdescription", false)]
+    [Arguments("td:subthing", "thingdescription", false)]
+    [Arguments("type", "thingmodel", false)]
+    [Arguments("tm:extends", "thingmodel", true)]
+    [Arguments("tm:submodel", "thingmodel", true)]
+    [Arguments("td:extends", "thingdescription", true)]
+    [Arguments("td:subthing", "thingdescription", true)]
+    [Arguments("type", "thingmodel", true)]
+    public async Task DependencyLinkClassificationDistinguishesDuplicateRecordsFromCompetingScopes(
+        string operation, string kind, bool competingScope)
+    {
+        var source = ClassificationSource(kind);
+        var reference = ClassificationReference(operation);
+        var index = await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(source, reference.Target.DocumentUri, WotCapturedUriIdentityKind.DocumentView,
+                source.Resource + "/versions/1.0.0"),
+             new(source, reference.Target.DocumentUri, WotCapturedUriIdentityKind.DocumentBase,
+                source.Resource + (competingScope ? "" : "/versions/1.0.0"))]);
+        if (competingScope)
+        {
+            var failure = await Assert.That(() =>
+                index.ClassifyDependencyLink(reference, WotReferenceTargetKind.ThingDescription))
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected ambiguous recorded scopes.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.Ambiguous);
+        }
+        else
+        {
+            var target = index.ClassifyDependencyLink(reference, WotReferenceTargetKind.ThingDescription) ??
+                throw new InvalidOperationException("Expected one deduplicated identity.");
+            await Assert.That(target.VersionId).IsEqualTo("1.0.0");
+            await Assert.That(target.ResourceKind).IsEqualTo(kind);
+        }
+    }
+
+    [Test]
+    [Arguments("describedby", false)]
+    [Arguments("describedby", true)]
+    [Arguments("tm:ref", false)]
+    [Arguments("tm:ref", true)]
+    [Arguments("TM:extends", false)]
+    [Arguments("TM:extends", true)]
+    [Arguments("https://www.w3.org/2019/wot/td#type", false)]
+    [Arguments("https://www.w3.org/2019/wot/td#type", true)]
+    [Arguments("type", false)]
+    [Arguments("type", true)]
+    [Arguments("", false)]
+    [Arguments("", true)]
+    public async Task DependencyLinkClassificationRejectsInvalidRelationsAndTmTypeSourcesBeforeLookup(
+        string operation, bool local)
+    {
+        var index = new WotCapturedUriIdentityIndex([]);
+        var budget = new FederationReadBudget();
+        var failure = await Assert.That(() => index.ClassifyDependencyLink(ClassificationReference(operation, local),
+            WotReferenceTargetKind.ThingModel, budget))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected an invalid dependency relation.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(budget.Work).IsEqualTo(0L);
+        await Assert.That(budget.Requests).IsEqualTo(0L);
+    }
+
+    [Test]
+    [Arguments(-1, false)]
+    [Arguments(0, false)]
+    [Arguments(1, false)]
+    [Arguments(-1, true)]
+    [Arguments(0, true)]
+    [Arguments(1, true)]
+    public async Task DependencyLinkClassificationSharesInclusiveWorkBoundaries(int delta, bool local)
+    {
+        var source = ClassificationSource("thingmodel");
+        var reference = ClassificationReference("type", local);
+        var index = await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(source, reference.Target.DocumentUri, WotCapturedUriIdentityKind.DocumentView,
+                source.Resource + "/versions/2.0.0")]);
+        var required = local ? 2L : 3L;
+        var budget = new FederationReadBudget(new FederationReadLimits(maxWork: required + delta));
+        budget.ChargeWork();
+        if (delta < 0)
+        {
+            var failure = await Assert.That(() =>
+                index.ClassifyDependencyLink(reference, WotReferenceTargetKind.ThingDescription, budget))
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected cumulative work exhaustion.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        }
+        else
+        {
+            var target = index.ClassifyDependencyLink(reference, WotReferenceTargetKind.ThingDescription, budget);
+            await Assert.That(target?.VersionId).IsEqualTo(local ? null : "2.0.0");
+            await Assert.That(budget.Work).IsEqualTo(required);
+        }
+        await Assert.That(budget.Requests).IsEqualTo(0L);
+    }
+
+    [Test]
+    public async Task DependencyLinkClassificationChecksSourceDriftCancellationAndInvalidSourceKind()
+    {
+        var source = ClassificationSource("thingmodel");
+        var reference = ClassificationReference("tm:extends");
+        var index = await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(source, reference.Target.DocumentUri, WotCapturedUriIdentityKind.DocumentView,
+                source.Resource + "/versions/2.0.0")]);
+        var reads = source.Reads.Count;
+        source.Model = null;
+        var failure = await Assert.That(() =>
+            index.ClassifyDependencyLink(reference, WotReferenceTargetKind.ThingModel))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected captured source drift.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InconsistentSnapshot);
+
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var budget = new FederationReadBudget();
+        await Assert.That(() => index.ClassifyDependencyLink(reference,
+            WotReferenceTargetKind.ThingModel, budget, cancellation.Token)).Throws<OperationCanceledException>();
+        await Assert.That(() => index.ClassifyDependencyLink(reference,
+            (WotReferenceTargetKind)42, budget)).Throws<ArgumentOutOfRangeException>();
+        await Assert.That(budget.Work).IsEqualTo(0L);
+        await Assert.That(source.Reads.Count).IsEqualTo(reads);
+    }
+
+    [Test]
     [Arguments("tm:ref", "thingmodel", false)]
     [Arguments("tm:ref", "thingmodel", true)]
     [Arguments("tm:ref", "schema", false)]

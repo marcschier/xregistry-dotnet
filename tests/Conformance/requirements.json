@@ -141408,7 +141408,7 @@
       "text": "`operator` MUST use the canonical string in the following table. These strings are closure labels, not terms expanded through a context on the closure document:",
       "review": {
         "status": "reviewed",
-        "note": "Ordinary candidates use canonical tm:ref and td:ref labels independently of authored aliases. Link discovery emits the exact named extension/submodel/subthing labels, and only a captured TD contributes a type link. describedby is a classification candidate rather than an authorized closure operator. Projection source discovery emits the selected experimental projects IRI. The closure reader accepts exactly these eight canonical strings and rejects prefix aliases or expanded alternatives. Independent comparison with discovered source occurrences is not implemented; this compound requirement stays pending.",
+        "note": "Ordinary candidates use canonical tm:ref and td:ref labels independently of authored aliases. Link discovery emits the exact named extension/submodel/subthing labels, and only a captured TD contributes a type link. Dependency-link classification accepts those five literal relations, with type restricted to TD sources; describedby is not an accepted dependency operator. Projection source discovery emits the selected experimental projects IRI. The closure reader accepts exactly these eight canonical strings and rejects prefix aliases or expanded alternatives. Independent comparison with discovered source occurrences is not implemented; this compound requirement stays pending.",
         "roles": [
           "client",
           "producer"
@@ -141422,7 +141422,8 @@
           "WotReferenceUriResolverTests.OnlyACapturedThingDescriptionContributesATypeLink",
           "WotReferenceUriResolverTests.ProjectionSourcesRetainManifestOrderCrossKindDeclarationsAndExactEntryPointers",
           "WotPublicationClosureTests.ClosureRepresentationAcceptsExactlyTheSelectedCanonicalOperators",
-          "WotPublicationClosureTests.ClosureRepresentationRejectsOperatorAliasesAndUnknownStrings"
+          "WotPublicationClosureTests.ClosureRepresentationRejectsOperatorAliasesAndUnknownStrings",
+          "WotRegistryResolverTests.DependencyLinkClassificationRejectsInvalidRelationsAndTmTypeSourcesBeforeLookup"
         ],
         "nativeEvidence": []
       }
@@ -141778,7 +141779,7 @@
       "text": "For `td:ref`, `type`, and the other operators, the captured Resource kind MUST agree with the target kind defined for that operator. A `type` link MAY identify a Thing Model by its `wotid` or by a captured document-view URI, including an exact-Version URI. A captured document URI is usable only at the Resource or Version scope recorded for it. If the resolved URI identifies more than one distinct Resource or Version, the mapping is ambiguous. Duplicate records for the same identity do not create ambiguity.",
       "review": {
         "status": "reviewed",
-        "note": "Captured reference acquisition checks requested Resource kind and pin conflicts, preserves Resource versus exact-Version scope, and rejects competing targets before target reads. Duplicate associations compare decoded XID paths while retaining case-sensitive Version IDs. Equivalent immutable sources require matching context, original/effective model and resolution owner. Ordinary classification now checks the unique captured identity before accepting a Thing Model, excluded Schema or Thing Description under its operator; it does not select a Version or acquire bytes. Combined link/projection classification and independent closure validation remain unfinished, so the compound closure requirement stays pending.",
+        "note": "Captured reference acquisition checks requested Resource kind and pin conflicts, preserves Resource versus exact-Version scope, and rejects competing targets before target reads. Duplicate associations compare decoded XID paths while retaining case-sensitive Version IDs. Equivalent immutable sources require matching context, original/effective model and resolution owner. Ordinary classification checks the unique captured identity before accepting a Thing Model, excluded Schema or Thing Description under its operator. Dependency-link classification applies the TM/TD target-kind rules, including type through a captured wotid or document-view URI, and rejects Schema targets. Both preserve recorded scope without selecting Versions or acquiring bytes. Combined occurrence admission, projection-source classification and independent closure validation remain unfinished, so the compound requirement stays pending.",
         "roles": [
           "client",
           "producer"
@@ -141796,7 +141797,12 @@
           "WotRegistryResolverTests.OrdinaryReferenceClassificationRejectsKindsNotDefinedForItsOperator",
           "WotRegistryResolverTests.OrdinaryClassificationCannotResolveAmbiguityByFilteringForAnOperatorKind",
           "WotRegistryResolverTests.OrdinaryClassificationAcceptsDuplicateRecordsOnlyForTheSameCapturedIdentity",
-          "WotRegistryResolverTests.OrdinaryClassificationDoesNotConflateResourceScopeWithItsDefaultVersion"
+          "WotRegistryResolverTests.OrdinaryClassificationDoesNotConflateResourceScopeWithItsDefaultVersion",
+          "WotRegistryResolverTests.DependencyLinkClassificationComposesAuthoredDiscoveryWithCapturedKindsAndScope",
+          "WotRegistryResolverTests.DependencyLinksResolveCapturedWotIdsFromTmAndTdSources",
+          "WotRegistryResolverTests.DependencyLinkClassificationRejectsWrongKindsIncludingSchema",
+          "WotRegistryResolverTests.DependencyLinkClassificationCannotUseKindToDisambiguateUris",
+          "WotRegistryResolverTests.DependencyLinkClassificationDistinguishesDuplicateRecordsFromCompetingScopes"
         ],
         "nativeEvidence": []
       }
@@ -141824,7 +141830,7 @@
       "text": "If no captured identity matches or the match is ambiguous, the Producer MUST NOT claim domain-complete closure and the Consumer MUST reject such a claim. The binding list cannot resolve the ambiguity. This profile does not include Schema Resource documents or OPC UA `uav:dataTypeDefinitions` materialization references; another closure profile is needed to cover those dependencies.",
       "review": {
         "status": "reviewed",
-        "note": "Ordinary-reference classification reports missing or ambiguous captured identities without consulting a binding target, reading another source or filtering candidates by the desired kind. Noncanonical operators reject before lookup; capture drift and cancellation propagate, and classification and identity matching share one work budget. Complete publication acceptance still needs independent occurrence and binding verification, including Schema and uav:dataTypeDefinitions exclusions. No WoT-complete extension validator is registered; this compound requirement stays pending.",
+        "note": "Ordinary-reference and dependency-link classification report missing or ambiguous captured identities without consulting a binding target, reading another source or filtering candidates by the desired kind. Noncanonical operators reject before lookup; local occurrences bypass the index, capture drift and cancellation propagate, and classification and identity matching share one work budget. Complete publication acceptance still needs independent occurrence and binding verification, including Schema and uav:dataTypeDefinitions exclusions. No WoT-complete extension validator is registered; this compound requirement stays pending.",
         "roles": [
           "client",
           "producer"
@@ -141837,7 +141843,12 @@
           "WotRegistryResolverTests.OrdinaryClassificationCannotResolveAmbiguityByFilteringForAnOperatorKind",
           "WotRegistryResolverTests.OrdinaryClassificationRejectsNoncanonicalOrNonordinaryOperatorsBeforeLookup",
           "WotRegistryResolverTests.OrdinaryClassificationUsesTheSameInclusiveWorkBudgetAsIdentityMatching",
-          "WotRegistryResolverTests.OrdinaryClassificationObservesCaptureDriftAndCancellation"
+          "WotRegistryResolverTests.OrdinaryClassificationObservesCaptureDriftAndCancellation",
+          "WotRegistryResolverTests.DependencyLinksReportMissingCapturedIdentities",
+          "WotRegistryResolverTests.DependencyLinkClassificationCannotUseKindToDisambiguateUris",
+          "WotRegistryResolverTests.LocalDependencyLinksDoNotConsultCapturedIdentities",
+          "WotRegistryResolverTests.DependencyLinkClassificationSharesInclusiveWorkBoundaries",
+          "WotRegistryResolverTests.DependencyLinkClassificationChecksSourceDriftCancellationAndInvalidSourceKind"
         ],
         "nativeEvidence": []
       }

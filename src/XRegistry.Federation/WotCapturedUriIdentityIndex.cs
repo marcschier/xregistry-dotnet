@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using XRegistry.Models;
 
 namespace XRegistry.Federation;
 
@@ -344,15 +345,44 @@ public sealed class WotCapturedUriIdentityIndex
         {
             throw FederationJson.Invalid("Ordinary reference classification requires a canonical tm:ref or td:ref operator.");
         }
+        return ClassifyTarget(reference, reference.Operator == "tm:ref" ? "thingmodel" : "thingdescription",
+            reference.Operator == "tm:ref", budget, cancellationToken);
+    }
+
+    /// <summary>Classifies a canonical dependency link using captured target identities and the source's model-derived kind.</summary>
+    /// <returns>Null for a document-local link; otherwise the unique, correctly typed captured Resource or exact Version.</returns>
+    /// <remarks>
+    /// Accepts tm:extends, tm:submodel, td:extends, td:subthing and TD type links.
+    /// Describedby candidates are not dependency links. This method neither selects Versions nor acquires documents.
+    /// </remarks>
+    public WotCapturedResourceIdentity? ClassifyDependencyLink(WotAuthoredReferenceOccurrence reference,
+        WotReferenceTargetKind sourceKind, FederationReadBudget? budget = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+        ArgumentNullException.ThrowIfNull(reference.Target);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!Enum.IsDefined(sourceKind)) { throw new ArgumentOutOfRangeException(nameof(sourceKind)); }
+        var targetKind = reference.Operator switch
+        {
+            "tm:extends" or "tm:submodel" => "thingmodel",
+            "td:extends" or "td:subthing" => "thingdescription",
+            "type" when sourceKind == WotReferenceTargetKind.ThingDescription => "thingmodel",
+            _ => throw FederationJson.Invalid("Dependency link classification requires a canonical relation, with type restricted to TD sources.")
+        };
+        return ClassifyTarget(reference, targetKind, false, budget, cancellationToken);
+    }
+
+    private WotCapturedResourceIdentity? ClassifyTarget(WotAuthoredReferenceOccurrence reference,
+        string targetKind, bool allowSchema, FederationReadBudget? budget, CancellationToken cancellationToken)
+    {
         var readBudget = budget ?? new();
         readBudget.ChargeWork();
         if (reference.Target.IsDocumentLocal) { return null; }
         var target = Resolve(reference.Target.DocumentUri, readBudget, cancellationToken);
-        if (reference.Operator == "tm:ref"
-            ? target.ResourceKind is not ("thingmodel" or "schema")
-            : target.ResourceKind != "thingdescription")
+        if (target.ResourceKind != targetKind && !(allowSchema && target.ResourceKind == "schema"))
         {
-            throw FederationJson.Invalid("The ordinary reference identifies an unsupported captured Resource kind.");
+            throw FederationJson.Invalid("The reference identifies an unsupported captured Resource kind.");
         }
         cancellationToken.ThrowIfCancellationRequested();
         return target;
