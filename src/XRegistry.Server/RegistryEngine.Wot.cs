@@ -105,22 +105,40 @@ public sealed partial class RegistryEngine
             using (document)
             {
                 var root = document.RootElement;
-                if (root.ValueKind != JsonValueKind.Object ||
-                    !root.TryGetProperty("id", out var idElement) ||
-                    idElement.ValueKind != JsonValueKind.String)
+                if (root.ValueKind != JsonValueKind.Object)
                 {
                     throw ServerErrors.With("invalid_attribute", resource.Key,
-                        "A WoT Document must have a string id member.", ("name", definition.Singular));
+                        "A WoT Document must be a JSON object.", ("name", definition.Singular));
                 }
 
-                var wotId = idElement.GetString()!;
-                if (input.ContainsKey("wotid") &&
-                    (input["wotid"] is not JsonValue submittedWotId ||
-                     !submittedWotId.TryGetValue<string>(out var submitted) ||
-                     !StringComparer.Ordinal.Equals(wotId, submitted)))
+                string wotId;
+                if (root.TryGetProperty("id", out var idElement))
+                {
+                    if (idElement.ValueKind != JsonValueKind.String)
+                    {
+                        throw ServerErrors.With("invalid_attribute", resource.Key,
+                            "A WoT Document's id member must be a string.", ("name", definition.Singular));
+                    }
+
+                    wotId = idElement.GetString()!;
+                    if (input.ContainsKey("wotid") &&
+                        (input["wotid"] is not JsonValue submittedWotId ||
+                         !submittedWotId.TryGetValue<string>(out var submitted) ||
+                         !StringComparer.Ordinal.Equals(wotId, submitted)))
+                    {
+                        throw ServerErrors.With("invalid_attribute", resource.Key,
+                            "The wotid attribute must equal the Document's id member.", ("name", "wotid"));
+                    }
+                }
+                else if (input["wotid"] is JsonValue submittedWotId &&
+                    submittedWotId.TryGetValue<string>(out var submitted) && !string.IsNullOrEmpty(submitted))
+                {
+                    wotId = submitted;
+                }
+                else
                 {
                     throw ServerErrors.With("invalid_attribute", resource.Key,
-                        "The wotid attribute must equal the Document's id member.", ("name", "wotid"));
+                        "A WoT Document without an id member requires a supplied wotid.", ("name", "wotid"));
                 }
 
                 input["wotid"] = wotId;

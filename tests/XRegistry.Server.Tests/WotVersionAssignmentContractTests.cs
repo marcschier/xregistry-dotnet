@@ -12,6 +12,78 @@ namespace XRegistry.Server.Tests;
 public class WotVersionAssignmentContractTests
 {
     [Test]
+    [Arguments("thingmodel", WotVersionProfile.SemVer, "0.0.0-1")]
+    [Arguments("thingdescription", WotVersionProfile.SemVer, "0.0.0-1")]
+    [Arguments("thingmodel", WotVersionProfile.Incremental, "1")]
+    [Arguments("thingdescription", WotVersionProfile.Incremental, "1")]
+    public async Task DocumentsWithoutIdUseExplicitPublisherIdentityWithoutRewritingBytes(
+        string kind, WotVersionProfile profile, string versionId)
+    {
+        var fixture = CreateWotFixture(profile);
+        var path = fixture.ResourcePath(kind, "explicit-identity");
+        const string document = "{\r\n  \"title\": \"No authored identifier\"\r\n}\r\n";
+
+        await ExecuteDocumentAsync(fixture.Engine, RegistryAction.Replace, path, document,
+            """{"wotid":"urn:example:explicit-identity"}""");
+
+        await AssertStoredAssignmentAsync(fixture.Engine, path, versionId, "generated",
+            "urn:example:explicit-identity", document);
+    }
+
+    [Test]
+    [Arguments("thingmodel", WotVersionProfile.SemVer, "model", "1.2.3")]
+    [Arguments("thingdescription", WotVersionProfile.SemVer, "instance", "1.2.3")]
+    [Arguments("thingmodel", WotVersionProfile.Incremental, "model", "42")]
+    [Arguments("thingdescription", WotVersionProfile.Incremental, "instance", "42")]
+    public async Task ExplicitPublisherIdentityRetainsAuthoredVersionAssignment(
+        string kind, WotVersionProfile profile, string field, string versionId)
+    {
+        var fixture = CreateWotFixture(profile);
+        var path = fixture.ResourcePath(kind, "authored-identity");
+        var document = $$$"""{"title":"No id","version":{"{{{field}}}":"{{{versionId}}}"}}""";
+
+        await ExecuteDocumentAsync(fixture.Engine, RegistryAction.Replace, path, document,
+            """{"wotid":"urn:example:authored-identity"}""");
+
+        await AssertStoredAssignmentAsync(fixture.Engine, path, versionId, "authored",
+            "urn:example:authored-identity", document);
+    }
+
+    [Test]
+    [Arguments(WotVersionProfile.SemVer, "0.0.0-1")]
+    [Arguments(WotVersionProfile.Incremental, "1")]
+    public async Task MissingBothIdentitiesRejectsWithoutAllocatingARevision(
+        WotVersionProfile profile, string versionId)
+    {
+        var fixture = CreateWotFixture(profile);
+        var path = fixture.ResourcePath("thingmodel", "missing-identity");
+        var error = await Assert.That(async () => await ExecuteDocumentAsync(fixture.Engine,
+            RegistryAction.Replace, path, """{"title":"No identity"}""", "{}"))
+            .Throws<RegistryException>() ?? throw new InvalidOperationException("An identity must be supplied.");
+        await Assert.That(error.Diagnostic.Code).IsEqualTo("invalid_attribute");
+
+        await ExecuteDocumentAsync(fixture.Engine, RegistryAction.Replace, path, """{"title":"No identity"}""",
+            """{"wotid":"urn:example:missing-identity"}""");
+        await AssertStoredAssignmentAsync(fixture.Engine, path, versionId, "generated",
+            "urn:example:missing-identity", """{"title":"No identity"}""");
+    }
+
+    [Test]
+    [Arguments("null")]
+    [Arguments("42")]
+    [Arguments("{}")]
+    public async Task ExplicitPublisherIdentityDoesNotReplaceAnInvalidAuthoredId(string invalidId)
+    {
+        var fixture = CreateWotFixture();
+        var path = fixture.ResourcePath("thingmodel", "invalid-identity");
+        var error = await Assert.That(async () => await ExecuteDocumentAsync(fixture.Engine,
+            RegistryAction.Replace, path, $$"""{"id":{{invalidId}}}""",
+            """{"wotid":"urn:example:invalid-identity"}"""))
+            .Throws<RegistryException>() ?? throw new InvalidOperationException("An invalid id must be rejected.");
+        await Assert.That(error.Diagnostic.Code).IsEqualTo("invalid_attribute");
+    }
+
+    [Test]
     [Arguments("thingmodel", """{ "id" : "urn:example:tm-authored", "version" : { "model" : "1.2.3", "instance" : "9.8.7" }, "title" : "preserve this formatting" }""", "1.2.3", "authored", "urn:example:tm-authored")]
     [Arguments("thingdescription", """{ "id" : "urn:example:td-authored", "version" : { "model" : "9.8.7", "instance" : "4.5.6" }, "title" : "preserve this formatting" }""", "4.5.6", "authored", "urn:example:td-authored")]
     [Arguments("thingmodel", """{ "id" : "urn:example:tm-wrong-term", "version" : { "instance" : "9.8.7" }, "title" : "wrong term is not the model version" }""", "0.0.0-1", "generated", "urn:example:tm-wrong-term")]
@@ -134,10 +206,12 @@ public class WotVersionAssignmentContractTests
         await Assert.That(metadata.Metadata!.RootElement.GetProperty("defaultversionid").GetString()).IsEqualTo("1.1.0");
     }
 
-    private static WotFixture CreateWotFixture()
+    private static WotFixture CreateWotFixture(WotVersionProfile? profile = null)
     {
         using var source = BuiltInRegistryModels.LoadSource(RegistryModelKind.Wot);
-        var modelSource = source.RootElement.GetRawText();
+        var modelSource = profile is { } selected
+            ? WotRegistryProfiles.Compile(selected).Source.RootElement.GetRawText()
+            : source.RootElement.GetRawText();
         var model = RegistryModel.Compile(RegistryJson.Parse(modelSource));
         var targets = model.Groups.Values.SelectMany(group => group.Resources.Values.Select(resource =>
             (Group: group, Resource: resource)));
