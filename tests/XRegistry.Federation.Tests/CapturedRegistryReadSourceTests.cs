@@ -15,6 +15,440 @@ namespace XRegistry.Federation.Tests;
 public class CapturedRegistryReadSourceTests
 {
     [Test]
+    [Arguments(-1)]
+    [Arguments(0)]
+    [Arguments(1)]
+    public async Task CapturedDependencyGraphsBoundDistinctSourceContextsInclusively(int delta)
+    {
+        var (first, identities) = await DependencyGraphFixture();
+        var (second, _) = await DependencyGraphFixture(registryId: "another");
+        var budget = new FederationReadBudget(new(maxSources: 2 + delta));
+        if (delta < 0)
+        {
+            var failure = await Assert.That(async () =>
+            {
+                _ = await WotRegistryResolver.CaptureDependencyGraphAsync([first, second],
+                    new Dictionary<Uri, FederationDocument>(), identities, budget: budget);
+            }).Throws<FederationException>() ?? throw new InvalidOperationException("Expected distinct source accounting.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        }
+        else
+        {
+            var graph = await WotRegistryResolver.CaptureDependencyGraphAsync([first, second],
+                new Dictionary<Uri, FederationDocument>(), identities, budget: budget);
+            await Assert.That(graph.Nodes.Count).IsEqualTo(2);
+            await Assert.That(graph.Edges.Count).IsEqualTo(0);
+        }
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task CapturedDependencyGraphsRequireEntriesAndAbsoluteDocumentUris(bool relativeUri)
+    {
+        var (entry, identities) = await DependencyGraphFixture();
+        var entries = relativeUri
+            ? new[] { entry with { DocumentUri = new Uri("relative.json", UriKind.Relative) } }
+            : Array.Empty<WotCapturedGraphEntry>();
+        var failure = await Assert.That(async () =>
+        {
+            _ = await WotRegistryResolver.CaptureDependencyGraphAsync(entries,
+                new Dictionary<Uri, FederationDocument>(), identities);
+        }).Throws<FederationException>() ?? throw new InvalidOperationException("Expected independent absolute graph roots.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    public async Task CapturedProjectionGraphsBindManifestSourcesRatherThanAffordanceSelectors()
+    {
+        var (entry, identities) = await DependencyGraphFixture(
+            """{"selected":{"tm:ref":"urn:graph:2#/properties/value"}}""",
+            """{"value":{}}""", configureFirst: root =>
+            {
+                root["@context"]!["p"] = WotJsonLdBaseResolver.ProjectionVocabulary;
+                root["@context"]!["p:projects"] = new JsonObject
+                {
+                    ["@id"] = WotJsonLdBaseResolver.ProjectionVocabulary + "projects", ["@container"] = "@list"
+                };
+                root["@type"] = new JsonArray("tm:ThingModel", "p:projection");
+                root["p:projects"] = JsonNode.Parse("""
+                    [{"p:sourceName":"base","href":"urn:graph:2","type":"application/tm+json"}]
+                    """);
+            });
+        var closureJson = GraphClosure(("1.0.0", "/p:projects/0",
+            WotJsonLdBaseResolver.ProjectionVocabulary + "projects", "urn:graph:2", "2.0.0"));
+        var closure = WotPublicationClosure.Parse(Encoding.UTF8.GetBytes(closureJson.ToJsonString()));
+        var graph = await closure.ValidateCapturedBindingsAsync([entry], new Dictionary<Uri, FederationDocument>(), identities);
+        await Assert.That(graph.Nodes.Count).IsEqualTo(2);
+        await Assert.That(graph.Edges.Count).IsEqualTo(1);
+        await Assert.That(graph.Entries[0].Inventory.ProjectionSelectors.Count).IsEqualTo(1);
+        await Assert.That(graph.Edges[0].Reference.SourcePointer).IsEqualTo("/p:projects/0");
+        var extra = new JsonObject
+        {
+            ["source"] = Fixture.Resource + "/versions/1.0.0", ["pointer"] = "/properties/selected",
+            ["operator"] = "tm:ref", ["href"] = "urn:graph:2#/properties/value",
+            ["target"] = Fixture.Resource + "/versions/2.0.0"
+        };
+        closureJson["bindings"]!.AsArray().Add(extra);
+        await Assert.That(() => WotPublicationClosure.Parse(Encoding.UTF8.GetBytes(closureJson.ToJsonString()))
+            .ValidateAgainstGraph(graph)).Throws<FederationException>();
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task DependencyGraphEntriesRejectDuplicateOrContradictoryRevisions(bool contradictory)
+    {
+        var (entry, identities) = await DependencyGraphFixture();
+        var other = contradictory ? (await DependencyGraphFixture("""{"different":{}}""")).Entry : entry;
+        var failure = await Assert.That(async () =>
+        {
+            _ = await WotRegistryResolver.CaptureDependencyGraphAsync([entry, other],
+                new Dictionary<Uri, FederationDocument>(), identities);
+        }).Throws<FederationException>() ?? throw new InvalidOperationException("Expected unambiguous exact entries.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    public async Task ClosureBindingComparisonRejectsXidsThatCannotDistinguishCapturedRegistries()
+    {
+        var (first, identities) = await DependencyGraphFixture();
+        var (second, _) = await DependencyGraphFixture(registryId: "another");
+        var graph = await WotRegistryResolver.CaptureDependencyGraphAsync([first, second],
+            new Dictionary<Uri, FederationDocument>(), identities);
+        await Assert.That(graph.Entries.Count).IsEqualTo(2);
+        await Assert.That(graph.Nodes.Count).IsEqualTo(2);
+        var closure = WotPublicationClosure.Parse(Encoding.UTF8.GetBytes(GraphClosure().ToJsonString()));
+        var failure = await Assert.That(() => closure.ValidateAgainstGraph(graph)).Throws<FederationException>() ??
+            throw new InvalidOperationException("Expected exact closure XIDs to remain unambiguous.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    public async Task CapturedGraphAndBindingValidationShareOneOperationBudget()
+    {
+        var (entry, identities) = await DependencyGraphFixture("""{"a":{"tm:ref":"urn:graph:2"}}""");
+        var closure = WotPublicationClosure.Parse(Encoding.UTF8.GetBytes(GraphClosure(
+            ("1.0.0", "/properties/a", "tm:ref", "urn:graph:2", "2.0.0")).ToJsonString()));
+        var baseline = new FederationReadBudget();
+        var graph = await closure.ValidateCapturedBindingsAsync([entry],
+            new Dictionary<Uri, FederationDocument>(), identities, budget: baseline);
+        await Assert.That(graph.Edges.Count).IsEqualTo(1);
+        foreach (var delta in new[] { -1, 0, 1 })
+        {
+            var budget = new FederationReadBudget(new(maxWork: baseline.Work + delta));
+            if (delta < 0)
+            {
+                var failure = await Assert.That(async () =>
+                {
+                    _ = await closure.ValidateCapturedBindingsAsync([entry],
+                        new Dictionary<Uri, FederationDocument>(), identities, budget: budget);
+                }).Throws<FederationException>() ?? throw new InvalidOperationException("Expected one shared operation budget.");
+                await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+            }
+            else
+            {
+                _ = await closure.ValidateCapturedBindingsAsync([entry],
+                    new Dictionary<Uri, FederationDocument>(), identities, budget: budget);
+                await Assert.That(budget.Work).IsEqualTo(baseline.Work);
+            }
+        }
+    }
+
+    [Test]
+    public async Task CapturedGraphAggregateBytesIncludeRetainedDocumentsAndEveryOccurrence()
+    {
+        var (entry, identities) = await DependencyGraphFixture(
+            """{"a":{"tm:ref":"urn:graph:2"},"b":{"tm:ref":"urn:graph:2"}}""");
+        var graph = await WotRegistryResolver.CaptureDependencyGraphAsync([entry],
+            new Dictionary<Uri, FederationDocument>(), identities);
+        var bytes = graph.Nodes.Sum(node => node.Document.Document.Length +
+            Encoding.UTF8.GetByteCount(node.VersionXid) + Encoding.UTF8.GetByteCount(node.DocumentUri.AbsoluteUri)) +
+            graph.Edges.Sum(edge => (long)Encoding.UTF8.GetByteCount(edge.Reference.SourcePointer) +
+                Encoding.UTF8.GetByteCount(edge.Reference.Operator) + Encoding.UTF8.GetByteCount(edge.Reference.Href) +
+                Encoding.UTF8.GetByteCount(edge.Source.VersionXid) + Encoding.UTF8.GetByteCount(edge.Target.VersionXid));
+        foreach (var delta in new[] { -1, 0, 1 })
+        {
+            var budget = new FederationReadBudget(new(maxResultBytes: checked((int)bytes + delta)));
+            if (delta < 0)
+            {
+                var failure = await Assert.That(async () =>
+                {
+                    _ = await WotRegistryResolver.CaptureDependencyGraphAsync([entry],
+                        new Dictionary<Uri, FederationDocument>(), identities, budget: budget);
+                }).Throws<FederationException>() ?? throw new InvalidOperationException("Expected aggregate graph size rejection.");
+                await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+            }
+            else
+            {
+                var result = await WotRegistryResolver.CaptureDependencyGraphAsync([entry],
+                    new Dictionary<Uri, FederationDocument>(), identities, budget: budget);
+                await Assert.That(result.Edges.Count).IsEqualTo(2);
+            }
+        }
+    }
+
+    [Test]
+    public async Task CapturedDependencyGraphsTraverseExactRevisionsAndKeepEveryOccurrenceAcrossCycles()
+    {
+        var (entry, identities) = await DependencyGraphFixture(
+            """
+            {"first":{"tm:ref":"urn:graph:2#/properties/value"},
+             "again":{"tm:ref":"urn:graph:2#/properties/value"},"local":{"tm:ref":"#/properties/first"}}
+            """,
+            """{"value":{},"next":{"tm:ref":"urn:graph:3"}}""",
+            """{"back":{"tm:ref":"urn:graph:1"}}""");
+        var graph = await WotRegistryResolver.CaptureDependencyGraphAsync([entry],
+            new Dictionary<Uri, FederationDocument>(), identities);
+        await Assert.That(graph.Entries.Count).IsEqualTo(1);
+        await Assert.That(graph.Nodes.Count).IsEqualTo(3);
+        await Assert.That(graph.Edges.Count).IsEqualTo(4);
+        await Assert.That(graph.Nodes[0].VersionXid).IsEqualTo(Fixture.Resource + "/versions/1.0.0");
+        await Assert.That(graph.Nodes[1].VersionXid).IsEqualTo(Fixture.Resource + "/versions/2.0.0");
+        await Assert.That(graph.Nodes[2].VersionXid).IsEqualTo(Fixture.Resource + "/versions/3.0.0");
+        await Assert.That(graph.Edges[0].Reference.SourcePointer).IsEqualTo("/properties/first");
+        await Assert.That(graph.Edges[1].Reference.SourcePointer).IsEqualTo("/properties/again");
+        await Assert.That(ReferenceEquals(graph.Edges[0].Target, graph.Edges[1].Target)).IsTrue();
+        await Assert.That(ReferenceEquals(graph.Edges[3].Target, graph.Entries[0])).IsTrue();
+        await Assert.That(graph.Nodes[0].Document.Version.ContentDigest).IsEqualTo(entry.Document.Version.ContentDigest);
+        var originalBytes = await Bytes(entry.Document.Document);
+        var capturedBytes = await Bytes(graph.Nodes[0].Document.Document);
+        await Assert.That(capturedBytes.SequenceEqual(originalBytes)).IsTrue();
+        var closure = GraphClosure(
+            ("1.0.0", "/properties/first", "tm:ref", "urn:graph:2#/properties/value", "2.0.0"),
+            ("1.0.0", "/properties/again", "tm:ref", "urn:graph:2#/properties/value", "2.0.0"),
+            ("2.0.0", "/properties/next", "tm:ref", "urn:graph:3", "3.0.0"),
+            ("3.0.0", "/properties/back", "tm:ref", "urn:graph:1", "1.0.0"));
+        WotPublicationClosure.Parse(Encoding.UTF8.GetBytes(closure.ToJsonString())).ValidateAgainstGraph(graph);
+    }
+
+    [Test]
+    [Arguments("missing")]
+    [Arguments("operator")]
+    [Arguments("href")]
+    [Arguments("decoded-href")]
+    [Arguments("pointer-case")]
+    [Arguments("pointer-fragment")]
+    [Arguments("wrong-version")]
+    [Arguments("local")]
+    [Arguments("unreachable")]
+    [Arguments("entry")]
+    public async Task ClosureBindingsCannotReplaceIndependentOccurrenceOrTargetEvidence(string change)
+    {
+        var (entry, identities) = await DependencyGraphFixture(
+            """{"a/b~c":{"tm:ref":"urn:graph:2#/properties/%76alue"},"local":{"tm:ref":"#/properties/a~1b~0c"}}""",
+            """{"value":{}}""");
+        var graph = await WotRegistryResolver.CaptureDependencyGraphAsync([entry],
+            new Dictionary<Uri, FederationDocument>(), identities);
+        var root = GraphClosure(("1.0.0", "/properties/a~1b~0c", "tm:ref",
+            "urn:graph:2#/properties/%76alue", "2.0.0"));
+        var binding = root["bindings"]![0]!;
+        switch (change)
+        {
+            case "missing": root["bindings"] = new JsonArray(); break;
+            case "operator": binding["operator"] = "td:ref"; break;
+            case "href": binding["href"] = "urn:graph:2"; break;
+            case "decoded-href": binding["href"] = "urn:graph:2#/properties/value"; break;
+            case "pointer-case": binding["pointer"] = "/properties/A~1b~0c"; break;
+            case "pointer-fragment": binding["pointer"] = "/properties/a%2Fb~0c"; break;
+            case "wrong-version": binding["target"] = Fixture.Resource + "/versions/3.0.0"; break;
+            case "local": binding["pointer"] = "/properties/local"; binding["href"] = "#/properties/a~1b~0c"; break;
+            case "unreachable": binding["source"] = Fixture.Resource + "/versions/3.0.0"; break;
+            case "entry": root["entries"] = new JsonArray(Fixture.Resource + "/versions/2.0.0"); break;
+        }
+        var closure = WotPublicationClosure.Parse(Encoding.UTF8.GetBytes(root.ToJsonString()));
+        var failure = await Assert.That(() => closure.ValidateAgainstGraph(graph)).Throws<FederationException>() ??
+            throw new InvalidOperationException("Expected independent binding evidence to reject altered closure.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    public async Task CapturedDependencyGraphsDoNotIncludeSchemaOrDocumentLocalOccurrences()
+    {
+        var (entry, identities) = await DependencyGraphFixture(
+            """{"schema":{"tm:ref":"urn:graph:schema#/definitions/value"},"local":{"tm:ref":"#/properties/schema"}}""");
+        var graph = await WotRegistryResolver.CaptureDependencyGraphAsync([entry],
+            new Dictionary<Uri, FederationDocument>(), identities);
+        await Assert.That(graph.Nodes.Count).IsEqualTo(1);
+        await Assert.That(graph.Edges.Count).IsEqualTo(0);
+        WotPublicationClosure.Parse(Encoding.UTF8.GetBytes(GraphClosure().ToJsonString())).ValidateAgainstGraph(graph);
+        var extra = GraphClosure(("1.0.0", "/properties/schema", "tm:ref",
+            "urn:graph:schema#/definitions/value", "2.0.0"));
+        await Assert.That(() => WotPublicationClosure.Parse(Encoding.UTF8.GetBytes(extra.ToJsonString()))
+            .ValidateAgainstGraph(graph)).Throws<FederationException>();
+    }
+
+    [Test]
+    [Arguments("missing-identity")]
+    [Arguments("wrong-kind")]
+    [Arguments("missing-fragment")]
+    public async Task CapturedDependencyGraphsRejectUnresolvableTargetsWithoutPartialResults(string change)
+    {
+        var href = change switch
+        {
+            "missing-identity" => "urn:missing",
+            "wrong-kind" => "urn:graph:schema",
+            _ => "urn:graph:2#/properties/missing"
+        };
+        var properties = new JsonObject
+        {
+            ["first"] = new JsonObject { ["tm:ref"] = "urn:graph:2" },
+            ["later"] = new JsonObject { [change == "wrong-kind" ? "td:ref" : "tm:ref"] = href }
+        };
+        var (entry, identities) = await DependencyGraphFixture(properties.ToJsonString());
+        if (change == "missing-fragment")
+        {
+            var failure = await Assert.That(async () =>
+            {
+                _ = await WotRegistryResolver.CaptureDependencyGraphAsync([entry],
+                    new Dictionary<Uri, FederationDocument>(), identities);
+            }).Throws<RegistryException>() ?? throw new InvalidOperationException("Expected exact target-fragment failure.");
+            await Assert.That(failure.Diagnostic.Code).IsEqualTo("not-found");
+        }
+        else
+        {
+            await Assert.That(async () =>
+            {
+                _ = await WotRegistryResolver.CaptureDependencyGraphAsync([entry],
+                    new Dictionary<Uri, FederationDocument>(), identities);
+            }).Throws<FederationException>();
+        }
+    }
+
+    [Test]
+    [Arguments("work", -1)]
+    [Arguments("work", 0)]
+    [Arguments("work", 1)]
+    [Arguments("depth", -1)]
+    [Arguments("depth", 0)]
+    [Arguments("depth", 1)]
+    [Arguments("requests", -1)]
+    [Arguments("requests", 0)]
+    [Arguments("requests", 1)]
+    [Arguments("bytes", -1)]
+    [Arguments("bytes", 0)]
+    [Arguments("bytes", 1)]
+    public async Task CapturedDependencyGraphTraversalHasInclusiveSharedLimits(string limit, int delta)
+    {
+        var (entry, identities) = await DependencyGraphFixture("""{"a":{"tm:ref":"urn:graph:2"}}""",
+            """{"b":{"tm:ref":"urn:graph:3"}}""");
+        async Task<WotCapturedDependencyGraph> Capture(FederationReadBudget budget) =>
+            await WotRegistryResolver.CaptureDependencyGraphAsync([entry],
+                new Dictionary<Uri, FederationDocument>(), identities, budget: budget);
+        var baseline = new FederationReadBudget();
+        _ = await Capture(baseline);
+        var budget = new FederationReadBudget(new(
+            maxWork: limit == "work" ? baseline.Work + delta : 1_000_000,
+            maxHops: limit == "depth" ? 2 + delta : 16,
+            maxRequests: limit == "requests" ? baseline.Requests + delta : 4096,
+            maxTotalBytes: limit == "bytes" ? baseline.BytesRead + delta : 64 * 1024 * 1024));
+        if (delta < 0)
+        {
+            var failure = await Assert.That(async () => { _ = await Capture(budget); }).Throws<FederationException>() ??
+                throw new InvalidOperationException("Expected bounded graph traversal.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        }
+        else
+        {
+            var result = await Capture(budget);
+            await Assert.That(result.Nodes.Count).IsEqualTo(3);
+            await Assert.That(budget.Work).IsEqualTo(baseline.Work);
+        }
+    }
+
+    [Test]
+    [Arguments(-1)]
+    [Arguments(0)]
+    [Arguments(1)]
+    public async Task IndependentClosureBindingChecksUseInclusiveWorkAndCancellation(int delta)
+    {
+        var (entry, identities) = await DependencyGraphFixture("""{"a":{"tm:ref":"urn:graph:2"}}""");
+        var graph = await WotRegistryResolver.CaptureDependencyGraphAsync([entry],
+            new Dictionary<Uri, FederationDocument>(), identities);
+        var closure = WotPublicationClosure.Parse(Encoding.UTF8.GetBytes(GraphClosure(
+            ("1.0.0", "/properties/a", "tm:ref", "urn:graph:2", "2.0.0")).ToJsonString()));
+        var baseline = new FederationReadBudget();
+        closure.ValidateAgainstGraph(graph, baseline);
+        var budget = new FederationReadBudget(new(maxWork: baseline.Work + delta));
+        if (delta < 0)
+        {
+            var failure = await Assert.That(() => closure.ValidateAgainstGraph(graph, budget)).Throws<FederationException>() ??
+                throw new InvalidOperationException("Expected closure comparison work limit.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        }
+        else
+        {
+            closure.ValidateAgainstGraph(graph, budget);
+            await Assert.That(budget.Work).IsEqualTo(baseline.Work);
+        }
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        await Assert.That(() => closure.ValidateAgainstGraph(graph, cancellationToken: cancellation.Token))
+            .Throws<OperationCanceledException>();
+        await Assert.That(async () =>
+        {
+            _ = await WotRegistryResolver.CaptureDependencyGraphAsync([entry],
+                new Dictionary<Uri, FederationDocument>(), identities, cancellationToken: cancellation.Token);
+        }).Throws<OperationCanceledException>();
+    }
+
+    private static async Task<(WotCapturedGraphEntry Entry, WotCapturedUriIdentityIndex Identities)> DependencyGraphFixture(
+        string first = "{}", string second = "{}", string third = "{}",
+        Action<JsonNode>? configureFirst = null, string registryId = "captured")
+    {
+        var fixture = new Fixture();
+        fixture.Root["registryid"] = registryId;
+        var versions = fixture.Root["sets"]!["team"]!["things"]!["a"]!["versions"]!.AsObject();
+        versions["3.0.0"] = versions["2.0.0"]!.DeepClone();
+        versions["3.0.0"]!["versionid"] = "3.0.0";
+        versions["3.0.0"]!["xid"] = Fixture.Resource + "/versions/3.0.0";
+        versions["3.0.0"]!["self"] = "#" + Fixture.Resource + "/versions/3.0.0";
+        fixture.Root["sets"]!["team"]!["things"]!["a"]!["versionscount"] = 3;
+        var properties = new[] { first, second, third };
+        for (var index = 0; index < properties.Length; index++)
+        {
+            var version = (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture) + ".0.0";
+            var root = JsonNode.Parse(await Bytes(InventoryDocument(properties[index], "[]")))!;
+            root["id"] = Fixture.WotId;
+            root["version"] = new JsonObject { ["model"] = version };
+            if (index == 0) { configureFirst?.Invoke(root); }
+            fixture.Documents[Fixture.Resource + "/versions/" + version] =
+                new(Encoding.UTF8.GetBytes(root.ToJsonString()), documentBase: "https://graph.test/" + version + ".json");
+        }
+        var source = fixture.Open();
+        var associations = new List<WotCapturedUriIdentity>();
+        foreach (var version in versions)
+        {
+            associations.Add(new(new("urn:graph:" + version.Key[0]), WotCapturedUriIdentityKind.DocumentView,
+                new(source, "/sets/team", Fixture.Collection, Fixture.Resource, "thingmodel", Fixture.WotId, version.Key)));
+        }
+        associations.Add(new(new("urn:graph:schema"), WotCapturedUriIdentityKind.DocumentView,
+            new(InventorySource("schema"), "/sets/team", Fixture.Collection, Fixture.Resource, "schema", null)));
+        var document = await WotRegistryResolver.ResolveAsync(source, Fixture.Collection,
+            new(Fixture.WotId, WotReferenceTargetKind.ThingModel, WotReferenceOperator.ThingModel, VersionIdPin: "1.0.0"));
+        return (new(document, new("https://graph.test/1.0.0.json")), new(associations));
+    }
+
+    private static JsonObject GraphClosure(params (string Source, string Pointer, string Operator, string Href, string Target)[] bindings)
+    {
+        var values = new JsonArray();
+        foreach (var binding in bindings)
+        {
+            values.Add(new JsonObject
+            {
+                ["source"] = Fixture.Resource + "/versions/" + binding.Source, ["pointer"] = binding.Pointer,
+                ["operator"] = binding.Operator, ["href"] = binding.Href,
+                ["target"] = Fixture.Resource + "/versions/" + binding.Target
+            });
+        }
+        return new()
+        {
+            ["format"] = WotPublicationClosure.Format, ["entries"] = new JsonArray(Fixture.Resource + "/versions/1.0.0"),
+            ["bindings"] = values
+        };
+    }
+
+    [Test]
     [Arguments(false)]
     [Arguments(true)]
     public async Task CapturedProjectionBulkTiesUseOriginalNamesAndCategoryOrder(bool reverse)

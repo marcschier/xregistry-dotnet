@@ -2536,6 +2536,26 @@ therefore parse without establishing a complete publication. Required WoT
 extension acceptance still needs independent semantic validation and pinned
 offline reconstruction.
 
+`CaptureDependencyGraphAsync` starts from independently selected retained entry
+documents and traverses their external occurrences without consulting a closure
+binding list. Each occurrence selects its target from captured Registry sources.
+Repeated targets and ordinary cycles share one exact node, but retain separate
+edges and requirement checks. Projection selectors reuse their manifest source
+edge. Local references and ordinary Schema targets do not create edges. Empty
+or repeated entries, contradictory revision evidence, unavailable targets and
+live target providers reject the operation without returning a partial graph.
+Shared work, source-context, hop, input and aggregate graph-size limits apply.
+
+`WotPublicationClosure.ValidateAgainstGraph` compares entries and bindings with
+that independent graph. It requires the exact authored pointer, canonical
+operator, original href and selected Version identity for every edge; missing,
+extra, local or unreachable bindings reject. Distinct captured Registries with
+indistinguishable Version XIDs also reject. `ValidateCapturedBindingsAsync`
+combines traversal and comparison under one budget, taking expected entries
+from the caller rather than from the closure. These checks do not establish
+complete syntactic-subtree discovery, projection admission or pinned offline
+composition. The required WoT extension remains unsupported.
+
 `AcquireCloudEventSubjectAsync` takes a parsed CloudEvents WoT source query, a
 subject pointer and one authorized Thing Description Resource collection.
 Complete Version metadata establishes each Resource's `wotid`, so an explicit

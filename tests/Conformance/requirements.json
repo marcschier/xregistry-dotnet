@@ -141347,7 +141347,7 @@
       "text": "A Producer MUST derive the closure from the captured source document bytes, not from the binding list. Each in-scope external reference occurrence in the closure MUST have exactly one binding to its exact target Version. The binding's `source`, `pointer`, `operator` and `href` MUST identify that occurrence and preserve its authored reference. A Consumer MUST verify those values against the captured source bytes and MUST NOT resolve a missing binding against a live Registry, select a default Version, or replace the target with a newer Version.",
       "review": {
         "status": "reviewed",
-        "note": "Source discovery and closure parsing remain separate inputs: the reader preserves binding strings and never performs source reads or Version selection. This is not independent occurrence verification. Producer graph traversal, exact target association, missing/extra binding rejection and consumer comparison against original captured bytes remain unfinished; no live/default fallback is added.",
+        "note": "Captured graph traversal starts with independently selected retained entries and derives every discovered external occurrence and exact target without consulting bindings. Ordinary cycles reuse exact nodes while repeated occurrences retain separate edges and requirement checks. Closure comparison rejects missing, extra or mismatched bindings, including changed operators, href decoding and incorrect targets. Combined traversal/comparison shares one budget and does not use a binding to recover a missing target. Complete syntactic-subtree discovery, projection admission and pinned offline composition remain unfinished; this compound requirement stays pending.",
         "roles": [
           "client",
           "producer"
@@ -141357,7 +141357,17 @@
         "status": "pending",
         "testIds": [
           "WotPublicationClosureTests.ClosureRepresentationRetainsExactAuthoredStringsAndReadOnlyOrder",
-          "WotPublicationClosureTests.ClosureRepresentationAllowsNoBindingsWithoutAssertingDependencyCompleteness"
+          "WotPublicationClosureTests.ClosureRepresentationAllowsNoBindingsWithoutAssertingDependencyCompleteness",
+          "CapturedRegistryReadSourceTests.CapturedDependencyGraphsTraverseExactRevisionsAndKeepEveryOccurrenceAcrossCycles",
+          "CapturedRegistryReadSourceTests.ClosureBindingsCannotReplaceIndependentOccurrenceOrTargetEvidence",
+          "CapturedRegistryReadSourceTests.CapturedDependencyGraphsRejectUnresolvableTargetsWithoutPartialResults",
+          "CapturedRegistryReadSourceTests.CapturedGraphAndBindingValidationShareOneOperationBudget",
+          "CapturedRegistryReadSourceTests.CapturedDependencyGraphTraversalHasInclusiveSharedLimits",
+          "CapturedRegistryReadSourceTests.CapturedGraphAggregateBytesIncludeRetainedDocumentsAndEveryOccurrence",
+          "CapturedRegistryReadSourceTests.CapturedDependencyGraphsBoundDistinctSourceContextsInclusively",
+          "CapturedRegistryReadSourceTests.CapturedDependencyGraphsRequireEntriesAndAbsoluteDocumentUris",
+          "CapturedRegistryReadSourceTests.DependencyGraphEntriesRejectDuplicateOrContradictoryRevisions",
+          "CapturedRegistryReadSourceTests.ClosureBindingComparisonRejectsXidsThatCannotDistinguishCapturedRegistries"
         ],
         "nativeEvidence": []
       }
@@ -141384,7 +141394,7 @@
       "text": "The binding key MUST be `(source, pointer)`. Source identity follows Core's XID rules; pointer comparison MUST be case-sensitive. `pointer` MUST be an RFC 6901 JSON Pointer into the original captured JSON document, not a URI-fragment pointer or a pointer into expanded or resolved JSON-LD. For a `links` occurrence it MUST identify the link object. For an ordinary `tm:ref` or `td:ref` it MUST identify the object containing that member. For a projection source it MUST identify the source-manifest entry. JSON Pointer escaping applies to the actual authored member names, including an alternative JSON-LD prefix. Array indexes MUST use their RFC 6901 spelling.",
       "review": {
         "status": "reviewed",
-        "note": "The representation reader validates RFC 6901 string-pointer syntax, preserves authored spelling and compares duplicate binding keys using normalized Core source identity and case-sensitive pointers. It does not guess whether a token is an array index or object key. Original-source topology, canonical array indexes and the operator-specific occurrence-object match still require independent validation; this compound requirement stays pending.",
+        "note": "The representation reader validates RFC 6901 syntax and compares duplicate keys using normalized Core source identity and case-sensitive pointers. Independent graph comparison requires the exact original object pointer, including escaped authored member names and canonical manifest array indexes; case or fragment-pointer substitutions reject. Complete syntactic-subtree discovery and projection admission remain unfinished; this compound requirement stays pending.",
         "roles": [
           "client",
           "producer"
@@ -141396,7 +141406,9 @@
           "WotPublicationClosureTests.ClosureRepresentationPreservesPointerSyntaxWithoutGuessingSourceTopology",
           "WotPublicationClosureTests.ClosureRepresentationRejectsMalformedOrFragmentPointers",
           "WotPublicationClosureTests.ClosureBindingPointerComparisonIsCaseSensitive",
-          "WotPublicationClosureTests.ClosureRepresentationRejectsDuplicateKeysUnderCoreSourceIdentity"
+          "WotPublicationClosureTests.ClosureRepresentationRejectsDuplicateKeysUnderCoreSourceIdentity",
+          "CapturedRegistryReadSourceTests.ClosureBindingsCannotReplaceIndependentOccurrenceOrTargetEvidence",
+          "CapturedRegistryReadSourceTests.CapturedProjectionGraphsBindManifestSourcesRatherThanAffordanceSelectors"
         ],
         "nativeEvidence": []
       }
@@ -141423,7 +141435,7 @@
       "text": "Each reachable in-scope external occurrence MUST have exactly one binding. A Consumer MUST reject duplicate binding keys, including duplicates with the same target, and MUST reject bindings to local, unreachable or nonexistent occurrences. Two different occurrences referring to the same target remain distinct bindings. If one pointed-to object contains several in-scope reference members, including aliases for the same expanded member, a Consumer MUST reject it as an ambiguous occurrence rather than choosing one. The binding's `href` MUST equal the source reference's JSON string value, including its fragment, without URI resolution or percent decoding.",
       "review": {
         "status": "reviewed",
-        "note": "The closure reader rejects duplicate source/pointer keys even when targets agree or source XIDs use equivalent escapes. It retains distinct pointers and exact href strings, including empty strings. The combined captured reference inventory classifies ordinary references, dependency links and projection sources, excludes local and ordinary Schema targets before duplicate-pointer checks, and rejects competing dependencies including ordinary/link collisions. Distinct occurrences with one target remain distinct. Projection selectors reuse manifest dependencies while ordinary td:ref members remain separate. Describedby links are classified against captured Schema identities and excluded from dependencies; missing, ambiguous or non-Schema external targets reject. This inventory does not compare bindings with source occurrences, establish syntactic-subtree coverage, complete projection admission or determine transitive reachability. Those semantic checks and exactly one binding per reachable external occurrence keep this compound requirement pending.",
+        "note": "The closure reader rejects duplicate source/pointer keys even when targets agree or source XIDs use equivalent escapes. The combined inventory classifies ordinary references, links and projection sources, excluding local and ordinary Schema targets before duplicate-pointer checks. Captured traversal establishes transitive reachability for discovered occurrences, retains distinct edges to repeated targets and ordinary cycles, and compares exact authored pointers, operators and hrefs with every binding. Projection selectors reuse their manifest edge; an extra selector binding rejects. Local, unreachable and missing bindings reject without partial success. Complete syntactic-subtree discovery, full projection admission and pinned offline composition remain unfinished; this compound requirement stays pending.",
         "roles": [
           "client",
           "producer"
@@ -141444,7 +141456,12 @@
           "CapturedRegistryReadSourceTests.CombinedInventoryAcceptsAnEmptyInventoryAndHonorsCancellationBeforeDiscovery",
           "CapturedRegistryReadSourceTests.CombinedInventoryRetainsTypeLinksOnlyForDescriptionSources",
           "CapturedRegistryReadSourceTests.CombinedInventoryRejectsCompetingUriScopesWithoutReadingTargetDocuments",
-          "CapturedRegistryReadSourceTests.CombinedInventoryRejectsUncapturedContextsWithoutLiveAcquisition"
+          "CapturedRegistryReadSourceTests.CombinedInventoryRejectsUncapturedContextsWithoutLiveAcquisition",
+          "CapturedRegistryReadSourceTests.CapturedDependencyGraphsTraverseExactRevisionsAndKeepEveryOccurrenceAcrossCycles",
+          "CapturedRegistryReadSourceTests.ClosureBindingsCannotReplaceIndependentOccurrenceOrTargetEvidence",
+          "CapturedRegistryReadSourceTests.CapturedDependencyGraphsDoNotIncludeSchemaOrDocumentLocalOccurrences",
+          "CapturedRegistryReadSourceTests.IndependentClosureBindingChecksUseInclusiveWorkAndCancellation",
+          "CapturedRegistryReadSourceTests.CapturedProjectionGraphsBindManifestSourcesRatherThanAffordanceSelectors"
         ],
         "nativeEvidence": []
       }

@@ -29,6 +29,96 @@ public sealed class WotPublicationClosure
     /// <summary>Gets bindings in authored order without replacing their XID or href spellings.</summary>
     public IReadOnlyList<WotPublicationClosureBinding> Bindings { get; }
 
+    /// <summary>Derives reachable target selections before comparing this document's entries and bindings.</summary>
+    /// <remarks>
+    /// Caller-selected entries are independent of this closure's entries and targets. Only retained
+    /// Registry sources are traversed. A matching graph does not establish complete projection
+    /// admission or ordinary offline composition and does not enable the required extension.
+    /// </remarks>
+    public async ValueTask<WotCapturedDependencyGraph> ValidateCapturedBindingsAsync(
+        IReadOnlyList<WotCapturedGraphEntry> expectedEntries,
+        IReadOnlyDictionary<Uri, FederationDocument> capturedContexts, WotCapturedUriIdentityIndex capturedIdentities,
+        bool allowPrerelease = false, FederationReadBudget? budget = null, CancellationToken cancellationToken = default)
+    {
+        var readBudget = budget ?? new();
+        var graph = await WotRegistryResolver.CaptureDependencyGraphAsync(expectedEntries, capturedContexts,
+            capturedIdentities, allowPrerelease, readBudget, cancellationToken).ConfigureAwait(false);
+        ValidateAgainstGraph(graph, readBudget, cancellationToken);
+        return graph;
+    }
+
+    /// <summary>Checks every supplied binding against an independently captured authored dependency graph.</summary>
+    /// <remarks>
+    /// The graph must be derived without using this binding list or its targets. This verifies entry
+    /// identities, reachability, occurrence strings and exact selected targets, not complete projection
+    /// admission, hidden-subtree discovery or reconstruction of an ordinary WoT view.
+    /// It does not register the required extension as supported.
+    /// </remarks>
+    public void ValidateAgainstGraph(WotCapturedDependencyGraph graph, FederationReadBudget? budget = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(graph);
+        cancellationToken.ThrowIfCancellationRequested();
+        var readBudget = budget ?? new();
+        var nodes = new Dictionary<string, WotCapturedDependencyNode>(StringComparer.Ordinal);
+        foreach (var node in graph.Nodes)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            readBudget.ChargeWork();
+            if (!nodes.TryAdd(VersionKey(node.VersionXid), node))
+            {
+                throw FederationJson.Invalid("Closure XIDs cannot distinguish reachable Versions from separate captured Registries.");
+            }
+        }
+        var expectedEntries = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var entry in graph.Entries)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            readBudget.ChargeWork();
+            expectedEntries.Add(VersionKey(entry.VersionXid));
+        }
+        foreach (var entry in Entries)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            readBudget.ChargeWork();
+            if (!expectedEntries.Remove(VersionKey(entry)))
+            {
+                throw FederationJson.Invalid("A closure entry does not match an independently selected graph entry.");
+            }
+        }
+        if (expectedEntries.Count != 0)
+        {
+            throw FederationJson.Invalid("The closure omits an independently selected graph entry.");
+        }
+        var expectedBindings = new Dictionary<(string Source, string Pointer), WotCapturedDependencyEdge>();
+        foreach (var edge in graph.Edges)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            readBudget.ChargeWork();
+            if (!expectedBindings.TryAdd((VersionKey(edge.Source.VersionXid), edge.Reference.SourcePointer), edge))
+            {
+                throw FederationJson.Invalid("The source-derived graph has competing occurrence keys.");
+            }
+        }
+        foreach (var binding in Bindings)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            readBudget.ChargeWork();
+            if (!expectedBindings.Remove((VersionKey(binding.Source), binding.SourcePointer), out var expected) ||
+                !string.Equals(binding.Operator, expected.Reference.Operator, StringComparison.Ordinal) ||
+                !string.Equals(binding.Href, expected.Reference.Href, StringComparison.Ordinal) ||
+                VersionKey(binding.Target) != VersionKey(expected.Target.VersionXid))
+            {
+                throw FederationJson.Invalid("A closure binding does not match its independently discovered occurrence and exact target.");
+            }
+        }
+        if (expectedBindings.Count != 0)
+        {
+            throw FederationJson.Invalid("The closure omits a reachable external occurrence binding.");
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+    }
+
     /// <summary>Parses the closed representation and rejects equivalent duplicate entry or binding identities.</summary>
     /// <remarks>
     /// This checks syntax, not captured Registry membership, target kind, source occurrences,
