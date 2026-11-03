@@ -279,7 +279,16 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
         });
         var result = new OpcUaRegistryEventSubscription(connection.Session, subscription, monitoredItem, decoder);
         subscription.AddItem(monitoredItem);
-        RequireSession(connection.Session, expectedSession);
+        try
+        {
+            RequireSession(connection.Session, expectedSession);
+        }
+        catch
+        {
+            monitoredItem.Notification -= result.OnNotification;
+            subscription.Dispose();
+            throw;
+        }
         if (!connection.Session.AddSubscription(subscription))
         {
             monitoredItem.Notification -= result.OnNotification;
