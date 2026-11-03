@@ -65,6 +65,29 @@ public class CatalogServerPresetTests
     [Test]
     [Arguments(false)]
     [Arguments(true)]
+    public async Task CatalogIdsKeepCoreCaseSensitiveLookupAndScopedSiblingUniqueness(bool all)
+    {
+        var engine = CreatePreset(all, new InMemoryRegistryPersistence());
+        await Send(engine, RegistryAction.Replace, "/categories/Category/registries/Entry", "{}");
+        await ExpectCode(() => Send(engine, RegistryAction.Read, "/categories/Category/registries/entry"), "not_found");
+        await ExpectCode(() => Send(engine, RegistryAction.Replace, "/categories/Category/registries/entry", "{}"),
+            "mismatched_id");
+
+        var inAnotherCategory = await Send(engine, RegistryAction.Replace, "/categories/Other/registries/Entry", "{}");
+        await Assert.That(inAnotherCategory.Kind).IsEqualTo(RegistryResultKind.Created);
+        await Assert.That((await Send(engine, RegistryAction.Read, "/categories/Other/registries/Entry"))
+            .Metadata!.RootElement.GetProperty("xid").GetString()).IsEqualTo("/categories/Other/registries/Entry");
+
+        await ExpectCode(() => Send(engine, RegistryAction.Replace, "/categories/category/registries/Another", "{}"),
+            "mismatched_id");
+        await Assert.That((await Send(engine, RegistryAction.Read, "/categories")).Metadata!.RootElement
+            .EnumerateObject().Select(static category => category.Name).ToArray())
+            .IsEquivalentTo(["Category", "Other"], StringComparer.Ordinal);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
     public async Task ServerPresetCompatibilityPersistsAcrossFrozenModelRestart(bool all)
     {
         var store = new InMemoryRegistryPersistence();

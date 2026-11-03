@@ -109862,7 +109862,7 @@
       "text": "The Group singular name MUST be `category` and its collection name MUST be `categories`. The Resource singular name MUST be `registry` and its collection name MUST be `registries`. Canonical entry XIDs have the form:",
       "review": {
         "status": "reviewed",
-        "note": "The selected model defines categories/category and metadata-only registries/registry. Complete Core identity, case-sensitive lookup, sibling uniqueness, empty/mixed-category and document-locator workflows remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "note": "CatalogIdsKeepCoreCaseSensitiveLookupAndScopedSiblingUniqueness verifies the categories and registries path segments in a returned Registry XID under both preset forms. It does not cover every canonical XID shape. Reviewed against pinned d757328e prose and model; managed evidence is not native qualification.",
         "roles": [
           "client",
           "server",
@@ -109871,7 +109871,9 @@
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "CatalogIdsKeepCoreCaseSensitiveLookupAndScopedSiblingUniqueness"
+        ],
         "nativeEvidence": []
       }
     },
@@ -109898,7 +109900,7 @@
       "text": "A catalog-description Version appends `/versions/<versionid>`. Its Meta entity appends `/meta` to the entry XID. All identifiers MUST follow [Core ID rules][Core IDs]. IDs MUST be unique case-insensitively within their parent scope, but lookups MUST be case-sensitive. For example, `Catalog` and `catalog` MUST NOT identify different siblings. A lookup using the wrong case MUST be treated as not found, not normalized to an existing ID.",
       "review": {
         "status": "reviewed",
-        "note": "The selected model defines categories/category and metadata-only registries/registry. Complete Core identity, case-sensitive lookup, sibling uniqueness, empty/mixed-category and document-locator workflows remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "note": "CatalogServerPresetTests covers case-sensitive lookup, case-insensitive sibling conflicts and distinct parent scopes against both server presets. Core identity workflows, empty/mixed-category behavior and document-locator handling remain pending. Reviewed against pinned d757328e prose and model; managed evidence is not native qualification.",
         "roles": [
           "client",
           "server",
@@ -109907,7 +109909,9 @@
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "CatalogIdsKeepCoreCaseSensitiveLookupAndScopedSiblingUniqueness"
+        ],
         "nativeEvidence": []
       }
     },
@@ -109933,7 +109937,7 @@
       "text": "IDs MUST contain 1 to 128 ASCII characters. The first character MUST be a letter, digit or `_`. Subsequent characters MUST be letters, digits, `_`, `.`, `~`, `:`, `@` or `-`. Storage mappings MUST preserve the original IDs and their scopes without weakening this grammar or introducing case-only duplicate siblings. For example, `schema:main` is a valid Core ID even on a platform that prohibits `:` in a filename: an ID is not a raw filesystem name. Equal IDs in distinct parent or model-type scopes do not imply identity.",
       "review": {
         "status": "reviewed",
-        "note": "The selected model defines categories/category and metadata-only registries/registry. Complete Core identity, case-sensitive lookup, sibling uniqueness, empty/mixed-category and document-locator workflows remain pending. Reviewed against pinned d757328e prose and model with current assertions, not inherited historical evidence. Managed evidence is not native qualification.",
+        "note": "RegistryPathTests exercises valid and invalid Core identifier forms, boundary lengths and encoded colon handling. Backend-specific preservation of those IDs and their parent scopes remains unproved. Reviewed against pinned d757328e prose and model; managed evidence is not native qualification.",
         "roles": [
           "client",
           "server",
@@ -109942,7 +109946,12 @@
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "AcceptsExactRegistryIdentifierGrammar",
+          "RejectsInvalidIdentifierGrammar",
+          "IdentifierLengthAndUniquenessAreIndependentOfLookupCase",
+          "ConstructsEscapedPathsWithoutWindowsFilenameRestrictions"
+        ],
         "nativeEvidence": []
       }
     },
