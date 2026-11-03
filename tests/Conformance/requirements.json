@@ -59966,8 +59966,11 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "RequestPathErrorSubjectsKeepTheIncomingPrefixButExcludeTheQuery",
+          "ChangingDefaultVersionDoesNotTouchEitherVersionAndDeletingLastRemovesResource"
+        ],
         "nativeEvidence": []
       }
     },
