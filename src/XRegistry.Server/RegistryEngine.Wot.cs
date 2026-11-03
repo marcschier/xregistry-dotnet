@@ -303,10 +303,16 @@ public sealed partial class RegistryEngine
                     : [context];
                 foreach (var item in contexts)
                 {
+                    if (item.ValueKind == JsonValueKind.Null)
+                    {
+                        hasBindingPrefix = false;
+                        hasUnresolvedContext = false;
+                        continue;
+                    }
                     if (item.ValueKind != JsonValueKind.Object)
                     {
                         hasBindingPrefix = false;
-                        hasUnresolvedContext |= item.ValueKind != JsonValueKind.Null;
+                        hasUnresolvedContext = true;
                         continue;
                     }
                     if (item.TryGetProperty("@import", out _))

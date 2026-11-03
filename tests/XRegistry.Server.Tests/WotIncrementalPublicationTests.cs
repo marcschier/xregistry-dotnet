@@ -170,6 +170,22 @@ public class WotIncrementalPublicationTests
     }
 
     [Test]
+    public async Task NullJsonLdContextResetsEarlierUnresolvedContext()
+    {
+        const string prefix = "http://opcfoundation.org/UA/WoT-Binding/";
+        var context = $$"""["https://example.invalid/context",null,{"uav":"{{prefix}}"}]""";
+        var document = $$"""{"@context":{{context}},"id":"urn:example:pump","uav:compatibilityLine":"urn:example:line:a"}""";
+        var engine = CreateEngine();
+
+        var created = await Publish(engine, Resource, document, "{}");
+        var details = await Send(engine, RegistryAction.Read, Resource + "/versions/1$details");
+
+        await Assert.That(created.Notices.Count).IsEqualTo(0);
+        await Assert.That(details.Metadata!.RootElement.GetProperty("compatibilityline").GetString())
+            .IsEqualTo("urn:example:line:a");
+    }
+
+    [Test]
     public async Task ExpandedAndCompactCompatibilityLineDeclarationsRejectAtomically()
     {
         const string context = """{"uav":"http://opcfoundation.org/UA/WoT-Binding/"}""";
