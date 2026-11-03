@@ -2238,9 +2238,31 @@ token. Enumeration and lookup consume cumulative work; capture bounds the
 number of source contexts, and a successful external lookup charges one selected
 source context. The index does not retain the construction token for later
 operations. Local references bypass the external index and retain the containing
-revision. The caller still supplies the identity associations; automatic
-construction from captured Registry models, views and document associations
-remains unfinished, as does independent closure validation.
+revision.
+
+`WotCapturedUriIdentityIndex.CaptureAsync` takes captured URI associations with
+their declared Resource or exact-Version XID scope. It derives the Resource
+kind from the source's compiled model and reads the applicable Version metadata
+for `wotid`; callers do not supply those values. Resource associations read
+captured Meta and default-Version metadata. Exact-Version associations require
+neither a Resource default nor document-byte acquisition. A `wotid` association
+must identify the applicable WoT Resource rather than a particular Version.
+Schema associations retain their model-defined kind without borrowing a
+Version's incidental `wotid` field.
+
+The builder follows one same-typed, same-source Resource alias while retaining
+the alias Resource identity. It rejects a second alias hop, changed source
+evidence or conflicting mutable metadata. Repeated associations reuse retained
+metadata within the operation; mutable views are rechecked before returning the
+index, without retrying against a newer default. Requests, metadata bytes,
+objects, source contexts and traversal work share the caller's finite budget.
+These observations do not make a mutable source an immutable snapshot.
+
+The caller still supplies the URI associations recorded by the captured view
+and document descriptors. The builder does not infer a document URI from a
+source locator, follow external descriptors or consult closure bindings.
+Automatic association extraction and independent closure validation remain
+unfinished.
 
 `AcquireCloudEventSubjectAsync` takes a parsed CloudEvents WoT source query, a
 subject pointer and one authorized Thing Description Resource collection.

@@ -115,12 +115,173 @@ public sealed record WotCapturedUriIdentity
     public WotCapturedResourceIdentity Target { get; }
 }
 
+/// <summary>A URI association retained by an authorized captured Registry view.</summary>
+public sealed record WotCapturedUriAssociation
+{
+    /// <summary>Records the URI's declared Resource or exact-Version scope without inferring target kind.</summary>
+    public WotCapturedUriAssociation(IFederationReadSource source, Uri uri,
+        WotCapturedUriIdentityKind kind, string targetXid)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(uri);
+        ArgumentNullException.ThrowIfNull(targetXid);
+        if (!Enum.IsDefined(kind)) { throw new ArgumentOutOfRangeException(nameof(kind)); }
+        if (!uri.IsAbsoluteUri || FederationJson.AbsoluteUri(uri.AbsoluteUri).Fragment.Length != 0)
+        {
+            throw new ArgumentException("A captured URI association must be absolute and fragment-free.", nameof(uri));
+        }
+        var path = RegistryPath.Parse(targetXid);
+        if (path.Kind is not (RegistryPathKind.Resource or RegistryPathKind.Version) || path.IsDetails)
+        {
+            throw new ArgumentException("A captured URI association must identify a Resource or exact Version.", nameof(targetXid));
+        }
+        Source = source;
+        Uri = uri;
+        Kind = kind;
+        TargetXid = targetXid;
+    }
+
+    /// <summary>The already authorized source retaining the selected Registry view.</summary>
+    public IFederationReadSource Source { get; }
+    /// <summary>The URI recorded by the view, never an inferred source locator.</summary>
+    public Uri Uri { get; }
+    /// <summary>The captured field that supplied the URI.</summary>
+    public WotCapturedUriIdentityKind Kind { get; }
+    /// <summary>The Resource or exact Version identified by the captured URI.</summary>
+    public string TargetXid { get; }
+}
+
 /// <summary>Resolves external URI identities without consulting bindings or live Registry state.</summary>
 public sealed class WotCapturedUriIdentityIndex
 {
     private readonly WotCapturedUriIdentity[] _identities;
     private readonly Dictionary<IFederationReadSource, CapturedSource> _sources =
         new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>Derives target kinds and applicable WoT identifiers from captured models and metadata.</summary>
+    /// <remarks>
+    /// Associations must come from the captured view's URI and document metadata, not closure bindings.
+    /// Resource associations use captured Meta and default-Version metadata; exact-Version associations
+    /// do not require a default. Only the supplied sources are read, and document bytes are not acquired.
+    /// </remarks>
+    public static async ValueTask<WotCapturedUriIdentityIndex> CaptureAsync(
+        IEnumerable<WotCapturedUriAssociation> associations, FederationReadBudget? budget = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(associations);
+        cancellationToken.ThrowIfCancellationRequested();
+        var readBudget = budget ?? new();
+        var reads = new Dictionary<IFederationReadSource, CapturedFederationReadScope>(
+            ReferenceEqualityComparer.Instance);
+        var metadata = new Dictionary<(CapturedFederationReadScope Scope, string Xid), JsonElement>();
+        var identities = new List<WotCapturedUriIdentity>();
+
+        async ValueTask<JsonElement> EntityAsync(CapturedFederationReadScope scope, string xid)
+        {
+            if (metadata.TryGetValue((scope, xid), out var retained)) { return retained; }
+            var envelope = await scope.MetadataAsync(new(FederationOperation.Entity, xid)).ConfigureAwait(false);
+            var entity = envelope.TryGetProperty("entity", out var value) ? value : envelope;
+            if (!FederationSyntax.SameXid(FederationJson.String(entity, "xid"), xid))
+            {
+                throw FederationJson.Invalid("A captured URI association returned different entity metadata.");
+            }
+            metadata.Add((scope, xid), entity);
+            return entity;
+        }
+
+        foreach (var association in associations)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            readBudget.ChargeWork();
+            if (association is null)
+            {
+                throw new ArgumentException("Captured URI associations cannot contain null entries.", nameof(associations));
+            }
+            if (!reads.TryGetValue(association.Source, out var scope))
+            {
+                readBudget.ChargeSource();
+                scope = new(association.Source, readBudget, cancellationToken);
+                reads.Add(association.Source, scope);
+            }
+            scope.Check();
+            var parts = FederationSyntax.Xid(association.TargetXid);
+            if (!scope.Model.Groups.TryGetValue(parts[0], out var group) ||
+                !group.Resources.TryGetValue(parts[2], out var resource) || !resource.HasDocument)
+            {
+                throw FederationJson.Invalid("A captured URI association must identify a document-bearing type in the captured model.");
+            }
+            var groupXid = DocumentTreeFormat.XidPath(parts[..2]);
+            var collectionXid = DocumentTreeFormat.XidPath(parts[..3]);
+            var resourceXid = DocumentTreeFormat.XidPath(parts[..4]);
+            var selectedResourceXid = resourceXid;
+            var versionId = parts.Length == 6 ? parts[5] : null;
+            var selectedId = versionId;
+            if (selectedId is null)
+            {
+                var meta = await EntityAsync(scope, resourceXid + "/meta").ConfigureAwait(false);
+                if (meta.TryGetProperty("xref", out var xref))
+                {
+                    readBudget.CheckHops(1);
+                    if (xref.ValueKind != JsonValueKind.String)
+                    {
+                        throw FederationJson.Invalid("A captured Resource alias must name a Resource XID.");
+                    }
+                    var targetParts = FederationSyntax.Xid(xref.GetString()!);
+                    if (targetParts.Length != 4 ||
+                        !ReferenceEquals(resource, DocumentTreeFormat.Resource(scope.Model, targetParts)))
+                    {
+                        throw FederationJson.Invalid("A captured Resource alias must name the same Resource model type.");
+                    }
+                    selectedResourceXid = DocumentTreeFormat.XidPath(targetParts);
+                    meta = await EntityAsync(scope, selectedResourceXid + "/meta").ConfigureAwait(false);
+                    if (meta.TryGetProperty("xref", out _))
+                    {
+                        throw new FederationException(FederationErrorCode.UnsupportedOperation,
+                            "A captured Resource alias target cannot itself be an alias.");
+                    }
+                }
+                selectedId = FederationJson.String(meta, "defaultversionid");
+            }
+            var versionXid = selectedResourceXid + "/versions/" + Uri.EscapeDataString(selectedId);
+            var version = await EntityAsync(scope, versionXid).ConfigureAwait(false);
+            if (FederationJson.String(version, "versionid") != selectedId)
+            {
+                throw FederationJson.Invalid("Captured Version metadata disagrees with its Version identity.");
+            }
+            var wotId = resource.Singular is "thingmodel" or "thingdescription"
+                ? FederationJson.String(version, "wotid") : null;
+            if (wotId is not null) { _ = FederationJson.AbsoluteUri(wotId); }
+            if (association.Kind == WotCapturedUriIdentityKind.WotId &&
+                (wotId is null || FederationJson.AbsoluteUri(wotId) != association.Uri || versionId is not null))
+            {
+                throw FederationJson.Invalid("A wotid association must identify its captured WoT Resource and applicable wotid.");
+            }
+            identities.Add(new(association.Uri, association.Kind,
+                new(association.Source, groupXid, collectionXid, resourceXid, resource.Singular, wotId, versionId)));
+        }
+
+        foreach (var scope in reads.Values)
+        {
+            readBudget.ChargeWork();
+            scope.Check();
+        }
+        foreach (var ((scope, xid), retained) in metadata)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            readBudget.ChargeWork();
+            if (scope.Context.IsImmutable) { continue; }
+            var envelope = await scope.MetadataAsync(new(FederationOperation.Entity, xid)).ConfigureAwait(false);
+            var entity = envelope.TryGetProperty("entity", out var value) ? value : envelope;
+            if (!EqualJson(retained, entity, readBudget, cancellationToken))
+            {
+                throw new FederationException(FederationErrorCode.InconsistentSnapshot,
+                    "URI identity metadata changed during capture.");
+            }
+        }
+        var result = new WotCapturedUriIdentityIndex(identities, readBudget, cancellationToken);
+        foreach (var scope in reads.Values) { scope.Check(); }
+        return result;
+    }
 
     /// <summary>Captures the URI identities supplied by the already selected Registry views.</summary>
     public WotCapturedUriIdentityIndex(IEnumerable<WotCapturedUriIdentity> identities,

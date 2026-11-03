@@ -230,6 +230,339 @@ public class WotRegistryResolverTests
     }
 
     [Test]
+    public async Task CapturedAssociationsDeriveResourceKindAndIdentityFromModelAndDefaultMetadata()
+    {
+        var source = new Source();
+        var index = await WotCapturedUriIdentityIndex.CaptureAsync(
+        [
+            new(source, new Uri(Source.Identity), WotCapturedUriIdentityKind.WotId, source.Resource),
+            new(source, new Uri("https://example.test/model.json"), WotCapturedUriIdentityKind.DocumentView, source.Resource)
+        ]);
+        var target = index.Resolve(new Uri(Source.Identity));
+        var byView = index.Resolve(new Uri("https://example.test/model.json"));
+
+        await Assert.That(target.ResourceKind).IsEqualTo("thingmodel");
+        await Assert.That(target.WotId).IsEqualTo(Source.Identity);
+        await Assert.That(target.GroupXid).IsEqualTo("/thingmodelgroups/tenant");
+        await Assert.That(target.ResourceCollection).IsEqualTo(source.Collection);
+        await Assert.That(target.ResourceXid).IsEqualTo(source.Resource);
+        await Assert.That(target.VersionId).IsNull();
+        await Assert.That(byView).IsEqualTo(target);
+        await Assert.That(source.Reads.Count).IsEqualTo(4);
+        await Assert.That(source.Reads.All(read => read.Operation == FederationOperation.Entity)).IsTrue();
+        await Assert.That(source.Reads.Count(read => read.Target == source.Resource + "/meta")).IsEqualTo(2);
+        await Assert.That(source.Reads.Count(read => read.Target == source.Resource + "/versions/1.0.0")).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task CapturedExactVersionAssociationDoesNotReadOrRequireAResourceDefault()
+    {
+        var source = new Source { Context = new("test", "urn:test:authorized", "revision", true) };
+        source.Change = (request, _) =>
+        {
+            if (!request.Target.EndsWith("/versions/2.0.0", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("An exact association must not inspect a Resource default.");
+            }
+        };
+        var uri = new Uri("https://example.test/model-2.json");
+        var index = await WotCapturedUriIdentityIndex.CaptureAsync(
+        [
+            new(source, uri, WotCapturedUriIdentityKind.DocumentBase, source.Resource + "/versions/2.0.0")
+        ]);
+        var target = index.Resolve(uri);
+
+        await Assert.That(target.VersionId).IsEqualTo("2.0.0");
+        await Assert.That(target.ResourceKind).IsEqualTo("thingmodel");
+        await Assert.That(target.WotId).IsEqualTo(Source.Identity);
+        await Assert.That(source.Reads.Count).IsEqualTo(1);
+        await Assert.That(source.Reads[0].Operation).IsEqualTo(FederationOperation.Entity);
+    }
+
+    [Test]
+    public async Task CapturedAssociationKindComesFromTheModelRatherThanTheXidOrVersionFields()
+    {
+        var source = new Source
+        {
+            Model = RegistryModel.Compile(RegistryJson.Parse("""
+                {"groups":{"thingmodelgroups":{"singular":"g",
+                "resources":{"thingmodels":{"singular":"schema"}}}}}
+                """))
+        };
+        var uri = new Uri("https://example.test/schema.json");
+        var index = await WotCapturedUriIdentityIndex.CaptureAsync(
+        [
+            new(source, uri, WotCapturedUriIdentityKind.DocumentBase, source.Resource + "/versions/1.0.0")
+        ]);
+        var target = index.Resolve(uri);
+
+        await Assert.That(target.ResourceKind).IsEqualTo("schema");
+        await Assert.That(target.WotId).IsNull();
+        await Assert.That(target.VersionId).IsEqualTo("1.0.0");
+        await Assert.That(source.Reads.All(read => read.Operation == FederationOperation.Entity)).IsTrue();
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task CapturedAssociationsRejectMissingOrDocumentlessModelTypesBeforeReads(bool documentless)
+    {
+        var source = new Source
+        {
+            Model = RegistryModel.Compile(RegistryJson.Parse(documentless
+                ? """{"groups":{"thingmodelgroups":{"singular":"g","resources":{"thingmodels":{"singular":"tm","hasdocument":false}}}}}"""
+                : """{"groups":{}}"""))
+        };
+        var failure = await Assert.That(async () => await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(source, new Uri(Source.Identity), WotCapturedUriIdentityKind.DocumentView, source.Resource)]))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected a model association rejection.");
+
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(source.Reads.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task WotIdAssociationsCannotInventIdentityOrAssignItToAnExactVersion(bool exactVersion)
+    {
+        var source = new Source();
+        var failure = await Assert.That(async () => await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(source, new Uri(exactVersion ? Source.Identity : "urn:test:invented"),
+                WotCapturedUriIdentityKind.WotId, source.Resource + (exactVersion ? "/versions/1.0.0" : ""))]))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected invalid wotid association.");
+
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(source.Reads.All(read => read.Operation == FederationOperation.Entity)).IsTrue();
+    }
+
+    [Test]
+    [Arguments(0)]
+    [Arguments(1)]
+    [Arguments(2)]
+    [Arguments(3)]
+    public async Task CapturedAssociationMetadataMustRetainItsPathVersionAndWotIdentity(int invalid)
+    {
+        var source = new Source();
+        source.Change = (_, metadata) =>
+        {
+            var entity = metadata["entity"]!.AsObject();
+            if (invalid == 0) { entity["xid"] = source.Resource + "/versions/other"; }
+            if (invalid == 1) { entity["versionid"] = "other"; }
+            if (invalid == 2) { entity.Remove("wotid"); }
+            if (invalid == 3) { entity["wotid"] = "not an absolute URI"; }
+        };
+        var failure = await Assert.That(async () => await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(source, new Uri(Source.Identity), WotCapturedUriIdentityKind.DocumentView,
+                source.Resource + "/versions/1.0.0")]))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected inconsistent Version metadata.");
+
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(source.Reads.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task CapturedAssociationsRecheckMutableMetadataWithoutSelectingANewerDefault()
+    {
+        var source = new Source();
+        var metaReads = 0;
+        source.Change = (request, metadata) =>
+        {
+            if (request.Target == source.Resource + "/meta" && ++metaReads == 2)
+            {
+                metadata["entity"]!["defaultversionid"] = "2.0.0";
+            }
+        };
+        var failure = await Assert.That(async () => await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(source, new Uri(Source.Identity), WotCapturedUriIdentityKind.WotId, source.Resource)]))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected changed capture rejection.");
+
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InconsistentSnapshot);
+        await Assert.That(source.Reads.Count).IsEqualTo(3);
+        await Assert.That(source.Reads.Any(read => read.Target.EndsWith("/versions/2.0.0", StringComparison.Ordinal))).IsFalse();
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task CapturedAssociationReadsPropagateCancellationAndSourceErrors(bool cancel)
+    {
+        var source = new Source();
+        using var cancellation = new CancellationTokenSource();
+        source.AfterRead = () =>
+        {
+            if (cancel) { cancellation.Cancel(); }
+        };
+        source.Change = (_, _) =>
+        {
+            if (!cancel) { throw new FederationException(FederationErrorCode.PolicyDenied, "Selected capture denied."); }
+        };
+        WotCapturedUriAssociation[] associations =
+            [new(source, new Uri(Source.Identity), WotCapturedUriIdentityKind.WotId, source.Resource)];
+        if (cancel)
+        {
+            await Assert.That(async () => await WotCapturedUriIdentityIndex.CaptureAsync(
+                associations, cancellationToken: cancellation.Token)).Throws<OperationCanceledException>();
+        }
+        else
+        {
+            var failure = await Assert.That(async () => await WotCapturedUriIdentityIndex.CaptureAsync(associations))
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected original capture error.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.PolicyDenied);
+        }
+        await Assert.That(source.Reads.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task CapturedResourceAliasUsesItsSameTypedCapturedTargetAndRetainsAliasIdentity()
+    {
+        var source = new Source();
+        var target = source.Collection + "/target";
+        source.Change = (request, metadata) =>
+        {
+            if (request.Target == source.Resource + "/meta")
+            {
+                var meta = metadata["entity"]!.AsObject();
+                meta["xref"] = target;
+                meta.Remove("defaultversionid");
+            }
+        };
+        var index = await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(source, new Uri(Source.Identity), WotCapturedUriIdentityKind.WotId, source.Resource)]);
+        var identity = index.Resolve(new Uri(Source.Identity));
+
+        await Assert.That(identity.ResourceXid).IsEqualTo(source.Resource);
+        await Assert.That(identity.WotId).IsEqualTo(Source.Identity);
+        await Assert.That(identity.VersionId).IsNull();
+        await Assert.That(source.Reads.Count(read => read.Target == source.Resource + "/meta")).IsEqualTo(2);
+        await Assert.That(source.Reads.Count(read => read.Target == target + "/meta")).IsEqualTo(2);
+        await Assert.That(source.Reads.Count(read => read.Target == target + "/versions/1.0.0")).IsEqualTo(2);
+        await Assert.That(source.Reads.Any(read => read.Target == source.Resource + "/versions/1.0.0")).IsFalse();
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task CapturedResourceAliasRejectsDifferentTypesAndSecondHopsWithoutDocumentReads(bool secondHop)
+    {
+        var source = new Source();
+        var target = source.Collection + "/target";
+        source.Change = (request, metadata) =>
+        {
+            if (request.Target == source.Resource + "/meta")
+            {
+                metadata["entity"]!["xref"] = secondHop ? target
+                    : "/thingdescriptiongroups/tenant/thingdescriptions/other";
+            }
+            if (request.Target == target + "/meta") { metadata["entity"]!["xref"] = source.Resource; }
+        };
+        var failure = await Assert.That(async () => await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(source, new Uri(Source.Identity), WotCapturedUriIdentityKind.WotId, source.Resource)]))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected invalid alias capture.");
+
+        await Assert.That(failure.Code).IsEqualTo(secondHop
+            ? FederationErrorCode.UnsupportedOperation : FederationErrorCode.InvalidPackage);
+        await Assert.That(source.Reads.Count).IsEqualTo(secondHop ? 2 : 1);
+        await Assert.That(source.Reads.All(read => read.Operation == FederationOperation.Entity)).IsTrue();
+    }
+
+    [Test]
+    public async Task CapturedAssociationEnumerationIsCancellableEmptyAndNullChecked()
+    {
+        var empty = await WotCapturedUriIdentityIndex.CaptureAsync([]);
+        var absent = await Assert.That(() => empty.Resolve(new Uri(Source.Identity)))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected an empty captured index.");
+        await Assert.That(absent.Code).IsEqualTo(FederationErrorCode.NotFound);
+        await Assert.That(async () => await WotCapturedUriIdentityIndex.CaptureAsync([null!])).Throws<ArgumentException>();
+
+        var source = new Source { Context = new("test", "urn:test:authorized", "revision", true) };
+        using var cancellation = new CancellationTokenSource();
+        IEnumerable<WotCapturedUriAssociation> Associations()
+        {
+            yield return new(source, new Uri(Source.Identity), WotCapturedUriIdentityKind.DocumentView,
+                source.Resource + "/versions/1.0.0");
+            cancellation.Cancel();
+        }
+        await Assert.That(async () => await WotCapturedUriIdentityIndex.CaptureAsync(
+            Associations(), cancellationToken: cancellation.Token)).Throws<OperationCanceledException>();
+        await Assert.That(source.Reads.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    [Arguments(0)]
+    [Arguments(1)]
+    [Arguments(2)]
+    public async Task CapturedAssociationBuilderRejectsSourceEvidenceDriftOnTheFirstRead(int changed)
+    {
+        var source = new Source();
+        source.AfterRead = () =>
+        {
+            if (changed == 0) { source.Context = new("test", "urn:test:changed"); }
+            if (changed == 1) { source.Model = LoadModel(); }
+            if (changed == 2) { source.Capabilities = RegistryJson.Parse("""{"federation":{"resolution":"producer"}}""").RootElement; }
+        };
+        var failure = await Assert.That(async () => await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(source, new Uri(Source.Identity), WotCapturedUriIdentityKind.WotId, source.Resource)]))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected changed capture evidence.");
+
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InconsistentSnapshot);
+        await Assert.That(source.Reads.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task CapturedAssociationBuilderRequiresACapturedModelAndRejectsEnumerationWorkExhaustion()
+    {
+        var source = new Source { Model = null };
+        var failure = await Assert.That(async () => await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(source, new Uri(Source.Identity), WotCapturedUriIdentityKind.WotId, source.Resource)]))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected missing captured model.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.UnsupportedOperation);
+        await Assert.That(source.Reads.Count).IsEqualTo(0);
+
+        source = new Source();
+        var budget = new FederationReadBudget(new(maxWork: 1));
+        budget.ChargeWork();
+        failure = await Assert.That(async () => await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(source, new Uri(Source.Identity), WotCapturedUriIdentityKind.WotId, source.Resource)], budget))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected enumeration work exhaustion.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        await Assert.That(source.Reads.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task CapturedAssociationReadsShareRequestWorkAndSourceLimits()
+    {
+        var source = new Source();
+        var budget = new FederationReadBudget(new(maxRequests: 1));
+        var failure = await Assert.That(async () => await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(source, new Uri(Source.Identity), WotCapturedUriIdentityKind.WotId, source.Resource)], budget))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected cumulative request exhaustion.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        await Assert.That(source.Reads.Count).IsEqualTo(1);
+        await Assert.That(budget.Requests).IsEqualTo(1);
+
+        var other = new Source();
+        budget = new(new(maxSources: 1));
+        budget.ChargeSource();
+        failure = await Assert.That(async () => await WotCapturedUriIdentityIndex.CaptureAsync(
+            [new(other, new Uri(Source.Identity), WotCapturedUriIdentityKind.WotId, other.Resource)], budget))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected cumulative source exhaustion.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        await Assert.That(other.Reads.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("/thingmodelgroups/tenant/meta")]
+    [Arguments("/thingmodelgroups/tenant/thingmodels")]
+    [Arguments("/thingmodelgroups/tenant/thingmodels/assigned$details")]
+    [Arguments("/thingmodelgroups/tenant/thingmodels/assigned/meta")]
+    public async Task CapturedAssociationRejectsNonDocumentScopes(string target)
+    {
+        await Assert.That(() => new WotCapturedUriAssociation(new Source(), new Uri(Source.Identity),
+            WotCapturedUriIdentityKind.DocumentView, target)).Throws<ArgumentException>();
+    }
+
+    [Test]
     [Arguments(0)]
     [Arguments(1)]
     [Arguments(2)]
