@@ -122,11 +122,13 @@ internal static class FederationJson
 
     internal static void UriReference(string value)
     {
-        if (!Uri.IsWellFormedUriString(value, UriKind.RelativeOrAbsolute))
+        var absolute = Uri.TryCreate(value, UriKind.Absolute, out _);
+        var candidate = absolute ? value : "https://wot.invalid/" + value;
+        if (!Uri.IsWellFormedUriString(candidate, UriKind.Absolute))
         {
             throw Invalid("Invalid URI reference.");
         }
-        if (Uri.TryCreate(value, UriKind.Absolute, out _))
+        if (absolute)
         {
             AbsoluteUri(value);
         }
