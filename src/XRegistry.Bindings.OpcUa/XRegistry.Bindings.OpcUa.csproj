@@ -7,6 +7,9 @@
     <PackageId>XRegistry.Bindings.OpcUa</PackageId>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="XRegistry.OpcUa.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="OPCFoundation.NetStandard.Opc.Ua.Client" />
     <ProjectReference Include="..\XRegistry.Federation\XRegistry.Federation.csproj" />
   </ItemGroup>

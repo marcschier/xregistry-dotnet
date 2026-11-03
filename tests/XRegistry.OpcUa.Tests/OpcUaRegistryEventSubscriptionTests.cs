@@ -58,6 +58,23 @@ public class OpcUaRegistryEventSubscriptionTests
     }
 
     [Test]
+    public async Task DiscoveryRejectsNamespaceMappingsFromAnotherSessionBeforeReading()
+    {
+        var session = CreateSession();
+        var proxy = (SessionProxy)(object)session;
+        proxy.TypeDefinition = s_registryType;
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await OpcUaRegistryEventSubscription.DiscoverEventTypesForSessionAsync(
+                session, s_namespaceUris, s_notifier, new NodeId(2u)));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.Unavailable);
+        await Assert.That(error.Message).IsEqualTo("The OPC UA Session changed during event-type discovery.");
+        await Assert.That(proxy.ReadCount).IsEqualTo(0);
+        await Assert.That(proxy.BrowseRequests.Count).IsEqualTo(0);
+    }
+
+    [Test]
     [Arguments("read")]
     [Arguments("browse")]
     [Arguments("next")]

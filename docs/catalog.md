@@ -370,6 +370,10 @@ notifier budget by staying within the depth limit. Budget exhaustion reports
 `limit_exceeded`, releases any outstanding continuation and retains release
 failures on the original error. `DiscoverEventTypesAsync` accepts caller limits;
 Subscription creation uses the defaults.
+`CreateAsync` pins the Session identity before reading `NamespaceArray` and uses
+that identity through event discovery. A changed Session is rejected before
+Subscription registration; discovery does not apply the previous Session's
+namespace mappings to the replacement Session.
 
 The reader, writer and read source have fake-Session coverage. An in-process
 OPC UA Stack server also verifies Session establishment, SpecVersion gating,

@@ -79,6 +79,16 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(session);
+        return await DiscoverEventTypesForSessionAsync(session, namespaceUris, notifier, session.SessionId,
+            maxBrowsePages, maxReferences, maxNotifiers, cancellationToken).ConfigureAwait(false);
+    }
+
+    internal static async ValueTask<IReadOnlyDictionary<NodeId, string>> DiscoverEventTypesForSessionAsync(
+        ISessionClient session, NamespaceTable namespaceUris, NodeId notifier, NodeId expectedSession,
+        int maxBrowsePages = 10_000, int maxReferences = 1_000_000, int maxNotifiers = 10_000,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(namespaceUris);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxBrowsePages);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxReferences);
@@ -88,7 +98,7 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
             throw new ArgumentException("A notifier NodeId is required.", nameof(notifier));
         }
         _ = ToLocalNodeId(namespaceUris, new ExpandedNodeId(notifier));
-        var expectedSession = session.SessionId;
+        RequireSession(session, expectedSession);
         var budget = new DiscoveryBudget(maxBrowsePages, maxReferences, maxNotifiers);
 
         var rootSupportsEvents =
@@ -243,11 +253,14 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
         OpcUaSessionConnection connection, NodeId notifier, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(connection);
+        var expectedSession = connection.Session.SessionId;
         var namespaceUris = await connection.Adapter.ReadNamespaceArrayAsync(cancellationToken)
             .ConfigureAwait(false);
-        var eventTypes = await DiscoverEventTypesAsync(connection.Session, namespaceUris, notifier,
-            cancellationToken: cancellationToken)
+        RequireSession(connection.Session, expectedSession);
+        var eventTypes = await DiscoverEventTypesForSessionAsync(connection.Session, namespaceUris, notifier,
+            expectedSession, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
+        RequireSession(connection.Session, expectedSession);
         var decoder = new OpcUaRegistryEventDecoder(eventTypes);
         var eventNamespace = eventTypes.Keys.Select(static node => node.NamespaceIndex).Distinct().ToArray();
         if (eventNamespace.Length != 1)
@@ -266,6 +279,7 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
         });
         var result = new OpcUaRegistryEventSubscription(connection.Session, subscription, monitoredItem, decoder);
         subscription.AddItem(monitoredItem);
+        RequireSession(connection.Session, expectedSession);
         if (!connection.Session.AddSubscription(subscription))
         {
             monitoredItem.Notification -= result.OnNotification;
