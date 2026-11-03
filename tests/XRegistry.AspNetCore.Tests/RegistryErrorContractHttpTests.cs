@@ -25,7 +25,10 @@ public class RegistryErrorContractHttpTests
 
         const string resourcePath = "/registry/thingmodelgroups/g/thingmodels/t";
         const string document = """
-            {"id":"urn:example:tm-url","version":{"model":"1.2.3"},
+            {"@context":["https://www.w3.org/2022/wot/td/v1.1",
+              {"tm":"https://www.w3.org/2019/wot/tm#"}],
+             "@type":"tm:ThingModel","id":"urn:example:tm-url","title":"URL test",
+             "version":{"model":"1.2.3"},
              "links":[{"rel":"tm:extends","href":"https://missing.example/models/base"}]}
             """;
         using var create = new HttpRequestMessage(HttpMethod.Put, resourcePath)
@@ -37,13 +40,20 @@ public class RegistryErrorContractHttpTests
         await Assert.That(created.StatusCode).IsEqualTo(HttpStatusCode.Created)
             .Because(await created.Content.ReadAsStringAsync());
 
-        using var metadataResponse = await host.Client.GetAsync(resourcePath + "$details");
+        const string versionPath = resourcePath + "/versions/1.2.3";
+        using var metadataResponse = await host.Client.GetAsync(versionPath + "$details");
         await Assert.That(metadataResponse.StatusCode).IsEqualTo(HttpStatusCode.OK);
         var metadata = RegistryJson.Parse(await metadataResponse.Content.ReadAsByteArrayAsync()).RootElement;
         var self = new Uri(metadata.GetProperty("self").GetString()!);
         var shortSelf = new Uri(metadata.GetProperty("shortself").GetString()!);
-        await Assert.That(self.AbsolutePath.EndsWith("$details", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(metadata.GetProperty("versionid").GetString()).IsEqualTo("1.2.3");
+        await Assert.That(self.AbsolutePath.EndsWith("/versions/1.2.3$details", StringComparison.Ordinal)).IsTrue();
         await Assert.That(shortSelf.AbsolutePath.Contains('$', StringComparison.Ordinal)).IsFalse();
+
+        using var metadataBySelf = await host.Client.GetAsync(self.AbsolutePath);
+        await Assert.That(metadataBySelf.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        var metadataBySelfBody = RegistryJson.Parse(await metadataBySelf.Content.ReadAsByteArrayAsync()).RootElement;
+        await Assert.That(metadataBySelfBody.GetProperty("versionid").GetString()).IsEqualTo("1.2.3");
 
         using var documentBySelf = await host.Client.GetAsync(self.AbsolutePath[..^"$details".Length]);
         using var documentByShortSelf = await host.Client.GetAsync(shortSelf.AbsolutePath);

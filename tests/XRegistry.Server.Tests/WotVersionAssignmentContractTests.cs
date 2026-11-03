@@ -265,16 +265,43 @@ public class WotVersionAssignmentContractTests
     {
         var fixture = CreateWotFixture();
         var resourcePath = fixture.ResourcePath(kind, "unresolved-reference");
-        const string document = """
-            {"id":"urn:example:unresolved-reference","links":[
-              {"rel":"tm:extends","href":"https://missing.example/models/base"}
-            ]}
+        var document = kind == "thingmodel" ? """
+            {"@context":["https://www.w3.org/2022/wot/td/v1.1",
+              {"tm":"https://www.w3.org/2019/wot/tm#"}],
+             "@type":"tm:ThingModel","id":"urn:example:unresolved-reference","title":"Unresolved reference",
+             "links":[{"rel":"tm:extends","href":"https://missing.example/models/base"}]}
+            """ : """
+            {"@context":"https://www.w3.org/2022/wot/td/v1.1",
+             "@type":"Thing","id":"urn:example:unresolved-reference","title":"Unresolved reference",
+             "links":[{"rel":"type","href":"https://missing.example/models/base",
+               "type":"application/tm+json"}]}
             """;
 
         await ExecuteDocumentAsync(fixture.Engine, RegistryAction.Replace, resourcePath, document, "{}");
 
         await AssertStoredAssignmentAsync(fixture.Engine, resourcePath, "0.0.0-1", "generated",
             "urn:example:unresolved-reference", document);
+    }
+
+    [Test]
+    public async Task GroupScopedWotIdQueryReturnsOnlyTheMatchingThingModel()
+    {
+        var fixture = CreateWotFixture();
+        await ExecuteDocumentAsync(fixture.Engine, RegistryAction.Replace,
+            fixture.ResourcePath("thingmodel", "matching"),
+            """{"id":"urn:example:matching"}""", "{}");
+        await ExecuteDocumentAsync(fixture.Engine, RegistryAction.Replace,
+            fixture.ResourcePath("thingmodel", "other"),
+            """{"id":"urn:example:other"}""", "{}");
+
+        var result = await Send(fixture.Engine, RegistryAction.Read,
+            "/thingmodelgroups/group/thingmodels", null,
+            new KeyValuePair<string, string?>("filter", "wotid=urn:example:matching"));
+
+        await Assert.That(string.Join(',', result.Metadata!.RootElement.EnumerateObject()
+            .Select(static item => item.Name))).IsEqualTo("matching");
+        await Assert.That(result.Metadata.RootElement.GetProperty("matching").GetProperty("wotid").GetString())
+            .IsEqualTo("urn:example:matching");
     }
 
     [Test]
