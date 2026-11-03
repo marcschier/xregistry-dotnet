@@ -2468,6 +2468,18 @@ documents remain unchanged. Shared work limits and cancellation apply.
 Projection requirements and incremental compatibility lines are not accepted by
 this SemVer path. It does not establish transitive closure or offline composition.
 
+`ReadReferenceRequirementsAsync` and `ResolveCapturedDependencyAsync` also
+support the selected incremental-profile design. Captured target models
+establish each dependency's profile; mixed TD type links apply implicit-floor
+and ambiguity rules only to SemVer targets. The deployed `uav:minVersion` term
+normalizes to the target-kind floor, while competing deployed and legacy floor
+members report `invalid-floor`. Incremental targets require an explicit
+`uav:compatibilityLine` and accept an optional numeric floor. Neither the root
+line nor TD version fields supply a dependency requirement. Unknown profiles
+abort selection. Exact-Version URI associations bypass these selectors, but
+still select only retained bytes. Projection requirements, unsupported-selector
+location checks and full closure acceptance remain unfinished.
+
 `WotPublicationClosure.Parse` reads the selected closed representation without
 registering the WoT extension as supported. Entries and binding endpoints must
 be exact Version XIDs. Entry identities are unique, and binding keys combine

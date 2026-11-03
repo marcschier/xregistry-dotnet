@@ -432,10 +432,30 @@ public static class WotRegistryResolver
     /// Resource associations use the captured WoT selection rules. Projection sources and incremental
     /// targets require their respective requirement readers and are not accepted here.
     /// </remarks>
-    public static async ValueTask<WotResolvedFragment> ResolveCapturedSemVerDependencyAsync(
+    public static ValueTask<WotResolvedFragment> ResolveCapturedSemVerDependencyAsync(
         WotResolvedDocument containingRevision, WotAuthoredReferenceOccurrence reference, Uri documentUri,
         IReadOnlyDictionary<Uri, FederationDocument> capturedContexts, WotCapturedUriIdentityIndex capturedIdentities,
-        FederationReadBudget? budget = null, CancellationToken cancellationToken = default)
+        FederationReadBudget? budget = null, CancellationToken cancellationToken = default) =>
+        ResolveCapturedDependencyCoreAsync(containingRevision, reference, documentUri, capturedContexts,
+            capturedIdentities, true, false, budget, cancellationToken);
+
+    /// <summary>Resolves an authored external dependency under its captured SemVer or incremental target profile.</summary>
+    /// <remarks>
+    /// Deployed UAV and legacy floor members are interpreted from captured contexts. Mixed type links
+    /// establish their individual target profiles before SemVer implicit-floor rules apply.
+    /// This does not resolve projection entries or establish transitive publication closure.
+    /// </remarks>
+    public static ValueTask<WotResolvedFragment> ResolveCapturedDependencyAsync(
+        WotResolvedDocument containingRevision, WotAuthoredReferenceOccurrence reference, Uri documentUri,
+        IReadOnlyDictionary<Uri, FederationDocument> capturedContexts, WotCapturedUriIdentityIndex capturedIdentities,
+        bool allowPrerelease = false, FederationReadBudget? budget = null, CancellationToken cancellationToken = default) =>
+        ResolveCapturedDependencyCoreAsync(containingRevision, reference, documentUri, capturedContexts,
+            capturedIdentities, false, allowPrerelease, budget, cancellationToken);
+
+    private static async ValueTask<WotResolvedFragment> ResolveCapturedDependencyCoreAsync(
+        WotResolvedDocument containingRevision, WotAuthoredReferenceOccurrence reference, Uri documentUri,
+        IReadOnlyDictionary<Uri, FederationDocument> capturedContexts, WotCapturedUriIdentityIndex capturedIdentities,
+        bool semVerOnly, bool allowPrerelease, FederationReadBudget? budget, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(containingRevision);
         ArgumentNullException.ThrowIfNull(reference);
@@ -447,19 +467,19 @@ public static class WotRegistryResolver
             : capturedIdentities.ClassifyDependencyLink(reference, containingRevision.Kind, readBudget, cancellationToken);
         if (identity is null || identity.ResourceKind == "schema")
         {
-            throw FederationJson.Invalid("A captured SemVer dependency must be an external WoT reference.");
+            throw FederationJson.Invalid("A captured dependency must be an external WoT reference.");
         }
-        if (identity.Source.Model is not { } targetModel ||
-            WotRegistryProfiles.Read(targetModel) != WotVersionProfile.SemVer)
+        if (semVerOnly && (identity.Source.Model is not { } targetModel ||
+            WotRegistryProfiles.Read(targetModel) != WotVersionProfile.SemVer))
         {
             throw new FederationException(FederationErrorCode.UnsupportedOperation,
                 "The authored SemVer dependency reader requires a captured SemVer target model.");
         }
-        var request = await WotJsonLdBaseResolver.ReadSemVerReferenceRequirementsAsync(containingRevision.Document,
-            documentUri, containingRevision.Kind, new(reference, identity), capturedContexts, readBudget,
-            cancellationToken).ConfigureAwait(false);
+        var request = await WotJsonLdBaseResolver.ReadReferenceRequirementsAsync(containingRevision.Document,
+            documentUri, containingRevision.Kind, new(reference, identity), capturedContexts, capturedIdentities,
+            readBudget, cancellationToken).ConfigureAwait(false);
         return await ResolveCapturedReferenceTargetAsync(containingRevision, reference.Href, reference.Target,
-            capturedIdentities, request, readBudget, cancellationToken).ConfigureAwait(false);
+            capturedIdentities, request with { AllowPrerelease = allowPrerelease }, readBudget, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Resolves a JSON-LD URI-reference through captured Resource identities and contexts.</summary>

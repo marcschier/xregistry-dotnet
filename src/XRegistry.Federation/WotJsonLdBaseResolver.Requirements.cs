@@ -12,13 +12,41 @@ public static partial class WotJsonLdBaseResolver
     /// <remarks>
     /// Member meanings come from captured contexts. A TD type link also carries the authored version.model
     /// and the complete type-link floor inventory. Syntax and floor compatibility are checked by Version
-    /// selection, after its ambiguity rule. Projection requirements and incremental compatibility lines
-    /// are not interpreted by this method. An exact-Version URI association bypasses floor derivation.
+    /// selection, after its ambiguity rule. This entry point assumes a native SemVer type-link inventory;
+    /// use ReadReferenceRequirementsAsync for mixed-profile targets. Deployed line selectors are retained
+    /// for rejection by SemVer selection. An exact-Version URI association bypasses floor derivation.
     /// </remarks>
     public static async ValueTask<WotVersionResolutionRequest> ReadSemVerReferenceRequirementsAsync(
         FederationDocument document, Uri documentUri, WotReferenceTargetKind sourceKind,
         WotCapturedDependencyOccurrence dependency, IReadOnlyDictionary<Uri, FederationDocument> capturedContexts,
         FederationReadBudget? budget = null, CancellationToken cancellationToken = default)
+    {
+        return await ReadReferenceRequirementsCoreAsync(document, documentUri, sourceKind, dependency,
+            capturedContexts, null, true, budget, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Derives deployed and legacy reference requirements using independently captured target profiles.</summary>
+    /// <remarks>
+    /// Incremental references carry only their own explicit line and optional numeric floor.
+    /// Only SemVer-target type links participate in a TD's implicit model floor and ambiguity rule.
+    /// Exact-Version URI associations bypass selection requirements. Projection entries are not accepted.
+    /// </remarks>
+    public static ValueTask<WotVersionResolutionRequest> ReadReferenceRequirementsAsync(
+        FederationDocument document, Uri documentUri, WotReferenceTargetKind sourceKind,
+        WotCapturedDependencyOccurrence dependency, IReadOnlyDictionary<Uri, FederationDocument> capturedContexts,
+        WotCapturedUriIdentityIndex capturedIdentities, FederationReadBudget? budget = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(capturedIdentities);
+        return ReadReferenceRequirementsCoreAsync(document, documentUri, sourceKind, dependency,
+            capturedContexts, capturedIdentities, false, budget, cancellationToken);
+    }
+
+    private static async ValueTask<WotVersionResolutionRequest> ReadReferenceRequirementsCoreAsync(
+        FederationDocument document, Uri documentUri, WotReferenceTargetKind sourceKind,
+        WotCapturedDependencyOccurrence dependency, IReadOnlyDictionary<Uri, FederationDocument> capturedContexts,
+        WotCapturedUriIdentityIndex? capturedIdentities, bool semVerOnly,
+        FederationReadBudget? budget, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(documentUri);
@@ -45,6 +73,20 @@ public static partial class WotJsonLdBaseResolver
             dependency.Target.WotId is null)
         {
             throw FederationJson.Invalid("The authored operator and captured target kind disagree.");
+        }
+        WotCapturedResourceIdentity? Classify(WotCapturedUriIdentityIndex index, WotAuthoredReferenceOccurrence occurrence) =>
+            occurrence.Operator is "tm:ref" or "td:ref"
+                ? index.ClassifyOrdinaryReference(occurrence, readBudget, cancellationToken)
+                : index.ClassifyDependencyLink(occurrence, sourceKind, readBudget, cancellationToken);
+        if (capturedIdentities is not null && Classify(capturedIdentities, reference) != dependency.Target)
+        {
+            throw FederationJson.Invalid("The supplied dependency target does not match the captured URI inventory.");
+        }
+        var profile = TargetProfile(dependency.Target);
+        if (semVerOnly && profile != WotVersionProfile.SemVer)
+        {
+            throw new FederationException(FederationErrorCode.UnsupportedOperation,
+                "The SemVer requirement reader does not accept an incremental target.");
         }
         var authoredReferences = reference.Operator is "tm:ref" or "td:ref"
             ? await DiscoverOrdinaryReferencesAsync(document, documentUri, contexts, readBudget, cancellationToken).ConfigureAwait(false)
@@ -84,6 +126,11 @@ public static partial class WotJsonLdBaseResolver
                 {
                     floors.Add((WotMinimumVersionKind.ThingDescription, member.Value));
                 }
+                else if (iri == "http://opcfoundation.org/UA/WoT-Binding/minVersion")
+                {
+                    floors.Add((targetKind == WotReferenceTargetKind.ThingModel
+                        ? WotMinimumVersionKind.ThingModel : WotMinimumVersionKind.ThingDescription, member.Value));
+                }
             }
             return floors;
         }
@@ -95,24 +142,39 @@ public static partial class WotJsonLdBaseResolver
         if (operation == WotReferenceOperator.ThingModelTypeLink)
         {
             JToken? authoredModel = null;
-            if (root["version"] is JObject version && version.TryGetValue("model", out var model))
+            if (profile == WotVersionProfile.SemVer &&
+                root["version"] is JObject version && version.TryGetValue("model", out var model))
             {
                 authoredModel = model;
             }
             var links = await DiscoverLinkReferencesAsync(document, documentUri, sourceKind, contexts,
                 readBudget, cancellationToken).ConfigureAwait(false);
             typeLinkCount = 0;
+            var semVerLinks = new List<WotAuthoredReferenceOccurrence>();
             foreach (var link in links)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 readBudget.ChargeWork();
                 if (link.Operator != "type") { continue; }
+                if (capturedIdentities is not null)
+                {
+                    var target = Classify(capturedIdentities, link) ??
+                        throw FederationJson.Invalid("A TD type link cannot identify its containing TD as a Thing Model.");
+                    if (TargetProfile(target) != WotVersionProfile.SemVer) { continue; }
+                }
+                semVerLinks.Add(link);
+            }
+            foreach (var link in semVerLinks)
+            {
                 typeLinkCount++;
                 var floors = link.SourcePointer == reference.SourcePointer
                     ? selectedFloors : await FloorsAsync(link.SourcePointer).ConfigureAwait(false);
                 allTypeLinksHaveFloor &= floors.Any(floor => floor.Kind == WotMinimumVersionKind.ThingModel);
             }
-            if (typeLinkCount == 0) { throw FederationJson.Invalid("The supplied occurrence is not an authored TD type link."); }
+            if (profile == WotVersionProfile.SemVer && typeLinkCount == 0)
+            {
+                throw FederationJson.Invalid("The supplied occurrence is not an authored SemVer TD type link.");
+            }
             if (authoredModel is not null && typeLinkCount > 1 && !allTypeLinksHaveFloor)
             {
                 throw new RegistryException(new("ambiguous-floor", reference.SourcePointer,
@@ -146,8 +208,31 @@ public static partial class WotJsonLdBaseResolver
             }
             minimum = floor.Value.Value<string>()!;
         }
+        string? compatibilityLine = null;
+        var lineCount = 0;
+        foreach (var member in occurrence.Properties())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            readBudget.ChargeWork();
+            if (member.Name.StartsWith('@')) { continue; }
+            var iri = await ExpandMemberIriAsync(document, reference.SourcePointer, member.Name, documentUri,
+                contexts, readBudget, cancellationToken).ConfigureAwait(false);
+            if (iri != "http://opcfoundation.org/UA/WoT-Binding/compatibilityLine") { continue; }
+            lineCount++;
+            if (lineCount > 1 || member.Value.Type != JTokenType.String)
+            {
+                throw new RegistryException(new("invalid-line", reference.SourcePointer,
+                    "One reference can carry only one string-valued target compatibility line."));
+            }
+            compatibilityLine = member.Value.Value<string>()!;
+        }
         cancellationToken.ThrowIfCancellationRequested();
         return new(dependency.Target.WotId, targetKind, operation, minimum, minimumKind, implicitFloor,
-            typeLinkCount, allTypeLinksHaveFloor);
+            typeLinkCount, allTypeLinksHaveFloor) { CompatibilityLine = compatibilityLine };
     }
+
+    private static WotVersionProfile TargetProfile(WotCapturedResourceIdentity identity) =>
+        identity.Source.Model is { } model ? WotRegistryProfiles.Read(model) :
+            throw new RegistryException(new("unknown-profile", "",
+                "Reference requirements need an available captured target profile."));
 }

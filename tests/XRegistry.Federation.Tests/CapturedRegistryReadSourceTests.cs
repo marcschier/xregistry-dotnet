@@ -15,6 +15,264 @@ namespace XRegistry.Federation.Tests;
 public class CapturedRegistryReadSourceTests
 {
     [Test]
+    [Arguments(false, "urn:test:line:a", "\"42\"", "43", null)]
+    [Arguments(false, "urn:test:line:a", null, "43", null)]
+    [Arguments(false, "urn:test:line:b", null, "45", null)]
+    [Arguments(false, "urn:test:line:a", "\"44\"", null, "unsatisfied")]
+    [Arguments(true, "urn:test:line:a", "\"42\"", null, "unsatisfied")]
+    [Arguments(true, "urn:test:line:b", null, null, "unsatisfied")]
+    [Arguments(false, null, "\"42\"", null, "compatibility-required")]
+    [Arguments(false, null, null, null, "compatibility-required")]
+    [Arguments(false, "relative", null, null, "invalid-line")]
+    [Arguments(false, "urn:test:line:a", "\"1.0.0\"", null, "invalid-version")]
+    public async Task IncrementalCapturedDependencyUsesExplicitLineAndNumericFloor(
+        bool sticky, string? line, string? floor, string? expectedVersion, string? expectedError)
+    {
+        var fixture = IncrementalFixture();
+        fixture.Root["sets"]!["team"]!["things"]!["a"]!["meta"]!["defaultversionsticky"] = sticky;
+        var target = fixture.Open(context: new("incremental", "urn:test:incremental", "captured", true));
+        var owner = new Fixture();
+        var authored = await RequirementDocument("""{"a":{"tm:ref":"urn:inventory:incremental"}}""", "[]");
+        authored["id"] = Fixture.WotId;
+        authored["version"] = JsonNode.Parse("""{"model":"1.0.0","instance":"999.0.0"}""");
+        authored["uav:compatibilityLine"] = "urn:never:inherit";
+        var occurrence = authored["properties"]!["a"]!;
+        if (line is not null) { occurrence["uav:compatibilityLine"] = line; }
+        if (floor is not null) { occurrence["uav:minVersion"] = JsonNode.Parse(floor); }
+        owner.Documents[Fixture.Resource + "/versions/1.0.0"] = new(Encoding.UTF8.GetBytes(authored.ToJsonString()));
+        var source = owner.Open();
+        var containing = await WotRegistryResolver.ResolveAsync(source, Fixture.Collection,
+            new(Fixture.WotId, WotReferenceTargetKind.ThingModel, WotReferenceOperator.ThingModel, VersionIdPin: "1.0.0"));
+        var identity = new WotCapturedResourceIdentity(target, "/sets/team", Fixture.Collection, Fixture.Resource,
+            "thingmodel", Fixture.WotId);
+        var index = new WotCapturedUriIdentityIndex([new(new("urn:inventory:incremental"),
+            WotCapturedUriIdentityKind.WotId, identity)]);
+        var uri = new Uri("https://example.test/entry.json");
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var dependency = (await WotJsonLdBaseResolver.DiscoverCapturedReferenceInventoryAsync(containing.Document,
+            uri, containing.Kind, contexts, index)).Dependencies.Single();
+        if (expectedError is not null)
+        {
+            var failure = await Assert.That(async () => await WotRegistryResolver.ResolveCapturedDependencyAsync(
+                containing, dependency.Reference, uri, contexts, index)).Throws<RegistryException>() ??
+                throw new InvalidOperationException("Expected explicit incremental requirement failure.");
+            await Assert.That(failure.Diagnostic.Code).IsEqualTo(expectedError);
+        }
+        else
+        {
+            var result = await WotRegistryResolver.ResolveCapturedDependencyAsync(containing, dependency.Reference,
+                uri, contexts, index);
+            await Assert.That(result.ContainingDocument.Version.VersionId).IsEqualTo(expectedVersion);
+            await Assert.That(result.ContainingDocument.Version.Profile).IsEqualTo(WotVersionProfile.Incremental);
+            await Assert.That(result.ContainingDocument.Version.CompatibilityLine).IsEqualTo(line);
+            var bytes = await Bytes(fixture.Documents[Fixture.Resource + "/versions/" + expectedVersion]);
+            await Assert.That(result.ContainingDocument.Version.ContentDigest).IsEqualTo("sha256:" + Digest(bytes));
+        }
+        await Assert.That(containing.Version.VersionId).IsEqualTo("1.0.0");
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task MixedTypeLinkRequirementsApplyImplicitRulesOnlyToSemVerTargets(bool additionalSemVer)
+    {
+        var semVer = new Fixture().Open();
+        var incremental = IncrementalFixture().Open(context: new("incremental", "urn:test:incremental", "captured", true));
+        var index = new WotCapturedUriIdentityIndex([
+            new(new("urn:inventory:tm"), WotCapturedUriIdentityKind.WotId,
+                new(semVer, "/sets/team", Fixture.Collection, Fixture.Resource, "thingmodel", Fixture.WotId)),
+            new(new("urn:inventory:incremental"), WotCapturedUriIdentityKind.WotId,
+                new(incremental, "/sets/team", Fixture.Collection, Fixture.Resource, "thingmodel", Fixture.WotId))
+        ]);
+        var root = await RequirementDocument("{}", """
+            [{"rel":"type","href":"urn:inventory:tm"},
+             {"rel":"type","href":"urn:inventory:incremental","uav:compatibilityLine":"urn:test:line:a"}]
+            """);
+        if (additionalSemVer)
+        {
+            root["links"]!.AsArray().Add(JsonNode.Parse("""{"rel":"type","href":"urn:inventory:tm","uav:minVersion":"1.0.0"}"""));
+        }
+        root["version"] = JsonNode.Parse("""{"model":"1.5.0"}""");
+        var document = new FederationDocument(Encoding.UTF8.GetBytes(root.ToJsonString()));
+        var uri = new Uri("https://example.test/entry.json");
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var dependencies = (await WotJsonLdBaseResolver.DiscoverCapturedReferenceInventoryAsync(document, uri,
+            WotReferenceTargetKind.ThingDescription, contexts, index)).Dependencies;
+        var numeric = await WotJsonLdBaseResolver.ReadReferenceRequirementsAsync(document, uri,
+            WotReferenceTargetKind.ThingDescription, dependencies[1], contexts, index);
+        await Assert.That(numeric.MinimumVersion).IsNull();
+        await Assert.That(numeric.ReferencingThingDescriptionModelVersion).IsNull();
+        await Assert.That(numeric.CompatibilityLine).IsEqualTo("urn:test:line:a");
+        foreach (var dependency in dependencies.Where(item => item.Reference.Href == "urn:inventory:tm"))
+        {
+            if (additionalSemVer)
+            {
+                var failure = await Assert.That(async () => await WotJsonLdBaseResolver.ReadReferenceRequirementsAsync(
+                    document, uri, WotReferenceTargetKind.ThingDescription, dependency, contexts, index))
+                    .Throws<RegistryException>() ?? throw new InvalidOperationException("Expected SemVer-subset ambiguity.");
+                await Assert.That(failure.Diagnostic.Code).IsEqualTo("ambiguous-floor");
+            }
+            else
+            {
+                var request = await WotJsonLdBaseResolver.ReadReferenceRequirementsAsync(document, uri,
+                    WotReferenceTargetKind.ThingDescription, dependency, contexts, index);
+                await Assert.That(request.ThingModelTypeLinkCount).IsEqualTo(1);
+                await Assert.That(request.ReferencingThingDescriptionModelVersion).IsEqualTo("1.5.0");
+                await Assert.That(request.AllThingModelTypeLinksHaveMinimumVersion).IsFalse();
+                await Assert.That(WotVersionResolver.SelectVersionId(new(Fixture.WotId, WotReferenceTargetKind.ThingModel,
+                    "1.0.0", false, [new("1.0.0", "", ""), new("2.0.0", "", "")]), request)).IsEqualTo("2.0.0");
+            }
+        }
+    }
+
+    [Test]
+    [Arguments("""{"uav:minVersion":"1.0.0"}""", null)]
+    [Arguments("""{"uav:minVersion":"1.0.0","tm:minVersion":"1.0.0"}""", "invalid-floor")]
+    [Arguments("""{"uav:compatibilityLine":"urn:test:line:a"}""", "invalid-line")]
+    [Arguments("""{"uav:compatibilityLine":false}""", "invalid-line")]
+    public async Task ProfileAwareRequirementsNormalizeOrRejectDeployedSelectors(string selectors, string? error)
+    {
+        var root = await RequirementDocument("""{"a":{"tm:ref":"urn:inventory:tm"}}""", "[]");
+        foreach (var member in JsonNode.Parse(selectors)!.AsObject())
+        {
+            root["properties"]!["a"]![member.Key] = member.Value!.DeepClone();
+        }
+        var document = new FederationDocument(Encoding.UTF8.GetBytes(root.ToJsonString()));
+        var uri = new Uri("https://example.test/entry.json");
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var index = InventoryIndex(new Fixture().Open());
+        var dependency = (await WotJsonLdBaseResolver.DiscoverCapturedReferenceInventoryAsync(document, uri,
+            WotReferenceTargetKind.ThingModel, contexts, index)).Dependencies.Single();
+        async Task<string> Select()
+        {
+            var request = await WotJsonLdBaseResolver.ReadReferenceRequirementsAsync(document, uri,
+                WotReferenceTargetKind.ThingModel, dependency, contexts, index);
+            return WotVersionResolver.SelectVersionId(new(Fixture.WotId, WotReferenceTargetKind.ThingModel,
+                "1.0.0", false, [new("1.0.0", "", ""), new("2.0.0", "", "")]), request);
+        }
+        if (error is not null)
+        {
+            var failure = await Assert.That(async () => { _ = await Select(); }).Throws<RegistryException>() ??
+                throw new InvalidOperationException("Expected explicit selector rejection.");
+            await Assert.That(failure.Diagnostic.Code).IsEqualTo(error);
+        }
+        else { await Assert.That(await Select()).IsEqualTo("2.0.0"); }
+    }
+
+    [Test]
+    public async Task MixedTypeLinkRequirementsRejectUnknownOtherProfileBeforeFloorAmbiguity()
+    {
+        var fixture = IncrementalFixture();
+        var model = JsonNode.Parse(fixture.Model.Source.RootElement.GetRawText())!;
+        model["attributes"]!["wotversionprofile"]!["default"] = "future";
+        model["attributes"]!["wotversionprofile"]!["enum"] = new JsonArray("future");
+        fixture.Model = RegistryModel.Compile(RegistryJson.Parse(model.ToJsonString()));
+        fixture.Root["modelsource"] = model;
+        var other = fixture.Open(context: new("unknown", "urn:test:unknown-profile", "captured", true));
+        var source = new Fixture().Open();
+        var index = new WotCapturedUriIdentityIndex([
+            new(new("urn:inventory:tm"), WotCapturedUriIdentityKind.WotId,
+                new(source, "/sets/team", Fixture.Collection, Fixture.Resource, "thingmodel", Fixture.WotId)),
+            new(new("urn:inventory:other"), WotCapturedUriIdentityKind.WotId,
+                new(other, "/sets/team", Fixture.Collection, Fixture.Resource, "thingmodel", Fixture.WotId))
+        ]);
+        var root = await RequirementDocument("{}", """
+            [{"rel":"type","href":"urn:inventory:tm","tm:minVersion":false},
+             {"rel":"type","href":"urn:inventory:other"}]
+            """);
+        root["version"] = JsonNode.Parse("""{"model":false}""");
+        var document = new FederationDocument(Encoding.UTF8.GetBytes(root.ToJsonString()));
+        var uri = new Uri("https://example.test/entry.json");
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var dependency = (await WotJsonLdBaseResolver.DiscoverCapturedReferenceInventoryAsync(document, uri,
+            WotReferenceTargetKind.ThingDescription, contexts, index)).Dependencies[0];
+        var failure = await Assert.That(async () => await WotJsonLdBaseResolver.ReadReferenceRequirementsAsync(document,
+            uri, WotReferenceTargetKind.ThingDescription, dependency, contexts, index)).Throws<RegistryException>() ??
+            throw new InvalidOperationException("Expected discovery of every type link's captured profile.");
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo("unknown-profile");
+    }
+
+    [Test]
+    public async Task ExactIncrementalDependencyBypassesUnusableSelectors()
+    {
+        var source = IncrementalFixture().Open();
+        var index = new WotCapturedUriIdentityIndex([
+            new(new("urn:inventory:exact"), WotCapturedUriIdentityKind.DocumentView,
+                new(source, "/sets/team", Fixture.Collection, Fixture.Resource, "thingmodel", Fixture.WotId, "45"))
+        ]);
+        var root = await RequirementDocument("""
+            {"a":{"tm:ref":"urn:inventory:exact",
+            "uav:minVersion":false,"tm:minVersion":"wrong","uav:compatibilityLine":false}}
+            """, "[]");
+        root["id"] = Fixture.WotId;
+        root["version"] = JsonNode.Parse("""{"model":"1.0.0"}""");
+        var document = new FederationDocument(Encoding.UTF8.GetBytes(root.ToJsonString()));
+        var uri = new Uri("https://example.test/entry.json");
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var dependency = (await WotJsonLdBaseResolver.DiscoverCapturedReferenceInventoryAsync(document, uri,
+            WotReferenceTargetKind.ThingModel, contexts, index)).Dependencies.Single();
+        var request = await WotJsonLdBaseResolver.ReadReferenceRequirementsAsync(document, uri,
+            WotReferenceTargetKind.ThingModel, dependency, contexts, index);
+        await Assert.That(request.MinimumVersion).IsNull();
+        await Assert.That(request.CompatibilityLine).IsNull();
+        await Assert.That(request.VersionIdPin).IsEqualTo("45");
+        var fixture = new Fixture();
+        fixture.Documents[Fixture.Resource + "/versions/1.0.0"] = document;
+        var containing = await WotRegistryResolver.ResolveAsync(fixture.Open(), Fixture.Collection,
+            new(Fixture.WotId, WotReferenceTargetKind.ThingModel, WotReferenceOperator.ThingModel, VersionIdPin: "1.0.0"));
+        var result = await WotRegistryResolver.ResolveCapturedDependencyAsync(containing, dependency.Reference,
+            uri, contexts, index);
+        await Assert.That(result.ContainingDocument.Version.VersionId).IsEqualTo("45");
+        await Assert.That(result.ContainingDocument.Version.CompatibilityLine).IsEqualTo("urn:test:line:b");
+    }
+
+    private static async Task<JsonNode> RequirementDocument(string properties, string links)
+    {
+        var root = JsonNode.Parse(await Bytes(InventoryDocument(properties, links)))!;
+        root["@context"]!["uav"] = "http://opcfoundation.org/UA/WoT-Binding/";
+        return root;
+    }
+
+    private static Fixture IncrementalFixture()
+    {
+        var fixture = new Fixture();
+        var model = JsonNode.Parse(fixture.Model.Source.RootElement.GetRawText())!;
+        model["attributes"] = JsonNode.Parse("""
+            {"wotversionprofile":{"type":"string","required":true,"readonly":true,"strict":true,
+             "enum":["incremental"],"default":"incremental"}}
+            """);
+        var definition = model["groups"]!["sets"]!["resources"]!["things"]!;
+        definition["versionmode"] = "manual";
+        definition["singleversionroot"] = false;
+        definition["attributes"] = JsonNode.Parse("""{"compatibilityline":{"type":"uriabsolute"}}""");
+        fixture.Model = RegistryModel.Compile(RegistryJson.Parse(model.ToJsonString()));
+        fixture.Root["modelsource"] = model;
+        var resource = fixture.Root["sets"]!["team"]!["things"]!["a"]!;
+        var template = resource["versions"]!["1.0.0"]!.DeepClone();
+        resource["versions"] = new JsonObject();
+        resource["versionscount"] = 3;
+        resource["meta"]!["defaultversionid"] = "41";
+        resource["meta"]!["defaultversionurl"] = "#/sets/team/things/a/versions/41";
+        fixture.Documents.Clear();
+        foreach (var id in new[] { "41", "43", "45" })
+        {
+            var version = template.DeepClone();
+            var line = id == "45" ? "urn:test:line:b" : "urn:test:line:a";
+            version["versionid"] = id;
+            version["xid"] = Fixture.Resource + "/versions/" + id;
+            version["self"] = "#/sets/team/things/a/versions/" + id;
+            version["compatibilityline"] = line;
+            resource["versions"]![id] = version;
+            fixture.Documents[Fixture.Resource + "/versions/" + id] = new(Encoding.UTF8.GetBytes(
+                new JsonObject
+                {
+                    ["id"] = Fixture.WotId, ["version"] = new JsonObject { ["model"] = id }
+                }.ToJsonString()));
+        }
+        return fixture;
+    }
+
+    [Test]
     [Arguments(false)]
     [Arguments(true)]
     public async Task AuthoredDependencyResolutionAppliesFloorsWithoutLiveFallbackOrWeakeningStickyDefaults(bool sticky)
@@ -151,39 +409,45 @@ public class CapturedRegistryReadSourceTests
     }
 
     [Test]
-    [Arguments(-1)]
-    [Arguments(0)]
-    [Arguments(1)]
-    public async Task AuthoredRequirementsShareInclusiveWorkAndCancellation(int delta)
+    [Arguments(-1, false)]
+    [Arguments(0, false)]
+    [Arguments(1, false)]
+    [Arguments(-1, true)]
+    [Arguments(0, true)]
+    [Arguments(1, true)]
+    public async Task AuthoredRequirementsShareInclusiveWorkAndCancellation(int delta, bool profileAware)
     {
         var document = InventoryDocument("""{"a":{"tm:ref":"urn:inventory:tm","tm:minVersion":"1.0.0"}}""", "[]");
         var uri = new Uri("https://example.test/entry.json");
         var contexts = new Dictionary<Uri, FederationDocument>();
+        var index = InventoryIndex(new Fixture().Open());
         var dependency = (await WotJsonLdBaseResolver.DiscoverCapturedReferenceInventoryAsync(document, uri,
-            WotReferenceTargetKind.ThingModel, contexts, InventoryIndex(new Fixture().Open()))).Dependencies.Single();
+            WotReferenceTargetKind.ThingModel, contexts, index)).Dependencies.Single();
+        ValueTask<WotVersionResolutionRequest> Read(FederationReadBudget budget, CancellationToken token = default) =>
+            profileAware
+                ? WotJsonLdBaseResolver.ReadReferenceRequirementsAsync(document, uri,
+                    WotReferenceTargetKind.ThingModel, dependency, contexts, index, budget, token)
+                : WotJsonLdBaseResolver.ReadSemVerReferenceRequirementsAsync(document, uri,
+                    WotReferenceTargetKind.ThingModel, dependency, contexts, budget, token);
         var baseline = new FederationReadBudget();
-        _ = await WotJsonLdBaseResolver.ReadSemVerReferenceRequirementsAsync(document, uri,
-            WotReferenceTargetKind.ThingModel, dependency, contexts, baseline);
+        _ = await Read(baseline);
         var budget = new FederationReadBudget(new(maxWork: baseline.Work + delta));
         if (delta < 0)
         {
-            var failure = await Assert.That(async () => await WotJsonLdBaseResolver.ReadSemVerReferenceRequirementsAsync(document,
-                uri, WotReferenceTargetKind.ThingModel, dependency, contexts, budget)).Throws<FederationException>() ??
+            var failure = await Assert.That(async () => await Read(budget)).Throws<FederationException>() ??
                 throw new InvalidOperationException("Expected shared requirement traversal limit.");
             await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
         }
         else
         {
-            var request = await WotJsonLdBaseResolver.ReadSemVerReferenceRequirementsAsync(document, uri,
-                WotReferenceTargetKind.ThingModel, dependency, contexts, budget);
+            var request = await Read(budget);
             await Assert.That(request.MinimumVersion).IsEqualTo("1.0.0");
             await Assert.That(budget.Work).IsEqualTo(baseline.Work);
         }
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
         var canceledBudget = new FederationReadBudget();
-        await Assert.That(async () => await WotJsonLdBaseResolver.ReadSemVerReferenceRequirementsAsync(document, uri,
-            WotReferenceTargetKind.ThingModel, dependency, contexts, canceledBudget, cancellation.Token)).Throws<OperationCanceledException>();
+        await Assert.That(async () => await Read(canceledBudget, cancellation.Token)).Throws<OperationCanceledException>();
         await Assert.That(canceledBudget.Work).IsEqualTo(0L);
     }
 

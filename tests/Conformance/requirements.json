@@ -130739,13 +130739,21 @@
       ],
       "text": "For mixed-profile type links, profile discovery precedes the legacy implicit/ambiguity rules, which apply to the SemVer-target subset. Incremental links retain their own explicit line and OPTIONAL explicit numeric floor. An unknown or unavailable profile causes failure rather than weakening the requirement.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The selected-design request reader independently classifies type-link targets and reads their captured profiles before applying implicit/ambiguity rules to only the SemVer subset. Incremental requests retain only their own explicit line and optional floor; unknown other-link profiles reject before floor ambiguity. Exact-Version associations bypass selectors. Complete syntactic discovery, projection requirements, unsupported selector-location checks and closure integration remain pending.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "CapturedRegistryReadSourceTests.MixedTypeLinkRequirementsApplyImplicitRulesOnlyToSemVerTargets",
+          "CapturedRegistryReadSourceTests.MixedTypeLinkRequirementsRejectUnknownOtherProfileBeforeFloorAmbiguity",
+          "CapturedRegistryReadSourceTests.IncrementalCapturedDependencyUsesExplicitLineAndNumericFloor",
+          "CapturedRegistryReadSourceTests.ProfileAwareRequirementsNormalizeOrRejectDeployedSelectors",
+          "CapturedRegistryReadSourceTests.ExactIncrementalDependencyBypassesUnusableSelectors"
+        ],
         "nativeEvidence": []
       }
     },
