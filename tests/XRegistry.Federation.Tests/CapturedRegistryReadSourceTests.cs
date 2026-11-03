@@ -15,6 +15,321 @@ namespace XRegistry.Federation.Tests;
 public class CapturedRegistryReadSourceTests
 {
     [Test]
+    [Arguments("urn:test:line:a", null, null)]
+    [Arguments("urn:test:line:a", "41", null)]
+    [Arguments("urn:test:line:a", "40", null)]
+    [Arguments("urn:test:line:a", "43", "unsatisfied")]
+    [Arguments("urn:test:line:b", null, "unsatisfied")]
+    [Arguments(null, null, "compatibility-required")]
+    [Arguments(null, "41", "compatibility-required")]
+    [Arguments("urn:test:line:a", "1.0.0", "invalid-version")]
+    public async Task CapturedLocalIncrementalReferencesRequireTheirOwnLineAndUseTheContainingRegistryRevision(
+        string? line, string? floor, string? expected)
+    {
+        var fixture = IncrementalFixture();
+        var root = JsonNode.Parse(await Bytes(InventoryDocument(
+            """{"a":{"tm:ref":"#/properties/value"},"value":{}}""", "[]")))!;
+        root["@context"]!["uav"] = "http://opcfoundation.org/UA/WoT-Binding/";
+        root["id"] = Fixture.WotId;
+        root["uav:compatibilityLine"] = "urn:test:line:a";
+        root["version"] = JsonNode.Parse("""{"model":"999"}""");
+        if (line is not null) { root["properties"]!["a"]!["uav:compatibilityLine"] = line; }
+        if (floor is not null) { root["properties"]!["a"]!["uav:minVersion"] = floor; }
+        fixture.Documents[Fixture.Resource + "/versions/41"] = new(Encoding.UTF8.GetBytes(root.ToJsonString()));
+        var document = await WotRegistryResolver.ResolveAsync(fixture.Open(), Fixture.Collection,
+            new(Fixture.WotId, WotReferenceTargetKind.ThingModel, WotReferenceOperator.ThingModel, VersionIdPin: "41"));
+        var uri = new Uri("https://view.test/local.json");
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var reference = (await WotJsonLdBaseResolver.DiscoverOrdinaryReferencesAsync(document.Document,
+            uri, contexts)).Single();
+        if (expected is not null)
+        {
+            var failure = await Assert.That(async () =>
+            {
+                _ = await WotRegistryResolver.ResolveCapturedLocalReferenceAsync(document, reference, uri, contexts);
+            }).Throws<RegistryException>() ?? throw new InvalidOperationException("Expected explicit local incremental requirements.");
+            await Assert.That(failure.Diagnostic.Code).IsEqualTo(expected);
+        }
+        else
+        {
+            var selected = await WotRegistryResolver.ResolveCapturedLocalReferenceAsync(document, reference, uri, contexts);
+            await Assert.That(ReferenceEquals(selected.ContainingDocument, document)).IsTrue();
+            await Assert.That(selected.ContainingDocument.Version.VersionId).IsEqualTo("41");
+            await Assert.That(selected.ContainingDocument.Version.CompatibilityLine).IsEqualTo("urn:test:line:a");
+        }
+    }
+
+    [Test]
+    public async Task CapturedLocalReferencesTreatReboundFloorNamesAsAnnotations()
+    {
+        var (entry, _) = await DependencyGraphFixture(configureFirst: root =>
+        {
+            root["@context"]!["model"] = "https://www.w3.org/2019/wot/tm#";
+            root["@context"]!["tm"] = "urn:vendor:";
+            root["version"] = new JsonObject();
+            root["properties"] = JsonNode.Parse("""
+                {"a":{"model:ref":"#/properties/value","tm:minVersion":{"vendor":"annotation"}},"value":{}}
+                """);
+        });
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var reference = (await WotJsonLdBaseResolver.DiscoverOrdinaryReferencesAsync(entry.Document.Document,
+            entry.DocumentUri, contexts)).Single();
+        var selected = await WotRegistryResolver.ResolveCapturedLocalReferenceAsync(entry.Document, reference,
+            entry.DocumentUri, contexts);
+        await Assert.That(ReferenceEquals(selected.ContainingDocument, entry.Document)).IsTrue();
+        await Assert.That(selected.Value.ValueKind).IsEqualTo(JsonValueKind.Object);
+    }
+
+    [Test]
+    [Arguments(false, "1.0.0", "1.0.0", null)]
+    [Arguments(false, "2.0.0", "1.0.0", null)]
+    [Arguments(false, "1.0.0", "2.0.0", "unsatisfied")]
+    [Arguments(false, null, "1.0.0", "unsatisfied")]
+    [Arguments(false, "bad", "1.0.0", "invalid-version")]
+    [Arguments(false, "1.0.0", "bad", "invalid-version")]
+    [Arguments(false, null, null, null)]
+    [Arguments(true, "1.2.0", "1.1.0", null)]
+    [Arguments(true, "2.0.0", "1.0.0", "unsatisfied")]
+    [Arguments(true, "1.0.0", "2.0.0", "unsatisfied")]
+    [Arguments(true, null, "1.0.0", "unsatisfied")]
+    [Arguments(true, "bad", "1.0.0", "invalid-version")]
+    [Arguments(true, null, null, null)]
+    public async Task CapturedLocalReferencesUseAuthoredVersionsAndNeverSelectAnotherRevision(
+        bool description, string? authoredVersion, string? floor, string? expectedError)
+    {
+        var (entry, identities) = await DependencyGraphFixture(configureFirst: root =>
+        {
+            root["@context"]!["model"] = "https://www.w3.org/2019/wot/tm#";
+            root["@context"]!["minimum"] = "http://opcfoundation.org/UA/WoT-Binding/minVersion";
+            root["version"] = authoredVersion is null ? new JsonObject() :
+                new JsonObject { [description ? "instance" : "model"] = authoredVersion };
+            root["properties"] = new JsonObject
+            {
+                ["a"] = new JsonObject
+                {
+                    [description ? "td:ref" : "model:ref"] = "#/properties/value",
+                },
+                ["value"] = new JsonObject { ["type"] = "number" }
+            };
+            if (floor is not null) { root["properties"]!["a"]!["minimum"] = floor; }
+        }, description: description);
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var reference = (await WotJsonLdBaseResolver.DiscoverOrdinaryReferencesAsync(entry.Document.Document,
+            entry.DocumentUri, contexts)).Single();
+        if (expectedError is not null)
+        {
+            var failure = await Assert.That(async () =>
+            {
+                _ = await WotRegistryResolver.ResolveCapturedLocalReferenceAsync(entry.Document, reference,
+                    entry.DocumentUri, contexts);
+            }).Throws<RegistryException>() ?? throw new InvalidOperationException("Expected authored local floor enforcement.");
+            await Assert.That(failure.Diagnostic.Code).IsEqualTo(expectedError);
+            var graphFailure = await Assert.That(async () =>
+            {
+                _ = await WotRegistryResolver.CaptureDependencyGraphAsync([entry], contexts, identities);
+            }).Throws<RegistryException>() ?? throw new InvalidOperationException("Expected graph-local requirements.");
+            await Assert.That(graphFailure.Diagnostic.Code).IsEqualTo(expectedError);
+        }
+        else
+        {
+            var selected = await WotRegistryResolver.ResolveCapturedLocalReferenceAsync(entry.Document,
+                reference, entry.DocumentUri, contexts);
+            await Assert.That(ReferenceEquals(selected.ContainingDocument, entry.Document)).IsTrue();
+            await Assert.That(selected.ContainingDocument.Version.VersionId).IsEqualTo("1.0.0");
+            await Assert.That(selected.Value.GetProperty("type").GetString()).IsEqualTo("number");
+            var graph = await WotRegistryResolver.CaptureDependencyGraphAsync([entry], contexts, identities);
+            await Assert.That(graph.Nodes.Count).IsEqualTo(1);
+            await Assert.That(graph.Edges.Count).IsEqualTo(0);
+        }
+    }
+
+    [Test]
+    [Arguments("competing", "invalid-floor")]
+    [Arguments("nonstring", "invalid-version")]
+    [Arguments("wrong-floor-kind", "invalid-floor")]
+    [Arguments("wrong-reference-kind", "invalid-floor")]
+    [Arguments("line", "invalid-line")]
+    [Arguments("authored-kind", "invalid-version")]
+    [Arguments("missing-version", "unsatisfied")]
+    [Arguments("missing-fragment", "not-found")]
+    public async Task CapturedLocalReferencesRejectMalformedOrWrongKindRequirements(string change, string expected)
+    {
+        var (entry, _) = await DependencyGraphFixture(configureFirst: root =>
+        {
+            root["@context"]!["uav"] = "http://opcfoundation.org/UA/WoT-Binding/";
+            root["properties"] = JsonNode.Parse("""{"a":{"tm:ref":"#/properties/value"},"value":{}}""");
+            var occurrence = root["properties"]!["a"]!;
+            if (change == "competing")
+            {
+                occurrence["tm:minVersion"] = "1.0.0";
+                occurrence["uav:minVersion"] = "1.0.0";
+            }
+            if (change == "nonstring") { occurrence["tm:minVersion"] = 1; }
+            if (change == "wrong-floor-kind") { occurrence["td:minVersion"] = "1.0.0"; }
+            if (change == "wrong-reference-kind")
+            {
+                occurrence.AsObject().Remove("tm:ref");
+                occurrence["td:ref"] = "#/properties/value";
+            }
+            if (change == "line") { occurrence["uav:compatibilityLine"] = "other"; }
+            if (change == "authored-kind")
+            {
+                occurrence["tm:minVersion"] = "1.0.0";
+                root["version"]!["model"] = 1;
+            }
+            if (change == "missing-version")
+            {
+                occurrence["tm:minVersion"] = "1.0.0";
+                root.AsObject().Remove("version");
+            }
+            if (change == "missing-fragment") { occurrence["tm:ref"] = "#/properties/missing"; }
+        });
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var reference = (await WotJsonLdBaseResolver.DiscoverOrdinaryReferencesAsync(entry.Document.Document,
+            entry.DocumentUri, contexts)).Single();
+        var failure = await Assert.That(async () =>
+        {
+            _ = await WotRegistryResolver.ResolveCapturedLocalReferenceAsync(entry.Document, reference,
+                entry.DocumentUri, contexts);
+        }).Throws<RegistryException>() ?? throw new InvalidOperationException("Expected local requirement diagnostics.");
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo(expected);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task CapturedLocalReferencesRejectForgedOccurrencesAndExternalTargets(bool external)
+    {
+        var (entry, _) = await DependencyGraphFixture("""{"a":{"tm:ref":"#/properties/a"}}""");
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var reference = (await WotJsonLdBaseResolver.DiscoverOrdinaryReferencesAsync(entry.Document.Document,
+            entry.DocumentUri, contexts)).Single();
+        reference = external ? reference with { Target = reference.Target with { IsDocumentLocal = false } } :
+            reference with { Href = "#/properties/other" };
+        var failure = await Assert.That(async () =>
+        {
+            _ = await WotRegistryResolver.ResolveCapturedLocalReferenceAsync(entry.Document, reference,
+                entry.DocumentUri, contexts);
+        }).Throws<FederationException>() ?? throw new InvalidOperationException("Expected revalidation of captured locality.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    [Arguments(-1)]
+    [Arguments(0)]
+    [Arguments(1)]
+    public async Task CapturedLocalReferencesShareInclusiveWorkAndCancellation(int delta)
+    {
+        var (entry, _) = await DependencyGraphFixture(
+            """{"a":{"tm:ref":"#/properties/value","tm:minVersion":"1.0.0"},"value":{}}""");
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var reference = (await WotJsonLdBaseResolver.DiscoverOrdinaryReferencesAsync(entry.Document.Document,
+            entry.DocumentUri, contexts)).Single();
+        var baseline = new FederationReadBudget();
+        _ = await WotRegistryResolver.ResolveCapturedLocalReferenceAsync(entry.Document, reference,
+            entry.DocumentUri, contexts, baseline);
+        var budget = new FederationReadBudget(new(maxWork: baseline.Work + delta));
+        if (delta < 0)
+        {
+            var failure = await Assert.That(async () =>
+            {
+                _ = await WotRegistryResolver.ResolveCapturedLocalReferenceAsync(entry.Document, reference,
+                    entry.DocumentUri, contexts, budget);
+            }).Throws<FederationException>() ?? throw new InvalidOperationException("Expected shared local work limits.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        }
+        else
+        {
+            var result = await WotRegistryResolver.ResolveCapturedLocalReferenceAsync(entry.Document,
+                reference, entry.DocumentUri, contexts, budget);
+            await Assert.That(ReferenceEquals(result.ContainingDocument, entry.Document)).IsTrue();
+            await Assert.That(budget.Work).IsEqualTo(baseline.Work);
+        }
+        await Assert.That(budget.Requests).IsEqualTo(0);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        await Assert.That(async () =>
+        {
+            _ = await WotRegistryResolver.ResolveCapturedLocalReferenceAsync(entry.Document, reference,
+                entry.DocumentUri, contexts, cancellationToken: cancellation.Token);
+        }).Throws<OperationCanceledException>();
+    }
+
+    [Test]
+    public async Task CapturedDependencyGraphsRejectLiveProvidersBeforeTargetAcquisition()
+    {
+        var fixture = new Fixture();
+        fixture.Documents[Fixture.Resource + "/versions/1.0.0"] = InventoryDocument(
+            """{"a":{"tm:ref":"urn:live-target"}}""", "[]");
+        var source = fixture.Open();
+        var live = new GraphLiveSource(source);
+        var identities = new WotCapturedUriIdentityIndex([
+            new(new("urn:live-target"), WotCapturedUriIdentityKind.DocumentView,
+                new(live, "/sets/team", Fixture.Collection, Fixture.Resource, "thingmodel", Fixture.WotId, "2.0.0"))
+        ]);
+        var entry = await WotRegistryResolver.ResolveAsync(source, Fixture.Collection,
+            new(Fixture.WotId, WotReferenceTargetKind.ThingModel, WotReferenceOperator.ThingModel, VersionIdPin: "1.0.0"));
+        var failure = await Assert.That(async () =>
+        {
+            _ = await WotRegistryResolver.CaptureDependencyGraphAsync([new(entry, new("https://view.test/entry.json"))],
+                new Dictionary<Uri, FederationDocument>(), identities);
+        }).Throws<FederationException>() ?? throw new InvalidOperationException("Expected retained-only graph traversal.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.UnsupportedOperation);
+        await Assert.That(live.Reads).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("complete")]
+    [Arguments("missing")]
+    [Arguments("extra")]
+    public async Task ClosureBindingComparisonUsesIndependentEntrySetsAndCoreXidIdentity(string change)
+    {
+        var (entry, identities) = await DependencyGraphFixture("""{"a":{"tm:ref":"urn:graph:2"}}""");
+        var initial = await WotRegistryResolver.CaptureDependencyGraphAsync([entry],
+            new Dictionary<Uri, FederationDocument>(), identities);
+        var second = initial.Nodes[1];
+        var graph = await WotRegistryResolver.CaptureDependencyGraphAsync(
+            [entry, new(second.Document, second.DocumentUri)], new Dictionary<Uri, FederationDocument>(), identities);
+        var root = GraphClosure(("1.0.0", "/properties/a", "tm:ref", "urn:graph:2", "2.0.0"));
+        root["entries"] = new JsonArray(Fixture.Resource + "/versions/2.0.0",
+            Fixture.Resource.Replace("team", "%74eam", StringComparison.Ordinal) + "/versions/1.0.0");
+        root["bindings"]![0]!["source"] = Fixture.Resource.Replace("team", "%74eam", StringComparison.Ordinal) +
+            "/versions/1.0.0";
+        root["bindings"]![0]!["target"] = Fixture.Resource.Replace("team", "%74eam", StringComparison.Ordinal) +
+            "/versions/2.0.0";
+        if (change == "missing") { root["entries"]!.AsArray().RemoveAt(0); }
+        if (change == "extra") { root["entries"]!.AsArray().Add(Fixture.Resource + "/versions/3.0.0"); }
+        var closure = WotPublicationClosure.Parse(Encoding.UTF8.GetBytes(root.ToJsonString()));
+        if (change == "complete")
+        {
+            closure.ValidateAgainstGraph(graph);
+            await Assert.That(graph.Entries.Count).IsEqualTo(2);
+            await Assert.That(graph.Nodes.Count).IsEqualTo(2);
+            await Assert.That(graph.Edges.Count).IsEqualTo(1);
+        }
+        else
+        {
+            var failure = await Assert.That(() => closure.ValidateAgainstGraph(graph)).Throws<FederationException>() ??
+                throw new InvalidOperationException("Expected the independently supplied entry set.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        }
+    }
+
+    private sealed class GraphLiveSource(CapturedRegistryReadSource source) : IFederationReadSource
+    {
+        public NativeRegistryContext Context => source.Context;
+        public JsonElement Capabilities => source.Capabilities;
+        public RegistryModel? Model => source.Model;
+        public int Reads { get; private set; }
+        public ValueTask<FederationReadResult> ReadAsync(FederationReadRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            Reads++;
+            return source.ReadAsync(request, cancellationToken);
+        }
+    }
+
+    [Test]
     [Arguments(-1)]
     [Arguments(0)]
     [Arguments(1)]
@@ -394,10 +709,15 @@ public class CapturedRegistryReadSourceTests
 
     private static async Task<(WotCapturedGraphEntry Entry, WotCapturedUriIdentityIndex Identities)> DependencyGraphFixture(
         string first = "{}", string second = "{}", string third = "{}",
-        Action<JsonNode>? configureFirst = null, string registryId = "captured")
+        Action<JsonNode>? configureFirst = null, string registryId = "captured", bool description = false)
     {
         var fixture = new Fixture();
         fixture.Root["registryid"] = registryId;
+        if (description)
+        {
+            fixture.Root["modelsource"]!["groups"]!["sets"]!["resources"]!["things"]!["singular"] = "thingdescription";
+            fixture.Model = RegistryModel.Compile(RegistryJson.Parse(fixture.Root["modelsource"]!.ToJsonString()));
+        }
         var versions = fixture.Root["sets"]!["team"]!["things"]!["a"]!["versions"]!.AsObject();
         versions["3.0.0"] = versions["2.0.0"]!.DeepClone();
         versions["3.0.0"]!["versionid"] = "3.0.0";
@@ -410,7 +730,7 @@ public class CapturedRegistryReadSourceTests
             var version = (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture) + ".0.0";
             var root = JsonNode.Parse(await Bytes(InventoryDocument(properties[index], "[]")))!;
             root["id"] = Fixture.WotId;
-            root["version"] = new JsonObject { ["model"] = version };
+            root["version"] = new JsonObject { [description ? "instance" : "model"] = version };
             if (index == 0) { configureFirst?.Invoke(root); }
             fixture.Documents[Fixture.Resource + "/versions/" + version] =
                 new(Encoding.UTF8.GetBytes(root.ToJsonString()), documentBase: "https://graph.test/" + version + ".json");
@@ -420,12 +740,14 @@ public class CapturedRegistryReadSourceTests
         foreach (var version in versions)
         {
             associations.Add(new(new("urn:graph:" + version.Key[0]), WotCapturedUriIdentityKind.DocumentView,
-                new(source, "/sets/team", Fixture.Collection, Fixture.Resource, "thingmodel", Fixture.WotId, version.Key)));
+                new(source, "/sets/team", Fixture.Collection, Fixture.Resource,
+                    description ? "thingdescription" : "thingmodel", Fixture.WotId, version.Key)));
         }
         associations.Add(new(new("urn:graph:schema"), WotCapturedUriIdentityKind.DocumentView,
             new(InventorySource("schema"), "/sets/team", Fixture.Collection, Fixture.Resource, "schema", null)));
         var document = await WotRegistryResolver.ResolveAsync(source, Fixture.Collection,
-            new(Fixture.WotId, WotReferenceTargetKind.ThingModel, WotReferenceOperator.ThingModel, VersionIdPin: "1.0.0"));
+            new(Fixture.WotId, description ? WotReferenceTargetKind.ThingDescription : WotReferenceTargetKind.ThingModel,
+                description ? WotReferenceOperator.ThingDescription : WotReferenceOperator.ThingModel, VersionIdPin: "1.0.0"));
         return (new(document, new("https://graph.test/1.0.0.json")), new(associations));
     }
 

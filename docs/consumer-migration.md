@@ -2556,6 +2556,19 @@ from the caller rather than from the closure. These checks do not establish
 complete syntactic-subtree discovery, projection admission or pinned offline
 composition. The required WoT extension remains unsupported.
 
+`ResolveCapturedLocalReferenceAsync` revalidates an ordinary authored reference,
+derives its floor and compatibility line under captured contexts, and applies
+them only to the retained containing revision. SemVer floors use the document's
+authored model or instance version; TD floors also enforce the major cap.
+Incremental references require their own explicit line and compare the optional
+numeric floor with the containing Registry revision. Neither root lines nor TD
+version fields supply an incremental dependency requirement. The method makes
+no source request and never selects a different Version. Missing fragment
+targets and unsatisfied or malformed requirements report an error.
+Captured graph traversal applies this check to local ordinary references while
+excluding projection selectors, which retain their separate source semantics.
+Local references still do not create closure bindings.
+
 `AcquireCloudEventSubjectAsync` takes a parsed CloudEvents WoT source query, a
 subject pointer and one authorized Thing Description Resource collection.
 Complete Version metadata establishes each Resource's `wotid`, so an explicit

@@ -8,6 +8,40 @@ namespace XRegistry.Federation;
 
 public static partial class WotJsonLdBaseResolver
 {
+    internal static async ValueTask<WotVersionResolutionRequest> ReadLocalReferenceRequirementsAsync(
+        WotResolvedDocument containing, WotAuthoredReferenceOccurrence reference, Uri documentUri,
+        IReadOnlyDictionary<Uri, FederationDocument> capturedContexts, FederationReadBudget budget,
+        CancellationToken cancellationToken)
+    {
+        if (!reference.Target.IsDocumentLocal || reference.Operator is not ("tm:ref" or "td:ref"))
+        {
+            throw FederationJson.Invalid("A captured local request requires an ordinary document-local reference.");
+        }
+        var contexts = ContextSnapshot(CaptureContextDocuments(capturedContexts, budget, cancellationToken));
+        var references = await DiscoverOrdinaryReferencesAsync(containing.Document, documentUri, contexts,
+            budget, cancellationToken).ConfigureAwait(false);
+        if (!references.Contains(reference))
+        {
+            throw FederationJson.Invalid("The local reference does not match an authored occurrence under captured contexts.");
+        }
+        var kind = reference.Operator == "tm:ref"
+            ? WotReferenceTargetKind.ThingModel : WotReferenceTargetKind.ThingDescription;
+        if (kind != containing.Kind)
+        {
+            throw new RegistryException(new("invalid-floor", reference.SourcePointer,
+                "A local reference must have the containing document's WoT kind."));
+        }
+        var root = await ParseDocumentAsync(containing.Document, budget, cancellationToken).ConfigureAwait(false);
+        var floors = await ReadAuthoredMinimumVersionsAsync(containing.Document, documentUri, root,
+            reference.SourcePointer, kind, contexts, budget, cancellationToken).ConfigureAwait(false);
+        var (minimum, minimumKind) = ReadMinimumVersion(floors, reference.SourcePointer);
+        var (line, _) = await ReadAuthoredSelectionMembersAsync(containing.Document, documentUri, root,
+            reference.SourcePointer, contexts, false, budget, cancellationToken).ConfigureAwait(false);
+        return new(containing.Version.WotId, kind, kind == WotReferenceTargetKind.ThingModel
+            ? WotReferenceOperator.ThingModel : WotReferenceOperator.ThingDescription, minimum, minimumKind,
+            IsDocumentLocal: true) { CompatibilityLine = line };
+    }
+
     /// <summary>Derives a SemVer resolution request from an authored ordinary reference or dependency link.</summary>
     /// <remarks>
     /// Member meanings come from captured contexts. A TD type link also carries the authored version.model
@@ -139,33 +173,9 @@ public static partial class WotJsonLdBaseResolver
             throw FederationJson.Invalid("The reference requirement does not match the captured authored occurrence.");
         }
 
-        async ValueTask<List<(WotMinimumVersionKind Kind, JToken Value)>> FloorsAsync(string pointer)
-        {
-            var value = ObjectAtPointer(root, pointer, readBudget, cancellationToken);
-            var floors = new List<(WotMinimumVersionKind Kind, JToken Value)>();
-            foreach (var member in value.Properties())
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                readBudget.ChargeWork();
-                if (member.Name.StartsWith('@')) { continue; }
-                var iri = await ExpandMemberIriAsync(document, pointer, member.Name, documentUri, contexts,
-                    readBudget, cancellationToken).ConfigureAwait(false);
-                if (iri == "https://www.w3.org/2019/wot/tm#minVersion")
-                {
-                    floors.Add((WotMinimumVersionKind.ThingModel, member.Value));
-                }
-                else if (iri == "https://www.w3.org/2019/wot/td#minVersion")
-                {
-                    floors.Add((WotMinimumVersionKind.ThingDescription, member.Value));
-                }
-                else if (iri == "http://opcfoundation.org/UA/WoT-Binding/minVersion")
-                {
-                    floors.Add((targetKind == WotReferenceTargetKind.ThingModel
-                        ? WotMinimumVersionKind.ThingModel : WotMinimumVersionKind.ThingDescription, member.Value));
-                }
-            }
-            return floors;
-        }
+        ValueTask<List<(WotMinimumVersionKind Kind, JToken Value)>> FloorsAsync(string pointer) =>
+            ReadAuthoredMinimumVersionsAsync(document, documentUri, root, pointer, targetKind,
+                contexts, readBudget, cancellationToken);
 
         var selectedFloors = await FloorsAsync(reference.SourcePointer).ConfigureAwait(false);
         var typeLinkCount = 1;
@@ -222,35 +232,76 @@ public static partial class WotJsonLdBaseResolver
                 implicitFloor = authoredModel.Value<string>()!;
             }
         }
-        if (selectedFloors.Count > 1)
+        var (minimum, minimumKind) = ReadMinimumVersion(selectedFloors, reference.SourcePointer);
+        var (compatibilityLine, sourceDigest) = await ReadAuthoredSelectionMembersAsync(document, documentUri, root,
+            reference.SourcePointer, contexts, projectionSource is not null, readBudget, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        return new(dependency.Target.WotId, targetKind, operation, minimum, minimumKind, implicitFloor,
+            typeLinkCount, allTypeLinksHaveFloor, DigestPin: sourceDigest) { CompatibilityLine = compatibilityLine };
+    }
+
+    private static async ValueTask<List<(WotMinimumVersionKind Kind, JToken Value)>> ReadAuthoredMinimumVersionsAsync(
+        FederationDocument document, Uri documentUri, JObject root, string pointer, WotReferenceTargetKind targetKind,
+        IReadOnlyDictionary<Uri, FederationDocument> contexts, FederationReadBudget budget, CancellationToken token)
+    {
+        var value = ObjectAtPointer(root, pointer, budget, token);
+        var floors = new List<(WotMinimumVersionKind Kind, JToken Value)>();
+        foreach (var member in value.Properties())
         {
-            throw new RegistryException(new("invalid-floor", reference.SourcePointer,
+            token.ThrowIfCancellationRequested();
+            budget.ChargeWork();
+            if (member.Name.StartsWith('@')) { continue; }
+            var iri = await ExpandMemberIriAsync(document, pointer, member.Name, documentUri, contexts,
+                budget, token).ConfigureAwait(false);
+            if (iri == "https://www.w3.org/2019/wot/tm#minVersion")
+            {
+                floors.Add((WotMinimumVersionKind.ThingModel, member.Value));
+            }
+            else if (iri == "https://www.w3.org/2019/wot/td#minVersion")
+            {
+                floors.Add((WotMinimumVersionKind.ThingDescription, member.Value));
+            }
+            else if (iri == "http://opcfoundation.org/UA/WoT-Binding/minVersion")
+            {
+                floors.Add((targetKind == WotReferenceTargetKind.ThingModel
+                    ? WotMinimumVersionKind.ThingModel : WotMinimumVersionKind.ThingDescription, member.Value));
+            }
+        }
+        return floors;
+    }
+
+    private static (string? Minimum, WotMinimumVersionKind? Kind) ReadMinimumVersion(
+        List<(WotMinimumVersionKind Kind, JToken Value)> floors, string pointer)
+    {
+        if (floors.Count > 1)
+        {
+            throw new RegistryException(new("invalid-floor", pointer,
                 "One reference cannot carry competing minimum-version members."));
         }
-        string? minimum = null;
-        WotMinimumVersionKind? minimumKind = null;
-        if (selectedFloors.Count == 1)
+        if (floors.Count == 0) { return (null, null); }
+        var floor = floors[0];
+        if (floor.Value.Type != JTokenType.String)
         {
-            var floor = selectedFloors[0];
-            minimumKind = floor.Kind;
-            if (floor.Value.Type != JTokenType.String)
-            {
-                throw new RegistryException(new("invalid-version", reference.SourcePointer,
-                    "A minimum version must be an authored string."));
-            }
-            minimum = floor.Value.Value<string>()!;
+            throw new RegistryException(new("invalid-version", pointer, "A minimum version must be an authored string."));
         }
-        string? compatibilityLine = null;
+        return (floor.Value.Value<string>()!, floor.Kind);
+    }
+
+    private static async ValueTask<(string? Line, string? Digest)> ReadAuthoredSelectionMembersAsync(FederationDocument document,
+        Uri documentUri, JObject root, string pointer, IReadOnlyDictionary<Uri, FederationDocument> contexts,
+        bool projectionSource, FederationReadBudget budget, CancellationToken token)
+    {
+        string? line = null;
         string? sourceDigest = null;
-        var lineCount = 0;
-        foreach (var member in occurrence.Properties())
+        var count = 0;
+        foreach (var member in ObjectAtPointer(root, pointer, budget, token).Properties())
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            readBudget.ChargeWork();
+            token.ThrowIfCancellationRequested();
+            budget.ChargeWork();
             if (member.Name.StartsWith('@')) { continue; }
-            var iri = await ExpandMemberIriAsync(document, reference.SourcePointer, member.Name, documentUri,
-                contexts, readBudget, cancellationToken).ConfigureAwait(false);
-            if (projectionSource is not null && iri == ProjectionVocabulary + "sourceDigest")
+            var iri = await ExpandMemberIriAsync(document, pointer, member.Name, documentUri,
+                contexts, budget, token).ConfigureAwait(false);
+            if (projectionSource && iri == ProjectionVocabulary + "sourceDigest")
             {
                 if (sourceDigest is not null || member.Value.Type != JTokenType.String ||
                     member.Value.Value<string>() is not { Length: 72 } digest ||
@@ -262,20 +313,16 @@ public static partial class WotJsonLdBaseResolver
                 sourceDigest = "sha256:" + digest[8..];
                 continue;
             }
-            if (iri != "http://opcfoundation.org/UA/WoT-Binding/compatibilityLine") { continue; }
-            // A root line declares the containing document, even beside a root reference.
-            if (reference.SourcePointer.Length == 0) { continue; }
-            lineCount++;
-            if (lineCount > 1 || member.Value.Type != JTokenType.String)
+            if (iri != "http://opcfoundation.org/UA/WoT-Binding/compatibilityLine" || pointer.Length == 0) { continue; }
+            count++;
+            if (count > 1 || member.Value.Type != JTokenType.String)
             {
-                throw new RegistryException(new("invalid-line", reference.SourcePointer,
+                throw new RegistryException(new("invalid-line", pointer,
                     "One reference can carry only one string-valued target compatibility line."));
             }
-            compatibilityLine = member.Value.Value<string>()!;
+            line = member.Value.Value<string>()!;
         }
-        cancellationToken.ThrowIfCancellationRequested();
-        return new(dependency.Target.WotId, targetKind, operation, minimum, minimumKind, implicitFloor,
-            typeLinkCount, allTypeLinksHaveFloor, DigestPin: sourceDigest) { CompatibilityLine = compatibilityLine };
+        return (line, sourceDigest);
     }
 
     private static WotVersionProfile TargetProfile(WotCapturedResourceIdentity identity) =>

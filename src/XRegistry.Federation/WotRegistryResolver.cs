@@ -243,6 +243,24 @@ public static partial class WotRegistryResolver
             cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Derives a local occurrence's requirements from retained bytes and resolves only its containing revision.</summary>
+    public static async ValueTask<WotResolvedFragment> ResolveCapturedLocalReferenceAsync(
+        WotResolvedDocument containingRevision, WotAuthoredReferenceOccurrence reference, Uri documentUri,
+        IReadOnlyDictionary<Uri, FederationDocument> capturedContexts, FederationReadBudget? budget = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(containingRevision);
+        ArgumentNullException.ThrowIfNull(reference);
+        ArgumentNullException.ThrowIfNull(documentUri);
+        ArgumentNullException.ThrowIfNull(capturedContexts);
+        cancellationToken.ThrowIfCancellationRequested();
+        var readBudget = budget ?? new();
+        var request = await WotJsonLdBaseResolver.ReadLocalReferenceRequirementsAsync(containingRevision, reference,
+            documentUri, capturedContexts, readBudget, cancellationToken).ConfigureAwait(false);
+        return await ResolveLocalTargetAsync(containingRevision, reference.Href, reference.Target, request,
+            readBudget, cancellationToken).ConfigureAwait(false);
+    }
+
     private static async ValueTask<WotResolvedFragment> ResolveLocalTargetAsync(
         WotResolvedDocument containingRevision, string reference, WotReferenceUri target,
         WotVersionResolutionRequest request, FederationReadBudget? budget, CancellationToken cancellationToken)

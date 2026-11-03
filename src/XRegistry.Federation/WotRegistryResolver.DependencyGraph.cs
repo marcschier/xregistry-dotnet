@@ -130,6 +130,24 @@ public static partial class WotRegistryResolver
             cancellationToken.ThrowIfCancellationRequested();
             readBudget.ChargeWork();
             var node = current.Node;
+            var selectorKeys = new HashSet<(string Pointer, string Property)>();
+            foreach (var selector in node.Inventory.ProjectionSelectors)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                readBudget.ChargeWork();
+                selectorKeys.Add((selector.Reference.SourcePointer, selector.Reference.PropertyName));
+            }
+            var ordinary = await WotJsonLdBaseResolver.DiscoverOrdinaryReferencesAsync(node.Document.Document,
+                node.DocumentUri, contexts, readBudget, cancellationToken).ConfigureAwait(false);
+            foreach (var reference in ordinary)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                readBudget.ChargeWork();
+                if (!reference.Target.IsDocumentLocal ||
+                    selectorKeys.Contains((reference.SourcePointer, reference.PropertyName))) { continue; }
+                _ = await ResolveCapturedLocalReferenceAsync(node.Document, reference, node.DocumentUri,
+                    contexts, readBudget, cancellationToken).ConfigureAwait(false);
+            }
             var rules = await WotJsonLdBaseResolver.ReadProjectionSelectionRulesAsync(node.Document.Document,
                 node.DocumentUri, node.Document.Kind, contexts, readBudget, cancellationToken).ConfigureAwait(false);
             var projections = rules.ToDictionary(rule => rule.Source.Reference.SourcePointer,

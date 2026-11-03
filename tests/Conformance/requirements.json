@@ -141142,13 +141142,22 @@
       ],
       "text": "A `tm:ref` or `td:ref` is document-local when its URI-reference, resolved against the containing document's base URI and with its fragment removed, identifies that same document. A document-local reference targets the containing revision being processed, not a Resource lookup. When it carries a floor, the resolver MUST compare the floor with that revision's `version.model` for `tm:ref` or `version.instance` for `td:ref`. A `td:ref` floor also applies the TD major cap. A missing authored version, or one below the floor or outside the cap, MUST produce `unsatisfied`. An invalid authored version MUST produce `invalid-version`. The resolver MUST NOT select another Version of the containing Resource to satisfy a local reference.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The captured local resolver revalidates the authored occurrence under captured contexts and derives its expanded floor and line through the shared external-reference readers. Local SemVer checks use the containing document's authored model/instance version, preserve TD major caps and never select another Registry Version. Missing or unsatisfied authored versions, invalid strings or value kinds, competing floors and wrong-kind references report explicit diagnostics. Incremental references require their own line and compare against the containing Registry revision rather than authored version.model; root lines do not supply a dependency line. Captured graph traversal validates local ordinary references without adding bindings or treating projection selectors as ordinary local dependencies. Complete syntactic-subtree discovery and ordinary offline composition remain unfinished; this compound requirement stays pending.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "CapturedRegistryReadSourceTests.CapturedLocalReferencesUseAuthoredVersionsAndNeverSelectAnotherRevision",
+          "CapturedRegistryReadSourceTests.CapturedLocalReferencesRejectMalformedOrWrongKindRequirements",
+          "CapturedRegistryReadSourceTests.CapturedLocalReferencesRejectForgedOccurrencesAndExternalTargets",
+          "CapturedRegistryReadSourceTests.CapturedLocalReferencesShareInclusiveWorkAndCancellation",
+          "CapturedRegistryReadSourceTests.CapturedLocalIncrementalReferencesRequireTheirOwnLineAndUseTheContainingRegistryRevision",
+          "CapturedRegistryReadSourceTests.CapturedLocalReferencesTreatReboundFloorNamesAsAnnotations"
+        ],
         "nativeEvidence": []
       }
     },
@@ -141367,7 +141376,9 @@
           "CapturedRegistryReadSourceTests.CapturedDependencyGraphsBoundDistinctSourceContextsInclusively",
           "CapturedRegistryReadSourceTests.CapturedDependencyGraphsRequireEntriesAndAbsoluteDocumentUris",
           "CapturedRegistryReadSourceTests.DependencyGraphEntriesRejectDuplicateOrContradictoryRevisions",
-          "CapturedRegistryReadSourceTests.ClosureBindingComparisonRejectsXidsThatCannotDistinguishCapturedRegistries"
+          "CapturedRegistryReadSourceTests.ClosureBindingComparisonRejectsXidsThatCannotDistinguishCapturedRegistries",
+          "CapturedRegistryReadSourceTests.CapturedDependencyGraphsRejectLiveProvidersBeforeTargetAcquisition",
+          "CapturedRegistryReadSourceTests.ClosureBindingComparisonUsesIndependentEntrySetsAndCoreXidIdentity"
         ],
         "nativeEvidence": []
       }
