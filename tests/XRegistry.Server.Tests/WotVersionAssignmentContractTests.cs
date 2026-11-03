@@ -259,6 +259,25 @@ public class WotVersionAssignmentContractTests
     }
 
     [Test]
+    [Arguments("thingmodel")]
+    [Arguments("thingdescription")]
+    public async Task RegistryStoresDocumentsWithUnresolvedThingModelReferences(string kind)
+    {
+        var fixture = CreateWotFixture();
+        var resourcePath = fixture.ResourcePath(kind, "unresolved-reference");
+        const string document = """
+            {"id":"urn:example:unresolved-reference","links":[
+              {"rel":"tm:extends","href":"https://missing.example/models/base"}
+            ]}
+            """;
+
+        await ExecuteDocumentAsync(fixture.Engine, RegistryAction.Replace, resourcePath, document, "{}");
+
+        await AssertStoredAssignmentAsync(fixture.Engine, resourcePath, "0.0.0-1", "generated",
+            "urn:example:unresolved-reference", document);
+    }
+
+    [Test]
     public async Task ExecuteAsyncRejectsInvalidSuppliedVersionIdBeforeAssignmentComparison()
     {
         var fixture = CreateWotFixture();

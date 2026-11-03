@@ -14,6 +14,47 @@ namespace XRegistry.AspNetCore.Tests;
 public class RegistryErrorContractHttpTests
 {
     [Test]
+    public async Task WotDocumentSelfAndShortSelfUrlsReturnDocumentBytes()
+    {
+        var model = XRegistry.Models.BuiltInRegistryModels.Compile(XRegistry.Models.RegistryModelKind.Wot);
+        await using var host = await HttpTests.TestHost.StartAsync(model: model, allowCapabilityUpdates: true,
+            httpOptions: new() { MountPath = "/registry" });
+        using var enabled = await host.Client.PatchAsync("/registry/capabilities",
+            new StringContent("""{"shortself":true}""", Encoding.UTF8, "application/json"));
+        await Assert.That(enabled.StatusCode).IsEqualTo(HttpStatusCode.OK);
+
+        const string resourcePath = "/registry/thingmodelgroups/g/thingmodels/t";
+        const string document = """
+            {"id":"urn:example:tm-url","version":{"model":"1.2.3"},
+             "links":[{"rel":"tm:extends","href":"https://missing.example/models/base"}]}
+            """;
+        using var create = new HttpRequestMessage(HttpMethod.Put, resourcePath)
+        {
+            Content = new ByteArrayContent(Encoding.UTF8.GetBytes(document))
+        };
+        create.Content.Headers.ContentType = new("application/json");
+        using var created = await host.Client.SendAsync(create);
+        await Assert.That(created.StatusCode).IsEqualTo(HttpStatusCode.Created)
+            .Because(await created.Content.ReadAsStringAsync());
+
+        using var metadataResponse = await host.Client.GetAsync(resourcePath + "$details");
+        await Assert.That(metadataResponse.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        var metadata = RegistryJson.Parse(await metadataResponse.Content.ReadAsByteArrayAsync()).RootElement;
+        var self = new Uri(metadata.GetProperty("self").GetString()!);
+        var shortSelf = new Uri(metadata.GetProperty("shortself").GetString()!);
+        await Assert.That(self.AbsolutePath.EndsWith("$details", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(shortSelf.AbsolutePath.Contains('$', StringComparison.Ordinal)).IsFalse();
+
+        using var documentBySelf = await host.Client.GetAsync(self.AbsolutePath[..^"$details".Length]);
+        using var documentByShortSelf = await host.Client.GetAsync(shortSelf.AbsolutePath);
+        await Assert.That(documentBySelf.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        await Assert.That(documentByShortSelf.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        var expectedBytes = Encoding.UTF8.GetBytes(document);
+        await Assert.That((await documentBySelf.Content.ReadAsByteArrayAsync()).SequenceEqual(expectedBytes)).IsTrue();
+        await Assert.That((await documentByShortSelf.Content.ReadAsByteArrayAsync()).SequenceEqual(expectedBytes)).IsTrue();
+    }
+
+    [Test]
     [Arguments("1.2.3", "/versions/1.2.4", "mismatched_id")]
     [Arguments("1.2.3+build.7", "", "invalid_attribute")]
     public async Task WotAssignmentDiagnosticsUseCoreHttpErrors(string authoredVersion, string suffix, string expectedCode)
