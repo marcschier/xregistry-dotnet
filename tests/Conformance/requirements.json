@@ -62701,8 +62701,11 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SelfUrlsAreUniquePublicHierarchyLocationsForEveryEntityPlane",
+          "XidValuesAreGeneratedAndCannotBeOverriddenOnAnyEntityPlane"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62735,8 +62738,10 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CoreXidAttributesAreRequiredImmutableReadonlyXidsAcrossEntityPlanes"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62769,8 +62774,11 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CoreXidAttributesAreRequiredImmutableReadonlyXidsAcrossEntityPlanes",
+          "XidValuesAreGeneratedAndCannotBeOverriddenOnAnyEntityPlane"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62803,8 +62811,14 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CoreXidAttributesAreRequiredImmutableReadonlyXidsAcrossEntityPlanes",
+          "XidValuesAreGeneratedAndCannotBeOverriddenOnAnyEntityPlane",
+          "PreservesEscapedPathAndCase",
+          "IdentifierLengthAndUniquenessAreIndependentOfLookupCase",
+          "RejectsTraversalAndDoubleDecoding"
+        ],
         "nativeEvidence": []
       }
     },
