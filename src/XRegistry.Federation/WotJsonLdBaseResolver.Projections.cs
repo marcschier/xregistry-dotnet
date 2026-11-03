@@ -164,10 +164,20 @@ public static partial class WotJsonLdBaseResolver
         var sources = await DiscoverProjectionSourceReferencesAsync(document, documentUri, sourceKind,
             capturedContexts, readBudget, cancellationToken).ConfigureAwait(false);
         if (sources.Count == 0) { return Array.Empty<WotProjectionSelectorOccurrence>(); }
-        var byUri = sources.ToDictionary(source => source.Reference.Target.DocumentUri.AbsoluteUri,
-            StringComparer.Ordinal);
         var references = await DiscoverOrdinaryReferencesAsync(document, documentUri, capturedContexts,
             readBudget, cancellationToken).ConfigureAwait(false);
+        return await AssociateProjectionSelectorsAsync(document, documentUri, capturedContexts, sources,
+            references, readBudget, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async ValueTask<IReadOnlyList<WotProjectionSelectorOccurrence>> AssociateProjectionSelectorsAsync(
+        FederationDocument document, Uri documentUri, IReadOnlyDictionary<Uri, FederationDocument> contexts,
+        IReadOnlyList<WotProjectionSourceOccurrence> sources, IReadOnlyList<WotAuthoredReferenceOccurrence> references,
+        FederationReadBudget readBudget, CancellationToken cancellationToken)
+    {
+        if (sources.Count == 0) { return Array.Empty<WotProjectionSelectorOccurrence>(); }
+        var byUri = sources.ToDictionary(source => source.Reference.Target.DocumentUri.AbsoluteUri,
+            StringComparer.Ordinal);
         var categories = new Dictionary<string, string?>(StringComparer.Ordinal);
         var selected = new HashSet<string>(StringComparer.Ordinal);
         var selectors = new List<WotProjectionSelectorOccurrence>();
@@ -181,7 +191,7 @@ public static partial class WotJsonLdBaseResolver
             var member = DecodePointerToken(authoredPath[1]);
             if (!categories.TryGetValue(member, out var category))
             {
-                var iri = await ExpandMemberIriAsync(document, "", member, documentUri, capturedContexts,
+                var iri = await ExpandMemberIriAsync(document, "", member, documentUri, contexts,
                     readBudget, cancellationToken).ConfigureAwait(false);
                 category = iri switch
                 {

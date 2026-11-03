@@ -2440,6 +2440,18 @@ The captured Registry constructor and Publication factory do not verify immutabl
 external model-include provenance or every Core metadata constraint. Domain
 closure validation and offline WoT composition remain unfinished.
 
+`WotJsonLdBaseResolver.DiscoverCapturedReferenceInventoryAsync` combines ordinary
+references, dependency links and projection sources against one captured URI
+index and context set. Local references and ordinary Schema targets are excluded
+before checking for competing dependency members at the same authored object
+pointer. Distinct pointers remain distinct occurrences even when targets agree.
+Projection selectors retain their source-entry association rather than creating
+another dependency; ordinary `td:ref` members remain separate dependencies.
+`describedby` candidates are returned separately and still require Schema
+exclusion handling. This inventory does not select exact Versions, validate
+projection requirements or establish reachability, syntactic-subtree coverage
+or closure completeness. It does not acquire target documents.
+
 `WotPublicationClosure.Parse` reads the selected closed representation without
 registering the WoT extension as supported. Entries and binding endpoints must
 be exact Version XIDs. Entry identities are unique, and binding keys combine
