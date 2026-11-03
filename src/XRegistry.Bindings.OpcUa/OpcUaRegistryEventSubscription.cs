@@ -88,10 +88,12 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
             throw new ArgumentException("A notifier NodeId is required.", nameof(notifier));
         }
         _ = ToLocalNodeId(namespaceUris, new ExpandedNodeId(notifier));
+        var expectedSession = session.SessionId;
         var budget = new DiscoveryBudget(maxBrowsePages, maxReferences, maxNotifiers);
 
         var rootSupportsEvents =
-            await SupportsEventSubscriptionsAsync(session, notifier, cancellationToken).ConfigureAwait(false);
+            await SupportsEventSubscriptionsAsync(session, expectedSession, notifier, cancellationToken)
+                .ConfigureAwait(false);
         if (!rootSupportsEvents)
         {
             throw new FederationException(FederationErrorCode.UnsupportedOperation,
@@ -117,11 +119,13 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
             }
 
             var supportsEvents = pending.Node == notifier ||
-                await SupportsEventSubscriptionsAsync(session, pending.Node, cancellationToken).ConfigureAwait(false);
+                await SupportsEventSubscriptionsAsync(session, expectedSession, pending.Node, cancellationToken)
+                    .ConfigureAwait(false);
             if (supportsEvents)
             {
                 var typeDefinitions = await BrowseAllAsync(session, pending.Node, BrowseDirection.Forward,
-                    ReferenceTypeIds.HasTypeDefinition, budget, cancellationToken).ConfigureAwait(false);
+                    ReferenceTypeIds.HasTypeDefinition, expectedSession, budget, cancellationToken)
+                    .ConfigureAwait(false);
                 if (typeDefinitions.Count != 1 || typeDefinitions[0].NodeClass != NodeClass.ObjectType)
                 {
                     throw new FederationException(FederationErrorCode.InvalidPackage,
@@ -129,11 +133,11 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
                 }
                 await AddEventTypesForTypeHierarchyAsync(session, namespaceUris,
                     ToLocalNodeId(namespaceUris, typeDefinitions[0].NodeId), discovered,
-                    budget, cancellationToken).ConfigureAwait(false);
+                    expectedSession, budget, cancellationToken).ConfigureAwait(false);
             }
 
             var children = await BrowseAllAsync(session, pending.Node, BrowseDirection.Forward,
-                ReferenceTypeIds.HasNotifier, budget, cancellationToken).ConfigureAwait(false);
+                ReferenceTypeIds.HasNotifier, expectedSession, budget, cancellationToken).ConfigureAwait(false);
             foreach (var child in children)
             {
                 if (child.NodeClass != NodeClass.Object)
@@ -178,7 +182,7 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
 
     private static async ValueTask AddEventTypesForTypeHierarchyAsync(ISessionClient session,
         NamespaceTable namespaceUris, NodeId typeDefinition, Dictionary<NodeId, string> discovered,
-        DiscoveryBudget budget, CancellationToken cancellationToken)
+        NodeId expectedSession, DiscoveryBudget budget, CancellationToken cancellationToken)
     {
         var visited = new HashSet<NodeId>();
         var current = typeDefinition;
@@ -196,7 +200,7 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
             }
 
             var eventReferences = await BrowseAllAsync(session, current, BrowseDirection.Forward,
-                ReferenceTypeIds.GeneratesEvent, budget, cancellationToken).ConfigureAwait(false);
+                ReferenceTypeIds.GeneratesEvent, expectedSession, budget, cancellationToken).ConfigureAwait(false);
             foreach (var reference in eventReferences)
             {
                 if (reference.BrowseName.Name is { } browseName &&
@@ -219,7 +223,7 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
             }
 
             var parents = await BrowseAllAsync(session, current, BrowseDirection.Inverse,
-                ReferenceTypeIds.HasSubtype, budget, cancellationToken).ConfigureAwait(false);
+                ReferenceTypeIds.HasSubtype, expectedSession, budget, cancellationToken).ConfigureAwait(false);
             if (parents.Count > 1)
             {
                 throw new FederationException(FederationErrorCode.InvalidPackage,
@@ -399,22 +403,25 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
         };
     }
 
-    private static async ValueTask<Variant> ReadValueAsync(ISessionClient session, NodeId node,
-        uint attributeId, CancellationToken cancellationToken)
+    private static async ValueTask<Variant> ReadValueAsync(ISessionClient session, NodeId expectedSession,
+        NodeId node, uint attributeId, CancellationToken cancellationToken)
     {
+        RequireSession(session, expectedSession);
         var response = await OpcUaSessionAdapter.InvokeAsync(() => session.ReadAsync(
             new RequestHeader(), 0, TimestampsToReturn.Neither,
             [new ReadValueId { NodeId = node, AttributeId = attributeId }], cancellationToken))
             .ConfigureAwait(false);
-        return OpcUaSessionAdapter.Single(response.Results, static result => result.StatusCode,
+        var value = OpcUaSessionAdapter.Single(response.Results, static result => result.StatusCode,
             response.DiagnosticInfos, response.ResponseHeader).WrappedValue;
+        RequireSession(session, expectedSession);
+        return value;
     }
 
-    private static async ValueTask<bool> SupportsEventSubscriptionsAsync(ISessionClient session, NodeId notifier,
-        CancellationToken cancellationToken)
+    private static async ValueTask<bool> SupportsEventSubscriptionsAsync(ISessionClient session,
+        NodeId expectedSession, NodeId notifier, CancellationToken cancellationToken)
     {
-        var notifierValue = await ReadValueAsync(session, notifier, Attributes.EventNotifier, cancellationToken)
-            .ConfigureAwait(false);
+        var notifierValue = await ReadValueAsync(session, expectedSession, notifier,
+            Attributes.EventNotifier, cancellationToken).ConfigureAwait(false);
         if (notifierValue.AsBoxedObject() is not byte eventNotifier)
         {
             throw new FederationException(FederationErrorCode.InvalidPackage,
@@ -424,40 +431,44 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
     }
 
     private static async ValueTask<IReadOnlyList<ReferenceDescription>> BrowseAllAsync(ISessionClient session,
-        NodeId node, BrowseDirection direction, NodeId referenceType, DiscoveryBudget budget,
-        CancellationToken cancellationToken)
+        NodeId node, BrowseDirection direction, NodeId referenceType, NodeId expectedSession,
+        DiscoveryBudget budget, CancellationToken cancellationToken)
     {
         var references = new List<ReferenceDescription>();
         budget.ChargePage();
-        var response = await OpcUaSessionAdapter.InvokeAsync(() => session.BrowseAsync(
-            new RequestHeader(), new ViewDescription(), MaxReferencesPerBrowse,
-            [new BrowseDescription
-            {
-                NodeId = node,
-                BrowseDirection = direction,
-                ReferenceTypeId = referenceType,
-                IncludeSubtypes = true,
-                NodeClassMask = (uint)NodeClass.ObjectType | (uint)NodeClass.Object,
-                ResultMask = (uint)BrowseResultMask.All,
-            }], cancellationToken)).ConfigureAwait(false);
         var outstanding = new List<byte[]>();
-        TrackContinuation(response.Results, outstanding);
         try
         {
+            RequireSession(session, expectedSession);
+            var response = await OpcUaSessionAdapter.InvokeAsync(() => session.BrowseAsync(
+                new RequestHeader(), new ViewDescription(), MaxReferencesPerBrowse,
+                [new BrowseDescription
+                {
+                    NodeId = node,
+                    BrowseDirection = direction,
+                    ReferenceTypeId = referenceType,
+                    IncludeSubtypes = true,
+                    NodeClassMask = (uint)NodeClass.ObjectType | (uint)NodeClass.Object,
+                    ResultMask = (uint)BrowseResultMask.All,
+                }], cancellationToken)).ConfigureAwait(false);
+            TrackContinuation(response.Results, outstanding);
             var result = OpcUaSessionAdapter.Single(response.Results, static result => result.StatusCode,
                 response.DiagnosticInfos, response.ResponseHeader);
+            RequireSession(session, expectedSession);
             var continuation = result.ContinuationPoint.ToArray();
             budget.ChargeReferences(result.References.Count);
             references.AddRange(result.References.ToArray() ?? []);
             while (continuation.Length > 0)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                RequireSession(session, expectedSession);
                 budget.ChargePage();
                 var next = await OpcUaSessionAdapter.InvokeAsync(() => session.BrowseNextAsync(
                     new RequestHeader(), false, [new ByteString(continuation)], cancellationToken)).ConfigureAwait(false);
                 TrackContinuation(next.Results, outstanding);
                 result = OpcUaSessionAdapter.Single(next.Results, static result => result.StatusCode,
                     next.DiagnosticInfos, next.ResponseHeader);
+                RequireSession(session, expectedSession);
                 continuation = result.ContinuationPoint.ToArray();
                 outstanding.Clear();
                 TrackContinuation(next.Results, outstanding);
@@ -467,13 +478,22 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
         }
         catch (Exception failure) when (outstanding.Count > 0)
         {
+            if (session.SessionId != expectedSession)
+            {
+                failure.Data["OpcUa.ContinuationReleaseFailure"] =
+                    new FederationException(FederationErrorCode.Unavailable,
+                        "The OPC UA Session changed; its Browse continuation cannot be released on the replacement Session.");
+                throw;
+            }
             foreach (var continuation in outstanding)
             {
                 try
                 {
+                    RequireSession(session, expectedSession);
                     var release = await OpcUaSessionAdapter.InvokeAsync(() => session.BrowseNextAsync(
                         new RequestHeader(), true, [new ByteString(continuation)], CancellationToken.None))
                         .ConfigureAwait(false);
+                    RequireSession(session, expectedSession);
                     _ = OpcUaSessionAdapter.Single(release.Results, static result => result.StatusCode,
                         release.DiagnosticInfos, release.ResponseHeader);
                 }
@@ -489,6 +509,15 @@ public sealed class OpcUaRegistryEventSubscription : IAsyncDisposable
             throw;
         }
         return references;
+    }
+
+    private static void RequireSession(ISessionClient session, NodeId expectedSession)
+    {
+        if (session.SessionId != expectedSession)
+        {
+            throw new FederationException(FederationErrorCode.Unavailable,
+                "The OPC UA Session changed during event-type discovery.");
+        }
     }
 
     private static void TrackContinuation(ArrayOf<BrowseResult> results, List<byte[]> outstanding)

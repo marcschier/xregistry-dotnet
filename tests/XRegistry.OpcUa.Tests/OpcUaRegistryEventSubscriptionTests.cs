@@ -58,6 +58,62 @@ public class OpcUaRegistryEventSubscriptionTests
     }
 
     [Test]
+    [Arguments("read")]
+    [Arguments("browse")]
+    [Arguments("next")]
+    public async Task DiscoveryStopsWhenSessionChangesAndDoesNotReleaseContinuationsOnReplacement(string phase)
+    {
+        var session = CreateSession();
+        var proxy = (SessionProxy)(object)session;
+        proxy.TypeDefinition = s_registryType;
+        proxy.SessionId = new NodeId(1u);
+        proxy.SessionChangedTo = new NodeId(2u);
+        if (phase == "read")
+        {
+            proxy.AfterRead = proxy.ReplaceSession;
+        }
+        else
+        {
+            proxy.ReturnContinuationForGeneratedEvents = true;
+            proxy.NextContinuation = [2];
+            proxy.ContinuedEvents = [new(new ExpandedNodeId(s_registryCreated), "RegistryCreatedEventType")];
+            proxy.ContinuedPagesRemaining = 0;
+            if (phase == "browse")
+            {
+                proxy.AfterBrowse = proxy.ReplaceSession;
+            }
+            else
+            {
+                proxy.AfterBrowseNext = proxy.ReplaceSession;
+            }
+        }
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await OpcUaRegistryEventSubscription.DiscoverEventTypesAsync(
+                session, s_namespaceUris, s_notifier));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.Unavailable);
+        await Assert.That(error.Message).IsEqualTo("The OPC UA Session changed during event-type discovery.");
+        await Assert.That(proxy.BrowseNextReleaseFlags.Any(release => release)).IsFalse();
+    }
+
+    [Test]
+    public async Task DiscoveryRetainsNativeReadFailureWhenSessionChangesAfterResponse()
+    {
+        var session = CreateSession();
+        var proxy = (SessionProxy)(object)session;
+        proxy.ReadStatus = StatusCodes.BadUserAccessDenied;
+        proxy.AfterRead = proxy.ReplaceSession;
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await OpcUaRegistryEventSubscription.DiscoverEventTypesAsync(
+                session, s_namespaceUris, s_notifier));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.PolicyDenied);
+        await Assert.That(proxy.BrowseRequests.Count).IsEqualTo(0);
+    }
+
+    [Test]
     public async Task DiscoveryReadsGeneratedTypesFromDescendantNotifiers()
     {
         var session = CreateSession();
@@ -769,6 +825,8 @@ public class OpcUaRegistryEventSubscriptionTests
     public class SessionProxy : DispatchProxy
     {
         public byte EventNotifier { get; set; } = 1;
+        public NodeId SessionId { get; set; } = new(1u);
+        public NodeId SessionChangedTo { get; set; } = new(2u);
         public NodeId TypeDefinition { get; set; } = NodeId.Null;
         public Dictionary<NodeId, NodeId[]> ParentTypes { get; } = [];
         public Dictionary<NodeId, (ExpandedNodeId NodeId, string BrowseName)[]> GeneratedEvents { get; } = [];
@@ -779,6 +837,9 @@ public class OpcUaRegistryEventSubscriptionTests
         public bool ReturnContinuationForGeneratedEvents { get; set; }
         public (ExpandedNodeId NodeId, string BrowseName)[] ContinuedEvents { get; set; } = [];
         public CancellationTokenSource? CancellationAfterEventBrowse { get; set; }
+        public Action? AfterRead { get; set; }
+        public Action? AfterBrowse { get; set; }
+        public Action? AfterBrowseNext { get; set; }
         public StatusCode ReadStatus { get; set; }
         public StatusCode BrowseStatus { get; set; }
         public StatusCode NextStatus { get; set; }
@@ -794,6 +855,8 @@ public class OpcUaRegistryEventSubscriptionTests
         public Func<BrowseDescription, ReferenceDescription[]?>? ReferenceOverride { get; set; }
         public int ReadCount { get; private set; }
         public int? ContinuedPagesRemaining { get; set; }
+
+        public void ReplaceSession() => SessionId = SessionChangedTo;
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
@@ -815,6 +878,7 @@ public class OpcUaRegistryEventSubscriptionTests
             }
             return targetMethod?.Name switch
             {
+                "get_SessionId" => SessionId,
                 "ReadAsync" => Read((ArrayOf<ReadValueId>)args![3]!),
                 "BrowseAsync" => Browse((ArrayOf<BrowseDescription>)args![3]!),
                 "BrowseNextAsync" => BrowseNext(
@@ -830,12 +894,15 @@ public class OpcUaRegistryEventSubscriptionTests
             var value = nodes[0].AttributeId == Attributes.EventNotifier
                 ? new Variant(EventNotifier)
                 : default;
-            return new(new ReadResponse
+            var response = new ReadResponse
             {
                 ResponseHeader = Header,
                 DiagnosticInfos = Diagnostics,
                 Results = [new DataValue(value, ReadStatus)]
-            });
+            };
+            AfterRead?.Invoke();
+            AfterRead = null;
+            return new(response);
         }
 
         private ValueTask<BrowseResponse> Browse(ArrayOf<BrowseDescription> nodes)
@@ -861,7 +928,7 @@ public class OpcUaRegistryEventSubscriptionTests
                 {
                     ReturnContinuationForGeneratedEvents = false;
                     CancellationAfterEventBrowse?.Cancel();
-                    return new(new BrowseResponse
+                    var continuationResponse = new BrowseResponse
                     {
                         ResponseHeader = Header,
                         DiagnosticInfos = Diagnostics,
@@ -871,7 +938,10 @@ public class OpcUaRegistryEventSubscriptionTests
                             StatusCode = InitialEventBrowseStatus,
                             ContinuationPoint = new ByteString(s_continuationPoint),
                         }]
-                    });
+                    };
+                    AfterBrowse?.Invoke();
+                    AfterBrowse = null;
+                    return new(continuationResponse);
                 }
                 references = GeneratedEvents.TryGetValue(request.NodeId, out var events)
                     ? events.Select(item => Reference(item.NodeId, item.BrowseName, NodeClass.ObjectType)).ToArray()
@@ -889,7 +959,7 @@ public class OpcUaRegistryEventSubscriptionTests
                 references = [];
             }
 
-            return new(new BrowseResponse
+            var response = new BrowseResponse
             {
                 ResponseHeader = Header,
                 DiagnosticInfos = Diagnostics,
@@ -898,7 +968,8 @@ public class OpcUaRegistryEventSubscriptionTests
                     References = new ArrayOf<ReferenceDescription>(ReferenceOverride?.Invoke(request) ?? references),
                     StatusCode = BrowseStatus
                 }]
-            });
+            };
+            return new(response);
         }
 
         private ValueTask<BrowseNextResponse> BrowseNext(bool release, ArrayOf<ByteString> continuationPoints)
@@ -926,7 +997,7 @@ public class OpcUaRegistryEventSubscriptionTests
                     continuation = [];
                 }
             }
-            return new(new BrowseNextResponse
+            var response = new BrowseNextResponse
             {
                 ResponseHeader = Header,
                 DiagnosticInfos = Diagnostics,
@@ -936,7 +1007,10 @@ public class OpcUaRegistryEventSubscriptionTests
                     StatusCode = release ? ReleaseStatus : NextStatus,
                     ContinuationPoint = release ? default : new ByteString(continuation)
                 }]
-            });
+            };
+            AfterBrowseNext?.Invoke();
+            AfterBrowseNext = null;
+            return new(response);
         }
 
         private static ReferenceDescription Reference(
