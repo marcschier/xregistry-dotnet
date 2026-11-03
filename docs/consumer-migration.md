@@ -2423,9 +2423,22 @@ cycles and disagreement with a supplied effective model reject acquisition
 before document reads. For externally captured model material, pass the
 explicitly compiled model and retain its provenance.
 
-Neither entry point verifies immutable external model-include provenance or
-every Core metadata constraint. Domain closure validation and offline WoT
-composition remain unfinished.
+Use `WotCapturedUriIdentityIndex.CaptureRegistryAsync` to build URI associations
+from this retained source. Applicable `wotid` values identify Resources;
+retained document bases identify their exact associated Versions. Two Versions
+with the same base remain ambiguous rather than selecting a default. Missing
+bases remain absent, and storage locators, document origins and Publication
+provenance do not become URI identities. Additional document-view associations
+must come from separately captured URI metadata, not closure binding targets.
+The inventory and URI parsing share finite budgets and cancellation, and later
+resolution uses retained metadata and bytes without opening a binding.
+Core document-view IDs omitted because containment supplies them remain usable
+for identity capture and Version selection; conflicting supplied IDs still
+reject the operation.
+
+The captured Registry constructor and Publication factory do not verify immutable
+external model-include provenance or every Core metadata constraint. Domain
+closure validation and offline WoT composition remain unfinished.
 
 `WotPublicationClosure.Parse` reads the selected closed representation without
 registering the WoT extension as supported. Entries and binding endpoints must

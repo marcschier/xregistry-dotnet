@@ -15,6 +15,219 @@ namespace XRegistry.Federation.Tests;
 public class CapturedRegistryReadSourceTests
 {
     [Test]
+    public async Task AutomaticCapturedUriIndexPreservesResourceAndExactVersionScopeOffline()
+    {
+        const string secondBase = "https://example.test/relocated/second.json";
+        var fixture = new Fixture();
+        var publication = new PublicationFixture(fixture, manifest => manifest["documents"]![1]!["base"] = secondBase);
+        var source = await CapturedRegistryReadSource.FromPublicationAsync(await publication.OpenAsync());
+        publication.FailOnRead = true;
+        var index = await WotCapturedUriIdentityIndex.CaptureRegistryAsync(source);
+        var resource = index.Resolve(new(Fixture.WotId));
+        await Assert.That(ReferenceEquals(resource.Source, source)).IsTrue();
+        await Assert.That(resource.ResourceXid).IsEqualTo(Fixture.Resource);
+        await Assert.That(resource.VersionId).IsNull();
+        await Assert.That(resource.ResourceKind).IsEqualTo("thingmodel");
+        var exact = index.Resolve(new(secondBase));
+        await Assert.That(exact.ResourceXid).IsEqualTo(Fixture.Resource);
+        await Assert.That(exact.VersionId).IsEqualTo("2.0.0");
+        var first = index.Resolve(new("https://example.test/relocated/model.json"));
+        await Assert.That(first.VersionId).IsEqualTo("1.0.0");
+        var containing = await WotRegistryResolver.ResolveAsync(source, Fixture.Collection,
+            new(Fixture.WotId, WotReferenceTargetKind.ThingModel, WotReferenceOperator.ThingModel, VersionIdPin: "1.0.0"));
+        var selected = await WotRegistryResolver.ResolveCapturedReferenceAsync(containing, secondBase,
+            new("https://example.test/relocated/model.json"), new("https://example.test/relocated/model.json"),
+            index, new(Fixture.WotId, WotReferenceTargetKind.ThingModel, WotReferenceOperator.ThingModel, VersionIdPin: "2.0.0"));
+        await Assert.That(selected.ContainingDocument.Version.VersionId).IsEqualTo("2.0.0");
+        await Assert.That(selected.ContainingDocument.Version.ContentDigest).IsEqualTo("sha256:" + Digest(Fixture.Second));
+        await Assert.That(publication.ChannelReads).IsEqualTo(1);
+        await Assert.That(publication.OpenedVersions.Count).IsEqualTo(4);
+    }
+
+    [Test]
+    public async Task AutomaticCapturedUriIndexDoesNotChooseBetweenVersionsSharingOneBase()
+    {
+        var source = new Fixture().Open();
+        var index = await WotCapturedUriIdentityIndex.CaptureRegistryAsync(source);
+        var failure = await Assert.That(() => index.Resolve(new("https://example.test/original/model.json")))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected ambiguous exact-Version bases.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.Ambiguous);
+        await Assert.That(index.Resolve(new(Fixture.WotId)).VersionId).IsNull();
+    }
+
+    [Test]
+    public async Task AutomaticCapturedUriIndexKeepsDistinctAliasResourceIdentitiesAmbiguous()
+    {
+        var fixture = new Fixture();
+        fixture.AddAlias();
+        var source = fixture.Open();
+        var index = await WotCapturedUriIdentityIndex.CaptureRegistryAsync(source,
+            [new(source, new("https://recorded.test/alias"), WotCapturedUriIdentityKind.DocumentView, Fixture.Collection + "/alias")]);
+        var alias = index.Resolve(new("https://recorded.test/alias"));
+        await Assert.That(alias.ResourceXid).IsEqualTo(Fixture.Collection + "/alias");
+        await Assert.That(alias.VersionId).IsNull();
+        await Assert.That(alias.WotId).IsEqualTo(Fixture.WotId);
+        var failure = await Assert.That(() => index.Resolve(new(Fixture.WotId))).Throws<FederationException>() ??
+            throw new InvalidOperationException("Expected distinct Resource identities rather than alias collapse.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.Ambiguous);
+    }
+
+    [Test]
+    public async Task AutomaticCapturedUriIndexUsesModelKindForNonWotDocumentAssociations()
+    {
+        var fixture = new Fixture();
+        fixture.Root["modelsource"]!["groups"]!["sets"]!["resources"]!["things"]!["singular"] = "schema";
+        fixture.Model = RegistryModel.Compile(RegistryJson.Parse(fixture.Root["modelsource"]!.ToJsonString()));
+        foreach (var version in fixture.Root["sets"]!["team"]!["things"]!["a"]!["versions"]!.AsObject())
+        {
+            version.Value!.AsObject().Remove("wotid");
+        }
+        fixture.Documents.Remove(Fixture.Resource + "/versions/2.0.0");
+        var index = await WotCapturedUriIdentityIndex.CaptureRegistryAsync(fixture.Open());
+        var selected = index.Resolve(new("https://example.test/original/model.json"));
+        await Assert.That(selected.ResourceKind).IsEqualTo("schema");
+        await Assert.That(selected.WotId).IsNull();
+        await Assert.That(selected.VersionId).IsEqualTo("1.0.0");
+        var failure = await Assert.That(() => index.Resolve(new(Fixture.WotId))).Throws<FederationException>() ??
+            throw new InvalidOperationException("Expected no invented WoT identity for a Schema Resource.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.NotFound);
+    }
+
+    [Test]
+    public async Task AutomaticCapturedUriIndexDoesNotInventMissingBasesOrDocumentViewUris()
+    {
+        var fixture = new Fixture();
+        fixture.Documents.Clear();
+        fixture.Documents[Fixture.Resource + "/versions/1.0.0"] = new(Fixture.First, documentOrigin: "https://origin.test/model.json");
+        var source = fixture.Open();
+        const string recordedView = "https://recorded.test/view";
+        var index = await WotCapturedUriIdentityIndex.CaptureRegistryAsync(source,
+            [new(source, new(recordedView), WotCapturedUriIdentityKind.DocumentView, Fixture.Resource + "/versions/1.0.0")]);
+        await Assert.That(index.Resolve(new(recordedView)).VersionId).IsEqualTo("1.0.0");
+        await Assert.That(index.Resolve(new(Fixture.WotId)).VersionId).IsNull();
+        foreach (var uri in new[] { source.Context.Source, "https://origin.test/model.json", "https://example.test/original/model.json" })
+        {
+            var failure = await Assert.That(() => index.Resolve(new(uri))).Throws<FederationException>() ??
+                throw new InvalidOperationException("Expected no inferred URI association.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.NotFound);
+        }
+    }
+
+    [Test]
+    [Arguments("wotid", "relative")]
+    [Arguments("wotid", "https://example.test/model#fragment")]
+    [Arguments("base", "relative")]
+    [Arguments("base", "https://example.test/model#fragment")]
+    public async Task AutomaticCapturedUriIndexRejectsInvalidCapturedUriIdentities(string field, string uri)
+    {
+        var fixture = new Fixture();
+        if (field == "wotid") { fixture.Root["sets"]!["team"]!["things"]!["a"]!["versions"]!["1.0.0"]!["wotid"] = uri; }
+        else { fixture.Documents[Fixture.Resource + "/versions/1.0.0"] = new(Fixture.First, documentBase: uri); }
+        var source = fixture.Open();
+        var failure = await Assert.That(async () => await WotCapturedUriIdentityIndex.CaptureRegistryAsync(source))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected an unusable captured URI identity.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    [Arguments("work", -1)]
+    [Arguments("work", 0)]
+    [Arguments("work", 1)]
+    [Arguments("bytes", -1)]
+    [Arguments("bytes", 0)]
+    [Arguments("bytes", 1)]
+    [Arguments("objects", -1)]
+    [Arguments("objects", 0)]
+    [Arguments("objects", 1)]
+    [Arguments("requests", -1)]
+    [Arguments("requests", 0)]
+    [Arguments("requests", 1)]
+    public async Task AutomaticCapturedUriIndexHasInclusiveCumulativeBoundaries(string limit, int delta)
+    {
+        var source = new Fixture().Open();
+        var baseline = new FederationReadBudget();
+        _ = await WotCapturedUriIdentityIndex.CaptureRegistryAsync(source, budget: baseline);
+        var budget = new FederationReadBudget(new(
+            maxWork: limit == "work" ? baseline.Work + delta : 1_000_000,
+            maxTotalBytes: limit == "bytes" ? baseline.BytesRead + delta : 64 * 1024 * 1024,
+            maxObjects: limit == "objects" ? baseline.ObjectsRead + delta : 4096,
+            maxRequests: limit == "requests" ? baseline.Requests + delta : 4096));
+        if (delta < 0)
+        {
+            var failure = await Assert.That(async () => await WotCapturedUriIdentityIndex.CaptureRegistryAsync(source, budget: budget))
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected URI capture work exhaustion.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        }
+        else
+        {
+            var index = await WotCapturedUriIdentityIndex.CaptureRegistryAsync(source, budget: budget);
+            await Assert.That(budget.Work).IsEqualTo(baseline.Work);
+            await Assert.That(budget.BytesRead).IsEqualTo(baseline.BytesRead);
+            await Assert.That(budget.ObjectsRead).IsEqualTo(baseline.ObjectsRead);
+            await Assert.That(budget.Requests).IsEqualTo(baseline.Requests);
+            await Assert.That(index.Resolve(new(Fixture.WotId)).ResourceXid).IsEqualTo(Fixture.Resource);
+        }
+    }
+
+    [Test]
+    [Arguments(-1)]
+    [Arguments(0)]
+    [Arguments(1)]
+    public async Task AutomaticCapturedUriIndexBoundsEachRecordedUriBeforeParsing(int delta)
+    {
+        var fixture = new Fixture();
+        var documentBase = "https://example.test/" + new string('a', 2048);
+        fixture.Documents[Fixture.Resource + "/versions/1.0.0"] = new(Fixture.First, documentBase: documentBase);
+        var source = fixture.Open();
+        var budget = new FederationReadBudget(new(maxObjectBytes: Encoding.UTF8.GetByteCount(documentBase) + delta));
+        if (delta < 0)
+        {
+            var failure = await Assert.That(async () => await WotCapturedUriIdentityIndex.CaptureRegistryAsync(source, budget: budget))
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected a bounded captured URI.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+            await Assert.That(budget.Requests).IsEqualTo(0L);
+        }
+        else
+        {
+            var index = await WotCapturedUriIdentityIndex.CaptureRegistryAsync(source, budget: budget);
+            await Assert.That(index.Resolve(new(documentBase)).VersionId).IsEqualTo("1.0.0");
+        }
+    }
+
+    [Test]
+    public async Task AutomaticCapturedUriIndexAcceptsAnEmptyCapturedGraph()
+    {
+        var fixture = new Fixture();
+        fixture.Root["sets"] = new JsonObject();
+        fixture.Root["setscount"] = 0;
+        fixture.Documents.Clear();
+        var index = await WotCapturedUriIdentityIndex.CaptureRegistryAsync(fixture.Open());
+        var failure = await Assert.That(() => index.Resolve(new(Fixture.WotId))).Throws<FederationException>() ??
+            throw new InvalidOperationException("Expected an empty captured URI index.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.NotFound);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task AutomaticCapturedUriIndexHonorsCancellationDuringAssociationInventory(bool duringInventory)
+    {
+        var source = new Fixture().Open();
+        using var cancellation = new CancellationTokenSource();
+        var budget = new FederationReadBudget();
+        IEnumerable<WotCapturedUriAssociation> Associations()
+        {
+            cancellation.Cancel();
+            yield return new(source, new("https://recorded.test/view"), WotCapturedUriIdentityKind.DocumentView, Fixture.Resource);
+        }
+        if (!duringInventory) { cancellation.Cancel(); }
+        await Assert.That(async () => await WotCapturedUriIdentityIndex.CaptureRegistryAsync(source,
+            duringInventory ? Associations() : null, budget, cancellation.Token)).Throws<OperationCanceledException>();
+        await Assert.That(budget.Requests).IsEqualTo(0L);
+        if (!duringInventory) { await Assert.That(budget.Work).IsEqualTo(0L); }
+    }
+
+    [Test]
     public async Task PublicationCaptureCompilesRetainedModelSourceAndLocalIncludesWithoutCallerModel()
     {
         var fixture = new Fixture();
@@ -603,6 +816,12 @@ public class CapturedRegistryReadSourceTests
         var source = fixture.Open();
         var result = await source.ReadAsync(new(FederationOperation.Document, Fixture.Resource));
         await Assert.That(result.SelectedXid).IsEqualTo(Fixture.Resource + "/versions/1.0.0");
+        var index = await WotCapturedUriIdentityIndex.CaptureRegistryAsync(source);
+        await Assert.That(index.Resolve(new(Fixture.WotId)).ResourceXid).IsEqualTo(Fixture.Resource);
+        var resolved = await WotRegistryResolver.ResolveAsync(source, Fixture.Collection,
+            new(Fixture.WotId, WotReferenceTargetKind.ThingModel, WotReferenceOperator.ThingModel, VersionIdPin: "1.0.0"));
+        await Assert.That(resolved.Version.VersionId).IsEqualTo("1.0.0");
+        await Assert.That(resolved.Version.ContentDigest).IsEqualTo("sha256:" + Digest(Fixture.First));
     }
 
     [Test]

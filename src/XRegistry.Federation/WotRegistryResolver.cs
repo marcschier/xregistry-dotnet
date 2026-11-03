@@ -714,7 +714,8 @@ public static class WotRegistryResolver
                     var defaultPath = selectionXid + "/versions/" + Uri.EscapeDataString(defaultVersionId);
                     var defaultVersion = Entity(await MetadataAsync(new(FederationOperation.Entity, defaultPath))
                         .ConfigureAwait(false), defaultPath);
-                    if (FederationJson.String(defaultVersion, "versionid") != defaultVersionId)
+                    if (defaultVersion.TryGetProperty("versionid", out _) &&
+                        FederationJson.String(defaultVersion, "versionid") != defaultVersionId)
                     {
                         throw FederationJson.Invalid("A WoT default Version has a different Version identity.");
                     }
@@ -865,9 +866,10 @@ public static class WotRegistryResolver
             var identity = expectedIdentity;
             foreach (var member in versions)
             {
-                var id = FederationJson.String(member.Value, "versionid");
+                var id = member.Name;
                 var wotId = FederationJson.String(member.Value, "wotid");
-                if (id != member.Name || identity is not null && wotId != identity)
+                if (member.Value.TryGetProperty("versionid", out _) && FederationJson.String(member.Value, "versionid") != id ||
+                    identity is not null && wotId != identity)
                 {
                     throw FederationJson.Invalid("A WoT Version has a different identity from its selected Resource.");
                 }

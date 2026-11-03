@@ -141636,7 +141636,7 @@
       "text": "Before validating closure bindings, the Producer and Consumer MUST determine candidate targets from the captured Registry model, Registry view and document associations. Target matching MUST use each candidate's Group and Resource identity, Resource kind, applicable `wotid`, original document URI base and document-view URI from the captured Registry metadata. Each URI identity MUST distinguish a Resource from an exact Version. `originRegistry` is provenance, not a document URI identity, and MUST NOT be used for target matching. Neither side MAY use closure binding targets, unrecorded retrieval locations or requests to a live Registry to choose a target.",
       "review": {
         "status": "reviewed",
-        "note": "The captured URI index distinguishes Resource and exact-Version scope without consulting bindings or originRegistry. CaptureAsync derives Resource kind from the captured model and applicable wotid from captured Version metadata for supplied view/document URI associations. Resource associations use Meta/default metadata, exact-Version associations do not require a default, and one same-typed same-source Resource alias retains the alias identity. Source context, model and resolution owner are captured and rechecked; mutable metadata is compared again without retrying against a newer default. Requests, metadata and traversal share finite budgets and cancellation. Distinct mutable source objects remain separate, while equivalent immutable context/model/owner records can represent one identity. Different revisions, root hashes or storage roots cannot collapse under one locator. Automatic URI-association extraction from captured views/document descriptors and independent closure verification remain unimplemented; this compound requirement stays pending.",
+        "note": "The captured URI index distinguishes Resource and exact-Version scope without consulting bindings or originRegistry. CaptureAsync derives Resource kind from the captured model and applicable wotid from captured Version metadata for supplied view/document URI associations. Resource associations use Meta/default metadata, exact-Version associations do not require a default, and one same-typed same-source Resource alias retains the alias identity. CaptureRegistryAsync inventories owned Core document-view graphs and retained document associations, derives Resource-scoped applicable wotid and exact-Version document-base identities, and does not infer missing bases or document-view URIs from locators or provenance. Duplicate base URIs on distinct Versions remain ambiguous; Schema associations derive their kind from the model. Omitted Core document-view IDs use containment, while conflicting supplied IDs reject. Source context, model and resolution owner are captured and rechecked; mutable metadata is compared again without retrying against a newer default. Requests, metadata, URI parsing and traversal share finite budgets and cancellation. Distinct mutable source objects remain separate, while equivalent immutable context/model/owner records can represent one identity. Different revisions, root hashes or storage roots cannot collapse under one locator. Broader binding/provider integration and independent closure verification remain unfinished; this compound requirement stays pending.",
         "roles": [
           "client",
           "producer"
@@ -141664,7 +141664,18 @@
           "WotRegistryResolverTests.CapturedResourceAliasRejectsDifferentTypesAndSecondHopsWithoutDocumentReads",
           "WotRegistryResolverTests.CapturedAssociationReadsPropagateCancellationAndSourceErrors",
           "WotRegistryResolverTests.CapturedAssociationReadsShareRequestWorkAndSourceLimits",
-          "WotRegistryResolverTests.CapturedAssociationBuilderRejectsSourceEvidenceDriftOnTheFirstRead"
+          "WotRegistryResolverTests.CapturedAssociationBuilderRejectsSourceEvidenceDriftOnTheFirstRead",
+          "CapturedRegistryReadSourceTests.AutomaticCapturedUriIndexPreservesResourceAndExactVersionScopeOffline",
+          "CapturedRegistryReadSourceTests.AutomaticCapturedUriIndexDoesNotChooseBetweenVersionsSharingOneBase",
+          "CapturedRegistryReadSourceTests.AutomaticCapturedUriIndexKeepsDistinctAliasResourceIdentitiesAmbiguous",
+          "CapturedRegistryReadSourceTests.AutomaticCapturedUriIndexUsesModelKindForNonWotDocumentAssociations",
+          "CapturedRegistryReadSourceTests.AutomaticCapturedUriIndexDoesNotInventMissingBasesOrDocumentViewUris",
+          "CapturedRegistryReadSourceTests.AutomaticCapturedUriIndexRejectsInvalidCapturedUriIdentities",
+          "CapturedRegistryReadSourceTests.AutomaticCapturedUriIndexHasInclusiveCumulativeBoundaries",
+          "CapturedRegistryReadSourceTests.AutomaticCapturedUriIndexBoundsEachRecordedUriBeforeParsing",
+          "CapturedRegistryReadSourceTests.AutomaticCapturedUriIndexAcceptsAnEmptyCapturedGraph",
+          "CapturedRegistryReadSourceTests.AutomaticCapturedUriIndexHonorsCancellationDuringAssociationInventory",
+          "CapturedRegistryReadSourceTests.CapturedMapKeysSupplyOmittedEntityIdAttributes"
         ],
         "nativeEvidence": []
       }

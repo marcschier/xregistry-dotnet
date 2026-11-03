@@ -169,6 +169,21 @@ public sealed class CapturedRegistryReadSource : IFederationReadSource
     /// <summary>Returns the original captured Registry representation, not a serialization of a read result.</summary>
     public byte[] GetExactRegistryBytes() => (byte[])_registryBytes.Clone();
 
+    internal IEnumerable<(string Xid, string Kind, JsonElement Version)> ResourceMetadata(
+        FederationReadBudget budget, CancellationToken token)
+    {
+        foreach (var member in _entities.Values)
+        {
+            token.ThrowIfCancellationRequested();
+            budget.ChargeWork();
+            if (member.Parts.Length != 4) { continue; }
+            var resource = DocumentTreeFormat.Resource(Model, member.Parts);
+            if (resource.HasDocument) { yield return (member.Xid, resource.Singular, SelectionMetadata(member)); }
+        }
+    }
+
+    internal IEnumerable<KeyValuePair<string, FederationDocument>> DocumentAssociations => _documents;
+
     /// <inheritdoc />
     public ValueTask<FederationReadResult> ReadAsync(FederationReadRequest request, CancellationToken cancellationToken = default)
     {

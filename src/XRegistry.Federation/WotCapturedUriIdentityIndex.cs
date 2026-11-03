@@ -159,6 +159,59 @@ public sealed class WotCapturedUriIdentityIndex
     private readonly Dictionary<IFederationReadSource, CapturedSource> _sources =
         new(ReferenceEqualityComparer.Instance);
 
+    /// <summary>Builds associations from an owned captured graph's applicable wotid values and retained document bases.</summary>
+    /// <remarks>
+    /// WoT identifiers retain Resource scope; a document base identifies its exact associated Version.
+    /// Missing bases remain absent. Storage locators and provenance are not used to invent associations.
+    /// Extra associations must be supplied from independently captured URI metadata, not closure bindings.
+    /// </remarks>
+    public static async ValueTask<WotCapturedUriIdentityIndex> CaptureRegistryAsync(
+        CapturedRegistryReadSource source, IEnumerable<WotCapturedUriAssociation>? additionalAssociations = null,
+        FederationReadBudget? budget = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        cancellationToken.ThrowIfCancellationRequested();
+        budget ??= new();
+        var associations = new List<WotCapturedUriAssociation>();
+        Uri IdentityUri(string value)
+        {
+            budget.CheckObjectBytes(value.Length);
+            budget.ChargeWork(value.Length);
+            var length = System.Text.Encoding.UTF8.GetByteCount(value);
+            budget.CheckObjectBytes(length);
+            budget.ChargeBytes(length);
+            budget.ChargeObject();
+            var uri = FederationJson.AbsoluteUri(value);
+            if (uri.Fragment.Length != 0) { throw FederationJson.Invalid("A captured URI identity must be fragment-free."); }
+            return uri;
+        }
+        foreach (var (xid, kind, version) in source.ResourceMetadata(budget, cancellationToken))
+        {
+            if (kind is "thingmodel" or "thingdescription")
+            {
+                associations.Add(new(source, IdentityUri(FederationJson.String(version, "wotid")),
+                    WotCapturedUriIdentityKind.WotId, xid));
+            }
+        }
+        foreach (var (xid, document) in source.DocumentAssociations)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            budget.ChargeWork();
+            if (document.Base is { } recordedBase)
+            {
+                associations.Add(new(source, IdentityUri(recordedBase), WotCapturedUriIdentityKind.DocumentBase, xid));
+            }
+        }
+        foreach (var association in additionalAssociations ?? [])
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            budget.ChargeWork();
+            ArgumentNullException.ThrowIfNull(association);
+            associations.Add(association);
+        }
+        return await CaptureAsync(associations, budget, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Derives target kinds and applicable WoT identifiers from captured models and metadata.</summary>
     /// <remarks>
     /// Associations must come from the captured view's URI and document metadata, not closure bindings.
@@ -245,7 +298,7 @@ public sealed class WotCapturedUriIdentityIndex
             }
             var versionXid = selectedResourceXid + "/versions/" + Uri.EscapeDataString(selectedId);
             var version = await EntityAsync(scope, versionXid).ConfigureAwait(false);
-            if (FederationJson.String(version, "versionid") != selectedId)
+            if (version.TryGetProperty("versionid", out _) && FederationJson.String(version, "versionid") != selectedId)
             {
                 throw FederationJson.Invalid("Captured Version metadata disagrees with its Version identity.");
             }
