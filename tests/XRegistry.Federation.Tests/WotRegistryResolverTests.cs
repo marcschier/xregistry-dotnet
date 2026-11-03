@@ -825,6 +825,65 @@ public class WotRegistryResolverTests
     }
 
     [Test]
+    public async Task LocalReferenceResolutionAppliesBaseLocalityFloorAndFragmentWithoutAnotherRead()
+    {
+        var bytes = Encoding.UTF8.GetBytes(
+            """{"version":{"model":"2.0.0"},"properties":{"status":{"type":"string"}}}""");
+        var source = new Source { SecondBytes = bytes };
+        var containing = await WotRegistryResolver.ResolveAsync(source, source.Collection,
+            source.Request with { VersionIdPin = "2.0.0" });
+        var request = source.Request with
+        {
+            MinimumVersion = "2.0.0",
+            MinimumVersionKind = WotMinimumVersionKind.ThingModel
+        };
+        var reads = source.Reads.Count;
+        var budget = new FederationReadBudget();
+
+        var result = await WotRegistryResolver.ResolveLocalReferenceAsync(containing,
+            "#/properties/status", new Uri("https://example.test/models/model.json"),
+            new Uri("https://example.test/models/model.json"), request, budget);
+
+        await Assert.That(result.Value.GetProperty("type").GetString()).IsEqualTo("string");
+        await Assert.That(result.ContainingDocument.Version.VersionId).IsEqualTo("2.0.0");
+        await Assert.That(result.ContainingDocument.Version.ContentDigest).IsEqualTo(Digest(bytes));
+        await Assert.That(source.Reads.Count).IsEqualTo(reads);
+        await Assert.That(budget.Requests).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task LocalReferenceWithoutFragmentSelectsTheContainingDocument()
+    {
+        var bytes = Encoding.UTF8.GetBytes("""{"properties":{"status":{"type":"string"}}}""");
+        var source = new Source { FirstBytes = bytes };
+        var containing = await WotRegistryResolver.ResolveAsync(source, source.Collection,
+            source.Request with { VersionIdPin = "1.0.0" });
+        var documentUri = new Uri("https://example.test/models/model.json");
+
+        var result = await WotRegistryResolver.ResolveLocalReferenceAsync(containing,
+            "", documentUri, documentUri, source.Request);
+
+        await Assert.That(result.Value.GetProperty("properties").GetProperty("status")
+            .GetProperty("type").GetString()).IsEqualTo("string");
+        await Assert.That(result.ContainingDocument.Version.VersionId).IsEqualTo("1.0.0");
+    }
+
+    [Test]
+    public async Task LocalReferenceResolverRejectsExternalTargetsBeforeSourceReads()
+    {
+        var source = new Source();
+        var containing = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var reads = source.Reads.Count;
+
+        await Assert.That(async () => await WotRegistryResolver.ResolveLocalReferenceAsync(containing,
+            "other.json#/properties/status", new Uri("https://example.test/models/model.json"),
+            new Uri("https://example.test/models/model.json"), source.Request))
+            .Throws<ArgumentException>();
+
+        await Assert.That(source.Reads.Count).IsEqualTo(reads);
+    }
+
+    [Test]
     [Arguments(false, "2.0.0", null)]
     [Arguments(false, "1.0.0", null)]
     [Arguments(false, "0.1.0", null)]

@@ -166,6 +166,37 @@ public static class WotRegistryResolver
         return containingRevision;
     }
 
+    /// <summary>Resolves a local WoT reference and applies its fragment to the retained containing revision.</summary>
+    /// <remarks>
+    /// The caller supplies the effective base and containing-document URI after JSON-LD context processing.
+    /// This method rejects external references and never opens another source or selects another Version.
+    /// The local Version check and fragment selection share one finite work budget.
+    /// </remarks>
+    public static async ValueTask<WotResolvedFragment> ResolveLocalReferenceAsync(
+        WotResolvedDocument containingRevision, string reference, Uri effectiveBaseUri,
+        Uri containingDocumentUri, WotVersionResolutionRequest request,
+        FederationReadBudget? budget = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(containingRevision);
+        ArgumentNullException.ThrowIfNull(request);
+        var target = WotReferenceUriResolver.Resolve(reference, effectiveBaseUri, containingDocumentUri);
+        if (!target.IsDocumentLocal)
+        {
+            throw new ArgumentException("The WoT reference does not identify its containing document.", nameof(reference));
+        }
+
+        var readBudget = budget ?? new();
+        var localRequest = request with
+        {
+            TargetWotId = containingRevision.Version.WotId,
+            IsDocumentLocal = true
+        };
+        var resolved = await ResolveLocalAsync(containingRevision, localRequest, readBudget, cancellationToken)
+            .ConfigureAwait(false);
+        return await SelectFragmentAsync(resolved, target.Fragment ?? "#", readBudget, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     private static async ValueTask<JsonElement> ParseAcquiredDocumentAsync(WotResolvedDocument document,
         FederationReadBudget budget, CancellationToken cancellationToken)
     {
