@@ -2320,10 +2320,26 @@ A recognized selector must target the same affordance category and a declared
 source. Competing selectors at one affordance reject the operation. Each result
 identifies its existing source entry rather than adding a dependency occurrence.
 `td:ref`, nested references and non-affordance fragments remain ordinary.
-Captured target kinds and affordance existence, annotation admission, source
-requirements, digest pins and closure integration remain unverified.
+Discovery alone does not verify captured target kinds or affordance existence.
+Annotation admission, source requirements, digest pins and closure integration
+remain unverified.
 Document-local associations remain candidates for subsequent cycle validation,
 not accepted cyclic plans.
+
+`SelectProjectionAffordanceAsync` checks an already acquired source against the
+manifest's expected TD or TM kind, using the kind established by the captured
+model. It accepts a decoded selector pointer to one root `properties`, `actions`
+or `events` member and requires both the map and its selected value to be objects.
+Names remain case-sensitive, and percent sequences in the decoded pointer remain
+literal object-name text. A missing map or member reports `not-found`; an invalid
+map, value or document rejects the selection without acquiring another Version.
+The result retains the selected revision, exact bytes and full-document digest,
+even when the source has since become unavailable. Pointer input and retained
+document parsing share finite limits and cancellation.
+
+The caller still establishes the source association and checks Version
+requirements, source digest pins and nested-plan resolution. This selection
+method does not establish those conditions or compose the affordance into a view.
 
 `WotPublicationClosure.Parse` reads the selected closed representation without
 registering the WoT extension as supported. Entries and binding endpoints must

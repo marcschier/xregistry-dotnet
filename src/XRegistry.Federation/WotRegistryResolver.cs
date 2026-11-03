@@ -53,6 +53,53 @@ public sealed class WotResolvedFragment
 /// <summary>Resolves parsed profile-aware WoT references through a selected native source or retained revision.</summary>
 public static class WotRegistryResolver
 {
+    /// <summary>Selects an object-valued affordance from an already acquired projection source.</summary>
+    /// <remarks>
+    /// The expected kind comes from the source manifest; the actual kind comes from the captured model.
+    /// The pointer is a decoded JSON Pointer, not a URI fragment. Source association, Version requirements
+    /// and nested-plan resolution must be established separately. This never acquires another Version.
+    /// </remarks>
+    public static async ValueTask<WotResolvedFragment> SelectProjectionAffordanceAsync(
+        WotResolvedDocument document, WotReferenceTargetKind expectedKind, string targetPointer,
+        FederationReadBudget? budget = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(targetPointer);
+        if (!Enum.IsDefined(expectedKind)) { throw new ArgumentOutOfRangeException(nameof(expectedKind)); }
+        cancellationToken.ThrowIfCancellationRequested();
+        if (document.Kind != expectedKind)
+        {
+            throw FederationJson.Invalid("The captured projection source has a different WoT kind from its manifest.");
+        }
+        var readBudget = budget ?? new();
+        var pointerBytes = Encoding.UTF8.GetByteCount(targetPointer);
+        readBudget.CheckObjectBytes(pointerBytes);
+        readBudget.ChargeBytes(pointerBytes);
+        readBudget.ChargeObject();
+        readBudget.CheckDepth(targetPointer.Count(character => character == '/'));
+        var parts = targetPointer.Split('/');
+        if (parts.Length != 3 || parts[0].Length != 0 ||
+            parts[1] is not ("properties" or "actions" or "events"))
+        {
+            throw InvalidFragment("A projection target must identify one member of a root affordance map.");
+        }
+        var name = DecodePointerToken(parts[2], readBudget, cancellationToken);
+        var root = await ParseAcquiredDocumentAsync(document, readBudget, cancellationToken).ConfigureAwait(false);
+        if (!root.TryGetProperty(parts[1], out var map))
+        {
+            throw new RegistryException(new("not-found", "", "The projection source has no selected affordance map."));
+        }
+        FederationJson.RequireObject(map);
+        if (!map.TryGetProperty(name, out var value))
+        {
+            throw new RegistryException(new("not-found", "", "The projection source has no selected affordance."));
+        }
+        FederationJson.RequireObject(value);
+        readBudget.CheckResultBytes(Encoding.UTF8.GetByteCount(value.GetRawText()));
+        cancellationToken.ThrowIfCancellationRequested();
+        return new(document, value);
+    }
+
     /// <summary>Applies an RFC 6901 URI-fragment pointer after Version or local-revision selection.</summary>
     /// <remarks>
     /// The fragment includes its leading '#'; '#' selects the whole document. Percent decoding is

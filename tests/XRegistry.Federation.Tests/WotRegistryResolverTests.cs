@@ -14,6 +14,252 @@ namespace XRegistry.Federation.Tests;
 public class WotRegistryResolverTests
 {
     [Test]
+    [Arguments(false, "properties")]
+    [Arguments(false, "actions")]
+    [Arguments(false, "events")]
+    [Arguments(true, "properties")]
+    [Arguments(true, "actions")]
+    [Arguments(true, "events")]
+    public async Task ProjectionAffordancesUseCapturedKindAndRetainTheExactSelectedRevision(
+        bool description, string category)
+    {
+        var bytes = Encoding.UTF8.GetBytes(new JsonObject
+        {
+            ["id"] = Source.Identity,
+            [category] = new JsonObject
+            {
+                ["a/b~c%2F"] = new JsonObject { ["description"] = "captured", ["type"] = "number" }
+            }
+        }.ToJsonString());
+        var source = new Source(description) { SecondBytes = bytes };
+        var plan = new JsonObject
+        {
+            ["@context"] = JsonNode.Parse("""
+                {"Thing":"https://www.w3.org/2019/wot/td#Thing",
+                 "tm":"https://www.w3.org/2019/wot/tm#",
+                 "properties":{"@id":"https://www.w3.org/2019/wot/td#hasPropertyAffordance","@container":"@index"},
+                 "actions":{"@id":"https://www.w3.org/2019/wot/td#hasActionAffordance","@container":"@index"},
+                 "events":{"@id":"https://www.w3.org/2019/wot/td#hasEventAffordance","@container":"@index"},
+                 "href":{"@id":"https://www.w3.org/2019/wot/td#hasTarget","@type":"@id"}}
+                """),
+            ["@type"] = new JsonArray("Thing", "p:projection"),
+            ["p:projects"] = new JsonArray(new JsonObject
+            {
+                ["p:sourceName"] = "captured", ["href"] = "source.json",
+                ["type"] = description ? "application/td+json" : "application/tm+json"
+            }),
+            [category] = new JsonObject
+            {
+                ["renamed"] = new JsonObject { ["tm:ref"] = "source.json#/" + category + "/a~1b~0c%252F" }
+            }
+        };
+        plan["@context"]!["p"] = WotJsonLdBaseResolver.ProjectionVocabulary;
+        var selectors = await WotJsonLdBaseResolver.DiscoverProjectionSelectorReferencesAsync(
+            new(Encoding.UTF8.GetBytes(plan.ToJsonString())), new Uri("https://example.test/plan.json"),
+            WotReferenceTargetKind.ThingDescription, new Dictionary<Uri, FederationDocument>());
+        await Assert.That(selectors.Count).IsEqualTo(1);
+        await Assert.That(selectors[0].Reference.SourcePointer).IsEqualTo("/" + category + "/renamed");
+        var acquired = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var reads = source.Reads.Count;
+        source.Context = new("test", "urn:test:replaced");
+        source.Model = null;
+        source.Change = (_, _) => throw new InvalidOperationException("The selected source must not be reopened.");
+
+        var selected = await WotRegistryResolver.SelectProjectionAffordanceAsync(acquired,
+            selectors[0].Source.TargetKind, selectors[0].TargetPointer);
+
+        await Assert.That(ReferenceEquals(selected.ContainingDocument, acquired)).IsTrue();
+        await Assert.That(selected.Value.GetProperty("description").GetString()).IsEqualTo("captured");
+        await Assert.That(selected.Value.GetProperty("type").GetString()).IsEqualTo("number");
+        await Assert.That(selected.ContainingDocument.Version.VersionId).IsEqualTo("2.0.0");
+        await Assert.That(selected.ContainingDocument.Version.ContentDigest).IsEqualTo(Digest(bytes));
+        await Assert.That(selected.ContainingDocument.Context.Source).IsEqualTo("urn:test:authorized");
+        await Assert.That(source.Reads.Count).IsEqualTo(reads);
+        using var retained = acquired.Document.OpenRead();
+        using var copied = new MemoryStream();
+        await retained.CopyToAsync(copied);
+        await Assert.That(copied.ToArray().SequenceEqual(bytes)).IsTrue();
+    }
+
+    [Test]
+    [Arguments(false, false)]
+    [Arguments(true, false)]
+    [Arguments(false, true)]
+    [Arguments(true, true)]
+    public async Task ProjectionAffordancesRejectAManifestKindMismatchBeforeParsing(bool description, bool malformed)
+    {
+        var source = new Source(description)
+        {
+            SecondBytes = malformed ? [] : Encoding.UTF8.GetBytes("""{"properties":{"a":{}}}""")
+        };
+        var acquired = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var budget = new FederationReadBudget();
+        var failure = await Assert.That(async () =>
+            await WotRegistryResolver.SelectProjectionAffordanceAsync(acquired, description
+                ? WotReferenceTargetKind.ThingModel : WotReferenceTargetKind.ThingDescription,
+                "/properties/a", budget)).Throws<FederationException>() ??
+            throw new InvalidOperationException("Expected a captured target-kind mismatch.");
+
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(budget.Work).IsEqualTo(0L);
+        await Assert.That(budget.BytesRead).IsEqualTo(0L);
+    }
+
+    [Test]
+    [Arguments("{}")]
+    [Arguments("""{"properties":{}}""")]
+    [Arguments("""{"properties":{"A":{}}}""")]
+    public async Task ProjectionAffordancesRejectMissingMapsAndCaseSensitiveNamesWithoutFallback(string json)
+    {
+        var source = new Source
+        {
+            FirstBytes = Encoding.UTF8.GetBytes("""{"properties":{"a":{}}}"""),
+            SecondBytes = Encoding.UTF8.GetBytes(json)
+        };
+        var acquired = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var reads = source.Reads.Count;
+        var failure = await Assert.That(async () =>
+            await WotRegistryResolver.SelectProjectionAffordanceAsync(acquired, acquired.Kind, "/properties/a"))
+            .Throws<RegistryException>() ?? throw new InvalidOperationException("Expected a missing target.");
+
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo("not-found");
+        await Assert.That(source.Reads.Count).IsEqualTo(reads);
+        await Assert.That(source.Reads.Any(read => read.Operation == FederationOperation.Document &&
+            read.Target.EndsWith("/1.0.0", StringComparison.Ordinal))).IsFalse();
+    }
+
+    [Test]
+    [Arguments("""{"properties":[{}]}""", "/properties/0")]
+    [Arguments("""{"properties":null}""", "/properties/a")]
+    [Arguments("""{"properties":{"a":null}}""", "/properties/a")]
+    [Arguments("""{"properties":{"a":[]}}""", "/properties/a")]
+    [Arguments("""{"properties":{"a":true}}""", "/properties/a")]
+    [Arguments("""{"properties":{"a":1}}""", "/properties/a")]
+    [Arguments("""{"properties":{"a":"text"}}""", "/properties/a")]
+    [Arguments("""{"properties":{"a":{},"a":{}}}""", "/properties/a")]
+    [Arguments("""{"id":"urn:test:wrong","properties":{"a":{}}}""", "/properties/a")]
+    public async Task ProjectionAffordancesRejectNonobjectsAndInvalidCapturedDocuments(string json, string target)
+    {
+        var source = new Source { SecondBytes = Encoding.UTF8.GetBytes(json) };
+        var acquired = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var failure = await Assert.That(async () =>
+            await WotRegistryResolver.SelectProjectionAffordanceAsync(acquired, acquired.Kind, target))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected invalid captured target.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    [Arguments("")]
+    [Arguments("#/properties/a")]
+    [Arguments("/properties")]
+    [Arguments("/properties/a/type")]
+    [Arguments("/Properties/a")]
+    [Arguments("/definitions/a")]
+    [Arguments("/properties/a~2b")]
+    [Arguments("/properties/a~")]
+    public async Task ProjectionAffordancesRequireOneDecodedRootAffordancePointer(string target)
+    {
+        var source = new Source { SecondBytes = Encoding.UTF8.GetBytes("""{"properties":{"a":{}}}""") };
+        var acquired = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var failure = await Assert.That(async () =>
+            await WotRegistryResolver.SelectProjectionAffordanceAsync(acquired, acquired.Kind, target))
+            .Throws<RegistryException>() ?? throw new InvalidOperationException("Expected an invalid target pointer.");
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo("invalid-fragment");
+    }
+
+    [Test]
+    [Arguments("")]
+    [Arguments("0")]
+    [Arguments("a\u00e4")]
+    public async Task ProjectionAffordancesTreatMapKeysAsObjectNamesIncludingEmptyAndUnicode(string name)
+    {
+        var bytes = Encoding.UTF8.GetBytes(new JsonObject
+        {
+            ["properties"] = new JsonObject { [name] = new JsonObject { ["description"] = name } }
+        }.ToJsonString());
+        var source = new Source { SecondBytes = bytes };
+        var acquired = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var selected = await WotRegistryResolver.SelectProjectionAffordanceAsync(acquired, acquired.Kind,
+            "/properties/" + name);
+        await Assert.That(selected.Value.GetProperty("description").GetString()).IsEqualTo(name);
+    }
+
+    [Test]
+    [Arguments(0, -1)]
+    [Arguments(0, 0)]
+    [Arguments(0, 1)]
+    [Arguments(1, -1)]
+    [Arguments(1, 0)]
+    [Arguments(1, 1)]
+    [Arguments(2, -1)]
+    [Arguments(2, 0)]
+    [Arguments(2, 1)]
+    [Arguments(3, -1)]
+    [Arguments(3, 0)]
+    [Arguments(3, 1)]
+    [Arguments(4, -1)]
+    [Arguments(4, 0)]
+    [Arguments(4, 1)]
+    [Arguments(5, -1)]
+    [Arguments(5, 0)]
+    [Arguments(5, 1)]
+    [Arguments(6, -1)]
+    [Arguments(6, 0)]
+    [Arguments(6, 1)]
+    public async Task ProjectionAffordanceLimitsHaveInclusiveBoundaries(int boundary, int delta)
+    {
+        var bytes = Encoding.UTF8.GetBytes("""{"properties":{"a":{"description":"captured"}}}""");
+        var source = new Source { SecondBytes = bytes };
+        var acquired = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        const string target = "/properties/a";
+        var baseline = new FederationReadBudget();
+        var selected = await WotRegistryResolver.SelectProjectionAffordanceAsync(acquired, acquired.Kind,
+            target, baseline);
+        var limits = boundary switch
+        {
+            0 => new FederationReadLimits(maxWork: baseline.Work + delta),
+            1 => new FederationReadLimits(maxObjectBytes: bytes.Length + delta),
+            2 => new FederationReadLimits(maxResultBytes: Encoding.UTF8.GetByteCount(selected.Value.GetRawText()) + delta),
+            3 => new FederationReadLimits(maxDepth: 2 + delta),
+            4 => new FederationReadLimits(maxTotalBytes: Encoding.UTF8.GetByteCount(target) + delta),
+            5 => new FederationReadLimits(maxObjects: 2 + delta),
+            _ => new FederationReadLimits(maxJsonDepth: 3 + delta)
+        };
+        var budget = new FederationReadBudget(limits);
+        if (boundary == 5) { budget.ChargeObject(); }
+        if (delta < 0)
+        {
+            var failure = await Assert.That(async () =>
+                await WotRegistryResolver.SelectProjectionAffordanceAsync(acquired, acquired.Kind, target, budget))
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected a target limit failure.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        }
+        else
+        {
+            var result = await WotRegistryResolver.SelectProjectionAffordanceAsync(acquired, acquired.Kind, target, budget);
+            await Assert.That(result.Value.GetProperty("description").GetString()).IsEqualTo("captured");
+        }
+        await Assert.That(budget.BytesRead).IsEqualTo(boundary == 4 && delta < 0
+            ? 0L : Encoding.UTF8.GetByteCount(target));
+        await Assert.That(budget.Requests).IsEqualTo(0L);
+    }
+
+    [Test]
+    public async Task ProjectionAffordanceCancellationDoesNotReadOrReturnTheCapturedTarget()
+    {
+        var source = new Source();
+        var acquired = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var budget = new FederationReadBudget();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        await Assert.That(async () => await WotRegistryResolver.SelectProjectionAffordanceAsync(
+            acquired, acquired.Kind, "/properties/a", budget, cancellation.Token))
+            .Throws<OperationCanceledException>();
+        await Assert.That(budget.Work).IsEqualTo(0L);
+        await Assert.That(budget.Requests).IsEqualTo(0L);
+    }
+
+    [Test]
     [Arguments(false, "1.0.0")]
     [Arguments(true, "1.0.0")]
     [Arguments(false, "2.0.0-alpha")]
