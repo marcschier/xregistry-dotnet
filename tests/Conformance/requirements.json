@@ -60697,8 +60697,10 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "CollectionAndNestedErrorsRetainPrecisePointers"
+        ],
         "nativeEvidence": []
       }
     },
@@ -60731,8 +60733,11 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "MapKeysFollowCoreCharacterAndLengthRules",
+          "CollectionAndNestedErrorsRetainPrecisePointers"
+        ],
         "nativeEvidence": []
       }
     },
@@ -60765,8 +60770,10 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "MapKeysFollowCoreCharacterAndLengthRules"
+        ],
         "nativeEvidence": []
       }
     },
@@ -61009,8 +61016,11 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AttributeNamesAreLimitedToOneThroughSixtyThreeCharacters",
+          "WildcardsDoNotPermitInvalidNamesOrBypassDeclaredTypes"
+        ],
         "nativeEvidence": []
       }
     },
@@ -61044,8 +61054,11 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "AttributeNamesFollowCoreCharacterRules",
+          "WildcardsDoNotPermitInvalidNamesOrBypassDeclaredTypes"
+        ],
         "nativeEvidence": []
       }
     },
@@ -61079,8 +61092,11 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EmptyDescriptionRemainsAPresentLegalString",
+          "EmptySameNamedExtensionsAndRootModelUriAnnotationsRemainLegal"
+        ],
         "nativeEvidence": []
       }
     },
