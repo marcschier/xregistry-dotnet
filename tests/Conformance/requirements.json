@@ -61879,8 +61879,10 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SelfUrlsAreUniquePublicHierarchyLocationsForEveryEntityPlane"
+        ],
         "nativeEvidence": []
       }
     },
@@ -61913,8 +61915,10 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SelfUrlsAreUniquePublicHierarchyLocationsForEveryEntityPlane"
+        ],
         "nativeEvidence": []
       }
     },
@@ -61948,7 +61952,9 @@
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "ExportUsesRelativePointersAndNoDefaultProjection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -61981,8 +61987,12 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SelfUrlsAreUniquePublicHierarchyLocationsForEveryEntityPlane",
+          "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
+          "EveryEntityAndCollectionUsesItsActualResponseRoot"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62016,7 +62026,9 @@
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "GroupRequiredMetadataUsesCanonicalEntityValuesInBothViews"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62049,8 +62061,10 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "SelfUrlsAreUniquePublicHierarchyLocationsForEveryEntityPlane"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62083,7 +62097,9 @@
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "GroupRequiredMetadataUsesCanonicalEntityValuesInBothViews"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62151,7 +62167,9 @@
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "GroupRequiredMetadataUsesCanonicalEntityValuesInBothViews"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62184,8 +62202,12 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
+          "EveryEntityAndCollectionUsesItsActualResponseRoot",
+          "ExportUsesRelativePointersAndNoDefaultProjection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62218,8 +62240,12 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "DocumentViewUsesResponseLocalPointersWithoutDefaultVersionDuplication",
+          "EveryEntityAndCollectionUsesItsActualResponseRoot",
+          "ExportUsesRelativePointersAndNoDefaultProjection"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62253,7 +62279,10 @@
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "ShortSelfCoversEntityPlanesWithoutRewritingDomainUrlsOrDocuments",
+          "ShortSelfIsStableAcrossDisableEnableAndFrozenRestart"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62287,7 +62316,9 @@
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "ShortSelfCoversEntityPlanesWithoutRewritingDomainUrlsOrDocuments"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62352,8 +62383,10 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ShortSelfIsStableAcrossDisableEnableAndFrozenRestart"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62385,8 +62418,10 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "EnforcesNamingAndSystemAttributeOverlayRules"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62418,8 +62453,10 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ShortSelfCoversEntityPlanesWithoutRewritingDomainUrlsOrDocuments"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62451,8 +62488,11 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ShortSelfIsStableAcrossDisableEnableAndFrozenRestart",
+          "MappedCollectionsOnlyResponseKeepsNestedShortSelf"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62485,7 +62525,9 @@
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "ReadonlyShortSelfCannotBeOverriddenByResourceOrMetaUpdates"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62517,8 +62559,10 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ShortSelfCoversEntityPlanesWithoutRewritingDomainUrlsOrDocuments"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62551,7 +62595,9 @@
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "ShortSelfIsStableAcrossDisableEnableAndFrozenRestart"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62584,7 +62630,9 @@
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "ReadonlyShortSelfCannotBeOverriddenByResourceOrMetaUpdates"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62616,8 +62664,10 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ShortSelfCoversEntityPlanesWithoutRewritingDomainUrlsOrDocuments"
+        ],
         "nativeEvidence": []
       }
     },
