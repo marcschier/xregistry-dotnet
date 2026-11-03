@@ -60810,8 +60810,12 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ScalarValuesPreserveTypePrecisionAndNormalizeTimestamps",
+          "InvalidScalarsReturnExactFieldDiagnostics",
+          "ExplicitTimestampsArePreservedAndEqualOrNullModifiedAtTouchesNow"
+        ],
         "nativeEvidence": []
       }
     },
