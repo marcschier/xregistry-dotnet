@@ -218,6 +218,8 @@ public static partial class WotJsonLdBaseResolver
             var iri = await ExpandMemberIriAsync(document, reference.SourcePointer, member.Name, documentUri,
                 contexts, readBudget, cancellationToken).ConfigureAwait(false);
             if (iri != "http://opcfoundation.org/UA/WoT-Binding/compatibilityLine") { continue; }
+            // A root line declares the containing document, even beside a root reference.
+            if (reference.SourcePointer.Length == 0) { continue; }
             lineCount++;
             if (lineCount > 1 || member.Value.Type != JTokenType.String)
             {

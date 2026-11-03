@@ -15,6 +15,40 @@ namespace XRegistry.Federation.Tests;
 public class CapturedRegistryReadSourceTests
 {
     [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task RootLineDeclarationNeverSelectsTheTargetLineOfARootReference(bool incremental)
+    {
+        var source = incremental ? IncrementalFixture().Open() : new Fixture().Open();
+        var root = await RequirementDocument("{}", "[]");
+        root["tm:ref"] = "urn:inventory:tm";
+        root["uav:compatibilityLine"] = "urn:test:line:a";
+        var document = new FederationDocument(Encoding.UTF8.GetBytes(root.ToJsonString()));
+        var uri = new Uri("https://example.test/entry.json");
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var index = InventoryIndex(source);
+        var dependency = (await WotJsonLdBaseResolver.DiscoverCapturedReferenceInventoryAsync(document, uri,
+            WotReferenceTargetKind.ThingModel, contexts, index)).Dependencies.Single();
+        await Assert.That(dependency.Reference.SourcePointer).IsEqualTo("");
+        var request = await WotJsonLdBaseResolver.ReadReferenceRequirementsAsync(document, uri,
+            WotReferenceTargetKind.ThingModel, dependency, contexts, index);
+        await Assert.That(request.CompatibilityLine).IsNull();
+        var resource = new WotVersionResource(Fixture.WotId, WotReferenceTargetKind.ThingModel,
+            incremental ? "41" : "1.0.0", false,
+            [new(incremental ? "41" : "1.0.0", "", "") { CompatibilityLine = "urn:test:line:a" }])
+        {
+            Profile = incremental ? WotVersionProfile.Incremental : WotVersionProfile.SemVer
+        };
+        if (incremental)
+        {
+            var failure = await Assert.That(() => WotVersionResolver.SelectVersionId(resource, request))
+                .Throws<RegistryException>() ?? throw new InvalidOperationException("Expected no inherited target line.");
+            await Assert.That(failure.Diagnostic.Code).IsEqualTo("compatibility-required");
+        }
+        else { await Assert.That(WotVersionResolver.SelectVersionId(resource, request)).IsEqualTo("1.0.0"); }
+    }
+
+    [Test]
     [Arguments(false, "urn:test:line:a", "\"42\"", "43", null)]
     [Arguments(false, "urn:test:line:a", null, "43", null)]
     [Arguments(false, "urn:test:line:b", null, "45", null)]
