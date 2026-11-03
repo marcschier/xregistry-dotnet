@@ -11,6 +11,278 @@ namespace XRegistry.Federation.Tests;
 public class WotReferenceUriResolverTests
 {
     [Test]
+    [Arguments(WotReferenceTargetKind.ThingDescription, "Thing")]
+    [Arguments(WotReferenceTargetKind.ThingModel, "tm:ThingModel")]
+    public async Task ProjectionSelectorsRetainOccurrencesAndShareTheirDeclaredSourceEntry(
+        WotReferenceTargetKind kind, string ordinaryType)
+    {
+        var document = await ProjectionSelectorDocument("""
+            {"b":{"tm:ref":"source.json#/properties/b"},
+             "a/b~c":{"modelRef":"./source.json#/%70roperties/a~1b~0c"}}
+            """, ordinaryType);
+        var original = await ReadBytesAsync(document);
+        var budget = new FederationReadBudget();
+        var selectors = await WotJsonLdBaseResolver.DiscoverProjectionSelectorReferencesAsync(document,
+            new Uri("https://example.test/plans/plan.json"), kind, new Dictionary<Uri, FederationDocument>(), budget);
+
+        await Assert.That(selectors.Count).IsEqualTo(2);
+        await Assert.That(selectors[0].Reference.SourcePointer).IsEqualTo("/properties/b");
+        await Assert.That(selectors[1].Reference.SourcePointer).IsEqualTo("/properties/a~1b~0c");
+        await Assert.That(selectors[1].Reference.PropertyName).IsEqualTo("modelRef");
+        await Assert.That(selectors[1].Reference.Operator).IsEqualTo("tm:ref");
+        await Assert.That(selectors[1].Reference.Href).IsEqualTo("./source.json#/%70roperties/a~1b~0c");
+        await Assert.That(selectors[1].TargetPointer).IsEqualTo("/properties/a~1b~0c");
+        await Assert.That(selectors[0].Source.Reference.SourcePointer).IsEqualTo("/p:projects/0");
+        await Assert.That(selectors[0].Source.SourceName).IsEqualTo("pump");
+        await Assert.That(selectors[0].Source.TargetKind).IsEqualTo(WotReferenceTargetKind.ThingDescription);
+        await Assert.That(selectors[1].Source).IsEqualTo(selectors[0].Source);
+        await Assert.That(selectors[0].Source.Reference.Target.DocumentUri.AbsoluteUri)
+            .IsEqualTo("https://example.test/plans/source.json");
+        await Assert.That(budget.Requests).IsEqualTo(0L);
+        await Assert.That((await ReadBytesAsync(document)).SequenceEqual(original)).IsTrue();
+    }
+
+    [Test]
+    public async Task ProjectionSelectorsMatchResolvedSourceUrisRatherThanManifestPositions()
+    {
+        var document = await ProjectionSelectorDocument("""
+            {"a":{"tm:ref":"control.json#/properties/start"},"b":{"tm:ref":"source.json#/properties/speed"}}
+            """);
+        var root = System.Text.Json.Nodes.JsonNode.Parse(await ReadBytesAsync(document))!;
+        root["p:projects"]!.AsArray().Add(new System.Text.Json.Nodes.JsonObject
+        {
+            ["p:sourceName"] = "control",
+            ["href"] = "./control.json",
+            ["type"] = "application/tm+json"
+        });
+        var selectors = await WotJsonLdBaseResolver.DiscoverProjectionSelectorReferencesAsync(
+            new(Encoding.UTF8.GetBytes(root.ToJsonString())), new Uri("https://example.test/plans/plan.json"),
+            WotReferenceTargetKind.ThingDescription, new Dictionary<Uri, FederationDocument>());
+        await Assert.That(selectors.Count).IsEqualTo(2);
+        await Assert.That(selectors[0].Source.SourceName).IsEqualTo("control");
+        await Assert.That(selectors[0].Source.TargetKind).IsEqualTo(WotReferenceTargetKind.ThingModel);
+        await Assert.That(selectors[0].Source.Reference.SourcePointer).IsEqualTo("/p:projects/1");
+        await Assert.That(selectors[1].Source.SourceName).IsEqualTo("pump");
+        await Assert.That(selectors[1].Source.Reference.SourcePointer).IsEqualTo("/p:projects/0");
+    }
+
+    [Test]
+    [Arguments("actions", "hasActionAffordance")]
+    [Arguments("events", "hasEventAffordance")]
+    [Arguments("properties", "hasPropertyAffordance")]
+    public async Task ProjectionSelectorCategoriesUseCapturedExpandedMapMeanings(string category, string term)
+    {
+        var document = await ProjectionSelectorDocument("""{"a":{"tm:ref":"source.json#/""" + category + "/b\"}}");
+        var root = System.Text.Json.Nodes.JsonNode.Parse(await ReadBytesAsync(document))!;
+        root["@context"]!["selected~map"] = new System.Text.Json.Nodes.JsonObject
+        {
+            ["@id"] = "https://www.w3.org/2019/wot/td#" + term,
+            ["@container"] = "@index"
+        };
+        root["selected~map"] = root["properties"]!.DeepClone();
+        root.AsObject().Remove("properties");
+        var selectors = await WotJsonLdBaseResolver.DiscoverProjectionSelectorReferencesAsync(
+            new(Encoding.UTF8.GetBytes(root.ToJsonString())), new Uri("https://example.test/plans/plan.json"),
+            WotReferenceTargetKind.ThingDescription, new Dictionary<Uri, FederationDocument>());
+
+        await Assert.That(selectors.Count).IsEqualTo(1);
+        await Assert.That(selectors[0].Reference.SourcePointer).IsEqualTo("/selected~0map/a");
+        await Assert.That(selectors[0].TargetPointer).IsEqualTo("/" + category + "/b");
+    }
+
+    [Test]
+    [Arguments("""{"a":{"td:ref":"undeclared.json#/properties/a"}}""", 1)]
+    [Arguments("""{"a":{"tm:ref":"source.json"}}""", 1)]
+    [Arguments("""{"a":{"tm:ref":"source.json#"}}""", 1)]
+    [Arguments("""{"a":{"tm:ref":"source.json#anchor"}}""", 1)]
+    [Arguments("""{"a":{"tm:ref":"undeclared.json#/definitions/a"}}""", 1)]
+    [Arguments("""{"a":{"tm:ref":"source.json#/properties/a/type"}}""", 1)]
+    [Arguments("""{"a":{"tm:ref":"source.json#/Properties/a"}}""", 1)]
+    [Arguments("""{"a":{"data":{"tm:ref":"source.json#/properties/a"}}}""", 1)]
+    [Arguments("""{"a":{"type":"number"}}""", 0)]
+    [Arguments("{}", 0)]
+    public async Task ProjectionSelectorDiscoveryLeavesOrdinaryAndNestedReferencesUnconsumed(
+        string affordances, int ordinaryCount)
+    {
+        var document = await ProjectionSelectorDocument(affordances);
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var uri = new Uri("https://example.test/plans/plan.json");
+        var before = await WotJsonLdBaseResolver.DiscoverOrdinaryReferencesAsync(document, uri, contexts);
+        var selectors = await WotJsonLdBaseResolver.DiscoverProjectionSelectorReferencesAsync(document, uri,
+            WotReferenceTargetKind.ThingDescription, contexts);
+        var after = await WotJsonLdBaseResolver.DiscoverOrdinaryReferencesAsync(document, uri, contexts);
+        await Assert.That(selectors.Count).IsEqualTo(0);
+        await Assert.That(before.Count).IsEqualTo(ordinaryCount);
+        await Assert.That(after.SequenceEqual(before)).IsTrue();
+    }
+
+    [Test]
+    [Arguments("undeclared.json#/properties/a")]
+    [Arguments("Source.json#/properties/a")]
+    [Arguments("source.json#/actions/a")]
+    [Arguments("source.json#/events/a")]
+    [Arguments("source.json#/properties/a~2b")]
+    [Arguments("source.json#/%FF")]
+    public async Task ProjectionSelectorsRejectUndeclaredSourcesWrongCategoriesAndMalformedPointers(string href)
+    {
+        var document = await ProjectionSelectorDocument("{\"a\":{\"tm:ref\":" +
+            System.Text.Json.JsonSerializer.Serialize(href) + "}}");
+        var failure = await Assert.That(async () =>
+            await WotJsonLdBaseResolver.DiscoverProjectionSelectorReferencesAsync(document,
+                new Uri("https://example.test/plans/plan.json"), WotReferenceTargetKind.ThingDescription,
+                new Dictionary<Uri, FederationDocument>())).Throws<FederationException>() ??
+            throw new InvalidOperationException("Expected invalid projection-selector rejection.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    public async Task ProjectionSelectorsRejectCompetingExpandedReferenceAliasesAtOneAffordance()
+    {
+        var document = await ProjectionSelectorDocument("""
+            {"a":{"tm:ref":"source.json#/properties/a","modelRef":"source.json#/properties/b"}}
+            """);
+        var failure = await Assert.That(async () =>
+            await WotJsonLdBaseResolver.DiscoverProjectionSelectorReferencesAsync(document,
+                new Uri("https://example.test/plans/plan.json"), WotReferenceTargetKind.ThingDescription,
+                new Dictionary<Uri, FederationDocument>())).Throws<FederationException>() ??
+            throw new InvalidOperationException("Expected competing projection-selector rejection.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    public async Task ProjectionSelectorsUseReferenceScopedBasesRatherThanAuthoredHrefEquality()
+    {
+        var document = await ProjectionSelectorDocument("""
+            {"a":{"@context":{"tm:ref":{"@id":"https://www.w3.org/2019/wot/tm#ref",
+                                      "@context":{"@base":"https://example.test/elsewhere/"}}},
+                  "tm:ref":"../plans/source.json#/properties/a"}}
+            """);
+        var selectors = await WotJsonLdBaseResolver.DiscoverProjectionSelectorReferencesAsync(document,
+            new Uri("https://example.test/plans/plan.json"), WotReferenceTargetKind.ThingDescription,
+            new Dictionary<Uri, FederationDocument>());
+        await Assert.That(selectors.Count).IsEqualTo(1);
+        await Assert.That(selectors[0].Reference.Target.DocumentUri.AbsoluteUri)
+            .IsEqualTo(selectors[0].Source.Reference.Target.DocumentUri.AbsoluteUri);
+        await Assert.That(selectors[0].Reference.Href).IsEqualTo("../plans/source.json#/properties/a");
+    }
+
+    [Test]
+    public async Task UnmarkedDocumentsDoNotConsumeAffordanceReferencesAsProjectionSelectors()
+    {
+        var document = await ProjectionSelectorDocument("""{"a":{"tm:ref":"source.json#/properties/a"}}""");
+        var root = System.Text.Json.Nodes.JsonNode.Parse(await ReadBytesAsync(document))!;
+        root["@type"] = new System.Text.Json.Nodes.JsonArray("Thing");
+        var selectors = await WotJsonLdBaseResolver.DiscoverProjectionSelectorReferencesAsync(
+            new(Encoding.UTF8.GetBytes(root.ToJsonString())), new Uri("https://example.test/plans/plan.json"),
+            WotReferenceTargetKind.ThingDescription, new Dictionary<Uri, FederationDocument>());
+        await Assert.That(selectors.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task ProjectionSelectorsUseCapturedRemoteContextsAndRejectForeignMapMeanings()
+    {
+        var document = await ProjectionSelectorDocument("""{"a":{"tm:ref":"source.json#/properties/a"}}""");
+        var root = System.Text.Json.Nodes.JsonNode.Parse(await ReadBytesAsync(document))!;
+        var context = new System.Text.Json.Nodes.JsonObject { ["@context"] = root["@context"]!.DeepClone() };
+        var contextUri = new Uri("https://contexts.example.test/projection.jsonld");
+        root["@context"] = contextUri.AbsoluteUri;
+        var captured = new FederationDocument(Encoding.UTF8.GetBytes(context.ToJsonString()));
+        var original = await ReadBytesAsync(captured);
+        var contexts = new Dictionary<Uri, FederationDocument> { [contextUri] = captured };
+        var uri = new Uri("https://example.test/plans/plan.json");
+        var selectors = await WotJsonLdBaseResolver.DiscoverProjectionSelectorReferencesAsync(
+            new(Encoding.UTF8.GetBytes(root.ToJsonString())), uri, WotReferenceTargetKind.ThingDescription, contexts);
+        await Assert.That(selectors.Count).IsEqualTo(1);
+        await Assert.That(selectors[0].Reference.SourcePointer).IsEqualTo("/properties/a");
+        await Assert.That((await ReadBytesAsync(captured)).SequenceEqual(original)).IsTrue();
+
+        context["@context"]!["properties"]!["@id"] = "https://example.test/vendor#properties";
+        contexts[contextUri] = new(Encoding.UTF8.GetBytes(context.ToJsonString()));
+        var foreign = await WotJsonLdBaseResolver.DiscoverProjectionSelectorReferencesAsync(
+            new(Encoding.UTF8.GetBytes(root.ToJsonString())), uri, WotReferenceTargetKind.ThingDescription, contexts);
+        await Assert.That(foreign.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task ProjectionSelectorsRetainDocumentLocalSourceAssociationsForLaterCycleValidation()
+    {
+        var document = await ProjectionSelectorDocument("""{"a":{"tm:ref":"#/properties/a"}}""");
+        var root = System.Text.Json.Nodes.JsonNode.Parse(await ReadBytesAsync(document))!;
+        root["p:projects"]![0]!["href"] = "";
+        var selectors = await WotJsonLdBaseResolver.DiscoverProjectionSelectorReferencesAsync(
+            new(Encoding.UTF8.GetBytes(root.ToJsonString())), new Uri("https://example.test/plans/plan.json"),
+            WotReferenceTargetKind.ThingDescription, new Dictionary<Uri, FederationDocument>());
+        await Assert.That(selectors.Count).IsEqualTo(1);
+        await Assert.That(selectors[0].Reference.Target.IsDocumentLocal).IsTrue();
+        await Assert.That(selectors[0].Source.Reference.Target.IsDocumentLocal).IsTrue();
+        await Assert.That(selectors[0].Source.Reference.Href).IsEqualTo("");
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task ProjectionSelectorDiscoveryChecksInputAndExpandedResultBounds(bool resultLimit)
+    {
+        var document = await ProjectionSelectorDocument("""{"a":{"tm:ref":"source.json#/properties/a"}}""");
+        var limits = resultLimit
+            ? new FederationReadLimits(maxResultBytes: 1)
+            : new FederationReadLimits(maxObjectBytes: (int)document.Length - 1);
+        var failure = await Assert.That(async () =>
+            await WotJsonLdBaseResolver.DiscoverProjectionSelectorReferencesAsync(document,
+                new Uri("https://example.test/plans/plan.json"), WotReferenceTargetKind.ThingDescription,
+                new Dictionary<Uri, FederationDocument>(), new(limits))).Throws<FederationException>() ??
+            throw new InvalidOperationException("Expected selector document-bound rejection.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+    }
+
+    [Test]
+    public async Task ProjectionSelectorsUseSharedInclusiveWorkLimitsAndCancellation()
+    {
+        var document = await ProjectionSelectorDocument("""{"a":{"tm:ref":"source.json#/properties/a"}}""");
+        var uri = new Uri("https://example.test/plans/plan.json");
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var measured = new FederationReadBudget();
+        var selectors = await WotJsonLdBaseResolver.DiscoverProjectionSelectorReferencesAsync(document, uri,
+            WotReferenceTargetKind.ThingDescription, contexts, measured);
+        await Assert.That(selectors.Count).IsEqualTo(1);
+        var atLimit = new FederationReadBudget(new(maxWork: measured.Work));
+        var repeated = await WotJsonLdBaseResolver.DiscoverProjectionSelectorReferencesAsync(document, uri,
+            WotReferenceTargetKind.ThingDescription, contexts, atLimit);
+        await Assert.That(repeated[0]).IsEqualTo(selectors[0]);
+        await Assert.That(atLimit.Work).IsEqualTo(measured.Work);
+        var failure = await Assert.That(async () =>
+            await WotJsonLdBaseResolver.DiscoverProjectionSelectorReferencesAsync(document, uri,
+                WotReferenceTargetKind.ThingDescription, contexts, new(new(maxWork: measured.Work - 1))))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected adjacent selector work exhaustion.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        await Assert.That(async () =>
+            await WotJsonLdBaseResolver.DiscoverProjectionSelectorReferencesAsync(document, uri,
+                WotReferenceTargetKind.ThingDescription, contexts, cancellationToken: cancellation.Token))
+            .Throws<OperationCanceledException>();
+    }
+
+    private static async Task<FederationDocument> ProjectionSelectorDocument(string affordances,
+        string ordinaryType = "Thing")
+    {
+        var root = System.Text.Json.Nodes.JsonNode.Parse(await ReadBytesAsync(ProjectionDocument("""
+            [{"p:sourceName":"pump","href":"source.json","type":"application/td+json"}]
+            """, ordinaryType)))!;
+        var context = root["@context"]!;
+        context["properties"] = new System.Text.Json.Nodes.JsonObject
+        {
+            ["@id"] = "https://www.w3.org/2019/wot/td#hasPropertyAffordance",
+            ["@container"] = "@index"
+        };
+        context["td"] = "https://www.w3.org/2019/wot/td#";
+        context["modelRef"] = "https://www.w3.org/2019/wot/tm#ref";
+        context["data"] = "https://example.test/data";
+        root["properties"] = System.Text.Json.Nodes.JsonNode.Parse(affordances);
+        return new(Encoding.UTF8.GetBytes(root.ToJsonString()));
+    }
+
+    [Test]
     [Arguments(WotReferenceTargetKind.ThingModel, "tm:ThingModel")]
     [Arguments(WotReferenceTargetKind.ThingDescription, "Thing")]
     public async Task ProjectionSourcesRetainManifestOrderCrossKindDeclarationsAndExactEntryPointers(

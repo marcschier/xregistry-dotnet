@@ -141503,7 +141503,7 @@
       "text": "In a marked projection plan, each external source-manifest entry is a dependency occurrence, in its authored array order. Its binding MUST record that entry's `href` and the projection operator above. The entry's expected media `type` determines whether the target is a TD or TM; the Consumer MUST verify the captured target's actual kind. A `tm:ref` affordance selector matched to that source under the selected proposal MUST use the entry's binding and MUST NOT have a second binding of its own. Ordinary `td:ref` occurrences remain separate dependencies. A marker, source entry or selector that fails the selected proposal's rules MUST NOT be accepted by supplying an otherwise well-shaped closure binding.",
       "review": {
         "status": "reviewed",
-        "note": "Projection manifest discovery retains authored entry order and pointers, exact hrefs, the canonical experimental projects operator and the expected kind from the declared TD/TM media type. It rejects competing manifest/sourceName aliases, malformed entries, duplicate names or resolved URIs, and fragment-bearing source references. It checks the captured root kind without inferring source kinds from filenames. Actual target-kind verification, source requirements and digest pins, selector-to-entry association, full admission and independent binding verification remain unfinished; this compound requirement stays pending.",
+        "note": "Projection manifest discovery retains authored entry order and pointers, exact hrefs, the canonical experimental projects operator and the expected kind from the declared TD/TM media type. It rejects competing manifest/sourceName aliases, malformed entries, duplicate names or resolved URIs, and fragment-bearing source references. It checks the captured root kind without inferring source kinds from filenames. Selector discovery associates root-affordance tm:ref occurrences with declared entries by resolved URI, using captured map/member meanings and decoded JSON Pointer categories; wrong categories, undeclared sources and competing selectors reject. Ordinary td:ref and non-selector references remain separate. Actual target-kind and affordance-existence verification, source requirements and digest pins, annotations and cycles, full admission and independent binding verification remain unfinished; this compound requirement stays pending.",
         "roles": [
           "client",
           "producer"
@@ -141521,7 +141521,19 @@
           "WotReferenceUriResolverTests.ProjectionSourcesRejectCompetingExpandedSourceNameMembers",
           "WotReferenceUriResolverTests.ExpandedProjectionManifestNamesRetainJsonPointerSlashEscaping",
           "WotReferenceUriResolverTests.ProjectionSourceMediaTypesUseMimeCaseAndParameterRules",
-          "WotReferenceUriResolverTests.ProjectionSourceDiscoveryUsesSharedInclusiveWorkLimitsAndCancellation"
+          "WotReferenceUriResolverTests.ProjectionSourceDiscoveryUsesSharedInclusiveWorkLimitsAndCancellation",
+          "WotReferenceUriResolverTests.ProjectionSelectorsRetainOccurrencesAndShareTheirDeclaredSourceEntry",
+          "WotReferenceUriResolverTests.ProjectionSelectorsMatchResolvedSourceUrisRatherThanManifestPositions",
+          "WotReferenceUriResolverTests.ProjectionSelectorCategoriesUseCapturedExpandedMapMeanings",
+          "WotReferenceUriResolverTests.ProjectionSelectorDiscoveryLeavesOrdinaryAndNestedReferencesUnconsumed",
+          "WotReferenceUriResolverTests.ProjectionSelectorsRejectUndeclaredSourcesWrongCategoriesAndMalformedPointers",
+          "WotReferenceUriResolverTests.ProjectionSelectorsRejectCompetingExpandedReferenceAliasesAtOneAffordance",
+          "WotReferenceUriResolverTests.ProjectionSelectorsUseReferenceScopedBasesRatherThanAuthoredHrefEquality",
+          "WotReferenceUriResolverTests.UnmarkedDocumentsDoNotConsumeAffordanceReferencesAsProjectionSelectors",
+          "WotReferenceUriResolverTests.ProjectionSelectorsUseCapturedRemoteContextsAndRejectForeignMapMeanings",
+          "WotReferenceUriResolverTests.ProjectionSelectorsRetainDocumentLocalSourceAssociationsForLaterCycleValidation",
+          "WotReferenceUriResolverTests.ProjectionSelectorDiscoveryChecksInputAndExpandedResultBounds",
+          "WotReferenceUriResolverTests.ProjectionSelectorsUseSharedInclusiveWorkLimitsAndCancellation"
         ],
         "nativeEvidence": []
       }

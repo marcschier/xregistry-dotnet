@@ -15,6 +15,10 @@ namespace XRegistry.Federation;
 public sealed record WotProjectionSourceOccurrence(WotAuthoredReferenceOccurrence Reference,
     string SourceName, WotReferenceTargetKind TargetKind);
 
+/// <summary>An authored selector associated with its manifest entry, before target-affordance validation.</summary>
+public sealed record WotProjectionSelectorOccurrence(WotAuthoredReferenceOccurrence Reference,
+    WotProjectionSourceOccurrence Source, string TargetPointer);
+
 public static partial class WotJsonLdBaseResolver
 {
     /// <summary>The selected experimental projection vocabulary; earlier placeholder IRIs are not aliases.</summary>
@@ -143,6 +147,85 @@ public static partial class WotJsonLdBaseResolver
         }
         cancellationToken.ThrowIfCancellationRequested();
         return occurrences.AsReadOnly();
+    }
+
+    /// <summary>Associates explicit affordance selectors with their declared source entries without acquiring targets.</summary>
+    /// <remarks>
+    /// Only authored tm:ref members of root affordance-map entries can be selectors.
+    /// Each result uses its source entry's eventual binding rather than creating another dependency.
+    /// Actual target kind, affordance existence, annotations, source requirements and composition remain unverified.
+    /// </remarks>
+    public static async ValueTask<IReadOnlyList<WotProjectionSelectorOccurrence>> DiscoverProjectionSelectorReferencesAsync(
+        FederationDocument document, Uri documentUri, WotReferenceTargetKind sourceKind,
+        IReadOnlyDictionary<Uri, FederationDocument> capturedContexts,
+        FederationReadBudget? budget = null, CancellationToken cancellationToken = default)
+    {
+        var readBudget = budget ?? new();
+        var sources = await DiscoverProjectionSourceReferencesAsync(document, documentUri, sourceKind,
+            capturedContexts, readBudget, cancellationToken).ConfigureAwait(false);
+        if (sources.Count == 0) { return Array.Empty<WotProjectionSelectorOccurrence>(); }
+        var byUri = sources.ToDictionary(source => source.Reference.Target.DocumentUri.AbsoluteUri,
+            StringComparer.Ordinal);
+        var references = await DiscoverOrdinaryReferencesAsync(document, documentUri, capturedContexts,
+            readBudget, cancellationToken).ConfigureAwait(false);
+        var categories = new Dictionary<string, string?>(StringComparer.Ordinal);
+        var selected = new HashSet<string>(StringComparer.Ordinal);
+        var selectors = new List<WotProjectionSelectorOccurrence>();
+        foreach (var reference in references)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            readBudget.ChargeWork();
+            if (reference.Operator != "tm:ref" || reference.Target.Fragment is null) { continue; }
+            var authoredPath = reference.SourcePointer.Split('/');
+            if (authoredPath.Length != 3) { continue; }
+            var member = DecodePointerToken(authoredPath[1]);
+            if (!categories.TryGetValue(member, out var category))
+            {
+                var iri = await ExpandMemberIriAsync(document, "", member, documentUri, capturedContexts,
+                    readBudget, cancellationToken).ConfigureAwait(false);
+                category = iri switch
+                {
+                    "https://www.w3.org/2019/wot/td#hasPropertyAffordance" => "properties",
+                    "https://www.w3.org/2019/wot/td#hasActionAffordance" => "actions",
+                    "https://www.w3.org/2019/wot/td#hasEventAffordance" => "events",
+                    _ => null
+                };
+                categories.Add(member, category);
+            }
+            if (category is null) { continue; }
+            string pointer;
+            try
+            {
+                pointer = WotRegistryResolver.DecodeFragment(reference.Target.Fragment, readBudget,
+                    cancellationToken, requirePointer: false);
+            }
+            catch (RegistryException exception)
+            {
+                throw FederationJson.FromCore(exception);
+            }
+            if (pointer.Length == 0 || pointer[0] != '/') { continue; }
+            readBudget.CheckDepth(pointer.Count(character => character == '/'));
+            var targetPath = pointer[1..].Split('/');
+            if (targetPath.Length != 2) { continue; }
+            var targetCategory = DecodePointerToken(targetPath[0]);
+            if (targetCategory is not ("properties" or "actions" or "events")) { continue; }
+            _ = DecodePointerToken(targetPath[1]);
+            if (targetCategory != category)
+            {
+                throw FederationJson.Invalid("A projection selector must target its own affordance category.");
+            }
+            if (!byUri.TryGetValue(reference.Target.DocumentUri.AbsoluteUri, out var source))
+            {
+                throw FederationJson.Invalid("A projection selector must identify a declared source document.");
+            }
+            if (!selected.Add(reference.SourcePointer))
+            {
+                throw FederationJson.Invalid("One authored affordance cannot contain competing projection selectors.");
+            }
+            selectors.Add(new(reference, source, pointer));
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return selectors.AsReadOnly();
     }
 
     private static JObject ExpandProjectionRoot(JObject root, JArray baseline, Uri documentBase,

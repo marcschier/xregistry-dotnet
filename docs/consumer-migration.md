@@ -2312,6 +2312,19 @@ does not perform complete projection admission, verify captured target kinds,
 check source requirements or digest pins, associate selectors with entries,
 compose affordances or validate closure bindings.
 
+`DiscoverProjectionSelectorReferencesAsync` associates authored `tm:ref`
+selections in root affordance maps with source entries by resolved document
+URI. Map and reference aliases use their captured meanings. URI-fragment
+JSON Pointers are decoded once; authored pointers and hrefs remain unchanged.
+A recognized selector must target the same affordance category and a declared
+source. Competing selectors at one affordance reject the operation. Each result
+identifies its existing source entry rather than adding a dependency occurrence.
+`td:ref`, nested references and non-affordance fragments remain ordinary.
+Captured target kinds and affordance existence, annotation admission, source
+requirements, digest pins and closure integration remain unverified.
+Document-local associations remain candidates for subsequent cycle validation,
+not accepted cyclic plans.
+
 `AcquireCloudEventSubjectAsync` takes a parsed CloudEvents WoT source query, a
 subject pointer and one authorized Thing Description Resource collection.
 Complete Version metadata establishes each Resource's `wotid`, so an explicit

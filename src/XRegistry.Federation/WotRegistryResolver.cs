@@ -244,7 +244,8 @@ public static class WotRegistryResolver
         return root;
     }
 
-    private static string DecodeFragment(string fragment, FederationReadBudget budget, CancellationToken token)
+    internal static string DecodeFragment(string fragment, FederationReadBudget budget, CancellationToken token,
+        bool requirePointer = true)
     {
         if (fragment.Length == 0 || fragment[0] != '#')
         {
@@ -283,7 +284,7 @@ public static class WotRegistryResolver
         {
             throw new RegistryException(new("invalid-fragment", "", "The fragment is not valid UTF-8."), exception);
         }
-        if (pointer.Length > 0 && pointer[0] != '/')
+        if (requirePointer && pointer.Length > 0 && pointer[0] != '/')
         {
             throw InvalidFragment("A nonempty JSON Pointer must begin with '/'.");
         }
