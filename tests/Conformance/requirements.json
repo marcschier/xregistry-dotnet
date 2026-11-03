@@ -139467,7 +139467,10 @@
           "DiscoveryNotifierBudgetBoundsWideTreesBeforeReadingChildren",
           "DiscoveryNotifierBudgetPermitsExactLimitCompletion",
           "DiscoveryWorkBudgetsRejectInvalidConfigurationBeforeReading",
-          "DiscoveryWorkBudgetReleasesOutstandingHandleAndRetainsCleanupFailure"
+          "DiscoveryWorkBudgetReleasesOutstandingHandleAndRetainsCleanupFailure",
+          "DiscoveryRejectsNamespaceMappingsFromAnotherSessionBeforeReading",
+          "DiscoveryStopsWhenSessionChangesAndDoesNotReleaseContinuationsOnReplacement",
+          "DiscoveryRetainsNativeReadFailureWhenSessionChangesAfterResponse"
         ],
         "nativeEvidence": []
       }
