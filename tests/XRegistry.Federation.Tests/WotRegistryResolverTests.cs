@@ -925,6 +925,183 @@ public class WotRegistryResolverTests
     }
 
     [Test]
+    public async Task CapturedExactVersionUriPinsTheMappedResourceAndAppliesFragment()
+    {
+        var bytes = Encoding.UTF8.GetBytes("""{"properties":{"status":{"type":"string"}}}""");
+        var source = new Source { FirstBytes = bytes, SecondBytes = bytes };
+        var containing = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        source.Change = (request, metadata) =>
+        {
+            if (request.Target == source.Resource + "/meta")
+            {
+                metadata["entity"]!.AsObject().Remove("defaultversionid");
+            }
+        };
+        var mapped = new WotCapturedResourceIdentity(source, "/thingmodelgroups/tenant",
+            source.Collection, source.Resource, "thingmodel", Source.Identity, "2.0.0");
+        var uri = new Uri("https://example.test/models/model-2.json");
+        var identities = new WotCapturedUriIdentityIndex(
+        [
+            new WotCapturedUriIdentity(uri, WotCapturedUriIdentityKind.DocumentView, mapped),
+            new WotCapturedUriIdentity(uri, WotCapturedUriIdentityKind.DocumentBase, mapped)
+        ]);
+
+        var result = await WotRegistryResolver.ResolveCapturedReferenceAsync(containing,
+            "https://example.test/models/model-2.json#/properties/status",
+            new Uri("https://example.test/models/consumer.json"),
+            new Uri("https://example.test/models/consumer.json"), identities, source.Request);
+
+        await Assert.That(result.Value.GetProperty("type").GetString()).IsEqualTo("string");
+        await Assert.That(result.ContainingDocument.ResourceXid).IsEqualTo(source.Resource);
+        await Assert.That(result.ContainingDocument.Version.VersionId).IsEqualTo("2.0.0");
+        await Assert.That(source.Reads.Last().Target).IsEqualTo(source.Resource + "/versions/2.0.0");
+    }
+
+    [Test]
+    public async Task CapturedIdentityResolvesAcrossAnAuthorizedRegistryAndGroup()
+    {
+        var source = new Source();
+        var containing = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var targetSource = new Source(groupXid: "/thingmodelgroups/other")
+        {
+            Context = new("test", "urn:test:other")
+        };
+        var mapped = new WotCapturedResourceIdentity(targetSource, "/thingmodelgroups/other",
+            targetSource.Collection, targetSource.Resource, "thingmodel", Source.Identity, "2.0.0");
+        var uri = new Uri("https://example.test/other/model.json");
+        var identities = new WotCapturedUriIdentityIndex(
+        [
+            new WotCapturedUriIdentity(uri, WotCapturedUriIdentityKind.DocumentView, mapped)
+        ]);
+
+        var result = await WotRegistryResolver.ResolveCapturedReferenceAsync(containing,
+            "https://example.test/other/model.json", new Uri("https://example.test/models/consumer.json"),
+            new Uri("https://example.test/models/consumer.json"), identities, source.Request);
+
+        await Assert.That(result.ContainingDocument.ResourceXid).IsEqualTo(targetSource.Resource);
+        await Assert.That(result.ContainingDocument.Version.VersionId).IsEqualTo("2.0.0");
+        await Assert.That(result.ContainingDocument.Version.Origin).IsEqualTo("urn:test:other");
+        await Assert.That(targetSource.Reads.Last().Target).IsEqualTo(targetSource.Resource + "/versions/2.0.0");
+        await Assert.That(source.Reads.Count(read => read.Operation == FederationOperation.Document)).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task CapturedResourceUriUsesTheMappedViewsDefaultVersion()
+    {
+        var source = new Source { FirstBytes = Source.Second, SecondBytes = Source.Second };
+        source.Change = (request, metadata) =>
+        {
+            if (request.Target == source.Resource + "/meta")
+            {
+                metadata["entity"]!["defaultversionid"] = "2.0.0";
+            }
+        };
+        var containing = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var mapped = new WotCapturedResourceIdentity(source, "/thingmodelgroups/tenant",
+            source.Collection, source.Resource, "thingmodel", Source.Identity);
+        var identities = new WotCapturedUriIdentityIndex(
+        [
+            new WotCapturedUriIdentity(new Uri(Source.Identity), WotCapturedUriIdentityKind.WotId, mapped)
+        ]);
+
+        var result = await WotRegistryResolver.ResolveCapturedReferenceAsync(containing,
+            Source.Identity + "#/revision", new Uri("https://example.test/models/consumer.json"),
+            new Uri("https://example.test/models/consumer.json"), identities, source.Request);
+
+        await Assert.That(result.Value.GetInt32()).IsEqualTo(2);
+        await Assert.That(result.ContainingDocument.Version.VersionId).IsEqualTo("2.0.0");
+    }
+
+    [Test]
+    public async Task CapturedUriIdentityMustBeUniqueBeforeAnyTargetAcquisition()
+    {
+        var source = new Source();
+        var containing = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var reads = source.Reads.Count;
+        var first = new WotCapturedResourceIdentity(source, "/thingmodelgroups/tenant",
+            source.Collection, source.Resource, "thingmodel", Source.Identity);
+        var secondSource = new Source { Context = new("test", "urn:test:other") };
+        var second = new WotCapturedResourceIdentity(secondSource, "/thingmodelgroups/tenant",
+            secondSource.Collection, secondSource.Resource, "thingmodel", Source.Identity);
+        var uri = new Uri(Source.Identity);
+        var identities = new WotCapturedUriIdentityIndex(
+        [
+            new WotCapturedUriIdentity(uri, WotCapturedUriIdentityKind.WotId, first),
+            new WotCapturedUriIdentity(uri, WotCapturedUriIdentityKind.WotId, second)
+        ]);
+
+        var failure = await Assert.That(async () =>
+            await WotRegistryResolver.ResolveCapturedReferenceAsync(containing, Source.Identity,
+                new Uri("https://example.test/models/consumer.json"),
+                new Uri("https://example.test/models/consumer.json"), identities, source.Request))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected an ambiguous identity failure.");
+
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.Ambiguous);
+        await Assert.That(source.Reads.Count).IsEqualTo(reads);
+        await Assert.That(secondSource.Reads.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task MissingCapturedUriIdentityDoesNotReadAnotherRegistryView()
+    {
+        var source = new Source();
+        var containing = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var reads = source.Reads.Count;
+        var identities = new WotCapturedUriIdentityIndex([]);
+
+        var failure = await Assert.That(async () =>
+            await WotRegistryResolver.ResolveCapturedReferenceAsync(containing,
+                "https://example.test/models/not-captured.json",
+                new Uri("https://example.test/models/consumer.json"),
+                new Uri("https://example.test/models/consumer.json"), identities, source.Request))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected an uncaptured identity failure.");
+
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.NotFound);
+        await Assert.That(source.Reads.Count).IsEqualTo(reads);
+    }
+
+    [Test]
+    public async Task CapturedIdentityMustMatchTheRequestedResourceKindAndExactVersionPin()
+    {
+        var source = new Source();
+        var containing = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var reads = source.Reads.Count;
+        var uri = new Uri("https://example.test/models/model-2.json");
+        var wrongKind = new WotCapturedResourceIdentity(source, "/thingdescriptiongroups/tenant",
+            "/thingdescriptiongroups/tenant/thingdescriptions",
+            "/thingdescriptiongroups/tenant/thingdescriptions/assigned", "thingdescription",
+            Source.Identity, "2.0.0");
+        var wrongKindIndex = new WotCapturedUriIdentityIndex(
+        [
+            new WotCapturedUriIdentity(uri, WotCapturedUriIdentityKind.DocumentView, wrongKind)
+        ]);
+        var kindFailure = await Assert.That(async () =>
+            await WotRegistryResolver.ResolveCapturedReferenceAsync(containing,
+                "https://example.test/models/model-2.json",
+                new Uri("https://example.test/models/consumer.json"),
+                new Uri("https://example.test/models/consumer.json"), wrongKindIndex, source.Request))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected a kind mismatch.");
+
+        await Assert.That(kindFailure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        var mapped = new WotCapturedResourceIdentity(source, "/thingmodelgroups/tenant",
+            source.Collection, source.Resource, "thingmodel", Source.Identity, "2.0.0");
+        var exactVersionIndex = new WotCapturedUriIdentityIndex(
+        [
+            new WotCapturedUriIdentity(uri, WotCapturedUriIdentityKind.DocumentView, mapped)
+        ]);
+        var pinFailure = await Assert.That(async () =>
+            await WotRegistryResolver.ResolveCapturedReferenceAsync(containing,
+                "https://example.test/models/model-2.json",
+                new Uri("https://example.test/models/consumer.json"),
+                new Uri("https://example.test/models/consumer.json"), exactVersionIndex,
+                source.Request with { VersionIdPin = "1.0.0" }))
+            .Throws<RegistryException>() ?? throw new InvalidOperationException("Expected a conflicting Version pin.");
+
+        await Assert.That(pinFailure.Diagnostic.Code).IsEqualTo("invalid-pin");
+        await Assert.That(source.Reads.Count).IsEqualTo(reads);
+    }
+
+    [Test]
     [Arguments(false, "2.0.0", null)]
     [Arguments(false, "1.0.0", null)]
     [Arguments(false, "0.1.0", null)]
@@ -1835,9 +2012,10 @@ public class WotRegistryResolverTests
         internal static readonly byte[] Second = Encoding.UTF8.GetBytes("{\"revision\":2}\n");
         private static readonly RegistryModel CapturedModel = LoadModel();
 
-        internal Source(bool description = false)
+        internal Source(bool description = false, string? groupXid = null)
         {
-            Collection = description ? "/thingdescriptiongroups/tenant/thingdescriptions" : "/thingmodelgroups/tenant/thingmodels";
+            groupXid ??= description ? "/thingdescriptiongroups/tenant" : "/thingmodelgroups/tenant";
+            Collection = groupXid + (description ? "/thingdescriptions" : "/thingmodels");
             Request = new(Identity, description ? WotReferenceTargetKind.ThingDescription : WotReferenceTargetKind.ThingModel,
                 description ? WotReferenceOperator.ThingDescription : WotReferenceOperator.ThingModel);
         }
@@ -1891,13 +2069,15 @@ public class WotRegistryResolverTests
         private JsonObject Metadata(FederationReadRequest request)
         {
             var path = RegistryPath.Parse(request.Target);
-            if (path.Kind == RegistryPathKind.Version && path.VersionId!.Value == "1.0.0")
+            if (path.Kind == RegistryPathKind.Version &&
+                path.VersionId!.Value is "1.0.0" or "2.0.0")
             {
+                var versionId = path.VersionId.Value;
                 return new JsonObject
                 {
                     ["entity"] = new JsonObject
                     {
-                        ["xid"] = request.Target, ["versionid"] = "1.0.0", ["wotid"] = Identity
+                        ["xid"] = request.Target, ["versionid"] = versionId, ["wotid"] = Identity
                     }
                 };
             }

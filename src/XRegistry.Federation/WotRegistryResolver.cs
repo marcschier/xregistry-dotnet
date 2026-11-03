@@ -358,6 +358,45 @@ public static class WotRegistryResolver
             target, request, readBudget, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Resolves an external URI through captured Resource identities from authorized Registry views.</summary>
+    /// <remarks>
+    /// A Resource-level identity uses the selected view's Version rules. An exact-Version identity pins that
+    /// Version. Local references still use the retained containing revision and do not consult the identity index.
+    /// </remarks>
+    public static async ValueTask<WotResolvedFragment> ResolveCapturedReferenceAsync(
+        WotResolvedDocument containingRevision, string reference, Uri effectiveBaseUri,
+        Uri containingDocumentUri, WotCapturedUriIdentityIndex capturedIdentities,
+        WotVersionResolutionRequest request, FederationReadBudget? budget = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(containingRevision);
+        ArgumentNullException.ThrowIfNull(capturedIdentities);
+        ArgumentNullException.ThrowIfNull(request);
+        var target = WotReferenceUriResolver.Resolve(reference, effectiveBaseUri, containingDocumentUri);
+        return await ResolveCapturedReferenceTargetAsync(containingRevision, reference, target,
+            capturedIdentities, request, budget ?? new(), cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Resolves a JSON-LD URI-reference through captured Resource identities and contexts.</summary>
+    public static async ValueTask<WotResolvedFragment> ResolveCapturedReferenceAsync(
+        WotResolvedDocument containingRevision, string sourcePointer, string referencePropertyName,
+        string reference, Uri containingDocumentUri,
+        IReadOnlyDictionary<Uri, FederationDocument> capturedContexts,
+        WotCapturedUriIdentityIndex capturedIdentities, WotVersionResolutionRequest request,
+        FederationReadBudget? budget = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(containingRevision);
+        ArgumentNullException.ThrowIfNull(capturedContexts);
+        ArgumentNullException.ThrowIfNull(capturedIdentities);
+        ArgumentNullException.ThrowIfNull(request);
+        var readBudget = budget ?? new();
+        var target = await WotJsonLdBaseResolver.ResolveReferenceUriAsync(containingRevision.Document,
+            sourcePointer, referencePropertyName, reference, containingDocumentUri, capturedContexts,
+            readBudget, cancellationToken).ConfigureAwait(false);
+        return await ResolveCapturedReferenceTargetAsync(containingRevision, reference, target,
+            capturedIdentities, request, readBudget, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Resolves a WoT URI-reference, selects its Version, and applies its fragment.</summary>
     /// <remarks>
     /// The caller supplies an authorized Group Resource collection and the effective base and containing
@@ -403,6 +442,53 @@ public static class WotRegistryResolver
         var resolved = await ResolveAsync(source, resourceCollection, resolvedRequest,
             readBudget, cancellationToken).ConfigureAwait(false);
         return await SelectFragmentAsync(resolved, target.Fragment ?? "#", readBudget, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async ValueTask<WotResolvedFragment> ResolveCapturedReferenceTargetAsync(
+        WotResolvedDocument containingRevision, string reference, WotReferenceUri target,
+        WotCapturedUriIdentityIndex capturedIdentities, WotVersionResolutionRequest request,
+        FederationReadBudget budget, CancellationToken cancellationToken)
+    {
+        if (target.IsDocumentLocal)
+        {
+            return await ResolveLocalTargetAsync(containingRevision, reference, target, request, budget,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        var identity = capturedIdentities.Resolve(target.DocumentUri);
+        var expectedKind = request.TargetKind switch
+        {
+            WotReferenceTargetKind.ThingModel => "thingmodel",
+            WotReferenceTargetKind.ThingDescription => "thingdescription",
+            _ => throw new ArgumentOutOfRangeException(nameof(request))
+        };
+        if (!StringComparer.Ordinal.Equals(identity.ResourceKind, expectedKind))
+        {
+            throw FederationJson.Invalid("The captured URI identity names a different Resource kind.");
+        }
+        var wotId = identity.WotId ??
+            throw FederationJson.Invalid("The captured WoT Resource identity has no applicable wotid.");
+        if (identity.VersionId is { } exactVersion &&
+            (request.VersionIdPin is { } requestedVersion && requestedVersion != exactVersion ||
+             request.DigestPin is not null))
+        {
+            throw new RegistryException(new("invalid-pin", "",
+                "The captured exact-Version URI conflicts with the request's Version or digest pin."));
+        }
+
+        var resolvedRequest = request with
+        {
+            TargetWotId = wotId,
+            VersionIdPin = identity.VersionId ?? request.VersionIdPin,
+            IsDocumentLocal = false,
+            ContainingRevision = null
+        };
+        var collection = new FederationReadRequest(FederationOperation.Collection, identity.ResourceCollection);
+        var resolved = await new Resolution(identity.Source, collection, resolvedRequest, budget,
+            cancellationToken, resourceXidPin: identity.ResourceXid,
+            exactVersionId: identity.VersionId).RunAsync().ConfigureAwait(false);
+        return await SelectFragmentAsync(resolved, target.Fragment ?? "#", budget, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -461,10 +547,12 @@ public static class WotRegistryResolver
         private readonly WotVersionProfile _profile;
         private readonly CapturedFederationReadScope _reads;
         private readonly bool _useCoreDefaultSelection;
+        private readonly string? _resourceXidPin;
+        private readonly string? _exactVersionId;
 
         internal Resolution(IFederationReadSource source, FederationReadRequest collection,
             WotVersionResolutionRequest request, FederationReadBudget budget, CancellationToken token,
-            bool useCoreDefaultSelection = false)
+            bool useCoreDefaultSelection = false, string? resourceXidPin = null, string? exactVersionId = null)
         {
             token.ThrowIfCancellationRequested();
             _collection = collection;
@@ -472,9 +560,21 @@ public static class WotRegistryResolver
             _budget = budget;
             _token = token;
             _useCoreDefaultSelection = useCoreDefaultSelection;
+            _resourceXidPin = resourceXidPin;
+            _exactVersionId = exactVersionId;
             _reads = new(source, budget, token);
             _context = _reads.Context;
             _model = _reads.Model;
+            if (resourceXidPin is not null)
+            {
+                var parts = FederationSyntax.Xid(resourceXidPin);
+                if (parts.Length != 4 ||
+                    !collection.Parts.SequenceEqual(parts.Take(3), StringComparer.Ordinal))
+                {
+                    throw new ArgumentException("The selected Resource must belong to the requested Resource collection.",
+                        nameof(resourceXidPin));
+                }
+            }
             try { _profile = WotRegistryProfiles.Read(_model); }
             catch (RegistryException exception)
             {
@@ -512,6 +612,10 @@ public static class WotRegistryResolver
             {
                 _token.ThrowIfCancellationRequested();
                 var xid = _collection.Target + "/" + Uri.EscapeDataString(member.Name);
+                if (_resourceXidPin is not null && !FederationSyntax.SameXid(xid, _resourceXidPin))
+                {
+                    continue;
+                }
                 var metaPath = xid + "/meta";
                 var resourceMeta = Entity(await MetadataAsync(new(FederationOperation.Entity, metaPath))
                     .ConfigureAwait(false), metaPath);
@@ -546,7 +650,12 @@ public static class WotRegistryResolver
                 }
                 List<WotVersionCandidate>? resourceCandidates = null;
                 string? wotId;
-                if (_useCoreDefaultSelection)
+                if (_exactVersionId is not null)
+                {
+                    (wotId, resourceCandidates) = await ReadVersionsAsync(selectionXid,
+                        _request.TargetWotId).ConfigureAwait(false);
+                }
+                else if (_useCoreDefaultSelection)
                 {
                     (wotId, resourceCandidates) = await ReadVersionsAsync(selectionXid).ConfigureAwait(false);
                 }
@@ -606,6 +715,17 @@ public static class WotRegistryResolver
             var versionsPath = resolvedResourceXid + "/versions";
             var candidates = matchedCandidates ??
                 (await ReadVersionsAsync(resolvedResourceXid, _request.TargetWotId).ConfigureAwait(false)).Candidates;
+            if (_exactVersionId is { } exactVersionId)
+            {
+                var exactCandidate = candidates.Find(candidate => candidate.VersionId == exactVersionId);
+                if (exactCandidate is null)
+                {
+                    throw new RegistryException(new("not-found", "",
+                        "The captured URI identifies a Version that is not present in the selected Resource."));
+                }
+                var acquired = await AcquireAsync(versionsPath, exactVersionId).ConfigureAwait(false);
+                return Complete(resourceXid, exactCandidate, acquired.Document, acquired.Digest);
+            }
             if (_useCoreDefaultSelection)
             {
                 var selectedId = _request.VersionIdPin ??
