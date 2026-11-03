@@ -253,12 +253,6 @@ public sealed partial class RegistryEngine
             RegistryResourceDefinition definition)
         {
             const string lineIri = "http://opcfoundation.org/UA/WoT-Binding/compatibilityLine";
-            if (root.TryGetProperty("uav:compatibilityLine", out _))
-            {
-                throw ServerErrors.With("invalid-line", path,
-                    "Compact compatibility-line terms require JSON-LD context processing; use authorized metadata or the expanded IRI.",
-                    ("name", "compatibilityline"));
-            }
             var metadata = input["compatibilityline"];
             string? line = null;
             if (metadata is not null)
@@ -269,15 +263,16 @@ public sealed partial class RegistryEngine
                         ("name", "compatibilityline"));
                 }
             }
-            if (root.TryGetProperty(lineIri, out var declaration))
+            var declaration = WotCompatibilityLineDeclaration(root, lineIri, path);
+            if (declaration is { } value)
             {
-                if (declaration.ValueKind != JsonValueKind.String ||
-                    line is not null && line != declaration.GetString())
+                if (value.ValueKind != JsonValueKind.String ||
+                    line is not null && line != value.GetString())
                 {
                     throw ServerErrors.With("invalid-line", path, "Document and metadata compatibility lines must agree exactly.",
                         ("name", "compatibilityline"));
                 }
-                line = declaration.GetString();
+                line = value.GetString();
             }
             if (line is not null)
             {
@@ -295,6 +290,57 @@ public sealed partial class RegistryEngine
                 }
                 input["compatibilityline"] = line;
             }
+        }
+
+        private static JsonElement? WotCompatibilityLineDeclaration(JsonElement root, string lineIri, string path)
+        {
+            var hasBindingPrefix = false;
+            if (root.TryGetProperty("@context", out var context))
+            {
+                var contexts = context.ValueKind == JsonValueKind.Array
+                    ? context.EnumerateArray().ToArray()
+                    : [context];
+                foreach (var item in contexts)
+                {
+                    if (item.ValueKind != JsonValueKind.Object)
+                    {
+                        hasBindingPrefix = false;
+                        continue;
+                    }
+                    if (item.TryGetProperty("uav", out var prefix))
+                    {
+                        hasBindingPrefix = prefix.ValueKind == JsonValueKind.String &&
+                            prefix.GetString() == "http://opcfoundation.org/UA/WoT-Binding/";
+                    }
+                    else if (item.TryGetProperty("@import", out _))
+                    {
+                        hasBindingPrefix = false;
+                    }
+                }
+            }
+
+            JsonElement? declaration = null;
+            foreach (var property in root.EnumerateObject())
+            {
+                if (property.NameEquals(lineIri) ||
+                    hasBindingPrefix && property.NameEquals("uav:compatibilityLine"))
+                {
+                    if (declaration is not null)
+                    {
+                        throw ServerErrors.With("invalid-line", path,
+                            "The document declares the compatibility line more than once.",
+                            ("name", "compatibilityline"));
+                    }
+                    declaration = property.Value;
+                }
+                else if (property.NameEquals("uav:compatibilityLine") && !hasBindingPrefix)
+                {
+                    throw ServerErrors.With("invalid-line", path,
+                        "A compact compatibility-line term requires the WoT Binding namespace in the inline JSON-LD context.",
+                        ("name", "compatibilityline"));
+                }
+            }
+            return declaration;
         }
 
         private byte[]? WotDocumentBytes(RegistryResourceDefinition definition, JsonObject input)

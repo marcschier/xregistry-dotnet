@@ -148,6 +148,82 @@ public class WotIncrementalPublicationTests
     [Test]
     [Arguments(false)]
     [Arguments(true)]
+    public async Task InlineJsonLdWoTBindingContextPublishesCompactCompatibilityLine(bool contextArray)
+    {
+        const string prefix = "http://opcfoundation.org/UA/WoT-Binding/";
+        var term = """ "uav:compatibilityLine":{"@id":"uav:compatibilityLine","@type":"@id"} """;
+        var context = contextArray
+            ? $$"""[{"uav":"{{prefix}}",{{term}}}]"""
+            : $$"""{"uav":"{{prefix}}",{{term}}}""";
+        var document = $$"""{"@context":{{context}},"id":"urn:example:pump","uav:compatibilityLine":"urn:example:line:a"}""";
+        var engine = CreateEngine();
+
+        var created = await Publish(engine, Resource, document, "{}");
+        var details = await Send(engine, RegistryAction.Read, Resource + "/versions/1$details");
+        var stored = await Send(engine, RegistryAction.Read, Resource + "/versions/1");
+
+        await Assert.That(created.Notices.Count).IsEqualTo(0);
+        await Assert.That(details.Metadata!.RootElement.GetProperty("compatibilityline").GetString())
+            .IsEqualTo("urn:example:line:a");
+        using var reader = new StreamReader(stored.Document!.OpenRead());
+        await Assert.That(await reader.ReadToEndAsync()).IsEqualTo(document);
+    }
+
+    [Test]
+    public async Task ExpandedAndCompactCompatibilityLineDeclarationsRejectAtomically()
+    {
+        const string context = """{"uav":"http://opcfoundation.org/UA/WoT-Binding/"}""";
+        var conflicting = $$"""{"@context":{{context}},"id":"urn:example:pump","uav:compatibilityLine":"urn:example:line:a","http://opcfoundation.org/UA/WoT-Binding/compatibilityLine":"urn:example:line:b"}""";
+        var engine = CreateEngine();
+
+        await ExpectCode(async () => await Publish(engine, Resource, conflicting, "{}"), "invalid-line");
+        var retry = await Publish(engine, Resource,
+            $$"""{"@context":{{context}},"id":"urn:example:pump","uav:compatibilityLine":"urn:example:line:a"}""", "{}",
+            RegistryAction.Post);
+
+        await Assert.That(retry.Path.VersionId!.Value).IsEqualTo("1");
+        await Assert.That(retry.Notices.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task CompactDocumentAndMetadataCompatibilityLinesMustAgree()
+    {
+        const string context = """{"uav":"http://opcfoundation.org/UA/WoT-Binding/"}""";
+        var document = $$"""{"@context":{{context}},"id":"urn:example:pump","uav:compatibilityLine":"urn:example:line:a"}""";
+        var engine = CreateEngine();
+
+        await ExpectCode(async () => await Publish(engine, Resource, document,
+            """{"compatibilityline":"urn:example:line:b"}"""), "invalid-line");
+        var retry = await Publish(engine, Resource, document, Line, RegistryAction.Post);
+
+        await Assert.That(retry.Path.VersionId!.Value).IsEqualTo("1");
+    }
+
+    [Test]
+    [Arguments(0)]
+    [Arguments(1)]
+    [Arguments(2)]
+    public async Task CompactCompatibilityLineDoesNotTrustUnresolvedJsonLdContexts(int contextKind)
+    {
+        const string prefix = "http://opcfoundation.org/UA/WoT-Binding/";
+        var context = contextKind switch
+        {
+            0 => "\"https://example.invalid/context\"",
+            1 => $$"""[{"uav":"{{prefix}}"},"https://example.invalid/context"]""",
+            _ => """{"@import":"https://example.invalid/context"}"""
+        };
+        var document = $$"""{"@context":{{context}},"id":"urn:example:pump","uav:compatibilityLine":"urn:example:line:a"}""";
+        var engine = CreateEngine();
+
+        await ExpectCode(async () => await Publish(engine, Resource, document, "{}"), "invalid-line");
+        var retry = await Publish(engine, Resource, Document, Line, RegistryAction.Post);
+
+        await Assert.That(retry.Path.VersionId!.Value).IsEqualTo("1");
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
     public async Task DeletingHistoryAndRecreatingTheResourceCannotResetItsCounter(bool deleteGroup)
     {
         var store = new InMemoryRegistryPersistence();
