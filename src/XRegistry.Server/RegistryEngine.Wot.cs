@@ -154,7 +154,7 @@ public sealed partial class RegistryEngine
                     ServerJson.Text(existing.Attributes, "versionorigin") == "generated";
                 var versionId = authoredVersion ?? (existingGeneratedVersion
                     ? requestedVersionId! : LowestFreeWotVersionId(resource));
-                var submittedVersionId = Identifier(input, "versionid", resource.Key);
+                var submittedVersionId = WotVersionIdentifier(input, resource.Key);
                 var candidate = requestedVersionId ?? submittedVersionId;
                 if (candidate is not null && !StringComparer.Ordinal.Equals(candidate, versionId))
                 {
@@ -165,6 +165,31 @@ public sealed partial class RegistryEngine
 
                 return new(versionId, origin, wotId);
             }
+        }
+
+        private static string? WotVersionIdentifier(JsonObject input, string path)
+        {
+            if (!input.TryGetPropertyValue("versionid", out var value))
+            {
+                return null;
+            }
+
+            if (value is not JsonValue scalar || !scalar.TryGetValue<string>(out var versionId))
+            {
+                throw ServerErrors.With("invalid_attribute", path, "A supplied identifier must be a non-null string.",
+                    ("name", "versionid"));
+            }
+
+            try
+            {
+                _ = RegistryId.Parse(versionId);
+            }
+            catch (RegistryException exception)
+            {
+                throw ServerErrors.Wrap(exception, "invalid-version", path, ("name", "versionid"));
+            }
+
+            return versionId;
         }
 
         private WotVersionAssignment AssignIncrementalWotVersion(Entity resource, RegistryResourceDefinition definition, JsonObject input,

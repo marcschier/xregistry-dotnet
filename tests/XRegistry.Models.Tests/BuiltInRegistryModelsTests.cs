@@ -109,12 +109,23 @@ public class BuiltInRegistryModelsTests
     public async Task WotModelDefinesVersionedThingModelsAndThingDescriptions()
     {
         var groups = BuiltInRegistryModels.Compile(RegistryModelKind.Wot).Groups;
+        var thingModels = groups["thingmodelgroups"].Resources["thingmodels"];
+        var thingDescriptions = groups["thingdescriptiongroups"].Resources["thingdescriptions"];
 
-        await Assert.That(groups["thingmodelgroups"].Resources["thingmodels"].HasDocument).IsTrue();
-        await Assert.That(groups["thingmodelgroups"].Resources["thingmodels"].VersionMode).IsEqualTo("semver");
-        await Assert.That(groups["thingmodelgroups"].Resources["thingmodels"].Attributes["versionorigin"].Required).IsTrue();
-        await Assert.That(groups["thingdescriptiongroups"].Resources["thingdescriptions"].HasDocument).IsTrue();
-        await Assert.That(groups["thingdescriptiongroups"].Resources["thingdescriptions"].SingleVersionRoot).IsTrue();
+        await Assert.That(thingModels.HasDocument).IsTrue();
+        await Assert.That(thingModels.VersionMode).IsEqualTo("semver");
+        await Assert.That(thingModels.SingleVersionRoot).IsTrue();
+        await Assert.That(thingModels.Attributes["versionorigin"].Required).IsTrue();
+        await Assert.That(thingDescriptions.HasDocument).IsTrue();
+        await Assert.That(thingDescriptions.VersionMode).IsEqualTo("semver");
+        await Assert.That(thingDescriptions.SingleVersionRoot).IsTrue();
+        await Assert.That(thingDescriptions.Attributes["versionorigin"].Required).IsTrue();
+
+        using var source = BuiltInRegistryModels.LoadSource(RegistryModelKind.Wot);
+        var modelResource = source.RootElement.GetProperty("groups").GetProperty("thingmodelgroups")
+            .GetProperty("resources").GetProperty("thingmodels");
+        await Assert.That(modelResource.GetProperty("metaattributes").GetProperty("compatibility")
+            .GetProperty("default").GetString()).IsEqualTo("backward");
     }
 
     [Test]

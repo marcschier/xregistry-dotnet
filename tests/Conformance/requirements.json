@@ -138071,13 +138071,19 @@
       ],
       "text": "Each Version of a `thingdescription` or `thingmodel` Resource holds a complete WoT document, stored without rewriting its bytes. A Resource's `wotid` and registry Resource id are stable across compatible revisions. `wotid` is declared with [`matchversions`][xRegistry matchversions]. A registry MUST reject a Version that supplies a different `wotid`. A Thing Model's major version MUST be part of its `wotid`. A breaking change MUST use a new `wotid` and a new Resource ([Section 5.1.1](#511-breaking-changes-and-successor-identifiers)).",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The server-enforceable part is `matchversions` for `wotid`, which rejects an identity change. Requiring a TM major version in `wotid` and using a new identity for a breaking change are producer obligations; storage alone cannot verify compatibility.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "ExecuteAsyncRejectsWotIdChangesAcrossResourceVersions",
+          "DocumentsWithoutIdUseExplicitPublisherIdentityWithoutRewritingBytes"
+        ],
         "nativeEvidence": []
       }
     },
@@ -138102,13 +138108,17 @@
       ],
       "text": "Thing Model Resources and Thing Description Resources MUST use Core [`versionmode`][Core versionmode] `semver` and [`singleversionroot`][Core singleversionroot] `true`. Core orders each Resource's [`ancestorid`][Core ancestorid] lineage by SemVer precedence and forbids multiple roots with these aspects. The assignment rules for the corresponding authored fields are:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Both packaged WoT Resource types set `versionmode` to `semver` and `singleversionroot` to true. Core applies the required SemVer lineage ordering and single-root constraints.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "WotModelDefinesVersionedThingModelsAndThingDescriptions"
+        ],
         "nativeEvidence": []
       }
     },
@@ -138133,13 +138143,18 @@
       ],
       "text": "| TM | `version.model` | `versionid` MUST equal the authored value verbatim. | The registry MUST assign `0.0.0-N`. |",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A valid `version.model` supplies the TM Version id verbatim; an absent or non-SemVer value receives the generated `0.0.0-N` assignment.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ExecuteAsyncAssignsAuthoredTermByResourceKindAndPreservesDocument",
+          "DocumentsWithoutIdUseExplicitPublisherIdentityWithoutRewritingBytes"
+        ],
         "nativeEvidence": []
       }
     },
@@ -138164,13 +138179,18 @@
       ],
       "text": "| TD | `version.instance` | `versionid` MUST equal the authored value verbatim. | The registry MUST assign `0.0.0-N`. |",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A valid `version.instance` supplies the TD Version id verbatim; an absent or non-SemVer value receives the generated `0.0.0-N` assignment.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ExecuteAsyncAssignsAuthoredTermByResourceKindAndPreservesDocument",
+          "DocumentsWithoutIdUseExplicitPublisherIdentityWithoutRewritingBytes"
+        ],
         "nativeEvidence": []
       }
     },
@@ -138196,13 +138216,18 @@
       ],
       "text": "For either Resource type, the registry MUST inspect the authored field without modifying the stored document. The original authored field MUST NOT be rewritten, including when absent or non-SemVer.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The engine reads the selected authored field from the parsed input and stores the original Document bytes, including when the field is absent or not the field assigned to that Resource type.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ExecuteAsyncAssignsAuthoredTermByResourceKindAndPreservesDocument",
+          "DocumentsWithoutIdUseExplicitPublisherIdentityWithoutRewritingBytes"
+        ],
         "nativeEvidence": []
       }
     },
@@ -138227,13 +138252,18 @@
       ],
       "text": "A valid authored value is SemVer 2.0.0 without build metadata and fits Core's 128-character [id constraint][Core id constraints]. SemVer build metadata (`+build`) MUST be rejected as `invalid-version`, since `+` is not allowed by Core's id constraints. An authored SemVer value that exceeds Core's 128-character id limit MUST also be rejected under those constraints.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Authored versions are parsed as SemVer, reject build metadata, and are limited to 128 characters. The tested boundary accepts a 128-character value and rejects 129 characters for both TM and TD.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ExecuteAsyncEnforcesTheCoreVersionIdLengthBoundary",
+          "ExecuteAsyncRejectsMismatchedThingDescriptionVersionIdAndBuildMetadata"
+        ],
         "nativeEvidence": []
       }
     },
@@ -138258,13 +138288,21 @@
       ],
       "text": "`N` is the lowest positive integer whose complete id is not already used in the Resource. The registry MUST assign an omitted `versionid`. A supplied `versionid` MUST equal the authored or generated assignment, or the registry MUST reject it as `version-mismatch`. A supplied id that violates Core's id grammar MUST be rejected as `invalid-version` before this comparison. Core requires an immutable, unique [`versionid`][Core versionid]. This extension defines the assignment in place of its default [Version ID algorithm][Core Version IDs].",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The engine assigns the lowest unused generated id, accepts matching authored ids, rejects mismatches, and reports invalid Core id grammar as `invalid-version` before comparing the assignment. Atomic publication is tracked by the next requirement.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ExecuteAsyncGeneratesLowestUnusedIdentifier",
+          "ExecuteAsyncAcceptsMatchingSuppliedIdAndExactVersionPath",
+          "ExecuteAsyncRejectsMismatchedThingDescriptionVersionIdAndBuildMetadata",
+          "ExecuteAsyncRejectsInvalidSuppliedVersionIdBeforeAssignmentComparison",
+          "CanonicalAssignmentVector"
+        ],
         "nativeEvidence": []
       }
     },
@@ -138289,13 +138327,17 @@
       ],
       "text": "The Registry MUST perform assignment and creation atomically with respect to concurrent writes, so two writes cannot claim the same generated id.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Two requests staged from the same persistence generation cannot both publish the same generated id. The losing request leaves no Version; retry assigns the next available id.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ConcurrentGeneratedAssignmentsCommitAtMostOneClaimAndRetryUsesTheNextId"
+        ],
         "nativeEvidence": []
       }
     },
@@ -138320,13 +138362,19 @@
       ],
       "text": "Each Thing Model Version and each Thing Description Version MUST have a server-set, read-only `versionorigin`. Its value MUST be `authored` when the Version's id comes from a SemVer authored field, and `generated` otherwise.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The read-only `versionorigin` is `authored` when the selected authored field is valid SemVer and `generated` otherwise, for both Resource types.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ExecuteAsyncAssignsAuthoredTermByResourceKindAndPreservesDocument",
+          "DocumentsWithoutIdUseExplicitPublisherIdentityWithoutRewritingBytes",
+          "ExecuteAsyncIgnoresClientSuppliedVersionOrigin"
+        ],
         "nativeEvidence": []
       }
     },
@@ -138351,13 +138399,18 @@
       ],
       "text": "Client-supplied `versionorigin` MUST be ignored under Core's [read-only attribute rules][Core read-only rules]. The model initializes the attribute to `authored`. When the registry assigns a generated id, it MUST replace that initial value with `generated`. The model default does not replace the assignment rules above.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The model defaults the read-only attribute to `authored`; generated assignments replace that value with `generated`. Client-supplied values are ignored for either assignment.",
+        "roles": [
+          "server"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "WotModelDefinesVersionedThingModelsAndThingDescriptions",
+          "ExecuteAsyncIgnoresClientSuppliedVersionOrigin"
+        ],
         "nativeEvidence": []
       }
     },
@@ -138382,13 +138435,17 @@
       ],
       "text": "Generated ids are prereleases. They MUST NOT be used as minimum-version floors, even when the target Version is absent.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "A generated id is a SemVer prerelease and the resolver rejects it as a minimum-version floor, including when selecting a target that has no matching published Version.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "GeneratedVersionIdCannotBeUsedAsFloor"
+        ],
         "nativeEvidence": []
       }
     },
@@ -138414,13 +138471,18 @@
       ],
       "text": "For Thing Models, the Resource-level [`compatibility`][Core compatibility] attribute in `meta` MUST default to `backward`. A backward-compatible TM revision MUST NOT remove or narrow an affordance, a data schema or an `@type`, and MUST NOT introduce a new mandatory member. Narrowing includes reducing the accepted values or operations of an existing member. These constraints apply to every earlier Version in the Resource's Core [`ancestorid`][Core ancestorid] lineage.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The TM Resource defaults `meta.compatibility` to `backward`. The TM compatibility rules constrain Producers; the Registry is not required to compare revisions or reject an incompatible Document.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "WotModelDefinesVersionedThingModelsAndThingDescriptions"
+        ],
         "nativeEvidence": []
       }
     },
@@ -138445,9 +138507,12 @@
       ],
       "text": "A Registry MAY validate this domain-specific compatibility rule through Core's [`validatecompatibility`][Core validatecompatibility] capability. Core's [`strictvalidation`][Core strictvalidation] rules still apply. Absence of a domain validator does not permit a Producer to publish an incompatible revision under the same `wotid`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Compatibility validation is optional for a Registry. The Producer's obligation remains even when no domain validator is configured; this repository has not established Producer-side compatibility enforcement.",
+        "roles": [
+          "server",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
@@ -138477,13 +138542,20 @@
       ],
       "text": "When [`defaultversionsticky`][Core defaultversionsticky] is false, Core's SemVer [`versionmode`][Core versionmode] orders the default. A late `1.0.1` after `1.1.0` MUST NOT replace `1.1.0` as the default. A sticky default MUST be honoured.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The non-sticky Resource default follows SemVer order, so a late lower patch does not replace a higher default. Consumers must honor a sticky default when it satisfies the requested floor.",
+        "roles": [
+          "server",
+          "client"
+        ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "ExecuteAsyncLateSemVerPatchDoesNotReplaceNewerDefault",
+          "StickyDefaultMustSatisfyTheDerivedFloor",
+          "StickyDefaultWinsAndVersionPinOverridesStickyDefaultAndFloor"
+        ],
         "nativeEvidence": []
       }
     },

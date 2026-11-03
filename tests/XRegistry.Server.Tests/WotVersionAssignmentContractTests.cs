@@ -190,6 +190,88 @@ public class WotVersionAssignmentContractTests
     }
 
     [Test]
+    [Arguments("thingmodel", "model", 122, true)]
+    [Arguments("thingmodel", "model", 123, false)]
+    [Arguments("thingdescription", "instance", 122, true)]
+    [Arguments("thingdescription", "instance", 123, false)]
+    public async Task ExecuteAsyncEnforcesTheCoreVersionIdLengthBoundary(
+        string kind, string field, int prereleaseLength, bool accepted)
+    {
+        var fixture = CreateWotFixture();
+        var resourcePath = fixture.ResourcePath(kind, "version-length");
+        var authoredVersion = "1.0.0-" + new string('a', prereleaseLength);
+        var document = "{\"id\":\"urn:example:version-length\",\"version\":{\"" + field +
+            "\":\"" + authoredVersion + "\"}}";
+
+        if (accepted)
+        {
+            await ExecuteDocumentAsync(fixture.Engine, RegistryAction.Replace, resourcePath, document, "{}");
+            await AssertStoredAssignmentAsync(fixture.Engine, resourcePath, authoredVersion, "authored",
+                "urn:example:version-length", document);
+            return;
+        }
+
+        var error = await Assert.That(async () => await ExecuteDocumentAsync(fixture.Engine,
+            RegistryAction.Replace, resourcePath, document, "{}"))
+            .Throws<RegistryException>() ?? throw new InvalidOperationException("An overlength SemVer must be rejected.");
+        await Assert.That(error.Diagnostic.Code).IsEqualTo("invalid-version");
+    }
+
+    [Test]
+    [Arguments("thingmodel", "model", "1.2.3", "generated", "1.2.3", "authored")]
+    [Arguments("thingdescription", "instance", "1.2.3", "generated", "1.2.3", "authored")]
+    [Arguments("thingmodel", "model", "", "authored", "0.0.0-1", "generated")]
+    [Arguments("thingdescription", "instance", "", "authored", "0.0.0-1", "generated")]
+    public async Task ExecuteAsyncIgnoresClientSuppliedVersionOrigin(
+        string kind, string field, string authoredVersion, string suppliedOrigin, string expectedVersionId,
+        string expectedOrigin)
+    {
+        var fixture = CreateWotFixture();
+        var resourcePath = fixture.ResourcePath(kind, "version-origin");
+        var version = authoredVersion.Length == 0
+            ? ""
+            : ",\"version\":{\"" + field + "\":\"" + authoredVersion + "\"}";
+        var document = "{\"id\":\"urn:example:version-origin\"" + version + "}";
+
+        await ExecuteDocumentAsync(fixture.Engine, RegistryAction.Replace, resourcePath, document,
+            "{\"versionorigin\":\"" + suppliedOrigin + "\"}");
+
+        await AssertStoredAssignmentAsync(fixture.Engine, resourcePath, expectedVersionId, expectedOrigin,
+            "urn:example:version-origin", document);
+    }
+
+    [Test]
+    [Arguments("thingmodel")]
+    [Arguments("thingdescription")]
+    public async Task ExecuteAsyncRejectsWotIdChangesAcrossResourceVersions(string kind)
+    {
+        var fixture = CreateWotFixture();
+        var resourcePath = fixture.ResourcePath(kind, "changed-wotid");
+        await ExecuteDocumentAsync(fixture.Engine, RegistryAction.Replace, resourcePath,
+            """{"id":"urn:example:original"}""", "{}");
+
+        await Assert.That(async () => await ExecuteDocumentAsync(fixture.Engine, RegistryAction.Post, resourcePath,
+            """{"id":"urn:example:replacement"}""", "{}")).Throws<RegistryException>();
+        var missingRevision = await Assert.That(async () => await fixture.Engine.ExecuteAsync(
+            new(RegistryAction.Read, VersionPath(resourcePath, "0.0.0-2")), Reader()))
+            .Throws<RegistryException>() ?? throw new InvalidOperationException("The rejected identity change must not persist.");
+        await Assert.That(missingRevision.Diagnostic.Code).IsEqualTo("not_found");
+    }
+
+    [Test]
+    public async Task ExecuteAsyncRejectsInvalidSuppliedVersionIdBeforeAssignmentComparison()
+    {
+        var fixture = CreateWotFixture();
+        var error = await Assert.That(async () => await ExecuteDocumentAsync(fixture.Engine, RegistryAction.Post,
+            fixture.ResourcePath("thingmodel", "invalid-version-id"),
+            """{"id":"urn:example:invalid-version-id","version":{"model":"1.2.3"}}""",
+            """{"versionid":"invalid+id"}"""))
+            .Throws<RegistryException>() ?? throw new InvalidOperationException("An invalid Version id must be rejected.");
+
+        await Assert.That(error.Diagnostic.Code).IsEqualTo("invalid-version");
+    }
+
+    [Test]
     public async Task ExecuteAsyncLateSemVerPatchDoesNotReplaceNewerDefault()
     {
         var fixture = CreateWotFixture();
@@ -206,7 +288,64 @@ public class WotVersionAssignmentContractTests
         await Assert.That(metadata.Metadata!.RootElement.GetProperty("defaultversionid").GetString()).IsEqualTo("1.1.0");
     }
 
-    private static WotFixture CreateWotFixture(WotVersionProfile? profile = null)
+    [Test]
+    public async Task ConcurrentGeneratedAssignmentsCommitAtMostOneClaimAndRetryUsesTheNextId()
+    {
+        var persistence = new InMemoryRegistryPersistence();
+        var first = CreateWotFixture(persistence: persistence);
+        var second = CreateWotFixture(persistence: persistence);
+        var resourcePath = first.ResourcePath("thingmodel", "concurrent");
+        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var participants = 0;
+        var context = new RegistryOperationContext(Writer().Caller)
+        {
+            PrepareResponseAsync = async (_, ct) =>
+            {
+                if (Interlocked.Increment(ref participants) == 2) { ready.SetResult(); }
+                await ready.Task.WaitAsync(ct);
+            }
+        };
+
+        async Task<string?> Attempt(WotFixture fixture, string title)
+        {
+            using var document = new MemoryStream(Encoding.UTF8.GetBytes(
+                "{\"id\":\"urn:example:concurrent\",\"title\":\"" + title + "\"}"), writable: false);
+            try
+            {
+                var result = await fixture.Engine.ExecuteAsync(new(RegistryAction.Post, resourcePath)
+                {
+                    Document = document,
+                    ContentType = "application/json",
+                    Metadata = RegistryJson.Parse("{}")
+                }, context);
+                await Assert.That(result.Path.EscapedPath)
+                    .IsEqualTo(VersionPath(resourcePath, "0.0.0-1").EscapedPath);
+                return title;
+            }
+            catch (RegistryConcurrencyException)
+            {
+                return null;
+            }
+        }
+
+        var outcomes = await Task.WhenAll(Attempt(first, "first"), Attempt(second, "second"))
+            .WaitAsync(TimeSpan.FromSeconds(15));
+        var committedTitles = outcomes.Where(static title => title is not null).ToArray();
+        await Assert.That(committedTitles.Length).IsEqualTo(1);
+        var committedDocument = "{\"id\":\"urn:example:concurrent\",\"title\":\"" + committedTitles[0] + "\"}";
+        await AssertStoredAssignmentAsync(first.Engine, resourcePath, "0.0.0-1", "generated",
+            "urn:example:concurrent", committedDocument);
+
+        var retry = await ExecuteDocumentAsync(first.Engine, RegistryAction.Post, resourcePath,
+            """{"id":"urn:example:concurrent","title":"retry"}""", "{}");
+        await Assert.That(retry.Path.EscapedPath)
+            .IsEqualTo(VersionPath(resourcePath, "0.0.0-2").EscapedPath);
+        await AssertStoredAssignmentAsync(first.Engine, resourcePath, "0.0.0-2", "generated",
+            "urn:example:concurrent", """{"id":"urn:example:concurrent","title":"retry"}""");
+    }
+
+    private static WotFixture CreateWotFixture(WotVersionProfile? profile = null,
+        InMemoryRegistryPersistence? persistence = null)
     {
         using var source = BuiltInRegistryModels.LoadSource(RegistryModelKind.Wot);
         var modelSource = profile is { } selected
@@ -217,7 +356,7 @@ public class WotVersionAssignmentContractTests
             (Group: group, Resource: resource)));
         var thingModel = targets.Single(static item => item.Resource.Singular == "thingmodel");
         var thingDescription = targets.Single(static item => item.Resource.Singular == "thingdescription");
-        return new(EngineTests.Create(modelSource, new InMemoryRegistryPersistence(), new PermitPolicy()),
+        return new(EngineTests.Create(modelSource, persistence ?? new InMemoryRegistryPersistence(), new PermitPolicy()),
             new(thingModel.Group.Plural, thingModel.Resource.Plural),
             new(thingDescription.Group.Plural, thingDescription.Resource.Plural));
     }

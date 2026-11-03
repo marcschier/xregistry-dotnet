@@ -75,9 +75,12 @@ public sealed partial class RegistryEngine
                     if (_operation.Action == RegistryAction.Post)
                     {
                         var resource = EnsureResource(path);
-                        var specifiedVersion = Identifier(body, "versionid", key);
+                        var definition = ResourceDefinition(path);
+                        var specifiedVersion = IsWotResource(definition)
+                            ? WotVersionIdentifier(body, key)
+                            : Identifier(body, "versionid", key);
                         var version = ApplyAssignedVersion(resource, specifiedVersion,
-                            VersionInput(body, ResourceDefinition(path)), documentMode, documentMode,
+                            VersionInput(body, definition), documentMode, documentMode,
                             generated: specifiedVersion is null);
                         _responsePath = RegistryPath.Parse(version.Key + (path.IsDetails ? "$details" : ""));
                     }
