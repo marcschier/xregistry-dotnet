@@ -245,7 +245,8 @@ public class FileOciLayoutPublicationTests
                         ? ValueTask.FromException(new IOException("Injected publication checkpoint failure."))
                         : ValueTask.CompletedTask,
                 }).AsTask(), FederationErrorCode.Unavailable);
-            await Assert.That(failure.Diagnostic == "publication_ack_unknown").IsEqualTo(unknown);
+            await Assert.That(failure.Diagnostic == "publication_ack_unknown").IsEqualTo(unknown)
+                .Because($"Publication failed with diagnostic '{failure.Diagnostic}': {failure.Message}");
             using var tree = FileDocumentTreeReader.Open(FileIntegrationFixture.Uri(root.FullName));
             await using var selected = await OciSnapshot.OpenLayoutAsync(tree, "stable");
             await Assert.That(selected.RootDigest).IsEqualTo(unknown ? updated.RootDigest : first.RootDigest);

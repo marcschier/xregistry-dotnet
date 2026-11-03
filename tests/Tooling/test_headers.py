@@ -75,6 +75,8 @@ class HeaderPolicyTests(unittest.TestCase):
             "tests/Conformance/Sources/tool.py",
             "tests/Conformance/Corrections/SPEC-001/tool.py",
             "src/XRegistry.Models/Resources/Model.cs",
+            "tests/XRegistry.Core.Tests/Wot/Resolution/regressions/check_vectors.py",
+            "tests/XRegistry.Core.Tests/Wot/Resolution/shared/check_vectors.py",
             "src/XRegistry/bin/Generated.cs",
             "src/XRegistry/obj/Generated.cs",
             "artifacts/Generated.cs",
