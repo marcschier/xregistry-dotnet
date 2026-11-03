@@ -61394,7 +61394,11 @@
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "CollectionAndNestedErrorsRetainPrecisePointers",
+          "WildcardsDoNotPermitInvalidNamesOrBypassDeclaredTypes",
+          "AnyScopedContentRequiresOnlyValidJsonSyntax"
+        ],
         "nativeEvidence": []
       }
     },
