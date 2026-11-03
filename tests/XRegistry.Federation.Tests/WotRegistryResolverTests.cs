@@ -884,6 +884,27 @@ public class WotRegistryResolverTests
     }
 
     [Test]
+    public async Task ExternalReferenceResolutionSelectsWotIdAndAppliesFragmentUnderOneBudget()
+    {
+        var bytes = Encoding.UTF8.GetBytes("""{"properties":{"status":{"type":"string"}}}""");
+        var source = new Source { FirstBytes = bytes, SecondBytes = bytes };
+        var containing = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+        var reads = source.Reads.Count;
+        var budget = new FederationReadBudget();
+
+        var result = await WotRegistryResolver.ResolveReferenceAsync(source, source.Collection, containing,
+            "urn:test:device:v1#/properties/status", new Uri("https://example.test/models/consumer.json"),
+            new Uri("https://example.test/models/consumer.json"), source.Request, budget);
+
+        await Assert.That(result.Value.GetProperty("type").GetString()).IsEqualTo("string");
+        await Assert.That(result.ContainingDocument.Version.WotId).IsEqualTo(Source.Identity);
+        await Assert.That(result.ContainingDocument.Version.ContentDigest).IsEqualTo(Digest(bytes));
+        await Assert.That(source.Reads.Count(read => read.Operation == FederationOperation.Document)).IsEqualTo(2);
+        await Assert.That(source.Reads.Count).IsGreaterThan(reads);
+        await Assert.That(budget.Requests).IsGreaterThan(0);
+    }
+
+    [Test]
     [Arguments(false, "2.0.0", null)]
     [Arguments(false, "1.0.0", null)]
     [Arguments(false, "0.1.0", null)]

@@ -318,6 +318,42 @@ public static class WotRegistryResolver
         return new Resolution(source, collection, request, budget ?? new(), cancellationToken).RunAsync();
     }
 
+    /// <summary>Resolves a WoT URI-reference, selects its Version, and applies its fragment.</summary>
+    /// <remarks>
+    /// The caller supplies an authorized Group Resource collection and the effective base and containing
+    /// document URIs established by JSON-LD context processing. A local reference uses the retained
+    /// containing revision; an external reference looks up its resolved fragment-free URI as a <c>wotid</c>.
+    /// Source authorization and URI-to-alias mapping remain the caller's responsibility.
+    /// </remarks>
+    public static async ValueTask<WotResolvedFragment> ResolveReferenceAsync(
+        IFederationReadSource source, string resourceCollection, WotResolvedDocument containingRevision,
+        string reference, Uri effectiveBaseUri, Uri containingDocumentUri,
+        WotVersionResolutionRequest request, FederationReadBudget? budget = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(containingRevision);
+        ArgumentNullException.ThrowIfNull(request);
+        var target = WotReferenceUriResolver.Resolve(reference, effectiveBaseUri, containingDocumentUri);
+        var readBudget = budget ?? new();
+        if (target.IsDocumentLocal)
+        {
+            return await ResolveLocalReferenceAsync(containingRevision, reference, effectiveBaseUri,
+                containingDocumentUri, request, readBudget, cancellationToken).ConfigureAwait(false);
+        }
+
+        var resolvedRequest = request with
+        {
+            TargetWotId = target.DocumentUri.AbsoluteUri,
+            IsDocumentLocal = false,
+            ContainingRevision = null
+        };
+        var resolved = await ResolveAsync(source, resourceCollection, resolvedRequest,
+            readBudget, cancellationToken).ConfigureAwait(false);
+        return await SelectFragmentAsync(resolved, target.Fragment ?? "#", readBudget, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     /// <summary>Acquires the TD source selected by decoded CloudEvents WoT query parameters.</summary>
     /// <remarks>
     /// The caller validates the complete source URI-reference and authorizes one Group Resource
