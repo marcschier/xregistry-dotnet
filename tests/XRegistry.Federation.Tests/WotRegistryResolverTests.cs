@@ -155,6 +155,36 @@ public class WotRegistryResolverTests
     }
 
     [Test]
+    public async Task CloudEventsSubjectUsesCapturedWotIdWhenDocumentOmitsId()
+    {
+        var view = Encoding.UTF8.GetBytes("""{"events":{"overheated":{"type":"test"}}}""");
+        var source = new Source(true) { FirstBytes = view, SecondBytes = view };
+        var query = WotCloudEventSourceQuery.Parse(WotCloudEventSourceQuery.Encode(Source.Identity));
+
+        var result = await WotRegistryResolver.AcquireCloudEventSubjectAsync(source, source.Collection, query,
+            "#/events/overheated");
+
+        await Assert.That(result.Value.GetProperty("type").GetString()).IsEqualTo("test");
+        await Assert.That(result.ContainingDocument.Version.WotId).IsEqualTo(Source.Identity);
+        await Assert.That(result.ContainingDocument.Document.Length).IsEqualTo(view.Length);
+    }
+
+    [Test]
+    public async Task CloudEventsSubjectRejectsDocumentIdThatConflictsWithCapturedWotId()
+    {
+        var view = Encoding.UTF8.GetBytes("""{"id":"urn:test:other","events":{"overheated":{"type":"test"}}}""");
+        var source = new Source(true) { FirstBytes = view, SecondBytes = view };
+        var query = WotCloudEventSourceQuery.Parse(WotCloudEventSourceQuery.Encode(Source.Identity));
+
+        var failure = await Assert.That(async () =>
+            await WotRegistryResolver.AcquireCloudEventSubjectAsync(source, source.Collection, query,
+                "#/events/overheated"))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected conflicting WoT identity rejection.");
+
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
     [Arguments(null, true)]
     [Arguments(null, false)]
     [Arguments("1.0.1", true)]
@@ -946,7 +976,6 @@ public class WotRegistryResolverTests
 
     [Test]
     [Arguments("[]")]
-    [Arguments("{}")]
     [Arguments("""{"id":"urn:other"}""")]
     [Arguments("""{"id":"urn:test:device:v1","id":"urn:test:device:v1"}""")]
     [Arguments("""{"id":"urn:test:device:v1","version":{"model":"2.0.0","model":"3.0.0"}}""")]
@@ -960,6 +989,19 @@ public class WotRegistryResolverTests
             source.Request with { IsDocumentLocal = true, MinimumVersion = "1.0.0" }))
             .Throws<FederationException>() ?? throw new InvalidOperationException("Expected invalid retained JSON.");
         await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    public async Task LocalParsingUsesCapturedWotIdWhenDocumentOmitsId()
+    {
+        var source = new Source { SecondBytes = Encoding.UTF8.GetBytes("""{"version":{"model":"2.0.0"}}""") };
+        var containing = await WotRegistryResolver.ResolveAsync(source, source.Collection, source.Request);
+
+        var result = await WotRegistryResolver.ResolveLocalAsync(containing,
+            source.Request with { IsDocumentLocal = true, MinimumVersion = "1.0.0" });
+
+        await Assert.That(ReferenceEquals(result, containing)).IsTrue();
+        await Assert.That(result.Version.WotId).IsEqualTo(Source.Identity);
     }
 
     [Test]

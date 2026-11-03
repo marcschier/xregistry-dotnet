@@ -140674,8 +140674,10 @@
       "implementation": {
         "status": "implemented",
         "testIds": [
+          "CloudEventsSubjectRejectsDocumentIdThatConflictsWithCapturedWotId",
           "CloudEventsSubjectRejectsMissingOrInvalidPointers",
           "CloudEventsSubjectSelectsFromTheSelectedPublishedViewVersion",
+          "CloudEventsSubjectUsesCapturedWotIdWhenDocumentOmitsId",
           "CloudEventsSubjectUsesOneReadBudgetForVersionAcquisitionAndPointerSelection",
           "FragmentsDecodeOnceAndSelectExactJsonValuesWithoutChangingProvenance",
           "MissingFragmentTargetsCannotFallbackOrChangeTheSelectedVersion"

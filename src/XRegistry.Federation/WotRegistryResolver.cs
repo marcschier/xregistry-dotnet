@@ -190,7 +190,7 @@ public static class WotRegistryResolver
         var root = parsed.RootElement;
         FederationJson.CountWork(root, budget, cancellationToken);
         FederationJson.RequireObject(root);
-        if (FederationJson.String(root, "id") != document.Version.WotId)
+        if (root.TryGetProperty("id", out _) && FederationJson.String(root, "id") != document.Version.WotId)
         {
             throw FederationJson.Invalid("The document's id differs from its acquired WoT identity.");
         }
