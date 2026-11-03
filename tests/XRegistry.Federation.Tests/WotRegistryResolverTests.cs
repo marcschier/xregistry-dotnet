@@ -1437,9 +1437,106 @@ public class WotRegistryResolverTests
             if (alias) { metadata["entity"]!["xref"] = source.Collection + "/other"; }
             else { metadata["entity"]!["defaultversionsticky"] = null; }
         };
+        if (alias)
+        {
+            source.Change += (request, metadata) =>
+            {
+                if (request.Target == source.Collection + "/other/meta")
+                {
+                    metadata["entity"]!["xref"] = source.Resource;
+                }
+            };
+        }
         var failure = await FederationFailure(source, source.Request);
         await Assert.That(failure.Code).IsEqualTo(alias
             ? FederationErrorCode.UnsupportedOperation : FederationErrorCode.InvalidPackage);
+        await Assert.That(source.Reads.Count(read => read.Operation == FederationOperation.Document)).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task SameRegistryAliasSelectsAndReturnsItsAuthorizedTargetVersion()
+    {
+        var source = new Source();
+        var aliasXid = source.Collection + "/alias";
+        var targetXid = source.Collection + "/other";
+        source.Change = (request, metadata) =>
+        {
+            if (request.Target == source.Collection)
+            {
+                metadata["entities"]!["alias"] = new JsonObject { ["xid"] = aliasXid };
+            }
+            if (request.Target == source.Resource + "/versions/1.0.0")
+            {
+                metadata["entity"]!["wotid"] = "urn:test:other";
+            }
+            if (request.Target == aliasXid + "/meta")
+            {
+                metadata["entity"]!["xref"] = targetXid;
+            }
+        };
+
+        var result = await WotRegistryResolver.ResolveAsync(source, source.Collection,
+            source.Request with { VersionIdPin = "1.0.0" });
+
+        await Assert.That(result.ResourceXid).IsEqualTo(aliasXid);
+        await Assert.That(result.Version.WotId).IsEqualTo(Source.Identity);
+        await Assert.That(result.Version.VersionId).IsEqualTo("1.0.0");
+        await Assert.That(source.Reads.Any(read => read.Target == targetXid + "/meta")).IsTrue();
+        await Assert.That(source.Reads.Last(read => read.Operation == FederationOperation.Document).Target)
+            .IsEqualTo(targetXid + "/versions/1.0.0");
+    }
+
+    [Test]
+    public async Task SameRegistryAliasRejectsTargetOfAnotherResourceType()
+    {
+        var source = new Source();
+        var aliasXid = source.Collection + "/alias";
+        source.Change = (request, metadata) =>
+        {
+            if (request.Target == source.Collection)
+            {
+                metadata["entities"]!["alias"] = new JsonObject { ["xid"] = aliasXid };
+            }
+            if (request.Target == aliasXid + "/meta")
+            {
+                metadata["entity"]!["xref"] = "/thingdescriptiongroups/tenant/thingdescriptions/other";
+            }
+        };
+
+        var failure = await FederationFailure(source, source.Request);
+
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(source.Reads.Any(read =>
+            read.Target == "/thingdescriptiongroups/tenant/thingdescriptions/other/meta")).IsFalse();
+        await Assert.That(source.Reads.Any(read => read.Operation == FederationOperation.Document)).IsFalse();
+    }
+
+    [Test]
+    public async Task SameRegistryAliasChangeDuringSelectionIsRejectedBeforeDocumentAcquisition()
+    {
+        var source = new Source();
+        var aliasXid = source.Collection + "/alias";
+        var targetXid = source.Collection + "/other";
+        var aliasMetaReads = 0;
+        source.Change = (request, metadata) =>
+        {
+            if (request.Target == source.Collection)
+            {
+                metadata["entities"]!["alias"] = new JsonObject { ["xid"] = aliasXid };
+            }
+            if (request.Target == source.Resource + "/versions/1.0.0")
+            {
+                metadata["entity"]!["wotid"] = "urn:test:other";
+            }
+            if (request.Target == aliasXid + "/meta")
+            {
+                metadata["entity"]!["xref"] = ++aliasMetaReads == 1 ? targetXid : source.Resource;
+            }
+        };
+
+        var failure = await FederationFailure(source, source.Request with { VersionIdPin = "1.0.0" });
+
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InconsistentSnapshot);
         await Assert.That(source.Reads.Count(read => read.Operation == FederationOperation.Document)).IsEqualTo(0);
     }
 

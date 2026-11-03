@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using XRegistry.Models;
 
 namespace XRegistry.Federation;
@@ -315,8 +316,9 @@ public static class WotRegistryResolver
     /// <remarks>
     /// The caller owns source authorization and URI/base/context processing. The source must expose
     /// its captured WoT model and fixed profile. Lookup uses exact wotid equality, rejects competing Resources,
-    /// and never follows successors, document URLs or another source. Digest pins are compared with
-    /// hashes of acquired bytes, not advisory metadata. All reads share the supplied finite budget.
+    /// follows at most one same-source, same-Resource-type xref, and never follows successors, document URLs
+    /// or another source. Digest pins are compared with hashes of acquired bytes, not advisory metadata.
+    /// All reads share the supplied finite budget.
     /// </remarks>
     public static ValueTask<WotResolvedDocument> ResolveAsync(IFederationReadSource source,
         string resourceCollection, WotVersionResolutionRequest request,
@@ -500,6 +502,10 @@ public static class WotRegistryResolver
         {
             var resources = Members(await MetadataAsync(_collection).ConfigureAwait(false), _collection.Target);
             string? resourceXid = null;
+            string? selectedResourceXid = null;
+            string? aliasTargetXid = null;
+            JsonElement aliasMetaSnapshot = default;
+            JsonElement aliasTargetMetaSnapshot = default;
             JsonElement meta = default;
             List<WotVersionCandidate>? matchedCandidates = null;
             foreach (var member in resources)
@@ -509,21 +515,45 @@ public static class WotRegistryResolver
                 var metaPath = xid + "/meta";
                 var resourceMeta = Entity(await MetadataAsync(new(FederationOperation.Entity, metaPath))
                     .ConfigureAwait(false), metaPath);
+                var selectionMeta = resourceMeta;
+                var selectionXid = xid;
                 if (resourceMeta.TryGetProperty("xref", out _))
                 {
-                    throw new FederationException(FederationErrorCode.UnsupportedOperation,
-                        "A WoT Resource alias must be resolved to its authorized source before Version selection.");
+                    if (_useCoreDefaultSelection)
+                    {
+                        throw new FederationException(FederationErrorCode.UnsupportedOperation,
+                            "A CloudEvents source cannot be selected through a WoT Resource alias.");
+                    }
+                    var target = FederationJson.String(resourceMeta, "xref");
+                    var targetParts = FederationSyntax.Xid(target);
+                    var resourceParts = FederationSyntax.Xid(xid);
+                    if (targetParts.Length != 4 ||
+                        !ReferenceEquals(DocumentTreeFormat.Resource(_model, resourceParts),
+                            DocumentTreeFormat.Resource(_model, targetParts)))
+                    {
+                        throw FederationJson.Invalid("A WoT Resource alias must target the same Resource model type.");
+                    }
+
+                    var targetMetaPath = target + "/meta";
+                    selectionMeta = Entity(await MetadataAsync(new(FederationOperation.Entity, targetMetaPath))
+                        .ConfigureAwait(false), targetMetaPath);
+                    if (selectionMeta.TryGetProperty("xref", out _))
+                    {
+                        throw new FederationException(FederationErrorCode.UnsupportedOperation,
+                            "A WoT Resource alias target cannot itself be an alias.");
+                    }
+                    selectionXid = target;
                 }
                 List<WotVersionCandidate>? resourceCandidates = null;
                 string? wotId;
                 if (_useCoreDefaultSelection)
                 {
-                    (wotId, resourceCandidates) = await ReadVersionsAsync(xid).ConfigureAwait(false);
+                    (wotId, resourceCandidates) = await ReadVersionsAsync(selectionXid).ConfigureAwait(false);
                 }
                 else
                 {
-                    var defaultVersionId = FederationJson.String(resourceMeta, "defaultversionid");
-                    var defaultPath = xid + "/versions/" + Uri.EscapeDataString(defaultVersionId);
+                    var defaultVersionId = FederationJson.String(selectionMeta, "defaultversionid");
+                    var defaultPath = selectionXid + "/versions/" + Uri.EscapeDataString(defaultVersionId);
                     var defaultVersion = Entity(await MetadataAsync(new(FederationOperation.Entity, defaultPath))
                         .ConfigureAwait(false), defaultPath);
                     if (FederationJson.String(defaultVersion, "versionid") != defaultVersionId)
@@ -539,12 +569,28 @@ public static class WotRegistryResolver
                         "Several Resources in the selected Group have the requested WoT identity.");
                 }
                 resourceXid = xid;
-                meta = resourceMeta;
+                selectedResourceXid = selectionXid;
+                meta = selectionMeta;
                 matchedCandidates = resourceCandidates;
+                if (selectionXid != xid)
+                {
+                    aliasTargetXid = selectionXid;
+                    aliasMetaSnapshot = resourceMeta;
+                    aliasTargetMetaSnapshot = selectionMeta;
+                }
             }
             if (resourceXid is null)
             {
                 throw new RegistryException(new("not-found", "", "No WoT Resource matches in the selected Group."));
+            }
+            var resolvedResourceXid = selectedResourceXid ??
+                throw new FederationException(FederationErrorCode.InconsistentSnapshot,
+                    "The matched WoT Resource has no selected source identity.");
+
+            if (aliasTargetXid is not null)
+            {
+                await ValidateAliasSnapshotAsync(resourceXid, aliasTargetXid, aliasMetaSnapshot,
+                    aliasTargetMetaSnapshot).ConfigureAwait(false);
             }
 
             var sticky = false;
@@ -557,9 +603,9 @@ public static class WotRegistryResolver
                 sticky = stickyValue.GetBoolean();
             }
 
-            var versionsPath = resourceXid + "/versions";
+            var versionsPath = resolvedResourceXid + "/versions";
             var candidates = matchedCandidates ??
-                (await ReadVersionsAsync(resourceXid, _request.TargetWotId).ConfigureAwait(false)).Candidates;
+                (await ReadVersionsAsync(resolvedResourceXid, _request.TargetWotId).ConfigureAwait(false)).Candidates;
             if (_useCoreDefaultSelection)
             {
                 var selectedId = _request.VersionIdPin ??
@@ -606,6 +652,25 @@ public static class WotRegistryResolver
             }
             return Complete(resourceXid, candidates.First(candidate => candidate.VersionId == selected), document, digest);
         }
+
+        private async ValueTask ValidateAliasSnapshotAsync(string aliasXid, string targetXid,
+            JsonElement aliasMeta, JsonElement targetMeta)
+        {
+            var aliasPath = aliasXid + "/meta";
+            var aliasAfter = Entity(await MetadataAsync(new(FederationOperation.Entity, aliasPath))
+                .ConfigureAwait(false), aliasPath);
+            var targetPath = targetXid + "/meta";
+            var targetAfter = Entity(await MetadataAsync(new(FederationOperation.Entity, targetPath))
+                .ConfigureAwait(false), targetPath);
+            if (!SameMetadata(aliasMeta, aliasAfter) || !SameMetadata(targetMeta, targetAfter))
+            {
+                throw new FederationException(FederationErrorCode.InconsistentSnapshot,
+                    "The WoT Resource alias or its target changed during Version selection.");
+            }
+        }
+
+        private static bool SameMetadata(JsonElement left, JsonElement right) =>
+            JsonNode.DeepEquals(JsonNode.Parse(left.GetRawText()), JsonNode.Parse(right.GetRawText()));
 
         private WotResolvedDocument Complete(string resourceXid, WotVersionCandidate selected,
             FederationDocument document, string digest)
