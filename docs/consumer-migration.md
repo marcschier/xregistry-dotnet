@@ -2296,8 +2296,19 @@ Thing Description. Results retain link-object pointers and authored hrefs.
 Repeated targets remain separate occurrences. Missing, malformed or competing
 reference-link members reject the operation rather than selecting one alias.
 `describedby` candidates are returned for subsequent Schema classification;
-their presence does not authorize a closure binding. Projection-source discovery
-and combined target classification remain unfinished.
+their presence does not authorize a closure binding. Combined target
+classification remains unfinished.
+
+`DiscoverProjectionSourceReferencesAsync` recognizes the selected experiment's
+lowercase expanded `projection` type on the authored root. A nested node's
+marker and the former placeholder namespace do not mark the envelope. A marked
+root must declare exactly its captured TD or TM kind. Source entries retain
+authored order, entry pointers and unchanged hrefs; their names and resolved,
+fragment-free URIs must be unique. Expected kind comes from the declared media
+type, not a filename. Source and context bytes remain unchanged. This method
+does not perform complete projection admission, verify captured target kinds,
+check source requirements or digest pins, associate selectors with entries,
+compose affordances or validate closure bindings.
 
 `AcquireCloudEventSubjectAsync` takes a parsed CloudEvents WoT source query, a
 subject pointer and one authorized Thing Description Resource collection.

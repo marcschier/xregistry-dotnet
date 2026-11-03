@@ -141373,7 +141373,7 @@
       "text": "`operator` MUST use the canonical string in the following table. These strings are closure labels, not terms expanded through a context on the closure document:",
       "review": {
         "status": "reviewed",
-        "note": "Ordinary candidates use canonical tm:ref and td:ref labels independently of authored aliases. Link discovery emits the exact named extension/submodel/subthing labels, and only a captured TD contributes a type link. describedby is a classification candidate rather than an authorized closure operator. Projection-source labels and independent comparison with supplied closure records are not implemented; this compound requirement stays pending.",
+        "note": "Ordinary candidates use canonical tm:ref and td:ref labels independently of authored aliases. Link discovery emits the exact named extension/submodel/subthing labels, and only a captured TD contributes a type link. describedby is a classification candidate rather than an authorized closure operator. Projection source discovery emits the selected experimental projects IRI. Independent comparison with supplied closure records is not implemented; this compound requirement stays pending.",
         "roles": [
           "client",
           "producer"
@@ -141384,7 +141384,8 @@
         "testIds": [
           "WotReferenceUriResolverTests.DiscoversOrdinaryReferencesByExpandedMeaningAndPreservesAuthoredPointersAndHrefs",
           "WotReferenceUriResolverTests.DiscoversLiteralReferenceLinksWithUnchangedHrefAndLinkObjectPointer",
-          "WotReferenceUriResolverTests.OnlyACapturedThingDescriptionContributesATypeLink"
+          "WotReferenceUriResolverTests.OnlyACapturedThingDescriptionContributesATypeLink",
+          "WotReferenceUriResolverTests.ProjectionSourcesRetainManifestOrderCrossKindDeclarationsAndExactEntryPointers"
         ],
         "nativeEvidence": []
       }
@@ -141412,7 +141413,7 @@
       "text": "A Consumer MUST compare canonical operators as exact strings and MUST reject unknown or mismatched operators. Member names MUST be interpreted under their captured effective JSON-LD contexts; the literal prefix alone does not establish a member's meaning. Link relations in the table are literal `rel` values. A prefix declaration MUST NOT turn another relation string into one of these values. In particular, `type` is a link relation, not `@type` or an IRI formed by appending `type` to the TD namespace. These representation rules do not change the composition semantics of the named operators.",
       "review": {
         "status": "reviewed",
-        "note": "Ordinary-reference discovery obtains tm:ref and td:ref meaning through captured JSON-LD expansion, preserving authored member names and pointers. Tests distinguish alternate prefixes, unrelated literal prefixes, keyword aliases, property/type-scoped contexts, context resets, non-propagating contexts and JSON literals. Source and captured-context aliases cannot impersonate synthetic expansion results. Link fields are also context-expanded, but relation values compare literally and case-sensitively; only a captured TD contributes a type link. Projection entries and independent closure operator comparison are not implemented; this compound requirement stays pending.",
+        "note": "Ordinary-reference discovery obtains tm:ref and td:ref meaning through captured JSON-LD expansion, preserving authored member names and pointers. Tests distinguish alternate prefixes, unrelated literal prefixes, keyword aliases, property/type-scoped contexts, context resets, non-propagating contexts and JSON literals. Source and captured-context aliases cannot impersonate synthetic expansion results. Link fields are also context-expanded, but relation values compare literally and case-sensitively; only a captured TD contributes a type link. Projection markers, projects members and sourceName members use captured expanded meanings. Independent closure operator comparison is not implemented; this compound requirement stays pending.",
         "roles": [
           "client",
           "producer"
@@ -141432,7 +141433,8 @@
           "WotReferenceUriResolverTests.OrdinaryDiscoveryDoesNotTurnLiteralPrefixesOrContextDefinitionsIntoOccurrences",
           "WotReferenceUriResolverTests.LinkRelationsAreLiteralRatherThanVocabularyExpandedOrCaseFolded",
           "WotReferenceUriResolverTests.LinkMemberAliasesRetainAuthoredSpellingAndEffectiveBase",
-          "WotReferenceUriResolverTests.OnlyACapturedThingDescriptionContributesATypeLink"
+          "WotReferenceUriResolverTests.OnlyACapturedThingDescriptionContributesATypeLink",
+          "WotReferenceUriResolverTests.ProjectionMarkerAndMembersUseCapturedExpandedMeaningsRatherThanLiteralPrefixes"
         ],
         "nativeEvidence": []
       }
@@ -141459,13 +141461,22 @@
       ],
       "text": "The experimental projection mapping selects the [Projection Plans proposal at commit `79ddf72`](https://github.com/marcschier/wot-thing-description/blob/79ddf72d70eff97d9541afc83e20631cc3ba3567/proposals/wot-projections/spec.md) and its context artifact at that revision. This is a repository-controlled experiment, not a W3C or OPC Foundation vocabulary assignment. A Consumer MUST identify its projection marker and `projects` member by the expanded IRIs defined there. The former placeholder namespace is not an alias. Consumers MUST use captured contexts or a supported immutable context set; opening a publication MUST NOT fetch live contexts.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Projection source discovery identifies the selected lowercase projection marker on the authored root and expands projects and sourceName under captured contexts. Tests cover the selected context artifact, alternate member and type aliases, nested graph markers, former placeholders, changed-case markers and unavailable contexts. Discovery never retrieves live contexts. Publication opening has not integrated this discovery or concrete closure validation, so the compound consumer requirement remains pending.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "WotReferenceUriResolverTests.ProjectionMarkerAndMembersUseCapturedExpandedMeaningsRatherThanLiteralPrefixes",
+          "WotReferenceUriResolverTests.ProjectionSourcesUseTheSelectedExperimentalContextAsCapturedBytes",
+          "WotReferenceUriResolverTests.ProjectionDiscoveryDoesNotAliasPlaceholderCaseChangedOrForeignMarkers",
+          "WotReferenceUriResolverTests.AProjectionMarkerOnAnotherNodeDoesNotMarkTheAuthoredRoot",
+          "WotReferenceUriResolverTests.UnmarkedProjectionDiscoveryStillChecksCapturedContextsAndCancellation"
+        ],
         "nativeEvidence": []
       }
     },
@@ -141491,13 +141502,27 @@
       ],
       "text": "In a marked projection plan, each external source-manifest entry is a dependency occurrence, in its authored array order. Its binding MUST record that entry's `href` and the projection operator above. The entry's expected media `type` determines whether the target is a TD or TM; the Consumer MUST verify the captured target's actual kind. A `tm:ref` affordance selector matched to that source under the selected proposal MUST use the entry's binding and MUST NOT have a second binding of its own. Ordinary `td:ref` occurrences remain separate dependencies. A marker, source entry or selector that fails the selected proposal's rules MUST NOT be accepted by supplying an otherwise well-shaped closure binding.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Projection manifest discovery retains authored entry order and pointers, exact hrefs, the canonical experimental projects operator and the expected kind from the declared TD/TM media type. It rejects competing manifest/sourceName aliases, malformed entries, duplicate names or resolved URIs, and fragment-bearing source references. It checks the captured root kind without inferring source kinds from filenames. Actual target-kind verification, source requirements and digest pins, selector-to-entry association, full admission and independent binding verification remain unfinished; this compound requirement stays pending.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "WotReferenceUriResolverTests.ProjectionSourcesRetainManifestOrderCrossKindDeclarationsAndExactEntryPointers",
+          "WotReferenceUriResolverTests.MarkedProjectionRequiresExactlyItsCapturedOrdinaryRootKind",
+          "WotReferenceUriResolverTests.ProjectionManifestMustBeANonemptyArrayOfObjects",
+          "WotReferenceUriResolverTests.ProjectionSourcesRejectMissingMalformedOrFragmentBearingIdentityFields",
+          "WotReferenceUriResolverTests.ProjectionSourceNamesAndResolvedDocumentUrisMustBeUnique",
+          "WotReferenceUriResolverTests.ProjectionDiscoveryRejectsSeparateKindAndCompetingManifestAliases",
+          "WotReferenceUriResolverTests.ProjectionSourcesRejectCompetingExpandedSourceNameMembers",
+          "WotReferenceUriResolverTests.ExpandedProjectionManifestNamesRetainJsonPointerSlashEscaping",
+          "WotReferenceUriResolverTests.ProjectionSourceMediaTypesUseMimeCaseAndParameterRules",
+          "WotReferenceUriResolverTests.ProjectionSourceDiscoveryUsesSharedInclusiveWorkLimitsAndCancellation"
+        ],
         "nativeEvidence": []
       }
     },
