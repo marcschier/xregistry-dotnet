@@ -80,8 +80,15 @@ public class RegistryRepresentationTests
         await Assert.That(doc.GetProperty("createdat").GetString()).IsEqualTo(api.GetProperty("createdat").GetString());
         await Assert.That(doc.GetProperty("modifiedat").GetString()).IsEqualTo(api.GetProperty("modifiedat").GetString());
 
-        var updated = (await Send(engine, RegistryAction.Patch, "/teams/g", """{"name":"updated"}""")).Metadata!.RootElement;
+        var updated = (await Send(engine, RegistryAction.Patch, "/teams/g", """
+            {"name":"updated","self":"https://forged.example/changed"}
+            """)).Metadata!.RootElement;
         await Assert.That(updated.GetProperty("epoch").GetInt32()).IsEqualTo(1);
+        await Assert.That(updated.GetProperty("self").GetString()).IsEqualTo("https://registry.example/catalog/teams/g");
+
+        var updatedDoc = (await Send(engine, RegistryAction.Read, "/teams/g", null,
+            new KeyValuePair<string, string?>("doc", null))).Metadata!.RootElement;
+        await Assert.That(updatedDoc.GetProperty("self").GetString()).IsEqualTo("#");
     }
 
     [Test]

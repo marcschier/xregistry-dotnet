@@ -62025,7 +62025,7 @@
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "GroupRequiredMetadataUsesCanonicalEntityValuesInBothViews"
         ],
@@ -62096,7 +62096,7 @@
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "GroupRequiredMetadataUsesCanonicalEntityValuesInBothViews"
         ],
@@ -62132,8 +62132,10 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "GroupRequiredMetadataUsesCanonicalEntityValuesInBothViews"
+        ],
         "nativeEvidence": []
       }
     },
@@ -62166,7 +62168,7 @@
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "GroupRequiredMetadataUsesCanonicalEntityValuesInBothViews"
         ],
