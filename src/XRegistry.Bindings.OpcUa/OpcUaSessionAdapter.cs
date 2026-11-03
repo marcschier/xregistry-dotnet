@@ -327,8 +327,16 @@ public sealed class OpcUaSessionAdapter : IOpcUaRegistrySession
         ArgumentException.ThrowIfNullOrEmpty(methodBrowseName);
         ArgumentNullException.ThrowIfNull(inputArguments);
         RequireMutationSecurity(cancellationToken);
-        return await CallNamedMethodAsync(target, methodBrowseName, inputArguments.ToArray(),
-            mutation: true, cancellationToken).ConfigureAwait(false);
+        var sourceSession = session.SessionId;
+        if (namespaceUris is null || namespaceSession != sourceSession)
+        {
+            _ = await ReadNamespaceArrayAsync(cancellationToken).ConfigureAwait(false);
+        }
+        RequireFileSession(sourceSession);
+        var output = await CallNamedMethodAsync(target, methodBrowseName, inputArguments.ToArray(),
+            mutation: true, cancellationToken, expectedSession: sourceSession).ConfigureAwait(false);
+        RequireFileSession(sourceSession);
+        return output;
     }
 
     private async ValueTask<IReadOnlyList<Variant>> CallFileMethodAsync(NodeId file, string methodBrowseName,

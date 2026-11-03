@@ -1333,6 +1333,110 @@ public class OpcUaSessionAdapterTests
     }
 
     [Test]
+    [Arguments("namespace")]
+    [Arguments("browse")]
+    [Arguments("next")]
+    [Arguments("call")]
+    public async Task NamedRegistryMutationRejectsSessionChangeAcrossNativeOperations(string phase)
+    {
+        var (adapter, proxy) = CreateAdapter();
+        byte[] continuation = [1];
+        var method = new ReferenceDescription
+        {
+            BrowseName = new QualifiedName("CreateResource", 1),
+            NodeClass = NodeClass.Method,
+            NodeId = new ExpandedNodeId(new NodeId("Actual.Create", 1))
+        };
+        proxy.BrowseResultFactory = _ => new BrowseResult
+        {
+            References = phase == "next" ? [] : [method],
+            ContinuationPoint = phase == "next" ? new ByteString(continuation) : default
+        };
+        proxy.NextBrowseReferences = [method];
+        proxy.NextBrowseContinuation = [];
+        Action change = () => proxy.SessionId = new NodeId("Replacement", 0);
+        if (phase == "namespace") proxy.AfterRead = change;
+        if (phase == "browse") proxy.AfterBrowse = change;
+        if (phase == "next") proxy.AfterBrowseNext = change;
+        if (phase == "call") proxy.AfterCall = change;
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.CallMethodAsync(new NodeId("Group", 1), "CreateResource", [], CancellationToken.None));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.Unavailable);
+        await Assert.That(proxy.MethodCalls.Count).IsEqualTo(phase == "call" ? 1 : 0);
+        await Assert.That(proxy.BrowseRequests.Count).IsEqualTo(phase == "namespace" ? 0 : 1);
+        await Assert.That(proxy.NextBrowseCount).IsEqualTo(phase == "next" ? 1 : 0);
+        await Assert.That(proxy.ReleasedContinuations.Count).IsEqualTo(0);
+        if (phase == "next")
+        {
+            var cleanup = error.Data["OpcUa.ContinuationReleaseFailure"] as FederationException;
+            await Assert.That(cleanup!.Code).IsEqualTo(FederationErrorCode.Unavailable);
+        }
+    }
+
+    [Test]
+    public async Task NamedRegistryMutationRetainsNativeStatusWhenSessionAlsoChanges()
+    {
+        var (adapter, proxy) = CreateAdapter();
+        proxy.BrowseResultFactory = _ => new BrowseResult
+        {
+            References = [new ReferenceDescription
+            {
+                BrowseName = new QualifiedName("CreateResource", 1),
+                NodeClass = NodeClass.Method,
+                NodeId = new ExpandedNodeId(new NodeId("Actual.Create", 1))
+            }]
+        };
+        proxy.CallStatus = StatusCodes.BadUserAccessDenied;
+        proxy.AfterCall = () => proxy.SessionId = new NodeId("Replacement", 0);
+
+        var error = await Assert.ThrowsAsync<FederationException>(async () =>
+            await adapter.CallMethodAsync(new NodeId("Group", 1), "CreateResource", [], CancellationToken.None));
+
+        await Assert.That(error!.Code).IsEqualTo(FederationErrorCode.PolicyDenied);
+        await Assert.That(((ServiceResultException)error.InnerException!).StatusCode)
+            .IsEqualTo(StatusCodes.BadUserAccessDenied);
+        await Assert.That(proxy.MethodCalls.Count).IsEqualTo(1);
+        await Assert.That(proxy.ReleasedContinuations.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task NamedRegistryMutationRefreshesNamespaceMappingBeforeReconnectionCall()
+    {
+        var (adapter, proxy) = CreateAdapter();
+        proxy.NamespaceArray = ["http://opcfoundation.org/UA/", "urn:target", "urn:other"];
+        _ = await adapter.ReadNamespaceArrayAsync(CancellationToken.None);
+        proxy.SessionId = new NodeId("Replacement", 0);
+        proxy.NamespaceArray = ["http://opcfoundation.org/UA/", "urn:other", "urn:target"];
+        proxy.BrowseResultFactory = _ => new BrowseResult
+        {
+            References = [new ReferenceDescription
+            {
+                BrowseName = new QualifiedName("CreateResource", 2),
+                NodeClass = NodeClass.Method,
+                NodeId = new ExpandedNodeId(new NodeId("Actual.Create", 0), "urn:target")
+            }]
+        };
+        var exactVersion = new NodeId("Version", 2);
+        proxy.MethodOutputs = _ => [new Variant(exactVersion), new Variant("v1"), new Variant(42u)];
+        var group = new NodeId("Group", 2);
+
+        var result = await adapter.CallMethodAsync(group, "CreateResource", [new Variant("schema-a")],
+            CancellationToken.None);
+
+        await Assert.That(proxy.ReadCount).IsEqualTo(2);
+        await Assert.That(proxy.MethodCalls.Single().ObjectId).IsEqualTo(group);
+        await Assert.That(proxy.MethodCalls.Single().MethodId).IsEqualTo(new NodeId("Actual.Create", 2));
+        await Assert.That(proxy.MethodCalls.Single().InputArguments[0].TryGetValue(out string? id) && id == "schema-a")
+            .IsTrue();
+        await Assert.That(result.Count).IsEqualTo(3);
+        await Assert.That(result[0].TryGetValue(out NodeId node) && node == exactVersion).IsTrue();
+        await Assert.That(result[1].TryGetValue(out string? version) && version == "v1").IsTrue();
+        await Assert.That(result[2].TryGetValue(out uint handle) && handle == 42u).IsTrue();
+    }
+
+    [Test]
     [Arguments(MessageSecurityMode.None)]
     [Arguments(MessageSecurityMode.Sign)]
     [Arguments(MessageSecurityMode.SignAndEncrypt)]
@@ -1473,7 +1577,10 @@ public class OpcUaSessionAdapterTests
             await adapter.CallMethodAsync(new NodeId("Target", 1), "Delete", [], CancellationToken.None));
 
         await Assert.That(failure!.Code).IsEqualTo(FederationErrorCode.PolicyDenied);
-        await Assert.That(proxy.NativeOperationCount).IsEqualTo(1);
+        await Assert.That(proxy.NativeOperationCount).IsEqualTo(2);
+        await Assert.That(proxy.ReadRequests.Single().NodeId).IsEqualTo(VariableIds.Server_NamespaceArray);
+        await Assert.That(proxy.BrowseRequests.Count).IsEqualTo(1);
+        await Assert.That(proxy.MethodCalls.Count).IsEqualTo(0);
     }
 
     [Test]

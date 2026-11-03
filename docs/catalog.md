@@ -189,6 +189,13 @@ between operations, before mapping discovered Method or Property targets.
 A cancelled or changed-Session NamespaceArray read cannot install its result.
 These checks do not cover every disconnected state or stale handle supplied
 between operations.
+Named Registry/domain Calls also pin their entry Session across namespace
+bootstrap, Method discovery and Call. A changed Session rejects a successful
+response rather than returning creation outputs or a file handle from that
+Session. Native failure statuses retain precedence, and continuation cleanup
+is not sent to the replacement Session. The caller must resolve its target in
+the new Session before retrying; rejecting a response does not reverse a
+mutation that the previous Session completed.
 `OpcUaSessionConnection` discovers endpoints and opens a Session only
 after caller policy selects one; it maps the advertised root through the
 Session's `NamespaceArray` and verifies the root and Core version.

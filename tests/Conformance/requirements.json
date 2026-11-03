@@ -136927,6 +136927,9 @@
           "ResourceCreationClosesReturnedHandleAfterCancellationWithoutLosingCleanupFailure",
           "ResourceCreationCancellationWithoutRequestedHandleDoesNotClosePlaceholder",
           "ResourceCreationRetainsMalformedOutputErrorOverLaterCancellation",
+          "NamedRegistryMutationRejectsSessionChangeAcrossNativeOperations",
+          "NamedRegistryMutationRefreshesNamespaceMappingBeforeReconnectionCall",
+          "NamedRegistryMutationRetainsNativeStatusWhenSessionAlsoChanges",
           "WriterWritesPropertiesDeleteAndFileDocumentsOnARealServer"
         ],
         "nativeEvidence": []
