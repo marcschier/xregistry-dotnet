@@ -425,6 +425,43 @@ public static class WotRegistryResolver
             capturedIdentities, request, budget ?? new(), cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Resolves an external SemVer dependency using its authored floors and captured URI identities.</summary>
+    /// <remarks>
+    /// This derives requirements from retained source bytes rather than caller-supplied floors.
+    /// No pin is inferred from a closure binding. Exact-Version URI associations remain exact;
+    /// Resource associations use the captured WoT selection rules. Projection sources and incremental
+    /// targets require their respective requirement readers and are not accepted here.
+    /// </remarks>
+    public static async ValueTask<WotResolvedFragment> ResolveCapturedSemVerDependencyAsync(
+        WotResolvedDocument containingRevision, WotAuthoredReferenceOccurrence reference, Uri documentUri,
+        IReadOnlyDictionary<Uri, FederationDocument> capturedContexts, WotCapturedUriIdentityIndex capturedIdentities,
+        FederationReadBudget? budget = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(containingRevision);
+        ArgumentNullException.ThrowIfNull(reference);
+        ArgumentNullException.ThrowIfNull(capturedIdentities);
+        cancellationToken.ThrowIfCancellationRequested();
+        var readBudget = budget ?? new();
+        var identity = reference.Operator is "tm:ref" or "td:ref"
+            ? capturedIdentities.ClassifyOrdinaryReference(reference, readBudget, cancellationToken)
+            : capturedIdentities.ClassifyDependencyLink(reference, containingRevision.Kind, readBudget, cancellationToken);
+        if (identity is null || identity.ResourceKind == "schema")
+        {
+            throw FederationJson.Invalid("A captured SemVer dependency must be an external WoT reference.");
+        }
+        if (identity.Source.Model is not { } targetModel ||
+            WotRegistryProfiles.Read(targetModel) != WotVersionProfile.SemVer)
+        {
+            throw new FederationException(FederationErrorCode.UnsupportedOperation,
+                "The authored SemVer dependency reader requires a captured SemVer target model.");
+        }
+        var request = await WotJsonLdBaseResolver.ReadSemVerReferenceRequirementsAsync(containingRevision.Document,
+            documentUri, containingRevision.Kind, new(reference, identity), capturedContexts, readBudget,
+            cancellationToken).ConfigureAwait(false);
+        return await ResolveCapturedReferenceTargetAsync(containingRevision, reference.Href, reference.Target,
+            capturedIdentities, request, readBudget, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Resolves a JSON-LD URI-reference through captured Resource identities and contexts.</summary>
     public static async ValueTask<WotResolvedFragment> ResolveCapturedReferenceAsync(
         WotResolvedDocument containingRevision, string sourcePointer, string referencePropertyName,

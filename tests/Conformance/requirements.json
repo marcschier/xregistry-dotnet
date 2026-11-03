@@ -140921,13 +140921,19 @@
       ],
       "text": "A reference MAY carry a minimum SemVer, called its floor, but MUST NOT carry a version range. `tm:minVersion` is a member of `tm:extends` or `tm:submodel` links and a sibling of `tm:ref`. `td:minVersion` is a member of `td:extends` or `td:subthing` links and a sibling of `td:ref`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The captured SemVer reader derives sibling/link floors from expanded member meanings and rejects ranges during selection. Evidence covers retained source bytes and captured Version selection; complete syntactic-subtree discovery and closure integration remain pending.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "CapturedRegistryReadSourceTests.AuthoredSemVerRequirementsUseExpandedFloorMembersAndTargetKind",
+          "CapturedRegistryReadSourceTests.AuthoredSemVerRequirementsRejectInvalidFloorsDuringRequestOrSelection",
+          "CapturedRegistryReadSourceTests.AuthoredDependencyResolutionAppliesFloorsWithoutLiveFallbackOrWeakeningStickyDefaults"
+        ],
         "nativeEvidence": []
       }
     },
@@ -140984,13 +140990,18 @@
       ],
       "text": "For a TD with exactly one `rel: \"type\"` link, its `version.model`, when present, is the implicit floor of that link. If the link also has an explicit `tm:minVersion`, the greater value by SemVer precedence is the effective floor. An explicit lower value MUST NOT weaken the implicit floor. If only one floor is present, that floor applies.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Authored TD type-link requests carry the implicit model floor and selected explicit floor into the existing SemVer selector. Tests reject a sticky candidate below the implicit floor even when the explicit floor is lower. Complete discovery and closure integration remain pending.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "CapturedRegistryReadSourceTests.AuthoredTypeLinkRequirementsCarryImplicitFloorAndWholeLinkInventory",
+          "CapturedRegistryReadSourceTests.AuthoredTypeLinkRequirementsAllowMissingExplicitFloorsWhenUnambiguous"
+        ],
         "nativeEvidence": []
       }
     },
@@ -141015,13 +141026,18 @@
       ],
       "text": "For a TD with several type links and `version.model`, every type link MUST carry its own `tm:minVersion`. Otherwise, resolution MUST fail as `ambiguous-floor`, including when resolving a different, fully specified link. When every link has a floor, each link MUST use the greater of its own floor and `version.model`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The authored request reader inventories all discovered type links and reports a missing TM floor before validating malformed individual floors. Tests cover each selected link and complete explicit-floor inventories. Full syntactic-subtree discovery and closure integration remain pending.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "CapturedRegistryReadSourceTests.AuthoredTypeLinkRequirementsReportGlobalAmbiguityBeforeMalformedSelectedFloor",
+          "CapturedRegistryReadSourceTests.AuthoredTypeLinkRequirementsCarryImplicitFloorAndWholeLinkInventory"
+        ],
         "nativeEvidence": []
       }
     },
@@ -141046,13 +141062,18 @@
       ],
       "text": "For several type links without `version.model`, each link uses its own floor if present. An omitted floor MUST NOT produce `ambiguous-floor`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Authored request derivation permits several type links without an implicit floor, retaining each selected link's optional explicit floor. Full discovery and closure integration remain pending.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "CapturedRegistryReadSourceTests.AuthoredTypeLinkRequirementsAllowMissingExplicitFloorsWhenUnambiguous",
+          "CapturedRegistryReadSourceTests.AuthoredTypeLinkRequirementsCarryImplicitFloorAndWholeLinkInventory"
+        ],
         "nativeEvidence": []
       }
     },
@@ -141077,13 +141098,17 @@
       ],
       "text": "A non-SemVer implicit floor MUST produce `invalid-version`.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The authored TD type-link reader reports nonstring implicit floors explicitly; the SemVer selector rejects invalid strings, generated floors and build metadata. This scoped evidence does not establish full discovery or closure acceptance.",
+        "roles": [
+          "client"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "CapturedRegistryReadSourceTests.AuthoredTypeLinkRequirementsRejectNonSemVerImplicitFloor"
+        ],
         "nativeEvidence": []
       }
     },

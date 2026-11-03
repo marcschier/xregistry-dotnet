@@ -2454,6 +2454,20 @@ reject the inventory. This inventory does not select exact Versions, validate
 projection requirements or establish reachability, syntactic-subtree coverage
 or closure completeness. It does not acquire target documents.
 
+`ReadSemVerReferenceRequirementsAsync` derives ordinary-reference and
+dependency-link requirements from retained document bytes and captured contexts,
+including expanded floor-member aliases. A TD type link carries its authored
+`version.model` and the complete type-link floor inventory; missing floors across
+several type links produce `ambiguous-floor` before individual floor validation.
+Ordinary TD-to-TD references do not inherit either TD version field.
+`ResolveCapturedSemVerDependencyAsync` combines these requirements with captured
+URI classification and Version selection. A recorded exact-Version URI
+association bypasses floor derivation; a sticky default below an applicable
+floor reports `unsatisfied` without selecting newer bytes. Source and target
+documents remain unchanged. Shared work limits and cancellation apply.
+Projection requirements and incremental compatibility lines are not accepted by
+this SemVer path. It does not establish transitive closure or offline composition.
+
 `WotPublicationClosure.Parse` reads the selected closed representation without
 registering the WoT extension as supported. Entries and binding endpoints must
 be exact Version XIDs. Entry identities are unique, and binding keys combine

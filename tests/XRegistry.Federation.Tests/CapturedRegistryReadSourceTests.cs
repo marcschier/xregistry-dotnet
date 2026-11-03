@@ -17,6 +17,328 @@ public class CapturedRegistryReadSourceTests
     [Test]
     [Arguments(false)]
     [Arguments(true)]
+    public async Task AuthoredDependencyResolutionAppliesFloorsWithoutLiveFallbackOrWeakeningStickyDefaults(bool sticky)
+    {
+        var fixture = new Fixture();
+        fixture.Root["sets"]!["team"]!["things"]!["a"]!["meta"]!["defaultversionsticky"] = sticky;
+        var authored = JsonNode.Parse(await Bytes(InventoryDocument(
+            """{"a":{"tm:ref":"urn:test:device:v1","tm:minVersion":"2.0.0"}}""", "[]")))!;
+        authored["id"] = Fixture.WotId;
+        authored["version"] = JsonNode.Parse("""{"model":"1.0.0"}""");
+        fixture.Documents[Fixture.Resource + "/versions/1.0.0"] = new(Encoding.UTF8.GetBytes(authored.ToJsonString()),
+            documentBase: "https://example.test/entry.json");
+        var source = fixture.Open();
+        var containing = await WotRegistryResolver.ResolveAsync(source, Fixture.Collection,
+            new(Fixture.WotId, WotReferenceTargetKind.ThingModel, WotReferenceOperator.ThingModel, VersionIdPin: "1.0.0"));
+        var uri = new Uri("https://example.test/entry.json");
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var index = await WotCapturedUriIdentityIndex.CaptureRegistryAsync(source);
+        var reference = (await WotJsonLdBaseResolver.DiscoverCapturedReferenceInventoryAsync(containing.Document,
+            uri, containing.Kind, contexts, index)).Dependencies.Single().Reference;
+        if (sticky)
+        {
+            var failure = await Assert.That(async () => await WotRegistryResolver.ResolveCapturedSemVerDependencyAsync(
+                containing, reference, uri, contexts, index)).Throws<RegistryException>() ??
+                throw new InvalidOperationException("Expected no newer-Version retry for an unsatisfied sticky default.");
+            await Assert.That(failure.Diagnostic.Code).IsEqualTo("unsatisfied");
+        }
+        else
+        {
+            var result = await WotRegistryResolver.ResolveCapturedSemVerDependencyAsync(containing, reference, uri, contexts, index);
+            await Assert.That(result.ContainingDocument.Version.VersionId).IsEqualTo("2.0.0");
+            await Assert.That(result.ContainingDocument.Version.ContentDigest).IsEqualTo("sha256:" + Digest(Fixture.Second));
+            await Assert.That(result.Value.GetProperty("version").GetProperty("model").GetString()).IsEqualTo("2.0.0");
+        }
+        await Assert.That(containing.Version.VersionId).IsEqualTo("1.0.0");
+    }
+
+    [Test]
+    public async Task ExactCapturedDependencyBypassesMalformedFloorsButRetainsExactBytes()
+    {
+        var fixture = new Fixture();
+        var authored = JsonNode.Parse(await Bytes(InventoryDocument(
+            """{"a":{"tm:ref":"urn:target:exact","tm:minVersion":false}}""", "[]")))!;
+        authored["id"] = Fixture.WotId;
+        authored["version"] = JsonNode.Parse("""{"model":"1.0.0"}""");
+        fixture.Documents[Fixture.Resource + "/versions/1.0.0"] = new(Encoding.UTF8.GetBytes(authored.ToJsonString()));
+        var source = fixture.Open();
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var index = await WotCapturedUriIdentityIndex.CaptureRegistryAsync(source,
+            [new(source, new("urn:target:exact"), WotCapturedUriIdentityKind.DocumentView, Fixture.Resource + "/versions/2.0.0")]);
+        var containing = await WotRegistryResolver.ResolveAsync(source, Fixture.Collection,
+            new(Fixture.WotId, WotReferenceTargetKind.ThingModel, WotReferenceOperator.ThingModel, VersionIdPin: "1.0.0"));
+        var uri = new Uri("https://example.test/entry.json");
+        var dependency = (await WotJsonLdBaseResolver.DiscoverCapturedReferenceInventoryAsync(containing.Document,
+            uri, containing.Kind, contexts, index)).Dependencies.Single();
+        var request = await WotJsonLdBaseResolver.ReadSemVerReferenceRequirementsAsync(containing.Document, uri,
+            containing.Kind, dependency, contexts);
+        await Assert.That(request.MinimumVersion).IsNull();
+        await Assert.That(request.VersionIdPin).IsEqualTo("2.0.0");
+        var result = await WotRegistryResolver.ResolveCapturedSemVerDependencyAsync(containing, dependency.Reference, uri, contexts, index);
+        await Assert.That(result.ContainingDocument.Version.VersionId).IsEqualTo("2.0.0");
+        await Assert.That(result.ContainingDocument.Version.ContentDigest).IsEqualTo("sha256:" + Digest(Fixture.Second));
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task AuthoredRequirementsDoNotApplyTdVersionsToOrdinaryTdReferences(bool invalidVersion)
+    {
+        var root = JsonNode.Parse(await Bytes(InventoryDocument("""{"a":{"td:ref":"urn:inventory:td"}}""", "[]")))!;
+        root["version"] = JsonNode.Parse(invalidVersion ? """{"model":false,"instance":"bad"}""" : """{"model":"9.0.0","instance":"9.0.0"}""");
+        var document = new FederationDocument(Encoding.UTF8.GetBytes(root.ToJsonString()));
+        var uri = new Uri("https://example.test/entry.json");
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var inventory = await WotJsonLdBaseResolver.DiscoverCapturedReferenceInventoryAsync(document, uri,
+            WotReferenceTargetKind.ThingDescription, contexts,
+            InventoryIndex(new Fixture().Open(), description: InventorySource("thingdescription")));
+        var request = await WotJsonLdBaseResolver.ReadSemVerReferenceRequirementsAsync(document, uri,
+            WotReferenceTargetKind.ThingDescription, inventory.Dependencies.Single(), contexts);
+        await Assert.That(request.MinimumVersion).IsNull();
+        await Assert.That(request.ReferencingThingDescriptionModelVersion).IsNull();
+        await Assert.That(request.MinimumVersionKind).IsNull();
+    }
+
+    [Test]
+    [Arguments(1, true)]
+    [Arguments(2, false)]
+    public async Task AuthoredTypeLinkRequirementsAllowMissingExplicitFloorsWhenUnambiguous(int count, bool implicitFloor)
+    {
+        var root = JsonNode.Parse(await Bytes(InventoryDocument("{}", count == 1
+            ? """[{"rel":"type","href":"urn:inventory:tm"}]"""
+            : """[{"rel":"type","href":"urn:inventory:tm"},{"rel":"type","href":"urn:inventory:tm"}]""")))!;
+        if (implicitFloor) { root["version"] = JsonNode.Parse("""{"model":"1.0.0"}"""); }
+        var document = new FederationDocument(Encoding.UTF8.GetBytes(root.ToJsonString()));
+        var uri = new Uri("https://example.test/entry.json");
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var inventory = await WotJsonLdBaseResolver.DiscoverCapturedReferenceInventoryAsync(document, uri,
+            WotReferenceTargetKind.ThingDescription, contexts, InventoryIndex(new Fixture().Open()));
+        var request = await WotJsonLdBaseResolver.ReadSemVerReferenceRequirementsAsync(document, uri,
+            WotReferenceTargetKind.ThingDescription, inventory.Dependencies[0], contexts);
+        await Assert.That(request.MinimumVersion).IsNull();
+        await Assert.That(request.ThingModelTypeLinkCount).IsEqualTo(count);
+        await Assert.That(request.AllThingModelTypeLinksHaveMinimumVersion).IsFalse();
+        await Assert.That(request.ReferencingThingDescriptionModelVersion).IsEqualTo(implicitFloor ? "1.0.0" : null);
+        await Assert.That(WotVersionResolver.SelectVersionId(new(Fixture.WotId, WotReferenceTargetKind.ThingModel,
+            "1.0.0", false, [new("1.0.0", "", "")]), request)).IsEqualTo("1.0.0");
+    }
+
+    [Test]
+    [Arguments("href")]
+    [Arguments("operator")]
+    [Arguments("member")]
+    [Arguments("target-kind")]
+    public async Task AuthoredRequirementsRejectInventedOccurrenceOrTargetMeaning(string change)
+    {
+        var document = InventoryDocument("""{"a":{"tm:ref":"urn:inventory:tm"}}""", "[]");
+        var uri = new Uri("https://example.test/entry.json");
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var inventory = await WotJsonLdBaseResolver.DiscoverCapturedReferenceInventoryAsync(document, uri,
+            WotReferenceTargetKind.ThingModel, contexts, InventoryIndex(new Fixture().Open()));
+        var dependency = inventory.Dependencies.Single();
+        dependency = change switch
+        {
+            "href" => dependency with { Reference = dependency.Reference with { Href = "urn:forged" } },
+            "operator" => dependency with { Reference = dependency.Reference with { Operator = "tm:extends" } },
+            "member" => dependency with { Reference = dependency.Reference with { PropertyName = "missing" } },
+            _ => dependency with { Target = new(dependency.Target.Source, "/sets/team", Fixture.Collection,
+                Fixture.Resource, "thingdescription", Fixture.WotId) }
+        };
+        var failure = await Assert.That(async () => await WotJsonLdBaseResolver.ReadSemVerReferenceRequirementsAsync(document,
+            uri, WotReferenceTargetKind.ThingModel, dependency, contexts)).Throws<FederationException>() ??
+            throw new InvalidOperationException("Expected a requirement derived only from actual authored reference meaning.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    [Arguments(-1)]
+    [Arguments(0)]
+    [Arguments(1)]
+    public async Task AuthoredRequirementsShareInclusiveWorkAndCancellation(int delta)
+    {
+        var document = InventoryDocument("""{"a":{"tm:ref":"urn:inventory:tm","tm:minVersion":"1.0.0"}}""", "[]");
+        var uri = new Uri("https://example.test/entry.json");
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var dependency = (await WotJsonLdBaseResolver.DiscoverCapturedReferenceInventoryAsync(document, uri,
+            WotReferenceTargetKind.ThingModel, contexts, InventoryIndex(new Fixture().Open()))).Dependencies.Single();
+        var baseline = new FederationReadBudget();
+        _ = await WotJsonLdBaseResolver.ReadSemVerReferenceRequirementsAsync(document, uri,
+            WotReferenceTargetKind.ThingModel, dependency, contexts, baseline);
+        var budget = new FederationReadBudget(new(maxWork: baseline.Work + delta));
+        if (delta < 0)
+        {
+            var failure = await Assert.That(async () => await WotJsonLdBaseResolver.ReadSemVerReferenceRequirementsAsync(document,
+                uri, WotReferenceTargetKind.ThingModel, dependency, contexts, budget)).Throws<FederationException>() ??
+                throw new InvalidOperationException("Expected shared requirement traversal limit.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        }
+        else
+        {
+            var request = await WotJsonLdBaseResolver.ReadSemVerReferenceRequirementsAsync(document, uri,
+                WotReferenceTargetKind.ThingModel, dependency, contexts, budget);
+            await Assert.That(request.MinimumVersion).IsEqualTo("1.0.0");
+            await Assert.That(budget.Work).IsEqualTo(baseline.Work);
+        }
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var canceledBudget = new FederationReadBudget();
+        await Assert.That(async () => await WotJsonLdBaseResolver.ReadSemVerReferenceRequirementsAsync(document, uri,
+            WotReferenceTargetKind.ThingModel, dependency, contexts, canceledBudget, cancellation.Token)).Throws<OperationCanceledException>();
+        await Assert.That(canceledBudget.Work).IsEqualTo(0L);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task AuthoredSemVerRequirementsUseExpandedFloorMembersAndTargetKind(bool description)
+    {
+        var root = JsonNode.Parse(await Bytes(InventoryDocument(
+            description ? """{"a":{"td:ref":"urn:inventory:td","floor":"1.0.0"}}"""
+                : """{"a":{"tm:ref":"urn:inventory:tm","floor":"1.0.0"}}""", "[]")))!;
+        root["@context"]!["floor"] = description ? "td:minVersion" : "tm:minVersion";
+        var document = new FederationDocument(Encoding.UTF8.GetBytes(root.ToJsonString()));
+        var uri = new Uri("https://example.test/entry.json");
+        var index = InventoryIndex(new Fixture().Open(), description: InventorySource("thingdescription"));
+        var inventory = await WotJsonLdBaseResolver.DiscoverCapturedReferenceInventoryAsync(document, uri,
+            WotReferenceTargetKind.ThingModel, new Dictionary<Uri, FederationDocument>(), index);
+        var request = await WotJsonLdBaseResolver.ReadSemVerReferenceRequirementsAsync(document, uri,
+            WotReferenceTargetKind.ThingModel, inventory.Dependencies.Single(), new Dictionary<Uri, FederationDocument>());
+        await Assert.That(request.MinimumVersion).IsEqualTo("1.0.0");
+        await Assert.That(request.MinimumVersionKind).IsEqualTo(description ? WotMinimumVersionKind.ThingDescription : WotMinimumVersionKind.ThingModel);
+        await Assert.That(request.TargetKind).IsEqualTo(description ? WotReferenceTargetKind.ThingDescription : WotReferenceTargetKind.ThingModel);
+        await Assert.That(request.VersionIdPin).IsNull();
+        await Assert.That(request.DigestPin).IsNull();
+        var candidates = new WotVersionResource(Fixture.WotId, request.TargetKind, "1.0.0", false,
+            [new("1.0.0", "", ""), new("2.0.0", "", "")]);
+        await Assert.That(WotVersionResolver.SelectVersionId(candidates, request)).IsEqualTo(description ? "1.0.0" : "2.0.0");
+    }
+
+    [Test]
+    [Arguments(1, false)]
+    [Arguments(1, true)]
+    [Arguments(2, false)]
+    [Arguments(2, true)]
+    public async Task AuthoredTypeLinkRequirementsCarryImplicitFloorAndWholeLinkInventory(int links, bool hasImplicit)
+    {
+        var root = JsonNode.Parse(await Bytes(InventoryDocument("{}",
+            links == 1 ? """[{"rel":"type","href":"urn:inventory:tm","tm:minVersion":"1.0.0"}]"""
+                : """[{"rel":"type","href":"urn:inventory:tm","tm:minVersion":"1.0.0"},{"rel":"type","href":"urn:inventory:tm","tm:minVersion":"1.2.0"}]""")))!;
+        if (hasImplicit) { root["version"] = JsonNode.Parse("""{"model":"1.5.0"}"""); }
+        var document = new FederationDocument(Encoding.UTF8.GetBytes(root.ToJsonString()));
+        var uri = new Uri("https://example.test/entry.json");
+        var inventory = await WotJsonLdBaseResolver.DiscoverCapturedReferenceInventoryAsync(document, uri,
+            WotReferenceTargetKind.ThingDescription, new Dictionary<Uri, FederationDocument>(), InventoryIndex(new Fixture().Open()));
+        var request = await WotJsonLdBaseResolver.ReadSemVerReferenceRequirementsAsync(document, uri,
+            WotReferenceTargetKind.ThingDescription, inventory.Dependencies[0], new Dictionary<Uri, FederationDocument>());
+        await Assert.That(request.Operator).IsEqualTo(WotReferenceOperator.ThingModelTypeLink);
+        await Assert.That(request.MinimumVersion).IsEqualTo("1.0.0");
+        await Assert.That(request.ReferencingThingDescriptionModelVersion).IsEqualTo(hasImplicit ? "1.5.0" : null);
+        await Assert.That(request.ThingModelTypeLinkCount).IsEqualTo(links);
+        await Assert.That(request.AllThingModelTypeLinksHaveMinimumVersion).IsTrue();
+        var candidates = new WotVersionResource(Fixture.WotId, WotReferenceTargetKind.ThingModel, "1.0.0", true,
+            [new("1.0.0", "", ""), new("1.5.0", "", "")]);
+        if (hasImplicit)
+        {
+            var failure = await Assert.That(() => WotVersionResolver.SelectVersionId(candidates, request)).Throws<RegistryException>() ??
+                throw new InvalidOperationException("Expected explicit lower floor not to weaken version.model.");
+            await Assert.That(failure.Diagnostic.Code).IsEqualTo("unsatisfied");
+        }
+        else { await Assert.That(WotVersionResolver.SelectVersionId(candidates, request)).IsEqualTo("1.0.0"); }
+    }
+
+    [Test]
+    public async Task AuthoredTypeLinkRequirementsReportGlobalAmbiguityBeforeMalformedSelectedFloor()
+    {
+        var root = JsonNode.Parse(await Bytes(InventoryDocument("{}",
+            """[{"rel":"type","href":"urn:inventory:tm","tm:minVersion":false},{"rel":"type","href":"urn:inventory:tm"}]""")))!;
+        root["version"] = JsonNode.Parse("""{"model":"not-semver"}""");
+        var document = new FederationDocument(Encoding.UTF8.GetBytes(root.ToJsonString()));
+        var uri = new Uri("https://example.test/entry.json");
+        var inventory = await WotJsonLdBaseResolver.DiscoverCapturedReferenceInventoryAsync(document, uri,
+            WotReferenceTargetKind.ThingDescription, new Dictionary<Uri, FederationDocument>(), InventoryIndex(new Fixture().Open()));
+        foreach (var dependency in inventory.Dependencies)
+        {
+            var failure = await Assert.That(async () => await WotJsonLdBaseResolver.ReadSemVerReferenceRequirementsAsync(document,
+                uri, WotReferenceTargetKind.ThingDescription, dependency, new Dictionary<Uri, FederationDocument>()))
+                .Throws<RegistryException>() ?? throw new InvalidOperationException("Expected whole-document type-link floor ambiguity.");
+            await Assert.That(failure.Diagnostic.Code).IsEqualTo("ambiguous-floor");
+        }
+    }
+
+    [Test]
+    [Arguments("false")]
+    [Arguments("null")]
+    [Arguments("\"not-semver\"")]
+    [Arguments("\"0.0.0-1\"")]
+    [Arguments("\"1.0.0+build\"")]
+    public async Task AuthoredTypeLinkRequirementsRejectNonSemVerImplicitFloor(string model)
+    {
+        var root = JsonNode.Parse(await Bytes(InventoryDocument("{}",
+            """[{"rel":"type","href":"urn:inventory:tm","tm:minVersion":"1.0.0"}]""")))!;
+        root["version"] = JsonNode.Parse("""{"model":""" + model + "}");
+        var document = new FederationDocument(Encoding.UTF8.GetBytes(root.ToJsonString()));
+        var uri = new Uri("https://example.test/entry.json");
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var dependency = (await WotJsonLdBaseResolver.DiscoverCapturedReferenceInventoryAsync(document, uri,
+            WotReferenceTargetKind.ThingDescription, contexts, InventoryIndex(new Fixture().Open()))).Dependencies.Single();
+        var failure = await Assert.That(async () =>
+        {
+            var request = await WotJsonLdBaseResolver.ReadSemVerReferenceRequirementsAsync(document, uri,
+                WotReferenceTargetKind.ThingDescription, dependency, contexts);
+            _ = WotVersionResolver.SelectVersionId(new(Fixture.WotId, WotReferenceTargetKind.ThingModel, "1.0.0", false,
+                [new("1.0.0", "", "")]), request);
+        }).Throws<RegistryException>() ?? throw new InvalidOperationException("Expected an invalid authored implicit floor.");
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo("invalid-version");
+    }
+
+    [Test]
+    [Arguments("\"^1.0.0\"", "invalid-version")]
+    [Arguments("\"0.0.0-1\"", "invalid-version")]
+    [Arguments("false", "invalid-version")]
+    [Arguments("\"1.0.0+build\"", "invalid-version")]
+    public async Task AuthoredSemVerRequirementsRejectInvalidFloorsDuringRequestOrSelection(string floor, string code)
+    {
+        var document = InventoryDocument("""{"a":{"tm:ref":"urn:inventory:tm","tm:minVersion":""" + floor + "}}", "[]");
+        var uri = new Uri("https://example.test/entry.json");
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var inventory = await WotJsonLdBaseResolver.DiscoverCapturedReferenceInventoryAsync(document, uri,
+            WotReferenceTargetKind.ThingModel, contexts, InventoryIndex(new Fixture().Open()));
+        var failure = await Assert.That(async () =>
+        {
+            var request = await WotJsonLdBaseResolver.ReadSemVerReferenceRequirementsAsync(document, uri,
+                WotReferenceTargetKind.ThingModel, inventory.Dependencies.Single(), contexts);
+            _ = WotVersionResolver.SelectVersionId(new(Fixture.WotId, WotReferenceTargetKind.ThingModel, "1.0.0", false,
+                [new("1.0.0", "", "")]), request);
+        }).Throws<RegistryException>() ?? throw new InvalidOperationException("Expected invalid authored minimum version.");
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo(code);
+    }
+
+    [Test]
+    [Arguments("""{"td:minVersion":"1.0.0"}""")]
+    [Arguments("""{"tm:minVersion":"1.0.0","againFloor":"2.0.0"}""")]
+    public async Task AuthoredSemVerRequirementsRejectWrongKindOrCompetingFloorAliases(string members)
+    {
+        var root = JsonNode.Parse(await Bytes(InventoryDocument("""{"a":{"tm:ref":"urn:inventory:tm"}}""", "[]")))!;
+        root["@context"]!["againFloor"] = "tm:minVersion";
+        foreach (var member in JsonNode.Parse(members)!.AsObject()) { root["properties"]!["a"]![member.Key] = member.Value!.DeepClone(); }
+        var document = new FederationDocument(Encoding.UTF8.GetBytes(root.ToJsonString()));
+        var uri = new Uri("https://example.test/entry.json");
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var inventory = await WotJsonLdBaseResolver.DiscoverCapturedReferenceInventoryAsync(document, uri,
+            WotReferenceTargetKind.ThingModel, contexts, InventoryIndex(new Fixture().Open()));
+        var failure = await Assert.That(async () =>
+        {
+            var request = await WotJsonLdBaseResolver.ReadSemVerReferenceRequirementsAsync(document, uri,
+                WotReferenceTargetKind.ThingModel, inventory.Dependencies.Single(), contexts);
+            _ = WotVersionResolver.SelectVersionId(new(Fixture.WotId, WotReferenceTargetKind.ThingModel, "1.0.0", false,
+                [new("1.0.0", "", "")]), request);
+        }).Throws<RegistryException>() ?? throw new InvalidOperationException("Expected conflicting floor semantics.");
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo("invalid-floor");
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
     public async Task SchemaDescriptionExclusionRetainsResourceOrExactVersionScopeWithoutReads(bool exact)
     {
         var source = InventorySource("schema");
