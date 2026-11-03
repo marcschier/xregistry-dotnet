@@ -29,6 +29,7 @@ CURRENT_MERGED = "d290b1ec38d9e5436decb5ba0854f2321401a118"
 CURRENT_DRAFT = "d757328e4e3ca70761244b4a77cacba6bfb5599b"
 OPCUA_EVENTS = "f69085fb89b1204dd72d9dca00472a5f331be2d1"
 HTTP_PROTOCOL_MODELS = "a1da400e938b420da1f097b58a73fd9f75deb9e5"
+COMPATIBILITY_ADMISSION = "b0d2d81777dace4361227a9c37ddf5cd6629a563"
 
 
 def sources() -> list[dict]:
@@ -143,8 +144,14 @@ def sources() -> list[dict]:
     for entry in current_draft["files"]:
         if entry["path"] == "workingdrafts/bindings/opcua.md":
             entry["role"] = "review-only"
+    compatibility_admission = {
+        "id": "pr677-b0d2d817", "repository": "https://github.com/xregistry/spec",
+        "commit": COMPATIBILITY_ADMISSION, "status": "working-draft", "files": [
+            {"path": "core/spec.md", "owner": "core", "kind": "normative", "role": "review-only"},
+        ],
+    }
     result = [merged, draft, closure, api, media, current_merged, current_draft, opcua_events,
-              http_protocol_models]
+              http_protocol_models, compatibility_admission]
     for source in result:
         source["files"].append({"path": "LICENSE", "owner": "license", "kind": "license", "role": "review-only"})
     return result

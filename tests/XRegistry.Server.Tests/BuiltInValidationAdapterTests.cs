@@ -378,13 +378,85 @@ public class BuiltInValidationAdapterTests
     [Test]
     [Arguments(false)]
     [Arguments(true)]
+    public async Task DisabledCompatibilityAdmitsModelModesWithoutAnEnabledChecker(bool strict)
+    {
+        var engine = ValidatingEngine(strict: strict, validateCompatibility: false, allowCapabilityUpdates: true);
+        await Send(engine, RegistryAction.Patch, "/capabilities", """{"compatibilities":{}}""");
+        var capabilities = (await Send(engine, RegistryAction.Read, "/capabilities")).Metadata!.RootElement;
+        await Assert.That(capabilities.GetProperty("compatibilities").EnumerateObject().Count()).IsEqualTo(0);
+        await Send(engine, RegistryAction.Replace, "/sets/g/schemas/s$details", """
+            {"versionid":"v1","format":"Avro/1.11.0","schema":"int","meta":{"compatibility":"backward"}}
+            """);
+        await Send(engine, RegistryAction.Post, "/sets/g/schemas/s$details", """
+            {"versionid":"v2","format":"Avro/1.11.0","schema":"long"}
+            """);
+        await Send(engine, RegistryAction.Patch, "/sets/g/schemas/s/meta", """{"compatibility":"forward"}""");
+        var before = (await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/meta")).Metadata!.RootElement.GetRawText();
+        await Assert.That(RegistryJson.Parse(before).RootElement.GetProperty("compatibility").GetString()).IsEqualTo("forward");
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        await ExpectCode(() => Send(engine, RegistryAction.Patch, "/sets/g/schemas/s/meta",
+            """{"compatibility":"not-a-model-mode"}"""), "invalid_attribute");
+        await Assert.That((await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/meta")).Metadata!.RootElement.GetRawText())
+            .IsEqualTo(before);
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        foreach (var id in new[] { "v1", "v2" })
+        {
+            var version = (await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/versions/" + id + "$details"))
+                .Metadata!.RootElement;
+            await Assert.That(version.GetProperty("formatvalidated").GetBoolean()).IsTrue();
+            await Assert.That(version.TryGetProperty("compatibilityvalidated", out _)).IsFalse();
+            await Assert.That(version.TryGetProperty("compatibilityvalidatedreason", out _)).IsFalse();
+            var document = await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/versions/" + id);
+            using var stream = document.Document!.OpenRead();
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            await Assert.That(await reader.ReadToEndAsync()).IsEqualTo(id == "v1" ? "\"int\"" : "\"long\"");
+        }
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task CompatibilityViolationRollsBackEveryVersionRegardlessOfStrictValidation(bool strict)
+    {
+        var engine = ValidatingEngine(strict: strict);
+        await Send(engine, RegistryAction.Replace, "/sets/g/schemas/s$details", """
+            {"versionid":"v1","format":"Avro/1.11.0","schema":"int","meta":{"compatibility":"backward"}}
+            """);
+        await Send(engine, RegistryAction.Post, "/sets/g/schemas/s$details", """
+            {"versionid":"v2","format":"Avro/1.11.0","schema":"long"}
+            """);
+        var paths = new[] { "/sets/g/schemas/s/meta", "/sets/g/schemas/s/versions/v1$details", "/sets/g/schemas/s/versions/v2$details" };
+        var before = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var path in paths)
+        {
+            before[path] = (await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText();
+        }
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
+        await ExpectCode(() => Send(engine, RegistryAction.Patch, "/sets/g/schemas/s/meta",
+            """{"compatibility":"forward"}"""), "compatibility_violation");
+        foreach (var path in paths)
+        {
+            await Assert.That((await Send(engine, RegistryAction.Read, path)).Metadata!.RootElement.GetRawText())
+                .IsEqualTo(before[path]);
+        }
+        await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
     public async Task UnsupportedCompatibilityModeIsUnknownRatherThanAnEstablishedViolation(bool strict)
     {
         var engine = ValidatingEngine(strict: strict, allowCapabilityUpdates: true);
         await Send(engine, RegistryAction.Replace, "/sets/g/schemas/s$details", """
             {"versionid":"v1","format":"Avro/1.11.0","schema":"int","meta":{"compatibility":"full"}}
             """);
+        await Send(engine, RegistryAction.Post, "/sets/g/schemas/s$details", """
+            {"versionid":"v2","format":"Avro/1.11.0","schema":"int"}
+            """);
         await Send(engine, RegistryAction.Patch, "/capabilities", """{"compatibilities":{"Avro/1.11.0":["full"]}}""");
+        var before = (await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/meta")).Metadata!.RootElement.GetRawText();
+        var events = (await engine.ReadEventBatchesAsync(Writer())).Count;
         if (strict)
         {
             await ExpectCode(() => Send(engine, RegistryAction.Patch, "/sets/g/schemas/s/meta",
@@ -397,15 +469,23 @@ public class BuiltInValidationAdapterTests
         var meta = await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/meta");
         await Assert.That(meta.Metadata!.RootElement.GetProperty("compatibility").GetString())
             .IsEqualTo(strict ? "full" : "backward");
-        var details = await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/versions/v1$details");
-        await Assert.That(details.Metadata!.RootElement.GetProperty("formatvalidated").GetBoolean()).IsTrue();
-        await Assert.That(details.Metadata.RootElement.GetProperty("compatibilityvalidated").GetBoolean()).IsEqualTo(strict);
-        await Assert.That(details.Metadata.RootElement.TryGetProperty("compatibilityvalidatedreason", out var reason)).IsEqualTo(!strict);
-        if (!strict) { await Assert.That(reason.GetString()).IsNotNullOrEmpty(); }
-        var stored = await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/versions/v1");
-        using var bytes = stored.Document!.OpenRead();
-        using var reader = new StreamReader(bytes, Encoding.UTF8);
-        await Assert.That(await reader.ReadToEndAsync()).IsEqualTo("\"int\"");
+        if (strict)
+        {
+            await Assert.That(meta.Metadata.RootElement.GetRawText()).IsEqualTo(before);
+            await Assert.That((await engine.ReadEventBatchesAsync(Writer())).Count).IsEqualTo(events);
+        }
+        foreach (var id in new[] { "v1", "v2" })
+        {
+            var details = await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/versions/" + id + "$details");
+            await Assert.That(details.Metadata!.RootElement.GetProperty("formatvalidated").GetBoolean()).IsTrue();
+            await Assert.That(details.Metadata.RootElement.GetProperty("compatibilityvalidated").GetBoolean()).IsEqualTo(strict);
+            await Assert.That(details.Metadata.RootElement.TryGetProperty("compatibilityvalidatedreason", out var reason)).IsEqualTo(!strict);
+            if (!strict) { await Assert.That(reason.GetString()).IsNotNullOrEmpty(); }
+            var stored = await Send(engine, RegistryAction.Read, "/sets/g/schemas/s/versions/" + id);
+            using var bytes = stored.Document!.OpenRead();
+            using var reader = new StreamReader(bytes, Encoding.UTF8);
+            await Assert.That(await reader.ReadToEndAsync()).IsEqualTo("\"int\"");
+        }
     }
 
     [Test]

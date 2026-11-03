@@ -320,7 +320,7 @@ class ProvenanceAndReviewTests(unittest.TestCase):
         self.assertEqual(set(sources), {
             "upstream-4a7e7f5e", "pr571-811de7d2", "pr571-514f6eac",
             "pr715-5f9d0134", "pr716-9613f002", "upstream-d290b1ec", "pr571-d757328e",
-            "pr571-f69085fb", "pr571-a1da400e",
+            "pr571-f69085fb", "pr571-a1da400e", "pr677-b0d2d817",
         })
         prior = sources["pr571-811de7d2"]
         current = sources["pr571-514f6eac"]
@@ -343,6 +343,11 @@ class ProvenanceAndReviewTests(unittest.TestCase):
         self.assertEqual(sources["upstream-d290b1ec"]["commit"], freezer.CURRENT_MERGED)
         self.assertEqual(sources["pr571-d757328e"]["commit"], freezer.CURRENT_DRAFT)
         self.assertEqual(new_roles["workingdrafts/models/wot/samples/cloudevents.json"], "review-only")
+        compatibility = sources["pr677-b0d2d817"]
+        self.assertEqual(compatibility["commit"], "b0d2d81777dace4361227a9c37ddf5cd6629a563")
+        self.assertEqual({(entry["path"], entry["role"]) for entry in compatibility["files"]}, {
+            ("core/spec.md", "review-only"), ("LICENSE", "review-only"),
+        })
 
     def test_http_selector_models_are_pinned_from_the_current_pr_head_as_review_only_artifacts(self) -> None:
         spec = importlib.util.spec_from_file_location("freeze_successors", ROOT / "eng/specification/freeze_successors.py")

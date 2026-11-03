@@ -76,6 +76,37 @@ that corpus only; it does not qualify package behavior, native platforms,
 interoperability, or release status. Current extracted requirement counts and
 qualification status are in [conformance evidence](conformance.md).
 
+## Selected compatibility-admission proposal
+
+The implementation selects the W27 compatibility-admission correction from
+[xregistry/spec#677](https://github.com/xregistry/spec/pull/677) at
+`b0d2d81777dace4361227a9c37ddf5cd6629a563`. The exact Core source and license
+are retained under `tests/Conformance/Successors/pr677-b0d2d817`.
+This is proposed behavior, not a merged Core requirement.
+
+The selection covers the `compatibilities` capability's configuration-error
+scope and the Meta `compatibility` admission/change rules. It does not select
+the other changes in that PR or replace the active merged Core source.
+The source file remains review-only in the extraction inventory so unrelated
+or older clauses cannot supersede merged requirements through this selection.
+
+A stored compatibility declaration must satisfy the Resource model, including
+its enum restrictions. Checker capabilities describe validation support rather
+than storage admission. When compatibility checking is disabled, an unavailable
+checker does not reject a permitted declaration and validation flags remain
+absent. When enabled checking is unsupported, non-strict validation records
+`compatibilityvalidated=false` with a reason; strict validation rejects the
+operation. An actual compatibility violation rejects the entire operation in
+either mode, without changing stored metadata, Versions or events. Changing
+the declaration evaluates all applicable Versions, not only new Versions.
+
+`DisabledCompatibilityAdmitsModelModesWithoutAnEnabledChecker`,
+`UnsupportedCompatibilityModeIsUnknownRatherThanAnEstablishedViolation` and
+`CompatibilityViolationRollsBackEveryVersionRegardlessOfStrictValidation`
+exercise these outcomes through the public engine API. This proposal selection
+does not convert the conflicting merged admission clause into implemented
+standard conformance or supply native qualification.
+
 ## Active Message artifact differences
 
 The merged `upstream-d290b1ec` Message model still differs from the packaged

@@ -793,6 +793,28 @@
           "sha256": "c07c2bf22d1b6eadecdbc008b0693c9a876f85c1485c375ff57301085ffc8db9"
         }
       ]
+    },
+    {
+      "id": "pr677-b0d2d817",
+      "repository": "https://github.com/xregistry/spec",
+      "commit": "b0d2d81777dace4361227a9c37ddf5cd6629a563",
+      "status": "working-draft",
+      "files": [
+        {
+          "path": "core/spec.md",
+          "owner": "core",
+          "kind": "normative",
+          "bytes": 247444,
+          "sha256": "9a35626bf8bbac66978b2999ccae1baa349c19af526886a59a0f338132281e88"
+        },
+        {
+          "path": "LICENSE",
+          "owner": "license",
+          "kind": "license",
+          "bytes": 11349,
+          "sha256": "c07c2bf22d1b6eadecdbc008b0693c9a876f85c1485c375ff57301085ffc8db9"
+        }
+      ]
     }
   ],
   "composition": [
@@ -1308,6 +1330,16 @@
     },
     {
       "source": "pr571-a1da400e",
+      "path": "LICENSE",
+      "role": "review-only"
+    },
+    {
+      "source": "pr677-b0d2d817",
+      "path": "core/spec.md",
+      "role": "review-only"
+    },
+    {
+      "source": "pr677-b0d2d817",
       "path": "LICENSE",
       "role": "review-only"
     }
