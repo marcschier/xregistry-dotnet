@@ -2411,11 +2411,21 @@ case-sensitive; a wrong-case Version request does not acquire document bytes.
 The factory takes content type from captured Version metadata and the original
 base from the manifest association. `originRegistry` and `originVersion` remain
 provenance in the supplied snapshot; neither becomes an inferred document
-location. The caller still supplies the captured compiled model. The direct
-constructor also leaves descriptor verification to the caller. Neither entry
-point verifies immutable model-include provenance or every Core metadata
-constraint. Domain closure validation and offline WoT composition remain
-unfinished.
+location. The direct constructor leaves descriptor verification to the caller.
+
+The factory can compile the retained `modelsource` when its model argument is
+omitted. Local includes and `ximportresources` are interpreted by the Core
+compiler without an external resolver. Source directives remain available even
+when the effective model expands them. A cross-Group alias must target the same
+actual compiled Resource type; structurally similar independent types do not
+become interchangeable. Missing original source, unretained external includes,
+cycles and disagreement with a supplied effective model reject acquisition
+before document reads. For externally captured model material, pass the
+explicitly compiled model and retain its provenance.
+
+Neither entry point verifies immutable external model-include provenance or
+every Core metadata constraint. Domain closure validation and offline WoT
+composition remain unfinished.
 
 `WotPublicationClosure.Parse` reads the selected closed representation without
 registering the WoT extension as supported. Entries and binding endpoints must

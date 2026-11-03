@@ -11,7 +11,7 @@ namespace XRegistry.Federation;
 
 /// <summary>Reads a complete captured Core document-view graph and explicitly associated exact documents without live acquisition.</summary>
 /// <remarks>
-/// The caller verifies publication descriptors and supplies the captured compiled model and authorized snapshot context.
+/// Direct constructor callers verify publication descriptors and supply the captured compiled model and authorized snapshot context.
 /// This checks containment, model agreement and navigation, not domain closure or every Core metadata constraint.
 /// Original bytes are retained independently; reads do not import, update or regenerate Registry state.
 /// </remarks>
@@ -118,13 +118,13 @@ public sealed class CapturedRegistryReadSource : IFederationReadSource
     /// All association identities and declared sizes are checked before document acquisition. Later reads use
     /// retained bytes only. Publication provenance remains in the supplied snapshot; originRegistry is not
     /// interpreted as a document location. This does not establish domain closure or full graph conformance.
+    /// An omitted model is compiled from retained modelsource, with local includes only and no external resolver.
     /// </remarks>
     public static async ValueTask<CapturedRegistryReadSource> FromPublicationAsync(
-        PublicationOpenedSnapshot snapshot, RegistryModel model, FederationReadBudget? budget = null,
+        PublicationOpenedSnapshot snapshot, RegistryModel? model = null, FederationReadBudget? budget = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        ArgumentNullException.ThrowIfNull(model);
         cancellationToken.ThrowIfCancellationRequested();
         budget ??= new();
         if (snapshot.Manifest.Registry.Size > budget.Limits.MaxObjectBytes)
@@ -133,7 +133,9 @@ public sealed class CapturedRegistryReadSource : IFederationReadSource
         }
         var context = new NativeRegistryContext("publication", snapshot.Manifest.Scope,
             snapshot.Manifest.SnapshotId, true, snapshot.Manifest.Registry.Digest["sha256:".Length..]);
-        var source = new CapturedRegistryReadSource(snapshot.GetExactRegistryBytes(), model, context,
+        var registryBytes = snapshot.GetExactRegistryBytes();
+        model ??= CompileCapturedModel(registryBytes, budget, cancellationToken);
+        var source = new CapturedRegistryReadSource(registryBytes, model, context,
             new Dictionary<string, FederationDocument>(StringComparer.Ordinal), budget, cancellationToken);
         var associations = new Dictionary<string, PublicationDocument>(StringComparer.Ordinal);
         foreach (var association in snapshot.Manifest.Documents)
@@ -271,7 +273,9 @@ public sealed class CapturedRegistryReadSource : IFederationReadSource
             if (meta.TryGetProperty("xref", out _))
             {
                 var target = FederationSyntax.Xid(FederationJson.String(meta, "xref"));
-                if (target.Length != 4 || target[0] != parts[0] || target[2] != parts[2])
+                if (target.Length != 4 || !Model.Groups.TryGetValue(target[0], out var targetGroup) ||
+                    !targetGroup.Resources.TryGetValue(target[2], out var targetResource) ||
+                    !ReferenceEquals(DocumentTreeFormat.Resource(Model, parts), targetResource))
                 {
                     throw FederationJson.Invalid("A captured alias must identify a Resource of the same model type.");
                 }
@@ -422,6 +426,34 @@ public sealed class CapturedRegistryReadSource : IFederationReadSource
     }
 
     private Entity GetEntity(string xid) => _entities.TryGetValue(xid, out var value) ? value : throw NotFound();
+    private static RegistryModel CompileCapturedModel(ReadOnlyMemory<byte> bytes,
+        FederationReadBudget budget, CancellationToken token)
+    {
+        var root = FederationJson.Parse(bytes, budget, token);
+        var source = FederationJson.Required(root, "modelsource");
+        FederationJson.RequireObject(source);
+        budget.ChargeWork();
+        var limits = new RegistryJsonLimits
+        {
+            MaxBytes = budget.Limits.MaxObjectBytes, MaxDepth = budget.Limits.MaxJsonDepth,
+            MaxNodes = (int)Math.Min(int.MaxValue, budget.Limits.MaxWork)
+        };
+        try
+        {
+            var model = RegistryModel.Compile(RegistryJson.FromElement(source, limits), new()
+            {
+                JsonLimits = limits,
+                MaxExpandedNodes = (int)Math.Min(100_000, Math.Max(1, budget.Limits.MaxWork - budget.Work)),
+                MaxIncludeDepth = Math.Min(128, budget.Limits.MaxDepth),
+                MaxResourceImportDepth = Math.Min(128, budget.Limits.MaxDepth)
+            });
+            token.ThrowIfCancellationRequested();
+            FederationJson.CountWork(model.EffectiveModel.RootElement, budget, token);
+            return model;
+        }
+        catch (RegistryException exception) { throw FederationJson.FromCore(exception); }
+    }
+
     private string ReserveDocument(string xid, long length)
     {
         _budget.ChargeWork();

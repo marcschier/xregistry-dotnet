@@ -15,6 +15,147 @@ namespace XRegistry.Federation.Tests;
 public class CapturedRegistryReadSourceTests
 {
     [Test]
+    public async Task PublicationCaptureCompilesRetainedModelSourceAndLocalIncludesWithoutCallerModel()
+    {
+        var fixture = new Fixture();
+        fixture.Root["modelsource"]!["attributes"] = JsonNode.Parse("""
+            {"first":{"type":"string"},"second":{"$include":"#/attributes/first"}}
+            """);
+        var publication = new PublicationFixture(fixture);
+        var source = await CapturedRegistryReadSource.FromPublicationAsync(await publication.OpenAsync());
+        await Assert.That(source.Model.Attributes["second"].Type).IsEqualTo(RegistryValueType.String);
+        await Assert.That(source.Model.Source.RootElement.GetProperty("attributes").GetProperty("second")
+            .GetProperty("$include").GetString()).IsEqualTo("#/attributes/first");
+        await Assert.That(source.Model.EffectiveModel.RootElement.GetProperty("attributes").GetProperty("second")
+            .TryGetProperty("$include", out _)).IsFalse();
+        publication.FailOnRead = true;
+        var document = await WotRegistryResolver.ResolveAsync(source, Fixture.Collection,
+            new(Fixture.WotId, WotReferenceTargetKind.ThingModel, WotReferenceOperator.ThingModel, VersionIdPin: "1.0.0"));
+        await Assert.That(document.Version.ContentDigest).IsEqualTo("sha256:" + Digest(Fixture.First));
+        await Assert.That(publication.OpenedVersions.Count).IsEqualTo(4);
+    }
+
+    [Test]
+    [Arguments(true)]
+    [Arguments(false)]
+    public async Task PublicationCapturePreservesActualResourceTypeSharingForCrossGroupAliases(bool shared)
+    {
+        var fixture = new Fixture();
+        fixture.AddAlias();
+        var groups = fixture.Root["modelsource"]!["groups"]!;
+        groups["copies"] = shared
+            ? JsonNode.Parse("""{"singular":"copy","ximportresources":["/sets/things"]}""")
+            : new JsonObject
+            {
+                ["singular"] = "copy", ["resources"] = new JsonObject
+                {
+                    ["things"] = groups["sets"]!["resources"]!["things"]!.DeepClone()
+                }
+            };
+        var alias = fixture.Root["sets"]!["team"]!["things"]!["alias"]!.DeepClone();
+        const string xid = "/copies/archive/things/alias";
+        const string pointer = "#/copies/archive/things/alias";
+        alias["xid"] = xid;
+        alias["self"] = pointer;
+        alias["metaurl"] = pointer + "/meta";
+        alias["meta"]!["xid"] = xid + "/meta";
+        alias["meta"]!["self"] = pointer + "/meta";
+        fixture.Root["copies"] = new JsonObject
+        {
+            ["archive"] = new JsonObject
+            {
+                ["copyid"] = "archive", ["xid"] = "/copies/archive", ["self"] = "#/copies/archive",
+                ["things"] = new JsonObject { ["alias"] = alias }
+            }
+        };
+        var publication = new PublicationFixture(fixture);
+        var opened = await publication.OpenAsync();
+        if (shared)
+        {
+            var source = await CapturedRegistryReadSource.FromPublicationAsync(opened);
+            await Assert.That(ReferenceEquals(source.Model.Groups["copies"].Resources["things"],
+                source.Model.Groups["sets"].Resources["things"])).IsTrue();
+            await Assert.That(source.Model.Source.RootElement.GetProperty("groups").GetProperty("copies")
+                .GetProperty("ximportresources")[0].GetString()).IsEqualTo("/sets/things");
+            var document = await source.ReadAsync(new(FederationOperation.Document, xid));
+            await Assert.That(document.SelectedXid).IsEqualTo(Fixture.Resource + "/versions/1.0.0");
+            using var stream = document.Document!.OpenRead();
+            using var bytes = new MemoryStream();
+            await stream.CopyToAsync(bytes);
+            await Assert.That(bytes.ToArray().SequenceEqual(Fixture.First)).IsTrue();
+        }
+        else
+        {
+            var failure = await Assert.That(async () => await CapturedRegistryReadSource.FromPublicationAsync(opened))
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected a distinct compiled Resource type.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+            await Assert.That(publication.OpenedVersions.Count).IsEqualTo(2);
+        }
+    }
+
+    [Test]
+    [Arguments("missing-source")]
+    [Arguments("external-include")]
+    [Arguments("relative-include")]
+    [Arguments("cycle")]
+    [Arguments("model-mismatch")]
+    [Arguments("unknown-core")]
+    [Arguments("invalid-source")]
+    public async Task AutomaticCapturedModelConstructionRejectsUnretainedOrContradictoryMaterial(string change)
+    {
+        var fixture = new Fixture();
+        switch (change)
+        {
+            case "missing-source":
+                fixture.Root.Remove("modelsource");
+                fixture.Root["model"] = JsonNode.Parse(fixture.Model.EffectiveModel.RootElement.GetRawText());
+                break;
+            case "external-include": fixture.Root["modelsource"]!["$include"] = "https://never-fetch.invalid/model.json"; break;
+            case "relative-include": fixture.Root["modelsource"]!["$include"] = "model.json"; break;
+            case "cycle": fixture.Root["modelsource"]!["$include"] = "#"; break;
+            case "model-mismatch": fixture.Root["model"] = new JsonObject(); break;
+            case "unknown-core": fixture.Root["specversion"] = "2.0"; break;
+            case "invalid-source": fixture.Root["modelsource"] = new JsonArray(); break;
+        }
+        var publication = new PublicationFixture(fixture);
+        var opened = await publication.OpenAsync();
+        var failure = await Assert.That(async () => await CapturedRegistryReadSource.FromPublicationAsync(opened))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected unusable captured model material.");
+        await Assert.That(failure.Code).IsEqualTo(change == "unknown-core"
+            ? FederationErrorCode.UnsupportedVersion : FederationErrorCode.InvalidPackage);
+        await Assert.That(publication.OpenedVersions.Count).IsEqualTo(2);
+    }
+
+    [Test]
+    [Arguments(-1)]
+    [Arguments(0)]
+    [Arguments(1)]
+    public async Task AutomaticCapturedModelConstructionUsesAnInclusiveSharedWorkBudget(int delta)
+    {
+        var fixture = new Fixture();
+        var publication = new PublicationFixture(fixture);
+        var opened = await publication.OpenAsync();
+        var baseline = new FederationReadBudget();
+        _ = await CapturedRegistryReadSource.FromPublicationAsync(opened, budget: baseline);
+        publication.OpenedVersions.Clear();
+        var budget = new FederationReadBudget(new(maxWork: baseline.Work + delta));
+        if (delta < 0)
+        {
+            var failure = await Assert.That(async () => await CapturedRegistryReadSource.FromPublicationAsync(opened, budget: budget))
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected cumulative work exhaustion.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+            await Assert.That(publication.OpenedVersions.Count).IsEqualTo(0);
+        }
+        else
+        {
+            var source = await CapturedRegistryReadSource.FromPublicationAsync(opened, budget: budget);
+            await Assert.That(budget.Work).IsEqualTo(baseline.Work);
+            await Assert.That(source.Model.Groups["sets"].Resources["things"].Singular).IsEqualTo("thingmodel");
+            await Assert.That(publication.OpenedVersions.Count).IsEqualTo(2);
+        }
+    }
+
+    [Test]
     public async Task PublicationCaptureRetainsVerifiedAssociationsWithoutReopeningTheChannel()
     {
         var fixture = new Fixture();
