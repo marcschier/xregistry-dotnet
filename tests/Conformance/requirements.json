@@ -140674,7 +140674,9 @@
       "implementation": {
         "status": "implemented",
         "testIds": [
+          "CloudEventsSubjectRejectsMissingOrInvalidPointers",
           "CloudEventsSubjectSelectsFromTheSelectedPublishedViewVersion",
+          "CloudEventsSubjectUsesOneReadBudgetForVersionAcquisitionAndPointerSelection",
           "FragmentsDecodeOnceAndSelectExactJsonValuesWithoutChangingProvenance",
           "MissingFragmentTargetsCannotFallbackOrChangeTheSelectedVersion"
         ],
@@ -140713,9 +140715,10 @@
       "implementation": {
         "status": "implemented",
         "testIds": [
-          "CloudEventsSubjectSelectsFromTheSelectedPublishedViewVersion",
+          "CloudEventsDocumentFailuresDoNotTryAnotherVersionOrSource",
           "CloudEventsExternalDescriptorsAreNotFetched",
-          "CloudEventsDocumentFailuresDoNotTryAnotherVersionOrSource"
+          "CloudEventsSubjectSelectsFromTheSelectedPublishedViewVersion",
+          "CloudEventsSubjectUsesOneReadBudgetForVersionAcquisitionAndPointerSelection"
         ],
         "nativeEvidence": []
       }

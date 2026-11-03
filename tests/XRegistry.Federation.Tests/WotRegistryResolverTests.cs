@@ -117,6 +117,44 @@ public class WotRegistryResolverTests
     }
 
     [Test]
+    [Arguments("#/events/missing", "not-found")]
+    [Arguments("", "invalid-fragment")]
+    public async Task CloudEventsSubjectRejectsMissingOrInvalidPointers(string subject, string expectedCode)
+    {
+        var view = Encoding.UTF8.GetBytes("""{"id":"urn:test:device:v1","events":{"overheated":{"type":"test"}}}""");
+        var source = new Source(true) { FirstBytes = view, SecondBytes = view };
+        var query = WotCloudEventSourceQuery.Parse(WotCloudEventSourceQuery.Encode(Source.Identity));
+        var failure = await Assert.That(async () =>
+            await WotRegistryResolver.AcquireCloudEventSubjectAsync(source, source.Collection, query, subject))
+            .Throws<RegistryException>() ?? throw new InvalidOperationException("Expected subject selection failure.");
+
+        await Assert.That(failure.Diagnostic.Code).IsEqualTo(expectedCode);
+        await Assert.That(source.Reads.Count(read => read.Operation == FederationOperation.Document)).IsEqualTo(1);
+        await Assert.That(source.Reads.Last().Target).IsEqualTo(source.Resource + "/versions/1.0.0");
+    }
+
+    [Test]
+    public async Task CloudEventsSubjectUsesOneReadBudgetForVersionAcquisitionAndPointerSelection()
+    {
+        var query = WotCloudEventSourceQuery.Parse(WotCloudEventSourceQuery.Encode(Source.Identity));
+        var view = Encoding.UTF8.GetBytes("""{"id":"urn:test:device:v1","events":{"overheated":{"type":"test"}}}""");
+        var acquisition = new Source(true) { FirstBytes = view, SecondBytes = view };
+        var acquisitionBudget = new FederationReadBudget();
+        await WotRegistryResolver.AcquireCloudEventSourceAsync(acquisition, acquisition.Collection, query,
+            acquisitionBudget);
+
+        var source = new Source(true) { FirstBytes = view, SecondBytes = view };
+        var sharedBudget = new FederationReadBudget(new FederationReadLimits(maxWork: acquisitionBudget.Work));
+        var failure = await Assert.That(async () =>
+            await WotRegistryResolver.AcquireCloudEventSubjectAsync(source, source.Collection, query,
+                "#/events/overheated", sharedBudget))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected the shared work budget to be exhausted.");
+
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        await Assert.That(source.Reads.Count(read => read.Operation == FederationOperation.Document)).IsEqualTo(1);
+    }
+
+    [Test]
     [Arguments(null, true)]
     [Arguments(null, false)]
     [Arguments("1.0.1", true)]
