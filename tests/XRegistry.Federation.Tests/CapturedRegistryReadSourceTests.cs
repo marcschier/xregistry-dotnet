@@ -15,6 +15,81 @@ namespace XRegistry.Federation.Tests;
 public class CapturedRegistryReadSourceTests
 {
     [Test]
+    [Arguments("tm:minVersion", "invalid-floor", false)]
+    [Arguments("td:minVersion", "invalid-floor", true)]
+    [Arguments("uav:minVersion", "invalid-floor", true)]
+    [Arguments("uav:compatibilityLine", "invalid-line", false)]
+    [Arguments("uav:compatibilityLine", "invalid-line", true)]
+    [Arguments("p:sourceDigest", "digest", true)]
+    public async Task ProjectionSelectorsRejectSourceRequirementsUnderCapturedAliases(
+        string term, string expected, bool alias)
+    {
+        var root = await ProjectionDocument(new()
+        {
+            ["p:sourceName"] = "base", ["href"] = "urn:inventory:tm", ["type"] = "application/tm+json"
+        });
+        root["properties"] = JsonNode.Parse("""{"value":{"tm:ref":"urn:inventory:tm#/properties/a"}}""");
+        var name = alias ? "requirement" : term;
+        if (alias) { root["@context"]![name] = term; }
+        root["properties"]!["value"]![name] = false;
+        var document = new FederationDocument(Encoding.UTF8.GetBytes(root.ToJsonString()));
+        var uri = new Uri("https://example.test/plan.json");
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        foreach (var combined in new[] { false, true })
+        {
+            async Task Discover()
+            {
+                if (combined)
+                {
+                    _ = await WotJsonLdBaseResolver.DiscoverCapturedReferenceInventoryAsync(document, uri,
+                        WotReferenceTargetKind.ThingModel, contexts, InventoryIndex(new Fixture().Open()));
+                }
+                else
+                {
+                    _ = await WotJsonLdBaseResolver.DiscoverProjectionSelectorReferencesAsync(document, uri,
+                        WotReferenceTargetKind.ThingModel, contexts);
+                }
+            }
+            if (expected == "digest")
+            {
+                var failure = await Assert.That(Discover).Throws<FederationException>() ??
+                    throw new InvalidOperationException("Expected selector-level source digest rejection.");
+                await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+            }
+            else
+            {
+                var failure = await Assert.That(Discover).Throws<RegistryException>() ??
+                    throw new InvalidOperationException("Expected requirement-location rejection before source selection.");
+                await Assert.That(failure.Diagnostic.Code).IsEqualTo(expected);
+                await Assert.That(failure.Diagnostic.Path).IsEqualTo("/properties/value");
+            }
+        }
+    }
+
+    [Test]
+    public async Task ProjectionSelectorsUseExpandedRequirementMeaningRatherThanLiteralPrefixes()
+    {
+        var root = await ProjectionDocument(new()
+        {
+            ["p:sourceName"] = "base", ["href"] = "urn:inventory:tm", ["type"] = "application/tm+json",
+            ["tm:minVersion"] = "1.0.0"
+        });
+        root["properties"] = JsonNode.Parse("""
+            {"value":{"@context":{"uav":"urn:vendor:"},"tm:ref":"urn:inventory:tm#/properties/a",
+              "uav:minVersion":"annotation","td:ref":"urn:inventory:td"}}
+            """);
+        var document = new FederationDocument(Encoding.UTF8.GetBytes(root.ToJsonString()));
+        var inventory = await WotJsonLdBaseResolver.DiscoverCapturedReferenceInventoryAsync(document,
+            new("https://example.test/plan.json"), WotReferenceTargetKind.ThingModel,
+            new Dictionary<Uri, FederationDocument>(),
+            InventoryIndex(new Fixture().Open(), description: InventorySource("thingdescription")));
+        await Assert.That(inventory.ProjectionSelectors.Count).IsEqualTo(1);
+        await Assert.That(inventory.Dependencies.Count).IsEqualTo(2);
+        await Assert.That(inventory.Dependencies[0].Reference.Operator).IsEqualTo("td:ref");
+        await Assert.That(inventory.Dependencies[1].Reference.SourcePointer).IsEqualTo("/p:projects/0");
+    }
+
+    [Test]
     [Arguments("first", "1.0.0", "1.0.0", null)]
     [Arguments("first", "2.0.0", null, "unsatisfied")]
     [Arguments("second", "2.0.0", "2.0.0", null)]

@@ -181,6 +181,7 @@ public static partial class WotJsonLdBaseResolver
         var categories = new Dictionary<string, string?>(StringComparer.Ordinal);
         var selected = new HashSet<string>(StringComparer.Ordinal);
         var selectors = new List<WotProjectionSelectorOccurrence>();
+        var root = await ParseDocumentAsync(document, readBudget, cancellationToken).ConfigureAwait(false);
         foreach (var reference in references)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -231,6 +232,31 @@ public static partial class WotJsonLdBaseResolver
             if (!selected.Add(reference.SourcePointer))
             {
                 throw FederationJson.Invalid("One authored affordance cannot contain competing projection selectors.");
+            }
+            var authored = ObjectAtPointer(root, reference.SourcePointer, readBudget, cancellationToken);
+            foreach (var memberValue in authored.Properties())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                readBudget.ChargeWork();
+                if (memberValue.Name.StartsWith('@')) { continue; }
+                var meaning = await ExpandMemberIriAsync(document, reference.SourcePointer, memberValue.Name,
+                    documentUri, contexts, readBudget, cancellationToken).ConfigureAwait(false);
+                if (meaning is "https://www.w3.org/2019/wot/tm#minVersion" or
+                    "https://www.w3.org/2019/wot/td#minVersion" or
+                    "http://opcfoundation.org/UA/WoT-Binding/minVersion")
+                {
+                    throw new RegistryException(new("invalid-floor", reference.SourcePointer,
+                        "A projection source floor belongs on its manifest entry, not an affordance selector."));
+                }
+                if (meaning == "http://opcfoundation.org/UA/WoT-Binding/compatibilityLine")
+                {
+                    throw new RegistryException(new("invalid-line", reference.SourcePointer,
+                        "A projection source line belongs on its manifest entry, not an affordance selector."));
+                }
+                if (meaning == ProjectionVocabulary + "sourceDigest")
+                {
+                    throw FederationJson.Invalid("A projection source digest belongs on its manifest entry, not an affordance selector.");
+                }
             }
             selectors.Add(new(reference, source, pointer));
         }

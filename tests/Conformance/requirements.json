@@ -141658,7 +141658,9 @@
           "CapturedRegistryReadSourceTests.ExactVersionProjectionSourcesStillCheckTheirOwnFloorAndDigest",
           "CapturedRegistryReadSourceTests.ProjectionSourceSelectionHasInclusiveSharedWorkAndCancellation",
           "CapturedRegistryReadSourceTests.ProjectionSourceDigestPinsDoNotWaiveWrongKindOrCompetingFloors",
-          "CapturedRegistryReadSourceTests.ProjectionSourceDigestAliasesCannotCreateCompetingPins"
+          "CapturedRegistryReadSourceTests.ProjectionSourceDigestAliasesCannotCreateCompetingPins",
+          "CapturedRegistryReadSourceTests.ProjectionSelectorsRejectSourceRequirementsUnderCapturedAliases",
+          "CapturedRegistryReadSourceTests.ProjectionSelectorsUseExpandedRequirementMeaningRatherThanLiteralPrefixes"
         ],
         "nativeEvidence": []
       }

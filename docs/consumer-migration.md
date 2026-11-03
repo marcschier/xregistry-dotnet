@@ -2492,6 +2492,14 @@ canonicalized or resolved document. Shared limits and cancellation cover
 requirement extraction and selection. These methods do not validate the full
 projection envelope, resolve nested plans, detect graph cycles or compose a view.
 
+Projection selector discovery rejects floor, compatibility-line and source-digest
+members on explicit affordance selectors. Those requirements belong on the
+manifest source entry. The check uses captured expanded member meanings,
+including aliases, so a rebound literal prefix does not create a requirement.
+Both standalone selector discovery and the combined inventory apply the same
+check before returning selectors. This does not yet validate the complete
+annotation or routing grammar.
+
 `WotPublicationClosure.Parse` reads the selected closed representation without
 registering the WoT extension as supported. Entries and binding endpoints must
 be exact Version XIDs. Entry identities are unique, and binding keys combine
