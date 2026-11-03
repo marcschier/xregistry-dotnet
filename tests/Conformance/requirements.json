@@ -691,7 +691,7 @@
         ]
       },
       "implementation": {
-        "status": "pending",
+        "status": "implemented",
         "testIds": [
           "NestedFailureRollsBackEveryEntity",
           "ResponsePreparationFailureDoesNotCommit",
