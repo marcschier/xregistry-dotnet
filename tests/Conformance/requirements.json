@@ -61316,8 +61316,11 @@
         ]
       },
       "implementation": {
-        "status": "pending",
-        "testIds": [],
+        "status": "implemented",
+        "testIds": [
+          "MetaOnlyValidationRecomputationPersistsWithoutUpdatingVersionEpochOrEvents",
+          "ReadonlyValidationDoesNotChangeModifiedTimeVersionOrdering"
+        ],
         "nativeEvidence": []
       }
     },
