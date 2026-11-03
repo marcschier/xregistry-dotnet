@@ -141216,13 +141216,21 @@
       ],
       "text": "A WoT publication that claims domain-complete closure MUST include the `http://opcfoundation.org/UA/WoT-Binding/publication-closure/1` extension as a REQUIRED manifest extension. Its document format is `wot-publication-closure/1`, as defined by the [closure schema](schemas/publication-closure.schema.json). The extension does not change the authored WoT documents or their reference semantics.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The closure reader exposes the exact extension URI and accepts only the selected closed format, including the corrected empty-href representation. It does not register extension support. Required-extension declaration, concrete semantic validation and offline reconstruction remain unfinished, so format parsing does not complete this obligation.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "WotPublicationClosureTests.ClosureRepresentationRetainsExactAuthoredStringsAndReadOnlyOrder",
+          "WotPublicationClosureTests.ClosureRepresentationRejectsMalformedRootAndCollectionShapes",
+          "WotPublicationClosureTests.ClosureRepresentationRequiresEveryRootField",
+          "WotPublicationClosureTests.ClosureRepresentationRejectsUnknownRootAndBindingMembers"
+        ],
         "nativeEvidence": []
       }
     },
@@ -141247,13 +141255,19 @@
       ],
       "text": "Each `entries` item, binding `source` and binding `target` MUST be an exact Version XID in the captured Registry view. A target MUST identify one associated Version document, not a Resource XID, default-Version alias, WoT identifier or URL. The captured Registry model determines the target Resource's kind. A Consumer MUST validate that kind and target identity against the source occurrence using the mapping defined for that reference kind. The closure document does not add a target-kind field or authorize a different selection rule. If no such mapping is defined, the Consumer MUST reject the binding.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Representation parsing requires exact Version XID syntax in entries, source and target; Resource/Meta paths, defaults, WoT identifiers and URLs are not accepted as endpoints. It does not infer a target kind from an operator or path. Captured-view membership, one associated document, model-derived kind and occurrence-to-target verification remain unfinished; this compound requirement stays pending.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "WotPublicationClosureTests.ClosureRepresentationRequiresExactVersionXidsEverywhere",
+          "WotPublicationClosureTests.ClosureRepresentationRequiresEveryBindingString"
+        ],
         "nativeEvidence": []
       }
     },
@@ -141279,13 +141293,19 @@
       ],
       "text": "A Producer MUST derive the closure from the captured source document bytes, not from the binding list. Each in-scope external reference occurrence in the closure MUST have exactly one binding to its exact target Version. The binding's `source`, `pointer`, `operator` and `href` MUST identify that occurrence and preserve its authored reference. A Consumer MUST verify those values against the captured source bytes and MUST NOT resolve a missing binding against a live Registry, select a default Version, or replace the target with a newer Version.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Source discovery and closure parsing remain separate inputs: the reader preserves binding strings and never performs source reads or Version selection. This is not independent occurrence verification. Producer graph traversal, exact target association, missing/extra binding rejection and consumer comparison against original captured bytes remain unfinished; no live/default fallback is added.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "WotPublicationClosureTests.ClosureRepresentationRetainsExactAuthoredStringsAndReadOnlyOrder",
+          "WotPublicationClosureTests.ClosureRepresentationAllowsNoBindingsWithoutAssertingDependencyCompleteness"
+        ],
         "nativeEvidence": []
       }
     },
@@ -141310,13 +141330,21 @@
       ],
       "text": "The binding key MUST be `(source, pointer)`. Source identity follows Core's XID rules; pointer comparison MUST be case-sensitive. `pointer` MUST be an RFC 6901 JSON Pointer into the original captured JSON document, not a URI-fragment pointer or a pointer into expanded or resolved JSON-LD. For a `links` occurrence it MUST identify the link object. For an ordinary `tm:ref` or `td:ref` it MUST identify the object containing that member. For a projection source it MUST identify the source-manifest entry. JSON Pointer escaping applies to the actual authored member names, including an alternative JSON-LD prefix. Array indexes MUST use their RFC 6901 spelling.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The representation reader validates RFC 6901 string-pointer syntax, preserves authored spelling and compares duplicate binding keys using normalized Core source identity and case-sensitive pointers. It does not guess whether a token is an array index or object key. Original-source topology, canonical array indexes and the operator-specific occurrence-object match still require independent validation; this compound requirement stays pending.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "WotPublicationClosureTests.ClosureRepresentationPreservesPointerSyntaxWithoutGuessingSourceTopology",
+          "WotPublicationClosureTests.ClosureRepresentationRejectsMalformedOrFragmentPointers",
+          "WotPublicationClosureTests.ClosureBindingPointerComparisonIsCaseSensitive",
+          "WotPublicationClosureTests.ClosureRepresentationRejectsDuplicateKeysUnderCoreSourceIdentity"
+        ],
         "nativeEvidence": []
       }
     },
@@ -141341,13 +141369,20 @@
       ],
       "text": "Each reachable in-scope external occurrence MUST have exactly one binding. A Consumer MUST reject duplicate binding keys, including duplicates with the same target, and MUST reject bindings to local, unreachable or nonexistent occurrences. Two different occurrences referring to the same target remain distinct bindings. If one pointed-to object contains several in-scope reference members, including aliases for the same expanded member, a Consumer MUST reject it as an ambiguous occurrence rather than choosing one. The binding's `href` MUST equal the source reference's JSON string value, including its fragment, without URI resolution or percent decoding.",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "The closure reader rejects duplicate source/pointer keys even when targets agree or source XIDs use equivalent escapes. It retains distinct pointers and exact href strings, including empty strings. It does not compare bindings with source occurrences or determine locality/reachability, and ordinary ambiguous-object classification remains unfinished. Those semantic checks and exactly one binding per reachable external occurrence keep this compound requirement pending.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "WotPublicationClosureTests.ClosureRepresentationRejectsDuplicateKeysUnderCoreSourceIdentity",
+          "WotPublicationClosureTests.ClosureBindingPointerComparisonIsCaseSensitive",
+          "WotPublicationClosureTests.ClosureRepresentationRetainsExactAuthoredStringsAndReadOnlyOrder"
+        ],
         "nativeEvidence": []
       }
     },
@@ -141373,7 +141408,7 @@
       "text": "`operator` MUST use the canonical string in the following table. These strings are closure labels, not terms expanded through a context on the closure document:",
       "review": {
         "status": "reviewed",
-        "note": "Ordinary candidates use canonical tm:ref and td:ref labels independently of authored aliases. Link discovery emits the exact named extension/submodel/subthing labels, and only a captured TD contributes a type link. describedby is a classification candidate rather than an authorized closure operator. Projection source discovery emits the selected experimental projects IRI. Independent comparison with supplied closure records is not implemented; this compound requirement stays pending.",
+        "note": "Ordinary candidates use canonical tm:ref and td:ref labels independently of authored aliases. Link discovery emits the exact named extension/submodel/subthing labels, and only a captured TD contributes a type link. describedby is a classification candidate rather than an authorized closure operator. Projection source discovery emits the selected experimental projects IRI. The closure reader accepts exactly these eight canonical strings and rejects prefix aliases or expanded alternatives. Independent comparison with discovered source occurrences is not implemented; this compound requirement stays pending.",
         "roles": [
           "client",
           "producer"
@@ -141385,7 +141420,9 @@
           "WotReferenceUriResolverTests.DiscoversOrdinaryReferencesByExpandedMeaningAndPreservesAuthoredPointersAndHrefs",
           "WotReferenceUriResolverTests.DiscoversLiteralReferenceLinksWithUnchangedHrefAndLinkObjectPointer",
           "WotReferenceUriResolverTests.OnlyACapturedThingDescriptionContributesATypeLink",
-          "WotReferenceUriResolverTests.ProjectionSourcesRetainManifestOrderCrossKindDeclarationsAndExactEntryPointers"
+          "WotReferenceUriResolverTests.ProjectionSourcesRetainManifestOrderCrossKindDeclarationsAndExactEntryPointers",
+          "WotPublicationClosureTests.ClosureRepresentationAcceptsExactlyTheSelectedCanonicalOperators",
+          "WotPublicationClosureTests.ClosureRepresentationRejectsOperatorAliasesAndUnknownStrings"
         ],
         "nativeEvidence": []
       }

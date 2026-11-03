@@ -2325,6 +2325,21 @@ requirements, digest pins and closure integration remain unverified.
 Document-local associations remain candidates for subsequent cycle validation,
 not accepted cyclic plans.
 
+`WotPublicationClosure.Parse` reads the selected closed representation without
+registering the WoT extension as supported. Entries and binding endpoints must
+be exact Version XIDs. Entry identities are unique, and binding keys combine
+Core source identity with a case-sensitive authored JSON Pointer. The parser
+rejects unknown fields, malformed pointers, duplicate keys and noncanonical
+operators. It preserves entry/binding order and exact href strings, including
+empty strings, without URI interpretation. The returned collections cannot be
+modified. Shared work, document-size and pointer-depth limits apply.
+
+Parsing does not verify captured Registry membership, target kind, source
+occurrences, reachability or dependency completeness. An empty binding list can
+therefore parse without establishing a complete publication. Required WoT
+extension acceptance still needs independent semantic validation and pinned
+offline reconstruction.
+
 `AcquireCloudEventSubjectAsync` takes a parsed CloudEvents WoT source query, a
 subject pointer and one authorized Thing Description Resource collection.
 Complete Version metadata establishes each Resource's `wotid`, so an explicit
