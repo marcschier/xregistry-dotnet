@@ -128984,7 +128984,10 @@
           "RejectsWrongFormatAndUnknownProperties",
           "OpenChannelRejectsUnsupportedRequiredExtensionsBeforeReadingRegistry",
           "OpenRecordRejectsUnsupportedRequiredExtensionsWithoutResolvingSources",
-          "OfflineReplayRejectsUnknownMandatoryExtensionsBeforeReadingRegistryOrDomainObjects"
+          "OfflineReplayRejectsUnknownMandatoryExtensionsBeforeReadingRegistryOrDomainObjects",
+          "EveryRequiredExtensionMustBeSupportedBeforeAnyDomainValidation",
+          "RequiredExtensionSemanticFailurePreventsOpeningWithoutRetry",
+          "OfflineReplayDoesNotAcceptARequiredExtensionWhoseSemanticsReject"
         ],
         "nativeEvidence": []
       }
@@ -129012,7 +129015,7 @@
       "text": "Every `requiredExtensions` entry MUST identify an included extension. Unlisted extensions are OPTIONAL to generic readers. A caller requesting a domain profile still requires that profile's extension and validation.",
       "review": {
         "status": "reviewed",
-        "note": "The parser requires each listed URI to have a descriptor; generic reads reject unsupported mandatory semantics and leave unlisted descriptors optional. No domain-profile registry or validator is wired into PublicationReadClient, so profile-specific extension requirements remain pending.",
+        "note": "The parser requires each listed URI to have a descriptor. Online and local package readers share explicit exact-URI validators, verify required extension bytes before invoking them, and await semantic validation before accepting a snapshot. Unsupported required semantics reject before Registry/domain reads; registered optional extensions are not implicitly interpreted. Profile-specific required-extension selection and concrete WoT closure validation remain pending, so this compound obligation is not yet implemented.",
         "roles": [
           "client",
           "producer"

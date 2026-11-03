@@ -130,6 +130,117 @@ public class PublicationPackageTests
     }
 
     [Test]
+    [Arguments(true)]
+    [Arguments(false)]
+    public async Task OfflineReplayValidatesRequiredExtensionsAgainstLocalPinnedContent(bool openDirectory)
+    {
+        var fixture = Fixture.Create(requireExtension: true);
+        await using var directory = await PackageDirectory.CreateAsync(fixture);
+        byte[]? document = null;
+        var validator = new PublicationReadClientTests.ExtensionValidator("urn:example:required",
+            async (snapshot, _, token) => document = await snapshot.ReadDocumentAsync(Fixture.DocumentVersion, token));
+
+        var snapshot = openDirectory
+            ? await PublicationPackage.OpenDirectoryAsync(directory.PackagePath, extensionValidators: [validator])
+            : await fixture.Package.OpenSnapshotAsync(directory.PackagePath, extensionValidators: [validator]);
+
+        await Assert.That(validator.Calls).IsEqualTo(1);
+        await Assert.That(ReferenceEquals(validator.Snapshot, snapshot)).IsTrue();
+        await Assert.That(validator.Bytes!.SequenceEqual(fixture.DocumentBytes)).IsTrue();
+        await Assert.That(document!.SequenceEqual(fixture.DocumentBytes)).IsTrue();
+        await Assert.That(snapshot.GetExactManifestBytes().SequenceEqual(fixture.ManifestBytes)).IsTrue();
+        await Assert.That(snapshot.GetExactRegistryBytes().SequenceEqual(fixture.RegistryBytes)).IsTrue();
+    }
+
+    [Test]
+    [Arguments(true)]
+    [Arguments(false)]
+    public async Task OfflineReplayDoesNotAcceptARequiredExtensionWhoseSemanticsReject(bool openDirectory)
+    {
+        var fixture = Fixture.Create(requireExtension: true);
+        await using var directory = await PackageDirectory.CreateAsync(fixture);
+        var rejection = new InvalidOperationException("The selected domain closure is incomplete.");
+        var validator = new PublicationReadClientTests.ExtensionValidator("urn:example:required",
+            (_, _, _) => ValueTask.FromException(rejection));
+
+        var error = await Assert.That(async () =>
+                openDirectory
+                    ? await PublicationPackage.OpenDirectoryAsync(directory.PackagePath, extensionValidators: [validator])
+                    : await fixture.Package.OpenSnapshotAsync(directory.PackagePath, extensionValidators: [validator]))
+            .Throws<InvalidOperationException>() ?? throw new InvalidOperationException("Expected semantic rejection.");
+
+        await Assert.That(ReferenceEquals(error, rejection)).IsTrue();
+        await Assert.That(validator.Calls).IsEqualTo(1);
+    }
+
+    [Test]
+    [Arguments(true)]
+    [Arguments(false)]
+    public async Task LinkedOfflineReplayCannotSkipAnUnavailableRequiredExtension(bool openDirectory)
+    {
+        var fixture = Fixture.Create(completeness: "linked", includeDocument: false, requireExtension: true);
+        await using var directory = await PackageDirectory.CreateAsync(fixture);
+        var validator = new PublicationReadClientTests.ExtensionValidator("urn:example:required");
+
+        var error = await Assert.That(async () =>
+                openDirectory
+                    ? await PublicationPackage.OpenDirectoryAsync(directory.PackagePath, extensionValidators: [validator])
+                    : await fixture.Package.OpenSnapshotAsync(directory.PackagePath, extensionValidators: [validator]))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected required object rejection.");
+
+        await Assert.That(error.Code).IsEqualTo("unavailable");
+        await Assert.That(validator.Calls).IsZero();
+    }
+
+    [Test]
+    [Arguments(true)]
+    [Arguments(false)]
+    public async Task OfflineReplayRejectsTamperedRequiredExtensionsBeforeInterpretingThem(bool openDirectory)
+    {
+        var fixture = Fixture.Create(requireExtension: true);
+        await using var directory = await PackageDirectory.CreateAsync(fixture);
+        var bytes = (byte[])fixture.DocumentBytes.Clone();
+        bytes[0] ^= 1;
+        await File.WriteAllBytesAsync(Path.Combine(directory.PackagePath, "objects", "document.bin"), bytes);
+        var validator = new PublicationReadClientTests.ExtensionValidator("urn:example:required");
+
+        var error = await Assert.That(async () =>
+                openDirectory
+                    ? await PublicationPackage.OpenDirectoryAsync(directory.PackagePath, extensionValidators: [validator])
+                    : await fixture.Package.OpenSnapshotAsync(directory.PackagePath, extensionValidators: [validator]))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected integrity rejection.");
+
+        await Assert.That(error.Code).IsEqualTo("digest_mismatch");
+        await Assert.That(validator.Calls).IsZero();
+    }
+
+    [Test]
+    [Arguments(true)]
+    [Arguments(false)]
+    public async Task OfflineReplayPropagatesCancellationDuringRequiredExtensionValidation(bool openDirectory)
+    {
+        var fixture = Fixture.Create(requireExtension: true);
+        await using var directory = await PackageDirectory.CreateAsync(fixture);
+        using var cancellation = new CancellationTokenSource();
+        var validator = new PublicationReadClientTests.ExtensionValidator("urn:example:required", (_, _, _) =>
+        {
+            cancellation.Cancel();
+            return ValueTask.CompletedTask;
+        });
+
+        var error = await Assert.That(async () =>
+                openDirectory
+                    ? await PublicationPackage.OpenDirectoryAsync(directory.PackagePath, extensionValidators: [validator],
+                        cancellationToken: cancellation.Token)
+                    : await fixture.Package.OpenSnapshotAsync(directory.PackagePath, extensionValidators: [validator],
+                        cancellationToken: cancellation.Token))
+            .Throws<OperationCanceledException>() ?? throw new InvalidOperationException("Expected cancellation.");
+
+        await Assert.That(error.CancellationToken).IsEqualTo(cancellation.Token);
+        await Assert.That(validator.Calls).IsEqualTo(1);
+    }
+
+    [Test]
     public async Task OfflinePackageOpensPinnedSnapshotAndReadsExactDocumentBytesLocally()
     {
         var fixture = Fixture.Create();

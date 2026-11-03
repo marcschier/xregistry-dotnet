@@ -610,6 +610,29 @@ that an extension retains a source identity or establishes an immutable
 capture guarantee. Generic readers still reject unsupported mandatory
 extension semantics; the parser does not assign a provenance vocabulary.
 
+`PublicationReadClient` accepts explicit `IPublicationExtensionValidator`
+registrations, keyed by exact extension URI. It retains the registrations at
+construction and checks that every required extension is supported before
+acquiring the captured Registry or extension documents. Duplicate registrations
+reject rather than replacing a validator. Registering a validator does not
+cause an optional extension to be interpreted.
+
+For each required extension, the reader verifies the descriptor's size and
+digest, then awaits its validator with those exact bytes and the pinned
+snapshot context. The validator can read associated documents through that
+context; those reads retain the same exact-Version and integrity checks.
+Validation errors propagate without retry or fallback. Cancellation during
+validation prevents the reader from returning an accepted snapshot, even if a
+validator returns normally after cancellation.
+
+`PublicationPackage.OpenDirectoryAsync` and `OpenSnapshotAsync` accept the same
+registrations and use the same validation path with local verified objects.
+A linked package cannot omit a required extension merely because optional
+document bytes may be absent. Unknown required extensions still reject before
+Registry or domain object reads. This registration path does not itself
+implement WoT closure or source-snapshot provenance validation; those require
+validators for the selected domain contracts.
+
 Opening a channel reads the retained manifest and checks its descriptor, scope
 and completeness. Offline replay is limited to `offline-complete` manifests,
 which must supply every referenced object; replay verifies each object again

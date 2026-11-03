@@ -29,16 +29,29 @@ public sealed class PublicationReadClient
 {
     private readonly Func<PublicationRegistryAccess, CancellationToken, ValueTask<IPublicationReadBinding>> _openBinding;
     private readonly long _maxDocumentBytes;
+    private readonly Dictionary<string, IPublicationExtensionValidator> _extensionValidators;
 
     /// <summary>Creates a reader with an explicit binding resolver and finite per-document byte limit.</summary>
     public PublicationReadClient(
         Func<PublicationRegistryAccess, CancellationToken, ValueTask<IPublicationReadBinding>> openBinding,
-        long maxDocumentBytes = 8 * 1024 * 1024)
+        long maxDocumentBytes = 8 * 1024 * 1024,
+        IEnumerable<IPublicationExtensionValidator>? extensionValidators = null)
     {
         ArgumentNullException.ThrowIfNull(openBinding);
         ArgumentOutOfRangeException.ThrowIfLessThan(maxDocumentBytes, 1);
         _openBinding = openBinding;
         _maxDocumentBytes = maxDocumentBytes;
+        _extensionValidators = new(StringComparer.Ordinal);
+        foreach (var validator in extensionValidators ?? [])
+        {
+            ArgumentNullException.ThrowIfNull(validator);
+            var uri = PublicationJson.RequireAbsoluteUri(validator.ExtensionUri, nameof(extensionValidators));
+            if (!_extensionValidators.TryAdd(uri, validator))
+            {
+                throw new ArgumentException($"An extension validator is already registered for '{uri}'.",
+                    nameof(extensionValidators));
+            }
+        }
     }
 
     /// <summary>Opens a channel once, then pins and verifies its exact manifest and Registry document.</summary>
@@ -81,12 +94,14 @@ public sealed class PublicationReadClient
                 "The selected channel scope does not match its retained manifest.");
         }
 
-        RejectUnsupportedRequiredExtensions(manifest);
+        RequireSupportedExtensions(manifest);
         var registryBytes = await ReadDescriptorAsync(manifest.Registry, cancellationToken).ConfigureAwait(false);
         var openRecord = PublicationOpenRecord.Create(manifest.Scope, metadata.Head, manifest.Registry,
             manifest.Completeness, new(registry, channelResource, metadata.Epoch));
         openRecord.ValidateAgainstManifest(manifest);
-        return new(this, openRecord, manifest, manifestBytes, registryBytes);
+        var snapshot = new PublicationOpenedSnapshot(this, openRecord, manifest, manifestBytes, registryBytes);
+        await ValidateRequiredExtensionsAsync(snapshot, cancellationToken).ConfigureAwait(false);
+        return snapshot;
     }
 
     /// <summary>Reopens an existing context through its pinned references without reading its channel again.</summary>
@@ -99,17 +114,35 @@ public sealed class PublicationReadClient
         var manifestBytes = await ReadDescriptorAsync(openRecord.Snapshot, cancellationToken).ConfigureAwait(false);
         var manifest = PublicationManifest.Parse(manifestBytes);
         openRecord.ValidateAgainstManifest(manifest);
-        RejectUnsupportedRequiredExtensions(manifest);
+        RequireSupportedExtensions(manifest);
         var registryBytes = await ReadDescriptorAsync(openRecord.Registry, cancellationToken).ConfigureAwait(false);
-        return new(this, openRecord, manifest, manifestBytes, registryBytes);
+        var snapshot = new PublicationOpenedSnapshot(this, openRecord, manifest, manifestBytes, registryBytes);
+        await ValidateRequiredExtensionsAsync(snapshot, cancellationToken).ConfigureAwait(false);
+        return snapshot;
     }
 
-    internal static void RejectUnsupportedRequiredExtensions(PublicationManifest manifest)
+    internal void RequireSupportedExtensions(PublicationManifest manifest)
     {
-        if (manifest.RequiredExtensions.Count > 0)
+        for (var index = 0; index < manifest.RequiredExtensions.Count; index++)
         {
-            throw PublicationJson.Error("unsupported_required_extension", "/requiredExtensions/0",
-                $"The reader does not support required extension '{manifest.RequiredExtensions[0]}'.");
+            var uri = manifest.RequiredExtensions[index];
+            if (!_extensionValidators.ContainsKey(uri))
+            {
+                throw PublicationJson.Error("unsupported_required_extension", $"/requiredExtensions/{index}",
+                    $"The reader does not support required extension '{uri}'.");
+            }
+        }
+    }
+
+    internal async ValueTask ValidateRequiredExtensionsAsync(PublicationOpenedSnapshot snapshot,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        foreach (var uri in snapshot.Manifest.RequiredExtensions)
+        {
+            var bytes = await snapshot.ReadExtensionAsync(uri, cancellationToken).ConfigureAwait(false);
+            await _extensionValidators[uri].ValidateAsync(snapshot, bytes, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
         }
     }
 

@@ -112,7 +112,9 @@ public sealed class PublicationPackage
     public static async ValueTask<PublicationOpenedSnapshot> OpenDirectoryAsync(string directory,
         int maxDocumentBytes = 8 * 1024 * 1024, long maxTotalBytes = 512L * 1024 * 1024,
         int maxObjects = 10_000, int maxPathDepth = 32, int maxPackageBytes = 4 * 1024 * 1024,
-        RegistryJsonLimits? jsonLimits = null, CancellationToken cancellationToken = default)
+        RegistryJsonLimits? jsonLimits = null,
+        IEnumerable<IPublicationExtensionValidator>? extensionValidators = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
         ArgumentOutOfRangeException.ThrowIfLessThan(maxDocumentBytes, 1);
@@ -167,7 +169,7 @@ public sealed class PublicationPackage
 
         var package = Parse(packageBytes.ToArray(), jsonLimits);
         return await package.OpenSnapshotAsync(tree, maxDocumentBytes, maxTotalBytes,
-            maxObjects, maxPathDepth, cancellationToken).ConfigureAwait(false);
+            maxObjects, maxPathDepth, extensionValidators, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -175,7 +177,9 @@ public sealed class PublicationPackage
     /// </summary>
     public async ValueTask<PublicationOpenedSnapshot> OpenSnapshotAsync(string directory,
         int maxDocumentBytes = 8 * 1024 * 1024, long maxTotalBytes = 512L * 1024 * 1024,
-        int maxObjects = 10_000, int maxPathDepth = 32, CancellationToken cancellationToken = default)
+        int maxObjects = 10_000, int maxPathDepth = 32,
+        IEnumerable<IPublicationExtensionValidator>? extensionValidators = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
         ArgumentOutOfRangeException.ThrowIfLessThan(maxDocumentBytes, 1);
@@ -185,12 +189,12 @@ public sealed class PublicationPackage
         cancellationToken.ThrowIfCancellationRequested();
         using var tree = PublicationPackageFileTree.Open(directory);
         return await OpenSnapshotAsync(tree, maxDocumentBytes, maxTotalBytes, maxObjects,
-            maxPathDepth, cancellationToken).ConfigureAwait(false);
+            maxPathDepth, extensionValidators, cancellationToken).ConfigureAwait(false);
     }
 
     private async ValueTask<PublicationOpenedSnapshot> OpenSnapshotAsync(PublicationPackageFileTree tree,
         int maxDocumentBytes, long maxTotalBytes, int maxObjects, int maxPathDepth,
-        CancellationToken cancellationToken)
+        IEnumerable<IPublicationExtensionValidator>? extensionValidators, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (Objects.Count > maxObjects)
@@ -220,7 +224,10 @@ public sealed class PublicationPackage
             .ConfigureAwait(false);
         var manifest = PublicationManifest.Parse(manifestBytes, _jsonLimits);
         Context.ValidateAgainstManifest(manifest);
-        PublicationReadClient.RejectUnsupportedRequiredExtensions(manifest);
+        var reader = new PublicationReadClient((access, _) =>
+            ValueTask.FromResult<IPublicationReadBinding>(new PackageBinding(access, bytesByReference)),
+            maxDocumentBytes, extensionValidators);
+        reader.RequireSupportedExtensions(manifest);
 
         var descriptors = new Dictionary<string, PublicationByteDescriptor>(StringComparer.Ordinal);
         AddDescriptor(descriptors, Context.Snapshot);
@@ -261,12 +268,11 @@ public sealed class PublicationPackage
             bytesByReference.Add(pair.Key, bytes);
         }
 
-        var reader = new PublicationReadClient((access, _) =>
-            ValueTask.FromResult<IPublicationReadBinding>(new PackageBinding(access, bytesByReference)),
-            maxDocumentBytes);
         cancellationToken.ThrowIfCancellationRequested();
-        return new(reader, Context, manifest, manifestBytes,
+        var snapshot = new PublicationOpenedSnapshot(reader, Context, manifest, manifestBytes,
             bytesByReference[PublicationReferenceComparer.GetReferenceIdentityKey(Context.Registry.Reference)]);
+        await reader.ValidateRequiredExtensionsAsync(snapshot, cancellationToken).ConfigureAwait(false);
+        return snapshot;
     }
 
     private static async ValueTask<byte[]> ReadDescriptorAsync(PublicationPackageFileTree tree,

@@ -408,6 +408,237 @@ public class PublicationReadClientTests
     }
 
     [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task RequiredExtensionValidationIsAwaitedAgainstVerifiedPinnedBytes(bool openChannel)
+    {
+        var fixture = Fixture.Create(requiredExtension: true);
+        var binding = fixture.Binding();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var complete = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        byte[]? document = null;
+        var validator = new ExtensionValidator("https://publisher.example.test/extensions/policy",
+            async (snapshot, _, token) =>
+            {
+                entered.SetResult();
+                await complete.Task.WaitAsync(token);
+                document = await snapshot.ReadDocumentAsync(fixture.DocumentDescriptor.Reference.Version, token);
+            });
+        var registrations = new List<IPublicationExtensionValidator> { validator };
+        var client = new PublicationReadClient((_, _) =>
+            ValueTask.FromResult<IPublicationReadBinding>(binding), extensionValidators: registrations);
+        registrations.Clear();
+
+        var operation = OpenFixtureAsync(client, fixture, openChannel).AsTask();
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var acceptedBeforeValidation = operation.IsCompleted;
+        complete.SetResult();
+        var opened = await operation;
+
+        await Assert.That(acceptedBeforeValidation).IsFalse();
+        await Assert.That(validator.Calls).IsEqualTo(1);
+        await Assert.That(ReferenceEquals(validator.Snapshot, opened)).IsTrue();
+        await Assert.That(validator.Bytes!.SequenceEqual(fixture.ExtensionBytes)).IsTrue();
+        await Assert.That(document!.SequenceEqual(fixture.DocumentBytes)).IsTrue();
+        await Assert.That(opened.GetExactManifestBytes().SequenceEqual(fixture.ManifestBytes)).IsTrue();
+        await Assert.That(opened.GetExactRegistryBytes().SequenceEqual(fixture.RegistryBytes)).IsTrue();
+        await Assert.That(binding.ChannelReadCount).IsEqualTo(openChannel ? 1 : 0);
+        await Assert.That(binding.OpenedVersions.SequenceEqual([
+            fixture.ManifestDescriptor.Reference.Version, fixture.RegistryDescriptor.Reference.Version,
+            fixture.ExtensionDescriptor.Reference.Version, fixture.DocumentDescriptor.Reference.Version])).IsTrue();
+        await Assert.That(binding.DisposeCount).IsEqualTo(binding.OpenedVersions.Count + binding.ChannelReadCount);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task RequiredExtensionSemanticFailurePreventsOpeningWithoutRetry(bool openChannel)
+    {
+        var fixture = Fixture.Create(requiredExtension: true);
+        var binding = fixture.Binding();
+        var rejection = new InvalidOperationException("The selected domain closure is incomplete.");
+        var validator = new ExtensionValidator("https://publisher.example.test/extensions/policy",
+            (_, _, _) => ValueTask.FromException(rejection));
+        var client = new PublicationReadClient((_, _) =>
+            ValueTask.FromResult<IPublicationReadBinding>(binding), extensionValidators: [validator]);
+
+        var error = await Assert.That(async () => await OpenFixtureAsync(client, fixture, openChannel))
+            .Throws<InvalidOperationException>() ?? throw new InvalidOperationException("Expected semantic rejection.");
+
+        await Assert.That(ReferenceEquals(error, rejection)).IsTrue();
+        await Assert.That(validator.Calls).IsEqualTo(1);
+        await Assert.That(binding.OpenedVersions.Count).IsEqualTo(3);
+        await Assert.That(binding.DisposeCount).IsEqualTo(3 + (openChannel ? 1 : 0));
+    }
+
+    [Test]
+    [Arguments(false, false)]
+    [Arguments(false, true)]
+    [Arguments(true, false)]
+    [Arguments(true, true)]
+    public async Task RequiredExtensionIntegrityIsCheckedBeforeSemanticValidation(bool openChannel, bool truncate)
+    {
+        var fixture = Fixture.Create(requiredExtension: true);
+        var bytes = (byte[])fixture.ExtensionBytes.Clone();
+        bytes[0] ^= 1;
+        fixture.Objects[fixture.ExtensionDescriptor.Reference.Version] = truncate ? bytes[..^1] : bytes;
+        var validator = new ExtensionValidator("https://publisher.example.test/extensions/policy");
+        var client = new PublicationReadClient((_, _) =>
+            ValueTask.FromResult<IPublicationReadBinding>(fixture.Binding()), extensionValidators: [validator]);
+
+        var error = await Assert.That(async () => await OpenFixtureAsync(client, fixture, openChannel))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected integrity rejection.");
+
+        await Assert.That(error.Code).IsEqualTo(truncate ? "size_mismatch" : "digest_mismatch");
+        await Assert.That(validator.Calls).IsZero();
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task EveryRequiredExtensionMustBeSupportedBeforeAnyDomainValidation(bool openChannel)
+    {
+        var fixture = Fixture.Create(requiredExtension: true,
+            additionalRequiredExtension: "https://publisher.example.test/extensions/Policy");
+        var binding = fixture.Binding();
+        var validator = new ExtensionValidator("https://publisher.example.test/extensions/policy");
+        var client = new PublicationReadClient((_, _) =>
+            ValueTask.FromResult<IPublicationReadBinding>(binding), extensionValidators: [validator]);
+
+        var error = await Assert.That(async () => await OpenFixtureAsync(client, fixture, openChannel))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected unknown extension rejection.");
+
+        await Assert.That(error.Code).IsEqualTo("unsupported_required_extension");
+        await Assert.That(error.Path).IsEqualTo("/requiredExtensions/1");
+        await Assert.That(validator.Calls).IsZero();
+        await Assert.That(binding.OpenedVersions.SequenceEqual(
+            [fixture.ManifestDescriptor.Reference.Version])).IsTrue();
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task RequiredExtensionsValidateInManifestOrderRatherThanRegistrationOrder(bool openChannel)
+    {
+        const string firstUri = "https://publisher.example.test/extensions/policy";
+        const string secondUri = "urn:example:second";
+        var fixture = Fixture.Create(requiredExtension: true, additionalRequiredExtension: secondUri);
+        var calls = new List<string>();
+        var first = new ExtensionValidator(firstUri, (_, _, _) =>
+        {
+            calls.Add(firstUri);
+            return ValueTask.CompletedTask;
+        });
+        var second = new ExtensionValidator(secondUri, (_, _, _) =>
+        {
+            calls.Add(secondUri);
+            return ValueTask.CompletedTask;
+        });
+        var client = new PublicationReadClient((_, _) =>
+            ValueTask.FromResult<IPublicationReadBinding>(fixture.Binding()), extensionValidators: [second, first]);
+
+        var snapshot = await OpenFixtureAsync(client, fixture, openChannel);
+
+        await Assert.That(calls.SequenceEqual([firstUri, secondUri])).IsTrue();
+        await Assert.That(first.Calls).IsEqualTo(1);
+        await Assert.That(second.Calls).IsEqualTo(1);
+        await Assert.That(snapshot.Manifest.RequiredExtensions.SequenceEqual(calls)).IsTrue();
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task CancellationDuringExtensionValidationCannotReturnAnAcceptedSnapshot(bool openChannel)
+    {
+        var fixture = Fixture.Create(requiredExtension: true);
+        using var cancellation = new CancellationTokenSource();
+        var validator = new ExtensionValidator("https://publisher.example.test/extensions/policy",
+            (_, _, _) =>
+            {
+                cancellation.Cancel();
+                return ValueTask.CompletedTask;
+            });
+        var client = new PublicationReadClient((_, _) =>
+            ValueTask.FromResult<IPublicationReadBinding>(fixture.Binding()), extensionValidators: [validator]);
+
+        var error = await Assert.That(async () =>
+                await OpenFixtureAsync(client, fixture, openChannel, cancellation.Token))
+            .Throws<OperationCanceledException>() ?? throw new InvalidOperationException("Expected cancellation.");
+
+        await Assert.That(error.CancellationToken).IsEqualTo(cancellation.Token);
+        await Assert.That(validator.Calls).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task OptionalExtensionsAreNotInterpretedMerelyBecauseAValidatorIsRegistered()
+    {
+        var fixture = Fixture.Create();
+        var binding = fixture.Binding();
+        var validator = new ExtensionValidator("https://publisher.example.test/extensions/policy");
+        var client = new PublicationReadClient((_, _) =>
+            ValueTask.FromResult<IPublicationReadBinding>(binding), extensionValidators: [validator]);
+
+        var snapshot = await client.OpenChannelAsync(Access, ChannelResource);
+
+        await Assert.That(validator.Calls).IsZero();
+        await Assert.That(binding.OpenedVersions.SequenceEqual([
+            fixture.ManifestDescriptor.Reference.Version, fixture.RegistryDescriptor.Reference.Version])).IsTrue();
+        await Assert.That(snapshot.Manifest.RequiredExtensions.Count).IsZero();
+    }
+
+    [Test]
+    public async Task ExtensionRegistrationRejectsDuplicateNullAndRelativeUriValidators()
+    {
+        var validator = new ExtensionValidator("urn:example:extension");
+        var fixture = Fixture.Create();
+        var resolverCalls = 0;
+        ValueTask<IPublicationReadBinding> Resolve(PublicationRegistryAccess _, CancellationToken token)
+        {
+            resolverCalls++;
+            return ValueTask.FromResult<IPublicationReadBinding>(fixture.Binding());
+        }
+
+        await Assert.That(() => new PublicationReadClient(Resolve, extensionValidators: [validator, validator]))
+            .Throws<ArgumentException>();
+        await Assert.That(() => new PublicationReadClient(Resolve, extensionValidators: [null!]))
+            .Throws<ArgumentNullException>();
+        var error = await Assert.That(() => new PublicationReadClient(Resolve,
+                extensionValidators: [new ExtensionValidator("/relative")]))
+            .Throws<PublicationException>() ?? throw new InvalidOperationException("Expected URI rejection.");
+        await Assert.That(error.Code).IsEqualTo("invalid_uri");
+        await Assert.That(resolverCalls).IsZero();
+    }
+
+    private static ValueTask<PublicationOpenedSnapshot> OpenFixtureAsync(PublicationReadClient client,
+        Fixture fixture, bool openChannel, CancellationToken cancellationToken = default) =>
+        openChannel
+            ? client.OpenChannelAsync(Access, ChannelResource, cancellationToken)
+            : client.OpenRecordAsync(PublicationOpenRecord.Create("urn:example:release", fixture.ManifestDescriptor,
+                fixture.RegistryDescriptor, "offline-complete"), cancellationToken);
+
+    internal sealed class ExtensionValidator(string uri,
+        Func<PublicationOpenedSnapshot, ReadOnlyMemory<byte>, CancellationToken, ValueTask>? validate = null)
+        : IPublicationExtensionValidator
+    {
+        public string ExtensionUri => uri;
+        internal int Calls { get; private set; }
+        internal PublicationOpenedSnapshot? Snapshot { get; private set; }
+        internal byte[]? Bytes { get; private set; }
+
+        public async ValueTask ValidateAsync(PublicationOpenedSnapshot snapshot,
+            ReadOnlyMemory<byte> exactExtensionBytes, CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            Snapshot = snapshot;
+            Bytes = exactExtensionBytes.ToArray();
+            if (validate is not null)
+            {
+                await validate(snapshot, exactExtensionBytes, cancellationToken);
+            }
+        }
+    }
+
+    [Test]
     public async Task OpenRecordRejectsUnsupportedRequiredExtensionsWithoutResolvingSources()
     {
         var fixture = Fixture.Create(requiredExtension: true);
@@ -754,7 +985,7 @@ public class PublicationReadClientTests
         internal PublicationChannelMetadata ChannelMetadata { get; set; }
         internal Dictionary<string, byte[]> Objects { get; }
 
-        internal static Fixture Create(bool requiredExtension = false)
+        internal static Fixture Create(bool requiredExtension = false, string? additionalRequiredExtension = null)
         {
             var registry = Encoding.UTF8.GetBytes("""{"registryid":"captured"}""");
             var document = Encoding.UTF8.GetBytes("""{"payload":"pinned"}""");
@@ -786,6 +1017,11 @@ public class PublicationReadClientTests
             {
                 root["requiredExtensions"] = new JsonArray(
                     JsonValue.Create("https://publisher.example.test/extensions/policy"));
+                if (additionalRequiredExtension is not null)
+                {
+                    root["extensions"]!.AsObject()[additionalRequiredExtension] = ToJson(extensionDescriptor);
+                    root["requiredExtensions"]!.AsArray().Add(additionalRequiredExtension);
+                }
             }
             var manifestBytes = Encoding.UTF8.GetBytes(root.ToJsonString());
             var snapshotId = Convert.ToHexString(SHA256.HashData(manifestBytes)).ToLowerInvariant();
@@ -828,6 +1064,7 @@ public class PublicationReadClientTests
         IReadOnlyDictionary<string, byte[]> objects, int maxReadSize) : IPublicationReadBinding
     {
         internal int ChannelReadCount { get; private set; }
+        internal int DisposeCount { get; private set; }
         internal List<string> OpenedVersions { get; } = [];
         public PublicationRegistryAccess Access { get; } = access;
 
@@ -854,7 +1091,11 @@ public class PublicationReadClientTests
             return ValueTask.FromResult(stream);
         }
 
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        public ValueTask DisposeAsync()
+        {
+            DisposeCount++;
+            return ValueTask.CompletedTask;
+        }
     }
 
     private sealed class ChunkedReadStream(byte[] document, int maxReadSize) : MemoryStream(document, writable: false)
