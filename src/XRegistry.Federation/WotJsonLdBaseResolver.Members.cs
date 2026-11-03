@@ -10,7 +10,7 @@ using VDS.RDF.JsonLd.Syntax;
 
 namespace XRegistry.Federation;
 
-/// <summary>An ordinary reference discovered in original WoT bytes, before target-kind classification.</summary>
+/// <summary>A reference candidate discovered in original WoT bytes, before target-kind classification.</summary>
 public sealed record WotAuthoredReferenceOccurrence(string SourcePointer, string PropertyName, string Operator,
     string Href, WotReferenceUri Target);
 
@@ -35,11 +35,7 @@ public static partial class WotJsonLdBaseResolver
         ArgumentNullException.ThrowIfNull(capturedContexts);
         var readBudget = budget ?? new();
         var contextDocuments = CaptureContextDocuments(capturedContexts, readBudget, cancellationToken);
-        var contexts = contextDocuments
-            .ToDictionary(pair => new Uri(pair.Key), pair => pair.Value,
-                EqualityComparer<Uri>.Create(
-                    (left, right) => StringComparer.Ordinal.Equals(left?.AbsoluteUri, right?.AbsoluteUri),
-                    uri => StringComparer.Ordinal.GetHashCode(uri.AbsoluteUri)));
+        var contexts = ContextSnapshot(contextDocuments);
         var root = await ParseDocumentAsync(document, readBudget, cancellationToken).ConfigureAwait(false);
         var documentBase = FederationJson.AbsoluteUri(document.Base ?? documentUri.AbsoluteUri);
         ExpandCapturedDocument(root, documentBase, contextDocuments, new(), readBudget, cancellationToken);
@@ -144,6 +140,13 @@ public static partial class WotJsonLdBaseResolver
         }
         return contexts;
     }
+
+    private static Dictionary<Uri, FederationDocument> ContextSnapshot(
+        Dictionary<string, FederationDocument> contexts) =>
+        contexts.ToDictionary(pair => new Uri(pair.Key), pair => pair.Value,
+            EqualityComparer<Uri>.Create(
+                (left, right) => StringComparer.Ordinal.Equals(left?.AbsoluteUri, right?.AbsoluteUri),
+                uri => StringComparer.Ordinal.GetHashCode(uri.AbsoluteUri)));
 
     private static JArray ExpandCapturedDocument(JObject root, Uri documentBase,
         Dictionary<string, FederationDocument> contexts, Dictionary<string, JToken> loaded,

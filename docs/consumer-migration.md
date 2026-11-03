@@ -2288,6 +2288,17 @@ occurrences after matching captured identities. It does not discover literal
 link relations or projection source entries, select target Versions, validate
 closure bindings or establish domain-complete closure.
 
+`DiscoverLinkReferencesAsync` interprets link collections, relation members and
+href members through the captured contexts, but compares relation values as
+literal, case-sensitive strings. It recognizes the extension and submodel or
+subthing relations and accepts `type` only when the captured source kind is a
+Thing Description. Results retain link-object pointers and authored hrefs.
+Repeated targets remain separate occurrences. Missing, malformed or competing
+reference-link members reject the operation rather than selecting one alias.
+`describedby` candidates are returned for subsequent Schema classification;
+their presence does not authorize a closure binding. Projection-source discovery
+and combined target classification remain unfinished.
+
 `AcquireCloudEventSubjectAsync` takes a parsed CloudEvents WoT source query, a
 subject pointer and one authorized Thing Description Resource collection.
 Complete Version metadata establishes each Resource's `wotid`, so an explicit

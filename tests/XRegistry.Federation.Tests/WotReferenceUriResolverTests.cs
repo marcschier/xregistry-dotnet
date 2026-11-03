@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text;
+using XRegistry.Models;
 using TUnit.Assertions;
 using TUnit.Core;
 
@@ -9,6 +10,194 @@ namespace XRegistry.Federation.Tests;
 
 public class WotReferenceUriResolverTests
 {
+    [Test]
+    [Arguments("tm:extends")]
+    [Arguments("tm:submodel")]
+    [Arguments("td:extends")]
+    [Arguments("td:subthing")]
+    [Arguments("type")]
+    [Arguments("describedby")]
+    public async Task DiscoversLiteralReferenceLinksWithUnchangedHrefAndLinkObjectPointer(string relation)
+    {
+        var document = LinkDocument("[{\"rel\":" + System.Text.Json.JsonSerializer.Serialize(relation) +
+            ""","href":"../models/target.json#/properties/a%2Fb"}]""");
+        var references = await WotJsonLdBaseResolver.DiscoverLinkReferencesAsync(document,
+            new Uri("https://example.test/td/document.json"), WotReferenceTargetKind.ThingDescription,
+            new Dictionary<Uri, FederationDocument>());
+
+        await Assert.That(references.Count).IsEqualTo(1);
+        await Assert.That(references[0].SourcePointer).IsEqualTo("/links/0");
+        await Assert.That(references[0].PropertyName).IsEqualTo("href");
+        await Assert.That(references[0].Operator).IsEqualTo(relation);
+        await Assert.That(references[0].Href).IsEqualTo("../models/target.json#/properties/a%2Fb");
+        await Assert.That(references[0].Target.DocumentUri.AbsoluteUri).IsEqualTo("https://example.test/models/target.json");
+        await Assert.That(references[0].Target.Fragment).IsEqualTo("#/properties/a%2Fb");
+    }
+
+    [Test]
+    public async Task LinkMemberAliasesRetainAuthoredSpellingAndEffectiveBase()
+    {
+        var document = new FederationDocument(Encoding.UTF8.GetBytes("""
+            {
+              "@context":{
+                "edges~name":{
+                  "@id":"https://www.w3.org/2019/wot/td#hasLink",
+                  "@container":"@set",
+                  "@context":{
+                    "relationship":"https://www.w3.org/2019/wot/hypermedia#hasRelationType",
+                    "target":{
+                      "@id":"https://www.w3.org/2019/wot/hypermedia#hasTarget",
+                      "@context":{"@base":"https://original.example.test/scoped/document.json"}
+                    }
+                  }
+                }
+              },
+              "edges~name":[{"relationship":"tm:extends","target":"model.json#/properties/a"}]
+            }
+            """));
+        var references = await WotJsonLdBaseResolver.DiscoverLinkReferencesAsync(document,
+            new Uri("https://example.test/td/document.json"), WotReferenceTargetKind.ThingDescription,
+            new Dictionary<Uri, FederationDocument>());
+
+        await Assert.That(references.Count).IsEqualTo(1);
+        await Assert.That(references[0].SourcePointer).IsEqualTo("/edges~0name/0");
+        await Assert.That(references[0].PropertyName).IsEqualTo("target");
+        await Assert.That(references[0].Operator).IsEqualTo("tm:extends");
+        await Assert.That(references[0].Href).IsEqualTo("model.json#/properties/a");
+        await Assert.That(references[0].Target.DocumentUri.AbsoluteUri).IsEqualTo("https://original.example.test/scoped/model.json");
+    }
+
+    [Test]
+    [Arguments("model:extends")]
+    [Arguments("https://www.w3.org/2019/wot/tm#extends")]
+    [Arguments("TM:extends")]
+    [Arguments("Type")]
+    [Arguments("relatedto")]
+    [Arguments("@type")]
+    public async Task LinkRelationsAreLiteralRatherThanVocabularyExpandedOrCaseFolded(string relation)
+    {
+        var document = LinkDocument("[{\"rel\":" + System.Text.Json.JsonSerializer.Serialize(relation) +
+            ""","href":"urn:example:target"}]""");
+        var references = await WotJsonLdBaseResolver.DiscoverLinkReferencesAsync(document,
+            new Uri("https://example.test/document.json"), WotReferenceTargetKind.ThingDescription,
+            new Dictionary<Uri, FederationDocument>());
+        await Assert.That(references.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(WotReferenceTargetKind.ThingModel, 0)]
+    [Arguments(WotReferenceTargetKind.ThingDescription, 1)]
+    public async Task OnlyACapturedThingDescriptionContributesATypeLink(
+        WotReferenceTargetKind sourceKind, int expectedCount)
+    {
+        var document = LinkDocument("""[{"rel":"type","href":"urn:example:model"}]""");
+        var references = await WotJsonLdBaseResolver.DiscoverLinkReferencesAsync(document,
+            new Uri("https://example.test/document.json"), sourceKind,
+            new Dictionary<Uri, FederationDocument>());
+        await Assert.That(references.Count).IsEqualTo(expectedCount);
+        if (expectedCount != 0)
+        {
+            await Assert.That(references[0].Operator).IsEqualTo("type");
+        }
+    }
+
+    [Test]
+    public async Task RepeatedLinkTargetsRemainSeparateAuthoredOccurrencesAndLocalLinksRemainClassified()
+    {
+        var document = LinkDocument("""
+            [
+              {"rel":"tm:extends","href":"urn:example:model"},
+              {"rel":"tm:extends","href":"urn:example:model"},
+              {"rel":"td:subthing","href":"#/properties/a"}
+            ]
+            """);
+        var references = await WotJsonLdBaseResolver.DiscoverLinkReferencesAsync(document,
+            new Uri("https://example.test/document.json"), WotReferenceTargetKind.ThingDescription,
+            new Dictionary<Uri, FederationDocument>());
+        await Assert.That(references.Count).IsEqualTo(3);
+        await Assert.That(references[0].SourcePointer).IsEqualTo("/links/0");
+        await Assert.That(references[1].SourcePointer).IsEqualTo("/links/1");
+        await Assert.That(references[0].Href).IsEqualTo(references[1].Href);
+        await Assert.That(references[2].SourcePointer).IsEqualTo("/links/2");
+        await Assert.That(references[2].Target.IsDocumentLocal).IsTrue();
+    }
+
+    [Test]
+    [Arguments("""{"rel":"tm:extends"}""")]
+    [Arguments("""{"rel":"tm:extends","href":null}""")]
+    [Arguments("""{"rel":"tm:extends","href":1}""")]
+    [Arguments("""{"rel":"tm:extends","href":["urn:example:target"]}""")]
+    [Arguments("""{"rel":"tm:extends","href":{"@id":"urn:example:target"}}""")]
+    [Arguments("""{"rel":["tm:extends"],"href":"urn:example:target"}""")]
+    [Arguments("""{"rel":false,"href":"urn:example:target"}""")]
+    [Arguments("""{"rel":"tm:extends","relation":"tm:extends","href":"urn:example:target"}""")]
+    [Arguments("""{"rel":"tm:extends","href":"urn:example:target","target":"urn:example:target"}""")]
+    public async Task ReferenceLinksRejectMissingMalformedOrCompetingSemanticMembers(string link)
+    {
+        var failure = await Assert.That(async () =>
+            await WotJsonLdBaseResolver.DiscoverLinkReferencesAsync(LinkDocument("[" + link + "]"),
+                new Uri("https://example.test/document.json"), WotReferenceTargetKind.ThingDescription,
+                new Dictionary<Uri, FederationDocument>())).Throws<FederationException>() ??
+            throw new InvalidOperationException("Expected invalid reference-link rejection.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    [Arguments("null")]
+    [Arguments("""{"rel":"tm:extends","href":"urn:example:target"}""")]
+    [Arguments("[1]")]
+    public async Task LinkDiscoveryRejectsNonArrayCollectionsAndNonObjectEntries(string links)
+    {
+        var failure = await Assert.That(async () =>
+            await WotJsonLdBaseResolver.DiscoverLinkReferencesAsync(LinkDocument(links),
+                new Uri("https://example.test/document.json"), WotReferenceTargetKind.ThingDescription,
+                new Dictionary<Uri, FederationDocument>())).Throws<FederationException>() ??
+            throw new InvalidOperationException("Expected invalid link-collection rejection.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    public async Task LinkDiscoveryIsEmptyCancellableAndBoundedWithoutReturningAPartialList()
+    {
+        var document = LinkDocument("[]");
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var uri = new Uri("https://example.test/document.json");
+        var empty = await WotJsonLdBaseResolver.DiscoverLinkReferencesAsync(document, uri,
+            WotReferenceTargetKind.ThingDescription, contexts);
+        await Assert.That(empty.Count).IsEqualTo(0);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        await Assert.That(async () =>
+            await WotJsonLdBaseResolver.DiscoverLinkReferencesAsync(document, uri,
+                WotReferenceTargetKind.ThingDescription, contexts, cancellationToken: cancellation.Token))
+            .Throws<OperationCanceledException>();
+        var failure = await Assert.That(async () =>
+            await WotJsonLdBaseResolver.DiscoverLinkReferencesAsync(document, uri,
+                WotReferenceTargetKind.ThingDescription, contexts, new(new(maxWork: 1))))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected shared link-discovery limits.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+    }
+
+    private static FederationDocument LinkDocument(string links) => new(Encoding.UTF8.GetBytes("""
+        {
+          "@context":{
+            "@vocab":"urn:example:",
+            "model":"https://www.w3.org/2019/wot/tm#",
+            "links":{
+              "@id":"https://www.w3.org/2019/wot/td#hasLink",
+              "@container":"@set",
+              "@context":{
+                "rel":"https://www.w3.org/2019/wot/hypermedia#hasRelationType",
+                "relation":"https://www.w3.org/2019/wot/hypermedia#hasRelationType",
+                "href":{"@id":"https://www.w3.org/2019/wot/hypermedia#hasTarget",
+                        "@type":"http://www.w3.org/2001/XMLSchema#anyURI"},
+                "target":"https://www.w3.org/2019/wot/hypermedia#hasTarget"
+              }
+            }
+          },
+          "links":
+        """ + links + "}"));
+
     [Test]
     public async Task DiscoversOrdinaryReferencesByExpandedMeaningAndPreservesAuthoredPointersAndHrefs()
     {

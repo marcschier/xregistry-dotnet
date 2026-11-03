@@ -141372,13 +141372,20 @@
       ],
       "text": "`operator` MUST use the canonical string in the following table. These strings are closure labels, not terms expanded through a context on the closure document:",
       "review": {
-        "status": "unreviewed",
-        "note": "",
-        "roles": []
+        "status": "reviewed",
+        "note": "Ordinary candidates use canonical tm:ref and td:ref labels independently of authored aliases. Link discovery emits the exact named extension/submodel/subthing labels, and only a captured TD contributes a type link. describedby is a classification candidate rather than an authorized closure operator. Projection-source labels and independent comparison with supplied closure records are not implemented; this compound requirement stays pending.",
+        "roles": [
+          "client",
+          "producer"
+        ]
       },
       "implementation": {
         "status": "pending",
-        "testIds": [],
+        "testIds": [
+          "WotReferenceUriResolverTests.DiscoversOrdinaryReferencesByExpandedMeaningAndPreservesAuthoredPointersAndHrefs",
+          "WotReferenceUriResolverTests.DiscoversLiteralReferenceLinksWithUnchangedHrefAndLinkObjectPointer",
+          "WotReferenceUriResolverTests.OnlyACapturedThingDescriptionContributesATypeLink"
+        ],
         "nativeEvidence": []
       }
     },
@@ -141405,7 +141412,7 @@
       "text": "A Consumer MUST compare canonical operators as exact strings and MUST reject unknown or mismatched operators. Member names MUST be interpreted under their captured effective JSON-LD contexts; the literal prefix alone does not establish a member's meaning. Link relations in the table are literal `rel` values. A prefix declaration MUST NOT turn another relation string into one of these values. In particular, `type` is a link relation, not `@type` or an IRI formed by appending `type` to the TD namespace. These representation rules do not change the composition semantics of the named operators.",
       "review": {
         "status": "reviewed",
-        "note": "Ordinary-reference discovery obtains tm:ref and td:ref meaning through captured JSON-LD expansion, preserving authored member names and pointers. Tests distinguish alternate prefixes, unrelated literal prefixes, keyword aliases, property/type-scoped contexts, context resets, non-propagating contexts and JSON literals. Source and captured-context aliases cannot impersonate synthetic expansion results. Literal link relations, projection entries and independent closure operator comparison are not implemented; this compound requirement stays pending.",
+        "note": "Ordinary-reference discovery obtains tm:ref and td:ref meaning through captured JSON-LD expansion, preserving authored member names and pointers. Tests distinguish alternate prefixes, unrelated literal prefixes, keyword aliases, property/type-scoped contexts, context resets, non-propagating contexts and JSON literals. Source and captured-context aliases cannot impersonate synthetic expansion results. Link fields are also context-expanded, but relation values compare literally and case-sensitively; only a captured TD contributes a type link. Projection entries and independent closure operator comparison are not implemented; this compound requirement stays pending.",
         "roles": [
           "client",
           "producer"
@@ -141422,7 +141429,10 @@
           "WotReferenceUriResolverTests.ReferenceDiscoveryPreservesAuthoredContainerKeys",
           "WotReferenceUriResolverTests.ContextAliasesForKeywordsDoNotBecomeOrdinaryReferenceMembers",
           "WotReferenceUriResolverTests.AuthoredAliasesCannotImpersonateASyntheticMemberMeaning",
-          "WotReferenceUriResolverTests.OrdinaryDiscoveryDoesNotTurnLiteralPrefixesOrContextDefinitionsIntoOccurrences"
+          "WotReferenceUriResolverTests.OrdinaryDiscoveryDoesNotTurnLiteralPrefixesOrContextDefinitionsIntoOccurrences",
+          "WotReferenceUriResolverTests.LinkRelationsAreLiteralRatherThanVocabularyExpandedOrCaseFolded",
+          "WotReferenceUriResolverTests.LinkMemberAliasesRetainAuthoredSpellingAndEffectiveBase",
+          "WotReferenceUriResolverTests.OnlyACapturedThingDescriptionContributesATypeLink"
         ],
         "nativeEvidence": []
       }
@@ -141676,7 +141686,7 @@
       "text": "For `td:ref`, `type`, and the other operators, the captured Resource kind MUST agree with the target kind defined for that operator. A `type` link MAY identify a Thing Model by its `wotid` or by a captured document-view URI, including an exact-Version URI. A captured document URI is usable only at the Resource or Version scope recorded for it. If the resolved URI identifies more than one distinct Resource or Version, the mapping is ambiguous. Duplicate records for the same identity do not create ambiguity.",
       "review": {
         "status": "reviewed",
-        "note": "Captured reference acquisition checks requested Resource kind and pin conflicts, preserves Resource versus exact-Version scope, and rejects competing targets before target reads. Duplicate associations compare decoded XID paths while retaining case-sensitive Version IDs. Equivalent immutable sources require matching context, original/effective model and resolution owner. Authored occurrence discovery and operator-specific link/type/projection validation are not implemented; these helper cases do not complete the compound closure requirement.",
+        "note": "Captured reference acquisition checks requested Resource kind and pin conflicts, preserves Resource versus exact-Version scope, and rejects competing targets before target reads. Duplicate associations compare decoded XID paths while retaining case-sensitive Version IDs. Equivalent immutable sources require matching context, original/effective model and resolution owner. Ordinary and link candidates are discovered from captured source bytes, but combined target-kind classification, projection roles and independent closure validation are not implemented; these helper cases do not complete the compound closure requirement.",
         "roles": [
           "client",
           "producer"
