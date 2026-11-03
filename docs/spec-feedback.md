@@ -179,8 +179,9 @@ names remain distinct. Projection source entries supply the bindings for
 their selectors, using the repository-controlled experimental vocabulary at
 `marcschier/wot-thing-description` commit
 `79ddf72d70eff97d9541afc83e20631cc3ba3567`. This is not a W3C or OPC
-Foundation vocabulary assignment. That branch is published, but its required
-tracking PR has not yet been created.
+Foundation vocabulary assignment. The proposal is tracked in
+[w3c/wot-thing-description#2243](https://github.com/w3c/wot-thing-description/pull/2243);
+its contribution-readiness requirements remain separate from runtime support.
 
 Schema versus ordinary `tm:ref` classification and document-URL identity
 mapping remain unresolved. The source correction retains both gaps and does
@@ -188,6 +189,33 @@ not permit live fallback or a completeness declaration without validated
 mappings. Its operator-schema checks establish representation constraints,
 not source-derived discovery, binding validation or offline reconstruction.
 Those runtime and semantic-vector obligations remain pending.
+
+## Empty WoT closure references
+
+The closure schema correction in
+[xregistry/spec#571](https://github.com/xregistry/spec/pull/571) at
+`aafe5b18af8c5e50520d4d2b171b21ad22fb409f` removes only the `href` string's
+minimum length. An empty authored URI-reference can identify an external
+document through its captured effective base, so rejecting that string prevents
+a closure from retaining the exact occurrence. The member remains required
+and string-typed; the other representation constraints are unchanged.
+
+The corrected schema, regression source and license are retained under
+`tests/Conformance/Successors/pr571-aafe5b18` as a narrow artifact supplement.
+The schema also contains the eight canonical operator values already approved
+in the selected WoT source, unlike the older `d757328e` artifact's unrestricted
+operator string. Historical schema bytes and the normative WoT selection at
+`890b4a62` are unchanged.
+
+`EmptyLinkHrefCanIdentifyAnExternalDocumentThroughItsCapturedEffectiveBase`
+demonstrates the external target and exact empty href through the public
+resolver. The upstream `test_closure_shape_preserves_empty_external_reference_href`
+accepts its closure representation; the adjacent string-type and required-member
+tests retain the rejection boundaries.
+`test_corrected_closure_schema_only_removes_the_empty_href_restriction`
+compares the corrected artifact with its retained canonical-operator predecessor.
+This removes a schema inconsistency, not the remaining runtime binding,
+transitive-capture or offline-composition work.
 
 ## Active Message artifact differences
 

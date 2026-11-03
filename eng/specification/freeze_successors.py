@@ -34,6 +34,7 @@ COMPATIBILITY_ADMISSION = "b0d2d81777dace4361227a9c37ddf5cd6629a563"
 XREF_CREATION_EVENTS = "9e103e2be4de6a7d90630bd2b346e4d08c029cf1"
 WOT_CLOSURE_CONTRACTS = "ab91328d0b210d054ed4278120fa949d13415ab2"
 CLOUD_EVENT_VIEW = "890b4a62360f4b4869a16495523b7f7addba2e7e"
+WOT_EMPTY_HREF = "aafe5b18af8c5e50520d4d2b171b21ad22fb409f"
 
 
 def sources() -> list[dict]:
@@ -182,6 +183,15 @@ def sources() -> list[dict]:
              "kind": "normative", "role": "normative"},
         ],
     }
+    wot_empty_href = {
+        "id": "pr571-aafe5b18", "repository": "https://github.com/marcschier/xregistry-drafts",
+        "commit": WOT_EMPTY_HREF, "status": "working-draft", "files": [
+            {"path": "workingdrafts/models/wot/schemas/publication-closure.schema.json", "owner": "wot",
+             "kind": "artifact", "role": "review-only"},
+            {"path": "workingdrafts/models/wot/tests/test_wot_examples.py", "owner": "wot",
+             "kind": "artifact", "role": "review-only"},
+        ],
+    }
     frozen_merged = deepcopy(current_merged)
     frozen_merged.update(id="upstream-801aaf21", commit=FROZEN_MERGED)
     for entry in frozen_merged["files"]:
@@ -200,7 +210,7 @@ def sources() -> list[dict]:
         })
     result = [merged, draft, closure, api, media, current_merged, current_draft, opcua_events,
               http_protocol_models, compatibility_admission, xref_creation_events, wot_closure_contracts,
-              cloud_event_view, frozen_merged]
+              cloud_event_view, frozen_merged, wot_empty_href]
     for source in result:
         source["files"].append({"path": "LICENSE", "owner": "license", "kind": "license", "role": "review-only"})
     return result

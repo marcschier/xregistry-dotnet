@@ -180,6 +180,14 @@ The effective successor composition is:
 | WoT | `pr571-890b4a62` |
 | Publication design | `pr571-d757328e`, selected informative design rather than a normative document |
 
+The WoT closure schema and regression source at `pr571-aafe5b18` are a narrow
+artifact supplement. The corrected schema permits an empty authored `href`
+whose captured effective base identifies an external document. It retains the
+eight canonical operators already specified by the selected WoT source.
+The files and license remain review-only in the extraction inventory; the
+normative composition and historical schema bytes are unchanged. Retaining
+this artifact does not implement closure validation.
+
 The HTTP selector models at `a1da400e`, PR #715 and PR #716 remain separate
 review-only inputs. Approved clause-level proposal selections are documented in
 [specification feedback](../../docs/spec-feedback.md). Neither the newer merged

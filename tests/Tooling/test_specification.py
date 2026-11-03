@@ -323,7 +323,7 @@ class ProvenanceAndReviewTests(unittest.TestCase):
             "upstream-4a7e7f5e", "pr571-811de7d2", "pr571-514f6eac",
             "pr715-5f9d0134", "pr716-9613f002", "upstream-d290b1ec", "pr571-d757328e",
             "pr571-f69085fb", "pr571-a1da400e", "pr677-b0d2d817", "pr686-9e103e2b",
-            "pr571-ab91328d", "pr571-890b4a62", "upstream-801aaf21",
+            "pr571-ab91328d", "pr571-890b4a62", "upstream-801aaf21", "pr571-aafe5b18",
         })
         prior = sources["pr571-811de7d2"]
         current = sources["pr571-514f6eac"]
@@ -493,6 +493,39 @@ class ProvenanceAndReviewTests(unittest.TestCase):
         self.assertEqual(active["workingdrafts/publication/design/design.md"], "selected-design")
         selected = {entry["path"]: entry["role"] for entry in sources["pr571-890b4a62"]["files"]}
         self.assertEqual(selected["workingdrafts/models/wot/spec.md"], "normative")
+
+    def test_empty_href_correction_pins_only_artifacts_without_replacing_normative_sources(self) -> None:
+        spec = importlib.util.spec_from_file_location("freeze_successors", ROOT / "eng/specification/freeze_successors.py")
+        freezer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(freezer)
+        sources = {source["id"]: source for source in freezer.sources()}
+        source = sources["pr571-aafe5b18"]
+        self.assertEqual(source["repository"], "https://github.com/marcschier/xregistry-drafts")
+        self.assertEqual(source["commit"], "aafe5b18af8c5e50520d4d2b171b21ad22fb409f")
+        self.assertEqual(source["commit"], freezer.WOT_EMPTY_HREF)
+        self.assertEqual({(entry["path"], entry["kind"], entry["role"]) for entry in source["files"]}, {
+            ("workingdrafts/models/wot/schemas/publication-closure.schema.json", "artifact", "review-only"),
+            ("workingdrafts/models/wot/tests/test_wot_examples.py", "artifact", "review-only"),
+            ("LICENSE", "license", "review-only"),
+        })
+        self.assertEqual({(entry["path"], entry["role"])
+                          for entry in sources["pr571-890b4a62"]["files"]}, {
+            ("workingdrafts/models/wot/spec.md", "normative"), ("LICENSE", "review-only"),
+        })
+        retained = {entry["path"]: entry["role"] for entry in sources["pr571-d757328e"]["files"]}
+        self.assertEqual(retained["workingdrafts/publication/spec.md"], "normative")
+        self.assertEqual(retained["workingdrafts/publication/design/design.md"], "selected-design")
+
+    def test_corrected_closure_schema_only_removes_the_empty_href_restriction(self) -> None:
+        relative = "workingdrafts/models/wot/schemas/publication-closure.schema.json"
+        prior = tool.read_json(ROOT / tool.SUCCESSOR_CORPUS / "pr571-ab91328d" / relative)
+        corrected = tool.read_json(ROOT / tool.SUCCESSOR_CORPUS / "pr571-aafe5b18" / relative)
+        properties = prior["properties"]["bindings"]["items"]["properties"]
+        self.assertEqual(properties["href"], {"type": "string", "minLength": 1})
+        del properties["href"]["minLength"]
+        self.assertEqual(corrected, prior)
+        self.assertIn("href", corrected["properties"]["bindings"]["items"]["required"])
+        self.assertEqual(len(properties["operator"]["enum"]), 8)
 
     def test_http_selector_models_are_pinned_from_the_current_pr_head_as_review_only_artifacts(self) -> None:
         spec = importlib.util.spec_from_file_location("freeze_successors", ROOT / "eng/specification/freeze_successors.py")

@@ -1155,6 +1155,35 @@
           "sha256": "c07c2bf22d1b6eadecdbc008b0693c9a876f85c1485c375ff57301085ffc8db9"
         }
       ]
+    },
+    {
+      "id": "pr571-aafe5b18",
+      "repository": "https://github.com/marcschier/xregistry-drafts",
+      "commit": "aafe5b18af8c5e50520d4d2b171b21ad22fb409f",
+      "status": "working-draft",
+      "files": [
+        {
+          "path": "workingdrafts/models/wot/schemas/publication-closure.schema.json",
+          "owner": "wot",
+          "kind": "artifact",
+          "bytes": 1619,
+          "sha256": "51376bb94143dfc50562cff15265f79f5550891def791410d07eb99b926ac537"
+        },
+        {
+          "path": "workingdrafts/models/wot/tests/test_wot_examples.py",
+          "owner": "wot",
+          "kind": "artifact",
+          "bytes": 20298,
+          "sha256": "202f57df8b0df156ae0e0e0a637dae6b7a9696600e66349ecd8c948ddee908f2"
+        },
+        {
+          "path": "LICENSE",
+          "owner": "license",
+          "kind": "license",
+          "bytes": 11349,
+          "sha256": "c07c2bf22d1b6eadecdbc008b0693c9a876f85c1485c375ff57301085ffc8db9"
+        }
+      ]
     }
   ],
   "composition": [
@@ -1900,6 +1929,21 @@
     },
     {
       "source": "upstream-801aaf21",
+      "path": "LICENSE",
+      "role": "review-only"
+    },
+    {
+      "source": "pr571-aafe5b18",
+      "path": "workingdrafts/models/wot/schemas/publication-closure.schema.json",
+      "role": "review-only"
+    },
+    {
+      "source": "pr571-aafe5b18",
+      "path": "workingdrafts/models/wot/tests/test_wot_examples.py",
+      "role": "review-only"
+    },
+    {
+      "source": "pr571-aafe5b18",
       "path": "LICENSE",
       "role": "review-only"
     }
