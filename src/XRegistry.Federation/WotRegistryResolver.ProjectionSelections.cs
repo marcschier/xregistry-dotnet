@@ -175,15 +175,42 @@ public static partial class WotRegistryResolver
         {
             cancellationToken.ThrowIfCancellationRequested();
             readBudget.ChargeWork();
-            resultBytes += Encoding.UTF8.GetByteCount(selection.Definition.GetRawText()) +
+            if (selection.Selector is not null)
+            {
+                var source = selection.Source ??
+                    throw new InvalidOperationException("A projection selector must retain its source rule.");
+                var sourcePrefixes = new Dictionary<string, string?>(StringComparer.Ordinal);
+                foreach (var annotation in selection.Annotations)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    readBudget.ChargeWork();
+                    if (annotation.VendorPrefixIri is not { } expected) { continue; }
+                    var prefix = annotation.MemberName[..annotation.MemberName.IndexOf(':')];
+                    if (!sourcePrefixes.TryGetValue(prefix, out var actual))
+                    {
+                        actual = await WotJsonLdBaseResolver.ReadProjectionCompactPrefixBindingAsync(
+                            selection.Owner.Document, selection.SourcePointer, prefix,
+                            source.Source.Reference.Target.DocumentUri, contexts, readBudget, cancellationToken)
+                            .ConfigureAwait(false);
+                        sourcePrefixes.Add(prefix, actual);
+                    }
+                    if (actual is not null && !string.Equals(actual, expected, StringComparison.Ordinal))
+                    {
+                        throw FederationJson.Invalid(
+                            $"Projection annotation prefix '{prefix}' conflicts with the selected source's context.");
+                    }
+                }
+            }
+            resultBytes += (long)Encoding.UTF8.GetByteCount(selection.Definition.GetRawText()) +
                 Encoding.UTF8.GetByteCount(selection.Name) + Encoding.UTF8.GetByteCount(selection.SourcePointer);
             foreach (var annotation in selection.Annotations)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 readBudget.ChargeWork();
-                resultBytes += Encoding.UTF8.GetByteCount(annotation.MemberName) +
+                resultBytes += (long)Encoding.UTF8.GetByteCount(annotation.MemberName) +
                     Encoding.UTF8.GetByteCount(annotation.Iri) +
-                    Encoding.UTF8.GetByteCount(annotation.Value.GetRawText());
+                    Encoding.UTF8.GetByteCount(annotation.Value.GetRawText()) +
+                    Encoding.UTF8.GetByteCount(annotation.VendorPrefixIri ?? "");
             }
             readBudget.CheckResultBytes(resultBytes);
             ordered.Add((ProjectionCategory(selection.Category), selection.Name, ""), selection);

@@ -24,7 +24,11 @@ public sealed record WotProjectionSelectorOccurrence(WotAuthoredReferenceOccurre
 public sealed record WotProjectionPlanEnvelope(WotReferenceTargetKind Kind, string ScenarioIri);
 
 /// <summary>A permitted selector annotation retained with its authored key and value.</summary>
-public sealed record WotProjectionSelectorAnnotation(string MemberName, string Iri, JsonElement Value);
+public sealed record WotProjectionSelectorAnnotation(string MemberName, string Iri, JsonElement Value)
+{
+    /// <summary>The plan's prefix namespace for a vendor annotation, or null for a standard annotation.</summary>
+    public string? VendorPrefixIri { get; init; }
+}
 
 public static partial class WotJsonLdBaseResolver
 {
@@ -91,6 +95,7 @@ public static partial class WotJsonLdBaseResolver
             cancellationToken.ThrowIfCancellationRequested();
             readBudget.ChargeWork();
             if (member.Name == selector.Reference.PropertyName) { continue; }
+            string? vendorPrefixIri = null;
             var iri = member.Name == "@type" ? "@type" :
                 member.Name.StartsWith('@')
                     ? throw FederationJson.Invalid("A projection selector cannot contain other JSON-LD keywords.")
@@ -125,9 +130,10 @@ public static partial class WotJsonLdBaseResolver
             else if (IsProjectionVendorAnnotation(member.Name, iri))
             {
                 var separator = member.Name.IndexOf(':');
-                if (!await IsProjectionCompactPrefixBoundAsync(root, occurrence,
+                vendorPrefixIri = await ReadProjectionCompactPrefixBindingAsync(root, occurrence,
                     selector.Reference.SourcePointer, member.Name[..separator], document, documentUri, contexts,
-                    readBudget, cancellationToken).ConfigureAwait(false))
+                    readBudget, cancellationToken).ConfigureAwait(false);
+                if (vendorPrefixIri is null)
                 {
                     throw FederationJson.Invalid("A projection vendor annotation requires a bound compact-IRI prefix.");
                 }
@@ -139,7 +145,7 @@ public static partial class WotJsonLdBaseResolver
             }
 
             using var value = JsonDocument.Parse(member.Value.ToString(Formatting.None));
-            annotations.Add(new(member.Name, iri, value.RootElement.Clone()));
+            annotations.Add(new(member.Name, iri, value.RootElement.Clone()) { VendorPrefixIri = vendorPrefixIri });
         }
 
         if (forms > 1 || security > 1 ||
@@ -171,23 +177,44 @@ public static partial class WotJsonLdBaseResolver
             !iri.StartsWith(ProjectionVocabulary, StringComparison.Ordinal);
     }
 
-    private static async ValueTask<bool> IsProjectionCompactPrefixBoundAsync(JObject root, JObject occurrence,
+    internal static async ValueTask<string?> ReadProjectionCompactPrefixBindingAsync(FederationDocument document,
+        string pointer, string prefix, Uri documentUri, IReadOnlyDictionary<Uri, FederationDocument> contexts,
+        FederationReadBudget budget, CancellationToken cancellationToken)
+    {
+        var root = await ParseDocumentAsync(document, budget, cancellationToken).ConfigureAwait(false);
+        var occurrence = ObjectAtPointer(root, pointer, budget, cancellationToken);
+        return await ReadProjectionCompactPrefixBindingAsync(root, occurrence, pointer, prefix, document,
+            documentUri, contexts, budget, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async ValueTask<string?> ReadProjectionCompactPrefixBindingAsync(JObject root, JObject occurrence,
         string pointer, string prefix, FederationDocument document, Uri documentUri,
         IReadOnlyDictionary<Uri, FederationDocument> contexts, FederationReadBudget budget,
         CancellationToken cancellationToken)
     {
+        var contextDocuments = CaptureContextDocuments(contexts, budget, cancellationToken);
+        var loaded = new Dictionary<string, JToken>(StringComparer.Ordinal);
+        var documentBase = FederationJson.AbsoluteUri(document.Base ?? documentUri.AbsoluteUri);
+        var baseline = ExpandCapturedDocument(root, documentBase, contextDocuments, loaded, budget,
+            cancellationToken);
         var prefixAlreadyAuthored = occurrence.Property(prefix, StringComparison.Ordinal) is not null;
         var prefixProbeValue = "urn:xregistry:projection-prefix:" +
             Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(pointer + "\n" + prefix)))
                 .ToLowerInvariant();
         while (ContainsProjectionProbeValue(root, prefixProbeValue, budget, cancellationToken) ||
-            ContainsProjectionProbeValue(root, prefixProbeValue + ":compact", budget, cancellationToken))
+            ContainsProjectionProbeValue(root, prefixProbeValue + ":compact", budget, cancellationToken) ||
+            ContainsProjectionProbeValue(baseline, prefixProbeValue, budget, cancellationToken) ||
+            ContainsProjectionProbeValue(baseline, prefixProbeValue + ":compact", budget, cancellationToken) ||
+            loaded.Values.Any(context => ContainsProjectionProbeValue(context, prefixProbeValue, budget, cancellationToken) ||
+                ContainsProjectionProbeValue(context, prefixProbeValue + ":compact", budget, cancellationToken)))
         {
             prefixProbeValue += ":probe";
         }
         var compactProbeValue = prefixProbeValue + ":compact";
         var prefixProbeName = prefix + ":__xregistry_prefix_probe__";
-        for (var suffix = 0; occurrence.Property(prefixProbeName, StringComparison.Ordinal) is not null; suffix++)
+        for (var suffix = 0; ContainsProperty(root, prefixProbeName, budget, cancellationToken) ||
+            ContainsProperty(baseline, prefixProbeName, budget, cancellationToken) ||
+            loaded.Values.Any(context => ContainsProperty(context, prefixProbeName, budget, cancellationToken)); suffix++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             budget.ChargeWork();
@@ -199,25 +226,165 @@ public static partial class WotJsonLdBaseResolver
         occurrence[prefixProbeName] = compactProbeValue;
         try
         {
-            var contextDocuments = CaptureContextDocuments(contexts, budget, cancellationToken);
-            var loaded = new Dictionary<string, JToken>(StringComparer.Ordinal);
-            var documentBase = FederationJson.AbsoluteUri(document.Base ?? documentUri.AbsoluteUri);
-            var baseline = ExpandCapturedDocument(root, documentBase, contextDocuments, loaded, budget,
+            var probed = ExpandCapturedDocument(root, documentBase, contextDocuments, loaded, budget,
                 cancellationToken);
-            var expanded = ExpandProjectionObject(root, pointer, baseline, documentBase, contextDocuments, loaded,
+            var expanded = ExpandProjectionObject(root, pointer, probed, documentBase, contextDocuments, loaded,
                 budget, cancellationToken);
             var prefixIri = prefixAlreadyAuthored
                 ? await ExpandMemberIriAsync(document, pointer, prefix, documentUri, contexts, budget,
                     cancellationToken).ConfigureAwait(false)
                 : ExpandedProbeProperty(expanded, prefixProbeValue, budget, cancellationToken);
             var compactIri = ExpandedProbeProperty(expanded, compactProbeValue, budget, cancellationToken);
-            return prefixIri is not null && compactIri is not null &&
-                compactIri.StartsWith(prefixIri, StringComparison.Ordinal) && compactIri.Length > prefixIri.Length;
+            var suffix = prefixProbeName[(prefix.Length + 1)..];
+            if (prefixIri is null || !string.Equals(compactIri, prefixIri + suffix, StringComparison.Ordinal))
+            {
+                return null;
+            }
+            _ = FederationJson.AbsoluteUri(prefixIri);
+            if (!string.Equals(prefixIri, prefix + ":", StringComparison.Ordinal) ||
+                ProbeAmbiguousProjectionPrefix(root, pointer, prefix, probed, documentBase, contextDocuments,
+                    loaded, budget, cancellationToken))
+            {
+                return prefixIri;
+            }
+            return null;
         }
         finally
         {
             occurrence.Property(prefixProbeName, StringComparison.Ordinal)?.Remove();
             if (!prefixAlreadyAuthored) { occurrence.Property(prefix, StringComparison.Ordinal)?.Remove(); }
+        }
+    }
+
+    private static bool ProbeAmbiguousProjectionPrefix(JObject root, string pointer, string prefix,
+        JArray baseline, Uri documentBase,
+        Dictionary<string, FederationDocument> contexts, Dictionary<string, JToken> loaded,
+        FederationReadBudget budget, CancellationToken cancellationToken)
+    {
+        var digest = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(pointer + "\n" + prefix)))
+            .ToLowerInvariant();
+        var markerTerm = "__xregistry_prefix_scope_" + digest + "__";
+        while (ContainsProperty(root, markerTerm, budget, cancellationToken) ||
+            ContainsProjectionProbeValue(root, markerTerm, budget, cancellationToken) ||
+            ContainsProperty(baseline, markerTerm, budget, cancellationToken) ||
+            ContainsProjectionProbeValue(baseline, markerTerm, budget, cancellationToken) ||
+            loaded.Values.Any(context => ContainsProperty(context, markerTerm, budget, cancellationToken) ||
+                ContainsProjectionProbeValue(context, markerTerm, budget, cancellationToken)))
+        {
+            markerTerm += "_";
+        }
+        var markerValue = "urn:xregistry:prefix-scope:" + digest;
+        while (ContainsProjectionProbeValue(root, markerValue, budget, cancellationToken) ||
+            ContainsProjectionProbeValue(baseline, markerValue, budget, cancellationToken) ||
+            loaded.Values.Any(context => ContainsProjectionProbeValue(context, markerValue, budget, cancellationToken)))
+        {
+            markerValue += ":probe";
+        }
+        var markerBase = "https://xregistry.invalid/.well-known/jsonld-probe/prefix-scope/" + digest + "/";
+
+        budget.CheckResultBytes(Encoding.UTF8.GetByteCount(root.ToString(Formatting.None)));
+        var probeRoot = (JObject)root.DeepClone();
+        ObjectAtPointer(probeRoot, pointer, budget, cancellationToken)[markerTerm] = markerValue;
+        void Mark(JToken context)
+        {
+            if (ContainsProperty(context, markerTerm, budget, cancellationToken) ||
+                ContainsProjectionProbeValue(context, markerTerm, budget, cancellationToken) ||
+                ContainsProjectionProbeValue(context, markerValue, budget, cancellationToken))
+            {
+                throw new FederationException(FederationErrorCode.UnsupportedOperation,
+                    "A captured context conflicts with a projection prefix-scope probe.");
+            }
+            MarkProjectionPrefixContexts(context, prefix, markerTerm, markerBase, budget, cancellationToken);
+        }
+        MarkProjectionPrefixContexts(probeRoot, prefix, markerTerm, markerBase, budget, cancellationToken);
+        budget.CheckResultBytes(Encoding.UTF8.GetByteCount(probeRoot.ToString(Formatting.None)));
+        try
+        {
+            // A scope marker follows prefix definitions through the processor without rebinding them.
+            var marked = ExpandCapturedDocument(probeRoot, documentBase, contexts, loaded, budget,
+                cancellationToken, Mark);
+            var expanded = ExpandProjectionObject(probeRoot, pointer, marked, documentBase, contexts, loaded,
+                budget, cancellationToken, Mark);
+            var scope = ExpandedProbeProperty(expanded, markerValue, budget, cancellationToken);
+            if (string.Equals(scope, markerBase + "bound", StringComparison.Ordinal)) { return true; }
+            if (string.Equals(scope, markerBase + "unbound", StringComparison.Ordinal)) { return false; }
+        }
+        catch (FederationException exception) when (exception.Code == FederationErrorCode.InvalidPackage)
+        {
+            throw new FederationException(FederationErrorCode.UnsupportedOperation,
+                "The effective JSON-LD prefix flag could not be inspected without changing its context.",
+                innerException: exception);
+        }
+        throw new FederationException(FederationErrorCode.UnsupportedOperation,
+            "The effective JSON-LD prefix flag could not be determined.");
+    }
+
+    private static void MarkProjectionPrefixContexts(JToken token, string prefix, string markerTerm,
+        string markerBase, FederationReadBudget budget, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        budget.ChargeWork();
+        if (token is JObject obj)
+        {
+            foreach (var property in obj.Properties().ToArray())
+            {
+                if (property.Name == "@context")
+                {
+                    MarkProjectionPrefixContext(property.Value, prefix, markerTerm, markerBase, budget,
+                        cancellationToken);
+                }
+                else
+                {
+                    MarkProjectionPrefixContexts(property.Value, prefix, markerTerm, markerBase, budget,
+                        cancellationToken);
+                }
+            }
+        }
+        else if (token is JArray array)
+        {
+            foreach (var item in array)
+            {
+                MarkProjectionPrefixContexts(item, prefix, markerTerm, markerBase, budget, cancellationToken);
+            }
+        }
+    }
+
+    private static void MarkProjectionPrefixContext(JToken context, string prefix, string markerTerm,
+        string markerBase, FederationReadBudget budget, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        budget.ChargeWork();
+        if (context is JObject obj)
+        {
+            var definition = obj.Property(prefix, StringComparison.Ordinal);
+            if (definition is not null)
+            {
+                if (obj.Property(markerTerm, StringComparison.Ordinal) is not null)
+                {
+                    throw new FederationException(FederationErrorCode.UnsupportedOperation,
+                        "A captured context conflicts with a projection prefix-scope probe.");
+                }
+                var bound = definition.Value switch
+                {
+                    JValue { Type: JTokenType.String } => !prefix.Contains('/'),
+                    JObject term => term["@prefix"] is JValue { Type: JTokenType.Boolean } flag &&
+                        flag.Value<bool>(),
+                    _ => false
+                };
+                obj.Add(markerTerm, new JObject
+                {
+                    ["@id"] = markerBase + (bound ? "bound" : "unbound"),
+                    ["@protected"] = false
+                });
+            }
+            MarkProjectionPrefixContexts(obj, prefix, markerTerm, markerBase, budget, cancellationToken);
+        }
+        else if (context is JArray array)
+        {
+            foreach (var item in array)
+            {
+                MarkProjectionPrefixContext(item, prefix, markerTerm, markerBase, budget, cancellationToken);
+            }
         }
     }
 
@@ -555,7 +722,7 @@ public static partial class WotJsonLdBaseResolver
 
     private static JObject ExpandProjectionObject(JObject root, string pointer, JArray baseline, Uri documentBase,
         Dictionary<string, FederationDocument> contexts, Dictionary<string, JToken> loaded,
-        FederationReadBudget budget, CancellationToken cancellationToken)
+        FederationReadBudget budget, CancellationToken cancellationToken, Action<JToken>? transform = null)
     {
         var predicate = "https://xregistry.invalid/.well-known/jsonld-probe/root/" +
             Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(root.ToString(Formatting.None))))
@@ -570,7 +737,8 @@ public static partial class WotJsonLdBaseResolver
         // Mark only the authored object, rather than a node lifted out of another graph or list.
         occurrence[predicate] = "object";
         budget.CheckResultBytes(Encoding.UTF8.GetByteCount(root.ToString(Formatting.None)));
-        var expanded = ExpandCapturedDocument(root, documentBase, contexts, loaded, budget, cancellationToken);
+        var expanded = ExpandCapturedDocument(root, documentBase, contexts, loaded, budget, cancellationToken,
+            transform);
         occurrence.Remove(predicate);
         JObject? selected = null;
         void Find(JToken token)

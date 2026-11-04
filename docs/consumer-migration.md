@@ -2515,11 +2515,18 @@ pointer. Manifest position takes priority over explicit-versus-bulk selection;
 within one source, explicit selections precede bulk imports. Bulk name prefixes
 uppercase the first Unicode code point, and ordering uses code points rather
 than UTF-16 code units. Local definitions replace imports. Even displaced
-selectors must identify existing affordances. Shared work, aggregate selected
-definition-size limits and cancellation apply. This is a selection inventory,
-not a resolved TD/TM: nested plans currently report `UnsupportedOperation`.
-Annotation merging, complete envelope admission, dependency relocation,
-context/security preservation and final ordinary validation remain unfinished.
+selectors must identify existing affordances. Vendor annotations retain their
+plan-context prefix namespace. For a winning explicit selection, a different
+binding of that prefix in the selected source's effective context rejects the
+selection; an absent or matching source binding is allowed. Displaced selectors
+are admitted and target-checked but do not participate in this conflict check.
+Captured plan and source bytes remain unchanged. Shared work, aggregate retained
+result-size limits and cancellation apply.
+
+This is a selection inventory, not a resolved TD/TM: nested plans currently
+report `UnsupportedOperation`. Annotation merging, complete envelope admission,
+dependency relocation, context/security preservation and final ordinary
+validation remain unfinished.
 
 `WotPublicationClosure.Parse` reads the selected closed representation without
 registering the WoT extension as supported. Entries and binding endpoints must

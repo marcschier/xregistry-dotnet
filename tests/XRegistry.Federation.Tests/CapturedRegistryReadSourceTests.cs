@@ -1140,11 +1140,15 @@ public class CapturedRegistryReadSourceTests
     }
 
     private static async Task<CapturedRegistryReadSource> SelectionSource(string properties,
-        string actions = "{}", string events = "{}")
+        string actions = "{}", string events = "{}", JsonNode? propertyContext = null)
     {
         var root = JsonNode.Parse(await Bytes(InventoryDocument(properties, "[]")))!;
         root["@context"]!["semantic"] = "urn:shared:";
         root["@context"]!["different"] = "urn:other:";
+        if (propertyContext is not null)
+        {
+            root["@context"]!["properties"]!["@context"] = propertyContext.DeepClone();
+        }
         root["@context"]!["actions"] = JsonNode.Parse("""{"@id":"td:hasActionAffordance","@container":"@index"}""");
         root["@context"]!["events"] = JsonNode.Parse("""{"@id":"td:hasEventAffordance","@container":"@index"}""");
         root["actions"] = JsonNode.Parse(actions);
@@ -1158,9 +1162,11 @@ public class CapturedRegistryReadSourceTests
     }
 
     private static async Task<IReadOnlyList<WotProjectionAffordanceSelection>> SelectProjection(JsonNode root,
-        CapturedRegistryReadSource source) =>
+        CapturedRegistryReadSource source, IReadOnlyDictionary<Uri, FederationDocument>? contexts = null,
+        FederationReadBudget? budget = null, CancellationToken token = default) =>
         await WotRegistryResolver.SelectCapturedProjectionAffordancesAsync(await RetainProjectionPlan(root),
-            new("https://example.test/plan.json"), new Dictionary<Uri, FederationDocument>(), InventoryIndex(source));
+            new("https://example.test/plan.json"), contexts ?? new Dictionary<Uri, FederationDocument>(),
+            InventoryIndex(source), budget: budget, cancellationToken: token);
 
     [Test]
     public async Task ProjectionEnvelopeReaderRetainsTheAbsoluteScenarioAndOrdinaryKind()
@@ -1311,6 +1317,8 @@ public class CapturedRegistryReadSourceTests
             annotation.Iri == "https://www.w3.org/2019/wot/td#title").Value.GetString())
             .IsEqualTo("Selected title");
         await Assert.That(selection.Annotations.Single(annotation =>
+            annotation.Iri == "https://www.w3.org/2019/wot/td#title").VendorPrefixIri).IsNull();
+        await Assert.That(selection.Annotations.Single(annotation =>
             annotation.Iri == "https://www.w3.org/2019/wot/td#description").Value.GetString())
             .IsEqualTo("Selected description");
         await Assert.That(selection.Annotations.Single(annotation => annotation.Iri == "@type").Value.GetString())
@@ -1318,6 +1326,844 @@ public class CapturedRegistryReadSourceTests
         await Assert.That(selection.Annotations.Single(annotation =>
             annotation.Iri == "https://example.test/vendor/classification").Value.GetProperty("level").GetString())
             .IsEqualTo("restricted");
+        await Assert.That(selection.Annotations.Single(annotation =>
+            annotation.Iri == "https://example.test/vendor/classification").VendorPrefixIri)
+            .IsEqualTo("https://example.test/vendor/");
+    }
+
+    [Test]
+    [Arguments("absent", false)]
+    [Arguments("identical", false)]
+    [Arguments("equivalent", false)]
+    [Arguments("different", true)]
+    [Arguments("local-match", false)]
+    [Arguments("local-conflict", true)]
+    [Arguments("local-disabled", false)]
+    [Arguments("local-reset", false)]
+    [Arguments("authored-identical", false)]
+    [Arguments("authored-conflict", true)]
+    public async Task ProjectionSelectionChecksVendorPrefixAgainstTheSourceEffectiveContext(
+        string binding, bool conflict)
+    {
+        var properties = binding switch
+        {
+            "local-match" => """{"a":{"@context":{"semantic":"urn:plan:"},"const":"source"}}""",
+            "local-conflict" => """{"a":{"@context":{"semantic":"urn:other:"},"const":"source"}}""",
+            "local-disabled" => """{"a":{"@context":{"semantic":{"@id":"urn:other:","@prefix":false}},"const":"source"}}""",
+            "local-reset" => """{"a":{"@context":null,"const":"source"}}""",
+            "authored-identical" or "authored-conflict" => """{"a":{"semantic":"original","const":"source"}}""",
+            _ => """{"a":{"const":"source"}}"""
+        };
+        var source = await SelectionSource(properties);
+        var root = await SelectionRuleDocument();
+        var prefix = binding == "absent" ? "vendor" : "semantic";
+        var planNamespace = binding switch
+        {
+            "absent" => "https://example.test/vendor/",
+            "different" or "local-match" or "local-disabled" or "local-reset" or "authored-conflict" => "urn:plan:",
+            _ => "urn:shared:"
+        };
+        root["@context"]![prefix] = binding == "equivalent"
+            ? JsonNode.Parse("""{"@id":"urn:shared:","@prefix":true}""")
+            : JsonValue.Create(planNamespace);
+        root["properties"] = new JsonObject
+        {
+            ["selected"] = new JsonObject
+            {
+                ["tm:ref"] = "urn:inventory:tm#/properties/a",
+                [prefix + ":classification"] = "restricted"
+            }
+        };
+
+        if (conflict)
+        {
+            var failure = await Assert.That(async () => { _ = await SelectProjection(root, source); })
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected a prefix binding conflict.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+            await Assert.That(failure.Message).Contains("prefix");
+        }
+        else
+        {
+            var selection = (await SelectProjection(root, source)).Single();
+            var annotation = selection.Annotations.Single();
+            await Assert.That(selection.SourcePointer).IsEqualTo("/properties/a");
+            await Assert.That(selection.Definition.GetProperty("const").GetString()).IsEqualTo("source");
+            await Assert.That(selection.Definition.GetRawText())
+                .IsEqualTo(JsonNode.Parse(properties)!["a"]!.ToJsonString());
+            await Assert.That(annotation.MemberName).IsEqualTo(prefix + ":classification");
+            await Assert.That(annotation.Iri).IsEqualTo(planNamespace + "classification");
+            await Assert.That(annotation.VendorPrefixIri).IsEqualTo(planNamespace);
+            await Assert.That(annotation.Value.GetString()).IsEqualTo("restricted");
+        }
+    }
+
+    [Test]
+    public async Task ProjectionSelectionUsesThePlanTermScopedPrefixBinding()
+    {
+        var source = await SelectionSource("""{"a":{"const":"source"}}""");
+        var root = await SelectionRuleDocument();
+        root["@context"]!["semantic"] = "urn:root:";
+        root["@context"]!["properties"]!["@context"] = new JsonObject { ["semantic"] = "urn:shared:" };
+        root["properties"] = JsonNode.Parse("""
+            {"selected":{"tm:ref":"urn:inventory:tm#/properties/a","semantic:classification":"restricted"}}
+            """);
+
+        var selection = (await SelectProjection(root, source)).Single();
+        await Assert.That(selection.Annotations.Single().Iri).IsEqualTo("urn:shared:classification");
+        await Assert.That(selection.Definition.GetProperty("const").GetString()).IsEqualTo("source");
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task ProjectionSelectionUsesTheSourceTermScopedPrefixBinding(bool conflict)
+    {
+        var sourceNamespace = conflict ? "urn:other:" : "urn:plan:";
+        var source = await SelectionSource("""{"a":{"const":"source"}}""",
+            propertyContext: new JsonObject { ["semantic"] = sourceNamespace });
+        var root = await SelectionRuleDocument();
+        root["@context"]!["semantic"] = "urn:plan:";
+        root["properties"] = JsonNode.Parse("""
+            {"selected":{"tm:ref":"urn:inventory:tm#/properties/a","semantic:classification":"restricted"}}
+            """);
+
+        if (conflict)
+        {
+            var failure = await Assert.That(async () => { _ = await SelectProjection(root, source); })
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected a scoped prefix conflict.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+            await Assert.That(failure.Message).Contains("prefix");
+        }
+        else
+        {
+            var selection = (await SelectProjection(root, source)).Single();
+            await Assert.That(selection.Annotations.Single().VendorPrefixIri).IsEqualTo("urn:plan:");
+            await Assert.That(selection.Definition.GetProperty("const").GetString()).IsEqualTo("source");
+        }
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task ProjectionSelectionUsesTheSourceTypeScopedPrefixBinding(bool conflict)
+    {
+        var properties = new JsonObject
+        {
+            ["a"] = new JsonObject
+            {
+                ["@context"] = new JsonObject
+                {
+                    ["ScopedType"] = new JsonObject
+                    {
+                        ["@id"] = "urn:example:type",
+                        ["@context"] = new JsonObject { ["semantic"] = conflict ? "urn:other:" : "urn:plan:" }
+                    }
+                },
+                ["@type"] = "ScopedType",
+                ["const"] = "source"
+            }
+        };
+        var source = await SelectionSource(properties.ToJsonString());
+        var root = await SelectionRuleDocument();
+        root["@context"]!["semantic"] = "urn:plan:";
+        root["properties"] = JsonNode.Parse("""
+            {"selected":{"tm:ref":"urn:inventory:tm#/properties/a","semantic:classification":"restricted"}}
+            """);
+
+        if (conflict)
+        {
+            var failure = await Assert.That(async () => { _ = await SelectProjection(root, source); })
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected a type-scoped prefix conflict.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+            await Assert.That(failure.Message).Contains("prefix");
+        }
+        else
+        {
+            var selection = (await SelectProjection(root, source)).Single();
+            await Assert.That(selection.Annotations.Single().VendorPrefixIri).IsEqualTo("urn:plan:");
+            await Assert.That(selection.Definition.GetProperty("@type").GetString()).IsEqualTo("ScopedType");
+        }
+    }
+
+    [Test]
+    [Arguments("same")]
+    [Arguments("conflict")]
+    [Arguments("missing")]
+    public async Task ProjectionSelectionUsesCapturedRemotePrefixContexts(string binding)
+    {
+        var planContextUri = new Uri("https://contexts.invalid/plan.jsonld");
+        var sourceContextUri = new Uri("https://contexts.invalid/source.jsonld");
+        var source = await SelectionSource(
+            $$$"""{"a":{"@context":"{{{sourceContextUri}}}","const":"source"}}""");
+        var root = await SelectionRuleDocument();
+        root["@context"] = new JsonArray(root["@context"]!.DeepClone(), JsonValue.Create(planContextUri.AbsoluteUri));
+        root["properties"] = JsonNode.Parse("""
+            {"selected":{"tm:ref":"urn:inventory:tm#/properties/a","vendor:classification":"restricted"}}
+            """);
+        var contexts = new Dictionary<Uri, FederationDocument>
+        {
+            [planContextUri] = new(Encoding.UTF8.GetBytes("""{"@context":{"vendor":"urn:plan:"}}"""))
+        };
+        if (binding != "missing")
+        {
+            var sourceNamespace = binding == "same" ? "urn:plan:" : "urn:other:";
+            contexts[sourceContextUri] = new(Encoding.UTF8.GetBytes(
+                $$$"""{"@context":{"vendor":"{{{sourceNamespace}}}"}}"""));
+        }
+
+        if (binding == "same")
+        {
+            var selection = (await SelectProjection(root, source, contexts)).Single();
+            await Assert.That(selection.Annotations.Single().Iri).IsEqualTo("urn:plan:classification");
+            await Assert.That(selection.Definition.GetProperty("const").GetString()).IsEqualTo("source");
+        }
+        else
+        {
+            var failure = await Assert.That(async () => { _ = await SelectProjection(root, source, contexts); })
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected a captured-context rejection.");
+            await Assert.That(failure.Code).IsEqualTo(binding == "missing"
+                ? FederationErrorCode.UnsupportedOperation : FederationErrorCode.InvalidPackage);
+            if (binding == "conflict") { await Assert.That(failure.Message).Contains("prefix"); }
+        }
+    }
+
+    [Test]
+    [Arguments(true)]
+    [Arguments(false)]
+    public async Task ProjectionSelectionChecksPrefixConflictsOnlyForWinningImports(bool firstSourceWins)
+    {
+        var first = await SelectionSource("""{"same":{"const":"first"}}""");
+        var second = await SelectionSource("""{"other":{"const":"second"}}""");
+        var root = await SelectionRuleDocument();
+        root["@context"]!["semantic"] = "urn:plan:";
+        if (firstSourceWins) { root["p:projects"]![0]!["p:selectAll"] = true; }
+        root["p:projects"]!.AsArray().Add(new JsonObject
+        {
+            ["p:sourceName"] = "second", ["href"] = "urn:source:second", ["type"] = "application/tm+json"
+        });
+        root["properties"] = JsonNode.Parse("""
+            {"same":{"tm:ref":"urn:source:second#/properties/other","semantic:classification":"restricted"}}
+            """);
+        var index = InventoryIndex(first);
+        var identities = new WotCapturedUriIdentityIndex(new[]
+        {
+            new WotCapturedUriIdentity(new("urn:inventory:tm"), WotCapturedUriIdentityKind.DocumentView,
+                index.Resolve(new("urn:inventory:tm"))),
+            new WotCapturedUriIdentity(new("urn:source:second"), WotCapturedUriIdentityKind.DocumentView,
+                new(second, "/sets/team", Fixture.Collection, Fixture.Resource, "thingmodel", Fixture.WotId))
+        });
+        var containing = await RetainProjectionPlan(root);
+        async Task<IReadOnlyList<WotProjectionAffordanceSelection>> Select() =>
+            await WotRegistryResolver.SelectCapturedProjectionAffordancesAsync(containing,
+                new("https://example.test/plan.json"), new Dictionary<Uri, FederationDocument>(), identities);
+
+        if (firstSourceWins)
+        {
+            var selection = (await Select()).Single();
+            await Assert.That(selection.Definition.GetProperty("const").GetString()).IsEqualTo("first");
+            await Assert.That(selection.Annotations.Count).IsEqualTo(0);
+        }
+        else
+        {
+            var failure = await Assert.That(async () => { _ = await Select(); })
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected a winning prefix conflict.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+            await Assert.That(failure.Message).Contains("prefix");
+        }
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task ProjectionSelectionRequiresTheExplicitVendorPrefixFlag(bool bound)
+    {
+        var source = await SelectionSource("""{"a":{}}""");
+        var root = await SelectionRuleDocument();
+        root["@context"] = new JsonArray(root["@context"]!.DeepClone(),
+            new JsonObject { ["namespace"] = "vendor:" },
+            new JsonObject { ["vendor"] = new JsonObject { ["@id"] = "namespace", ["@prefix"] = bound } });
+        root["properties"] = JsonNode.Parse("""
+            {"selected":{"tm:ref":"urn:inventory:tm#/properties/a","vendor:classification":"restricted"}}
+            """);
+
+        if (bound)
+        {
+            var selection = (await SelectProjection(root, source)).Single();
+            await Assert.That(selection.Annotations.Single().Iri).IsEqualTo("vendor:classification");
+        }
+        else
+        {
+            var failure = await Assert.That(async () => { _ = await SelectProjection(root, source); })
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected an unbound prefix rejection.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+            await Assert.That(failure.Message).Contains("bound compact-IRI prefix");
+        }
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task ProjectionSelectionReadsAmbiguousPrefixFlagsWithoutChangingContextAliases(bool bound)
+    {
+        var source = await SelectionSource("""{"a":{"const":"source"}}""");
+        var root = await SelectionRuleDocument();
+        root["@context"] = new JsonArray(root["@context"]!.DeepClone(),
+            new JsonObject { ["namespace"] = "vendor:", ["specific"] = "vendor:special" },
+            new JsonObject
+            {
+                ["vendor"] = new JsonObject { ["@id"] = "namespace", ["@prefix"] = bound },
+                ["vendor:special"] = "specific"
+            });
+        root["properties"] = JsonNode.Parse("""
+            {"selected":{"tm:ref":"urn:inventory:tm#/properties/a","vendor:classification":"restricted"}}
+            """);
+
+        if (bound)
+        {
+            var selection = (await SelectProjection(root, source)).Single();
+            await Assert.That(selection.Annotations.Single().VendorPrefixIri).IsEqualTo("vendor:");
+            await Assert.That(selection.Definition.GetProperty("const").GetString()).IsEqualTo("source");
+        }
+        else
+        {
+            var failure = await Assert.That(async () => { _ = await SelectProjection(root, source); })
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected an unbound prefix rejection.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+            await Assert.That(failure.Message).Contains("bound compact-IRI prefix");
+        }
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task ProjectionSelectionReadsImplicitAmbiguousPrefixFlags(bool shorthand)
+    {
+        var source = await SelectionSource("""{"a":{"const":"source"}}""");
+        var root = await SelectionRuleDocument();
+        root["@context"] = new JsonArray(root["@context"]!.DeepClone(),
+            new JsonObject { ["namespace"] = "vendor:" },
+            new JsonObject
+            {
+                ["vendor"] = shorthand ? JsonValue.Create("namespace") : new JsonObject { ["@id"] = "namespace" }
+            });
+        root["properties"] = JsonNode.Parse("""
+            {"selected":{"tm:ref":"urn:inventory:tm#/properties/a","vendor:classification":"restricted"}}
+            """);
+
+        if (shorthand)
+        {
+            var selection = (await SelectProjection(root, source)).Single();
+            await Assert.That(selection.Annotations.Single().VendorPrefixIri).IsEqualTo("vendor:");
+        }
+        else
+        {
+            var failure = await Assert.That(async () => { _ = await SelectProjection(root, source); })
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected an unbound prefix rejection.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+            await Assert.That(failure.Message).Contains("bound compact-IRI prefix");
+        }
+    }
+
+    [Test]
+    [Arguments("plan", false)]
+    [Arguments("plan", true)]
+    [Arguments("source", false)]
+    [Arguments("source", true)]
+    public async Task ProjectionSelectionReadsProtectedImportedPrefixFlags(string owner, bool bound)
+    {
+        var uri = new Uri("https://contexts.invalid/imported-prefix.jsonld");
+        var imported = new JsonObject
+        {
+            ["@context"] = new JsonObject
+            {
+                ["@protected"] = true,
+                ["vendor"] = new JsonObject { ["@id"] = "namespace", ["@prefix"] = bound }
+            }
+        };
+        var contexts = new Dictionary<Uri, FederationDocument>
+        {
+            [uri] = new(Encoding.UTF8.GetBytes(imported.ToJsonString()))
+        };
+        var scoped = new JsonArray(new JsonObject { ["namespace"] = "vendor:" },
+            new JsonObject { ["@import"] = uri.AbsoluteUri });
+        var properties = new JsonObject
+        {
+            ["a"] = new JsonObject { ["const"] = "source" }
+        };
+        if (owner == "source") { properties["a"]!["@context"] = scoped.DeepClone(); }
+        var source = await SelectionSource(properties.ToJsonString());
+        var root = await SelectionRuleDocument();
+        if (owner == "plan")
+        {
+            root["@context"] = new JsonArray(root["@context"]!.DeepClone(),
+                scoped[0]!.DeepClone(), scoped[1]!.DeepClone());
+        }
+        else
+        {
+            root["@context"]!["vendor"] = "urn:plan:";
+        }
+        root["properties"] = JsonNode.Parse("""
+            {"selected":{"tm:ref":"urn:inventory:tm#/properties/a","vendor:classification":"restricted"}}
+            """);
+
+        if (owner == "plan" && !bound || owner == "source" && bound)
+        {
+            var failure = await Assert.That(async () => { _ = await SelectProjection(root, source, contexts); })
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected prefix admission rejection.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+            await Assert.That(failure.Message).Contains("prefix");
+        }
+        else
+        {
+            var selection = (await SelectProjection(root, source, contexts)).Single();
+            await Assert.That(selection.Annotations.Single().VendorPrefixIri)
+                .IsEqualTo(owner == "plan" ? "vendor:" : "urn:plan:");
+            await Assert.That(selection.Definition.GetRawText()).IsEqualTo(properties["a"]!.ToJsonString());
+        }
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task ProjectionSelectionUsesLocalOverridesOfImportedPrefixFlags(bool bound)
+    {
+        var uri = new Uri("https://contexts.invalid/overridden-prefix.jsonld");
+        var imported = new JsonObject
+        {
+            ["@context"] = new JsonObject
+            {
+                ["vendor"] = new JsonObject { ["@id"] = "namespace", ["@prefix"] = !bound }
+            }
+        };
+        var source = await SelectionSource("""{"a":{"const":"source"}}""");
+        var root = await SelectionRuleDocument();
+        root["@context"] = new JsonArray(root["@context"]!.DeepClone(),
+            new JsonObject { ["namespace"] = "vendor:" },
+            new JsonObject
+            {
+                ["@import"] = uri.AbsoluteUri,
+                ["vendor"] = new JsonObject { ["@id"] = "namespace", ["@prefix"] = bound }
+            });
+        root["properties"] = JsonNode.Parse("""
+            {"selected":{"tm:ref":"urn:inventory:tm#/properties/a","vendor:classification":"restricted"}}
+            """);
+        var contexts = new Dictionary<Uri, FederationDocument>
+        {
+            [uri] = new(Encoding.UTF8.GetBytes(imported.ToJsonString()))
+        };
+
+        if (bound)
+        {
+            var selection = (await SelectProjection(root, source, contexts)).Single();
+            await Assert.That(selection.Annotations.Single().VendorPrefixIri).IsEqualTo("vendor:");
+        }
+        else
+        {
+            var failure = await Assert.That(async () => { _ = await SelectProjection(root, source, contexts); })
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected an unbound prefix rejection.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+            await Assert.That(failure.Message).Contains("bound compact-IRI prefix");
+        }
+    }
+
+    [Test]
+    [Arguments(false, true)]
+    [Arguments(true, false)]
+    public async Task ProjectionSelectionReadsThePrefixDefinitionAfterAContextReset(bool first, bool last)
+    {
+        var source = await SelectionSource("""{"a":{"const":"source"}}""");
+        var root = await SelectionRuleDocument();
+        var originalContext = root["@context"]!.DeepClone();
+        root["@context"] = new JsonArray(originalContext.DeepClone(),
+            new JsonObject { ["namespace"] = "vendor:" },
+            new JsonObject { ["vendor"] = new JsonObject { ["@id"] = "namespace", ["@prefix"] = first } },
+            null, originalContext.DeepClone(), new JsonObject { ["namespace"] = "vendor:" },
+            new JsonObject { ["vendor"] = new JsonObject { ["@id"] = "namespace", ["@prefix"] = last } });
+        root["properties"] = JsonNode.Parse("""
+            {"selected":{"tm:ref":"urn:inventory:tm#/properties/a","vendor:classification":"restricted"}}
+            """);
+
+        if (last)
+        {
+            var selection = (await SelectProjection(root, source)).Single();
+            await Assert.That(selection.Annotations.Single().VendorPrefixIri).IsEqualTo("vendor:");
+        }
+        else
+        {
+            var failure = await Assert.That(async () => { _ = await SelectProjection(root, source); })
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected an unbound prefix rejection.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+            await Assert.That(failure.Message).Contains("bound compact-IRI prefix");
+        }
+    }
+
+    [Test]
+    public async Task ProjectionSelectionRetainsSharedPrefixAnnotationsAndCapturedBytes()
+    {
+        var uri = new Uri("https://contexts.invalid/shared-prefix.jsonld");
+        var remote = new FederationDocument(Encoding.UTF8.GetBytes("""
+            {"@context":[{"namespace":"vendor:"},{"vendor":{"@id":"namespace","@prefix":true}}]}
+            """));
+        var source = await SelectionSource("""{"a":{"const":"source"}}""");
+        var sourceDocument = (await source.ReadAsync(new(FederationOperation.Document, Fixture.Resource))).Document!;
+        var sourceBytes = await Bytes(sourceDocument);
+        var remoteBytes = await Bytes(remote);
+        var root = await SelectionRuleDocument();
+        var marker = Convert.ToHexString(SHA256.HashData(
+            Encoding.UTF8.GetBytes("/properties/selected\nvendor"))).ToLowerInvariant();
+        root["@context"]!["__xregistry_prefix_scope_" + marker + "__"] = "urn:occupied:marker";
+        root["@context"] = new JsonArray(root["@context"]!.DeepClone(), JsonValue.Create(uri.AbsoluteUri));
+        root["properties"] = JsonNode.Parse("""
+            {"selected":{"tm:ref":"urn:inventory:tm#/properties/a",
+              "vendor:classification":"restricted","vendor:metadata":{"level":2}}}
+            """);
+        var containing = await RetainProjectionPlan(root);
+        var planBytes = await Bytes(containing.Document);
+
+        var selection = (await WotRegistryResolver.SelectCapturedProjectionAffordancesAsync(containing,
+            new("https://example.test/plan.json"), new Dictionary<Uri, FederationDocument> { [uri] = remote },
+            InventoryIndex(source))).Single();
+
+        await Assert.That(selection.Annotations.Count).IsEqualTo(2);
+        await Assert.That(selection.Annotations.All(annotation => annotation.VendorPrefixIri == "vendor:")).IsTrue();
+        await Assert.That(selection.Annotations.Single(annotation => annotation.MemberName == "vendor:classification")
+            .Value.GetString()).IsEqualTo("restricted");
+        await Assert.That(selection.Annotations.Single(annotation => annotation.MemberName == "vendor:metadata")
+            .Value.GetProperty("level").GetInt32()).IsEqualTo(2);
+        await Assert.That((await Bytes(selection.Owner.Document)).SequenceEqual(sourceBytes)).IsTrue();
+        await Assert.That((await Bytes(containing.Document)).SequenceEqual(planBytes)).IsTrue();
+        await Assert.That((await Bytes(remote)).SequenceEqual(remoteBytes)).IsTrue();
+    }
+
+    [Test]
+    public async Task ProjectionSelectionAvoidsPrefixScopeMarkerReferencesInContexts()
+    {
+        var marker = "__xregistry_prefix_scope_" + Convert.ToHexString(SHA256.HashData(
+            Encoding.UTF8.GetBytes("/properties/selected\nvendor"))).ToLowerInvariant() + "__";
+        var uri = new Uri("https://contexts.invalid/marker-reference.jsonld");
+        var remote = new JsonObject
+        {
+            ["@context"] = new JsonObject
+            {
+                ["vendor"] = new JsonObject { ["@id"] = "namespace", ["@prefix"] = true },
+                ["occupiedAlias"] = new JsonObject { ["@id"] = marker, ["@protected"] = true }
+            }
+        };
+        var source = await SelectionSource("""{"a":{"const":"source"}}""");
+        var root = await SelectionRuleDocument();
+        root["@context"]!["@vocab"] = "urn:context:";
+        root["@context"]!["occupiedAlias"] = new JsonObject
+        {
+            ["@id"] = "urn:context:" + marker, ["@protected"] = true
+        };
+        root["@context"] = new JsonArray(root["@context"]!.DeepClone(),
+            new JsonObject { ["namespace"] = "vendor:" }, JsonValue.Create(uri.AbsoluteUri));
+        root["properties"] = JsonNode.Parse("""
+            {"selected":{"tm:ref":"urn:inventory:tm#/properties/a","vendor:classification":"restricted"}}
+            """);
+        var contexts = new Dictionary<Uri, FederationDocument>
+        {
+            [uri] = new(Encoding.UTF8.GetBytes(remote.ToJsonString()))
+        };
+
+        var selection = (await SelectProjection(root, source, contexts)).Single();
+        await Assert.That(selection.Annotations.Single().VendorPrefixIri).IsEqualTo("vendor:");
+        await Assert.That(selection.Definition.GetProperty("const").GetString()).IsEqualTo("source");
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task ProjectionSelectionChecksTheSourceExplicitPrefixFlag(bool bound)
+    {
+        var properties = new JsonObject
+        {
+            ["a"] = new JsonObject
+            {
+                ["@context"] = new JsonArray(new JsonObject { ["namespace"] = "vendor:" },
+                    new JsonObject { ["vendor"] = new JsonObject { ["@id"] = "namespace", ["@prefix"] = bound } }),
+                ["vendor"] = "original",
+                ["const"] = "source"
+            }
+        };
+        var source = await SelectionSource(properties.ToJsonString());
+        var root = await SelectionRuleDocument();
+        root["@context"]!["vendor"] = "urn:plan:";
+        root["properties"] = JsonNode.Parse("""
+            {"selected":{"tm:ref":"urn:inventory:tm#/properties/a","vendor:classification":"restricted"}}
+            """);
+
+        if (bound)
+        {
+            var failure = await Assert.That(async () => { _ = await SelectProjection(root, source); })
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected a source prefix conflict.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+            await Assert.That(failure.Message).Contains("prefix");
+        }
+        else
+        {
+            var selection = (await SelectProjection(root, source)).Single();
+            await Assert.That(selection.Definition.GetProperty("const").GetString()).IsEqualTo("source");
+            await Assert.That(selection.Definition.GetProperty("vendor").GetString()).IsEqualTo("original");
+            await Assert.That(selection.Annotations.Single().Iri).IsEqualTo("urn:plan:classification");
+        }
+    }
+
+    [Test]
+    [Arguments("plan")]
+    [Arguments("source")]
+    public async Task ProjectionSelectionAvoidsPrefixProbeNamesDefinedInContexts(string owner)
+    {
+        var uri = new Uri("https://contexts.invalid/names.jsonld");
+        var sourceProperties = owner == "source"
+            ? $$$"""{"a":{"@context":"{{{uri}}}","const":"source"}}"""
+            : """{"a":{"const":"source"}}""";
+        var source = await SelectionSource(sourceProperties);
+        var root = await SelectionRuleDocument();
+        root["@context"]!["vendor"] = "urn:plan:";
+        root["properties"] = JsonNode.Parse("""
+            {"selected":{"tm:ref":"urn:inventory:tm#/properties/a","vendor:classification":"restricted"}}
+            """);
+        var probeDefinition = new JsonObject
+        {
+            ["@id"] = "urn:plan:__xregistry_prefix_probe__", ["@container"] = "@language"
+        };
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        if (owner == "plan")
+        {
+            root["@context"]!["vendor:__xregistry_prefix_probe__"] = probeDefinition;
+        }
+        else
+        {
+            var context = new JsonObject
+            {
+                ["@context"] = new JsonObject
+                {
+                    ["vendor"] = "urn:plan:", ["vendor:__xregistry_prefix_probe__"] = probeDefinition
+                }
+            };
+            contexts[uri] = new(Encoding.UTF8.GetBytes(context.ToJsonString()));
+        }
+
+        var selection = (await SelectProjection(root, source, contexts)).Single();
+        await Assert.That(selection.Annotations.Single().VendorPrefixIri).IsEqualTo("urn:plan:");
+        await Assert.That(selection.Definition.GetProperty("const").GetString()).IsEqualTo("source");
+    }
+
+    [Test]
+    public async Task ProjectionSelectionAvoidsExpandedPrefixProbeValueCollisions()
+    {
+        var uri = new Uri("https://contexts.invalid/values.jsonld");
+        var marker = "urn:xregistry:projection-prefix:" +
+            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes("/properties/a\nvendor"))).ToLowerInvariant();
+        var source = await SelectionSource(
+            $$$"""{"a":{"@context":"{{{uri}}}","other":"marker","const":"source"}}""");
+        var root = await SelectionRuleDocument();
+        root["@context"]!["vendor"] = "urn:plan:";
+        root["properties"] = JsonNode.Parse("""
+            {"selected":{"tm:ref":"urn:inventory:tm#/properties/a","vendor:classification":"restricted"}}
+            """);
+        var context = new JsonObject
+        {
+            ["@context"] = new JsonObject
+            {
+                ["vendor"] = "urn:other:",
+                ["marker"] = marker,
+                ["other"] = new JsonObject { ["@id"] = "urn:test:other", ["@type"] = "@vocab" }
+            }
+        };
+        var contexts = new Dictionary<Uri, FederationDocument>
+        {
+            [uri] = new(Encoding.UTF8.GetBytes(context.ToJsonString()))
+        };
+
+        var failure = await Assert.That(async () => { _ = await SelectProjection(root, source, contexts); })
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected the real source prefix conflict.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(failure.Message).Contains("prefix");
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task ProjectionSelectionReadsAmbiguousTypeScopedPrefixFlags(bool bound)
+    {
+        var properties = new JsonObject
+        {
+            ["a"] = new JsonObject
+            {
+                ["@context"] = new JsonObject
+                {
+                    ["ScopedType"] = new JsonObject
+                    {
+                        ["@id"] = "urn:example:type",
+                        ["@context"] = new JsonArray(new JsonObject { ["namespace"] = "vendor:" },
+                            new JsonObject { ["vendor"] = new JsonObject { ["@id"] = "namespace", ["@prefix"] = bound } })
+                    }
+                },
+                ["@type"] = "ScopedType",
+                ["const"] = "source"
+            }
+        };
+        var source = await SelectionSource(properties.ToJsonString());
+        var root = await SelectionRuleDocument();
+        root["@context"]!["vendor"] = "urn:plan:";
+        root["properties"] = JsonNode.Parse("""
+            {"selected":{"tm:ref":"urn:inventory:tm#/properties/a","vendor:classification":"restricted"}}
+            """);
+
+        if (bound)
+        {
+            var failure = await Assert.That(async () => { _ = await SelectProjection(root, source); })
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected a type-scoped prefix conflict.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+            await Assert.That(failure.Message).Contains("prefix");
+        }
+        else
+        {
+            var selection = (await SelectProjection(root, source)).Single();
+            await Assert.That(selection.Definition.GetProperty("@type").GetString()).IsEqualTo("ScopedType");
+            await Assert.That(selection.Annotations.Single().VendorPrefixIri).IsEqualTo("urn:plan:");
+        }
+    }
+
+    [Test]
+    [Arguments("plan", false)]
+    [Arguments("plan", true)]
+    [Arguments("source", false)]
+    [Arguments("source", true)]
+    public async Task ProjectionSelectionReadsAmbiguousPrefixFlagsFromCapturedRemoteContexts(string owner, bool bound)
+    {
+        var uri = new Uri("https://contexts.invalid/prefix.jsonld");
+        var properties = owner == "source"
+            ? $$$"""{"a":{"@context":"{{{uri}}}","const":"source"}}"""
+            : """{"a":{"const":"source"}}""";
+        var source = await SelectionSource(properties);
+        var root = await SelectionRuleDocument();
+        if (owner == "plan")
+        {
+            root["@context"] = new JsonArray(root["@context"]!.DeepClone(), JsonValue.Create(uri.AbsoluteUri));
+        }
+        else
+        {
+            root["@context"]!["vendor"] = "urn:plan:";
+        }
+        root["properties"] = JsonNode.Parse("""
+            {"selected":{"tm:ref":"urn:inventory:tm#/properties/a","vendor:classification":"restricted"}}
+            """);
+        var remoteContext = new JsonObject
+        {
+            ["@context"] = new JsonArray(new JsonObject { ["namespace"] = "vendor:" },
+                new JsonObject { ["vendor"] = new JsonObject { ["@id"] = "namespace", ["@prefix"] = bound } })
+        };
+        var contexts = new Dictionary<Uri, FederationDocument>
+        {
+            [uri] = new(Encoding.UTF8.GetBytes(remoteContext.ToJsonString()))
+        };
+
+        if (owner == "plan" && !bound || owner == "source" && bound)
+        {
+            var failure = await Assert.That(async () => { _ = await SelectProjection(root, source, contexts); })
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected prefix admission rejection.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+            await Assert.That(failure.Message).Contains("prefix");
+        }
+        else
+        {
+            var selection = (await SelectProjection(root, source, contexts)).Single();
+            await Assert.That(selection.Annotations.Single().VendorPrefixIri)
+                .IsEqualTo(owner == "plan" ? "vendor:" : "urn:plan:");
+            await Assert.That(selection.Definition.GetProperty("const").GetString()).IsEqualTo("source");
+        }
+    }
+
+    [Test]
+    [Arguments(-1)]
+    [Arguments(0)]
+    [Arguments(1)]
+    public async Task ProjectionSelectionPrefixChecksShareInclusiveWorkAndCancellation(int delta)
+    {
+        var source = await SelectionSource("""{"a":{"const":"source"}}""");
+        var root = await SelectionRuleDocument();
+        root["@context"]!["vendor"] = "urn:plan:";
+        root["properties"] = JsonNode.Parse("""
+            {"selected":{"tm:ref":"urn:inventory:tm#/properties/a","vendor:classification":"restricted"}}
+            """);
+        var containing = await RetainProjectionPlan(root);
+        var identities = InventoryIndex(source);
+        async Task<IReadOnlyList<WotProjectionAffordanceSelection>> Select(FederationReadBudget budget,
+            CancellationToken token = default) =>
+            await WotRegistryResolver.SelectCapturedProjectionAffordancesAsync(containing,
+                new("https://example.test/plan.json"), new Dictionary<Uri, FederationDocument>(), identities,
+                budget: budget, cancellationToken: token);
+
+        var baseline = new FederationReadBudget();
+        _ = await Select(baseline);
+        var budget = new FederationReadBudget(new(maxWork: baseline.Work + delta));
+        if (delta < 0)
+        {
+            var failure = await Assert.That(async () => { _ = await Select(budget); })
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected shared prefix work limit.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        }
+        else
+        {
+            var selection = (await Select(budget)).Single();
+            await Assert.That(selection.Annotations.Single().VendorPrefixIri).IsEqualTo("urn:plan:");
+            await Assert.That(budget.Work).IsEqualTo(baseline.Work);
+        }
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        await Assert.That(async () => { _ = await Select(new(), cancellation.Token); })
+            .Throws<OperationCanceledException>();
+    }
+
+    [Test]
+    [Arguments(-1)]
+    [Arguments(0)]
+    [Arguments(1)]
+    public async Task ProjectionSelectionBoundsRetainedPrefixAndAnnotationBytes(int delta)
+    {
+        var source = await SelectionSource(new JsonObject
+        {
+            ["a"] = new JsonObject { ["const"] = new string('s', 4096) }
+        }.ToJsonString());
+        var root = await SelectionRuleDocument();
+        root["@context"]!["vendor"] = "urn:plan:";
+        var selectors = new JsonObject();
+        foreach (var name in new[] { "one", "two", "three" })
+        {
+            selectors[name] = new JsonObject
+            {
+                ["tm:ref"] = "urn:inventory:tm#/properties/a",
+                ["vendor:classification"] = new string('v', 4096)
+            };
+        }
+        root["properties"] = selectors;
+        var containing = await RetainProjectionPlan(root);
+        var identities = InventoryIndex(source);
+        async Task<IReadOnlyList<WotProjectionAffordanceSelection>> Select(FederationReadBudget budget) =>
+            await WotRegistryResolver.SelectCapturedProjectionAffordancesAsync(containing,
+                new("https://example.test/plan.json"), new Dictionary<Uri, FederationDocument>(), identities,
+                budget: budget);
+
+        var baseline = await Select(new());
+        var size = baseline.Sum(selection => Encoding.UTF8.GetByteCount(selection.Definition.GetRawText()) +
+            Encoding.UTF8.GetByteCount(selection.Name) + Encoding.UTF8.GetByteCount(selection.SourcePointer) +
+            selection.Annotations.Sum(annotation => Encoding.UTF8.GetByteCount(annotation.MemberName) +
+                Encoding.UTF8.GetByteCount(annotation.Iri) + Encoding.UTF8.GetByteCount(annotation.Value.GetRawText()) +
+                Encoding.UTF8.GetByteCount(annotation.VendorPrefixIri ?? "")));
+        var budget = new FederationReadBudget(new(maxResultBytes: size + delta));
+        if (delta < 0)
+        {
+            var failure = await Assert.That(async () => { _ = await Select(budget); })
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected retained annotation size rejection.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+        }
+        else
+        {
+            await Assert.That((await Select(budget)).Count).IsEqualTo(3);
+        }
     }
 
     [Test]
