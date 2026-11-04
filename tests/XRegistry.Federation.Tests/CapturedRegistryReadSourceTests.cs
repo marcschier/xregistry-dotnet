@@ -1266,6 +1266,14 @@ public class CapturedRegistryReadSourceTests
         {
             var selections = await SelectProjection(root, source);
             await Assert.That(selections.Single().Name).IsEqualTo("selected");
+            if (routing == "projection")
+            {
+                await Assert.That(selections.Single().Annotations.Count).IsEqualTo(2);
+                await Assert.That(selections.Single().Annotations.Any(annotation =>
+                    annotation.Iri == "https://www.w3.org/2019/wot/td#hasForm")).IsTrue();
+                await Assert.That(selections.Single().Annotations.Any(annotation =>
+                    annotation.Iri == "https://www.w3.org/2019/wot/td#hasSecurityConfiguration")).IsTrue();
+            }
         }
         else
         {
@@ -1273,6 +1281,97 @@ public class CapturedRegistryReadSourceTests
                 .Throws<FederationException>() ?? throw new InvalidOperationException("Expected routing annotation rejection.");
             await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
         }
+    }
+
+    [Test]
+    public async Task ProjectionSelectionRetainsPermittedAnnotationsInThePlanContext()
+    {
+        var source = await SelectionSource("""{"a":{}}""");
+        var root = await SelectionRuleDocument();
+        root["@context"]!["title"] = "td:title";
+        root["@context"]!["description"] = "td:description";
+        root["@context"]!["domain"] = "https://example.test/types/";
+        root["@context"]!["vendor"] = JsonNode.Parse(
+            """{"@id":"https://example.test/vendor/","@prefix":true}""");
+        root["properties"] = new JsonObject
+        {
+            ["selected"] = new JsonObject
+            {
+                ["tm:ref"] = "urn:inventory:tm#/properties/a",
+                ["title"] = "Selected title",
+                ["description"] = "Selected description",
+                ["@type"] = "domain:ConditionSignal",
+                ["vendor:classification"] = JsonNode.Parse("""{"level":"restricted"}""")
+            }
+        };
+
+        var selection = (await SelectProjection(root, source)).Single();
+        await Assert.That(selection.Annotations.Count).IsEqualTo(4);
+        await Assert.That(selection.Annotations.Single(annotation =>
+            annotation.Iri == "https://www.w3.org/2019/wot/td#title").Value.GetString())
+            .IsEqualTo("Selected title");
+        await Assert.That(selection.Annotations.Single(annotation =>
+            annotation.Iri == "https://www.w3.org/2019/wot/td#description").Value.GetString())
+            .IsEqualTo("Selected description");
+        await Assert.That(selection.Annotations.Single(annotation => annotation.Iri == "@type").Value.GetString())
+            .IsEqualTo("domain:ConditionSignal");
+        await Assert.That(selection.Annotations.Single(annotation =>
+            annotation.Iri == "https://example.test/vendor/classification").Value.GetProperty("level").GetString())
+            .IsEqualTo("restricted");
+    }
+
+    [Test]
+    [Arguments("schema")]
+    [Arguments("td")]
+    [Arguments("projection")]
+    [Arguments("unbound")]
+    [Arguments("plain")]
+    [Arguments("keyword")]
+    [Arguments("duplicate")]
+    public async Task ProjectionSelectorsRejectOverridesAndUnboundedAnnotations(string invalidAnnotation)
+    {
+        var source = await SelectionSource("""{"a":{}}""");
+        var root = await SelectionRuleDocument();
+        root["@context"]!["vendor"] = JsonNode.Parse(
+            """{"@id":"https://example.test/vendor/","@prefix":true}""");
+        root["@context"]!["tdonly"] = JsonNode.Parse(
+            """{"@id":"https://www.w3.org/2019/wot/td#","@prefix":true}""");
+        root["@context"]!["planonly"] = JsonNode.Parse(
+            $$"""{"@id":"{{WotJsonLdBaseResolver.ProjectionVocabulary}}","@prefix":true}""");
+        root["@context"]!["titleAlias"] = "td:title";
+        var selector = new JsonObject { ["tm:ref"] = "urn:inventory:tm#/properties/a" };
+        switch (invalidAnnotation)
+        {
+            case "schema":
+                root["@context"]!["type"] = "td:type";
+                selector["type"] = "string";
+                break;
+            case "td":
+                selector["tdonly:extension"] = true;
+                break;
+            case "projection":
+                selector["planonly:extension"] = true;
+                break;
+            case "unbound":
+                selector["missing:extension"] = true;
+                break;
+            case "plain":
+                root["@context"]!["extension"] = "https://example.test/vendor/extension";
+                selector["extension"] = true;
+                break;
+            case "keyword":
+                selector["@id"] = "urn:annotation";
+                break;
+            case "duplicate":
+                selector["title"] = "First";
+                selector["titleAlias"] = "Second";
+                break;
+        }
+        root["properties"] = new JsonObject { ["selected"] = selector };
+
+        var failure = await Assert.That(async () => { _ = await SelectProjection(root, source); })
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected selector annotation rejection.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
     }
 
     [Test]

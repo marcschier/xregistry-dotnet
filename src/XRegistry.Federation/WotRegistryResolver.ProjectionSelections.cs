@@ -10,7 +10,7 @@ namespace XRegistry.Federation;
 /// <summary>One winning definition with its original owner, before annotations, relocation or final validation.</summary>
 public sealed record WotProjectionAffordanceSelection(WotResolvedDocument Owner, string SourcePointer,
     string Category, string Name, JsonElement Definition, WotProjectionSourceSelectionRule? Source,
-    WotProjectionSelectorOccurrence? Selector);
+    WotProjectionSelectorOccurrence? Selector, IReadOnlyList<WotProjectionSelectorAnnotation> Annotations);
 
 public static partial class WotRegistryResolver
 {
@@ -46,6 +46,8 @@ public static partial class WotRegistryResolver
         var selectors = await WotJsonLdBaseResolver.DiscoverProjectionSelectorReferencesAsync(
             containingRevision.Document, documentUri, containingRevision.Kind, contexts,
             readBudget, cancellationToken).ConfigureAwait(false);
+        var selectorAnnotations = new Dictionary<string, IReadOnlyList<WotProjectionSelectorAnnotation>>(
+            StringComparer.Ordinal);
         foreach (var selector in selectors)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -64,9 +66,10 @@ public static partial class WotRegistryResolver
             {
                 throw FederationJson.Invalid("A projection selector must belong to exactly one source rule.");
             }
-            await WotJsonLdBaseResolver.ValidateProjectionSelectorRoutingAsync(containingRevision.Document,
+            var annotations = await WotJsonLdBaseResolver.ReadProjectionSelectorAnnotationsAsync(containingRevision.Document,
                 documentUri, contexts, selector, matchingRule.Routing, readBudget, cancellationToken)
                 .ConfigureAwait(false);
+            selectorAnnotations.Add(selector.Reference.SourcePointer, annotations);
         }
         var root = await ParseAcquiredDocumentAsync(containingRevision, readBudget, cancellationToken).ConfigureAwait(false);
         var planMaps = await ProjectionMapsAsync(containingRevision, root, documentUri, contexts, readBudget,
@@ -123,7 +126,8 @@ public static partial class WotRegistryResolver
                 var definition = SelectProjectionMapAffordance(sourceRoot, category, original, readBudget,
                     cancellationToken);
                 explicitSelections.Add((ProjectionCategory(category), name, original),
-                    new(selected, selector.TargetPointer, category, name, definition, rule, selector));
+                    new(selected, selector.TargetPointer, category, name, definition, rule, selector,
+                        selectorAnnotations[selector.Reference.SourcePointer]));
             }
             foreach (var (category, map) in sourceMaps)
             {
@@ -141,7 +145,8 @@ public static partial class WotRegistryResolver
                     var name = ProjectionBulkName(rule.NamePrefix, affordance.Name);
                     readBudget.CheckResultBytes(Encoding.UTF8.GetByteCount(name));
                     bulk.Add((ProjectionCategory(category), name, affordance.Name),
-                        new(selected, pointer, category, name, affordance.Value, rule, null));
+                        new(selected, pointer, category, name, affordance.Value, rule, null,
+                            Array.Empty<WotProjectionSelectorAnnotation>()));
                 }
             }
             foreach (var selection in explicitSelections.Values.Concat(bulk.Values))
@@ -160,7 +165,7 @@ public static partial class WotRegistryResolver
                 var pointer = "/" + ProjectionPointer(map.Name) + "/" + ProjectionPointer(local.Name);
                 if (selectorPointers.Contains(pointer)) { continue; }
                 winners[(category, local.Name)] = new(containingRevision, pointer, category, local.Name,
-                    local.Value, null, null);
+                    local.Value, null, null, Array.Empty<WotProjectionSelectorAnnotation>());
             }
         }
         var ordered = new SortedDictionary<(int Category, string Name, string Original),
@@ -172,6 +177,14 @@ public static partial class WotRegistryResolver
             readBudget.ChargeWork();
             resultBytes += Encoding.UTF8.GetByteCount(selection.Definition.GetRawText()) +
                 Encoding.UTF8.GetByteCount(selection.Name) + Encoding.UTF8.GetByteCount(selection.SourcePointer);
+            foreach (var annotation in selection.Annotations)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                readBudget.ChargeWork();
+                resultBytes += Encoding.UTF8.GetByteCount(annotation.MemberName) +
+                    Encoding.UTF8.GetByteCount(annotation.Iri) +
+                    Encoding.UTF8.GetByteCount(annotation.Value.GetRawText());
+            }
             readBudget.CheckResultBytes(resultBytes);
             ordered.Add((ProjectionCategory(selection.Category), selection.Name, ""), selection);
         }

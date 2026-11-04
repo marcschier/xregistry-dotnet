@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using XRegistry.Models;
@@ -21,6 +22,9 @@ public sealed record WotProjectionSelectorOccurrence(WotAuthoredReferenceOccurre
 
 /// <summary>Validated immutable facts about a marked projection-plan envelope.</summary>
 public sealed record WotProjectionPlanEnvelope(WotReferenceTargetKind Kind, string ScenarioIri);
+
+/// <summary>A permitted selector annotation retained with its authored key and value.</summary>
+public sealed record WotProjectionSelectorAnnotation(string MemberName, string Iri, JsonElement Value);
 
 public static partial class WotJsonLdBaseResolver
 {
@@ -58,8 +62,8 @@ public static partial class WotJsonLdBaseResolver
         return envelope;
     }
 
-    /// <summary>Checks that selector forms and security remain on the side chosen by projection routing.</summary>
-    public static async ValueTask ValidateProjectionSelectorRoutingAsync(
+    /// <summary>Reads permitted annotations and checks that forms and security follow projection routing.</summary>
+    public static async ValueTask<IReadOnlyList<WotProjectionSelectorAnnotation>> ReadProjectionSelectorAnnotationsAsync(
         FederationDocument document, Uri documentUri,
         IReadOnlyDictionary<Uri, FederationDocument> capturedContexts,
         WotProjectionSelectorOccurrence selector, string routing,
@@ -78,17 +82,64 @@ public static partial class WotJsonLdBaseResolver
         var contexts = ContextSnapshot(CaptureContextDocuments(capturedContexts, readBudget, cancellationToken));
         var root = await ParseDocumentAsync(document, readBudget, cancellationToken).ConfigureAwait(false);
         var occurrence = ObjectAtPointer(root, selector.Reference.SourcePointer, readBudget, cancellationToken);
+        var annotations = new List<WotProjectionSelectorAnnotation>();
+        var meanings = new HashSet<string>(StringComparer.Ordinal);
         var forms = 0;
         var security = 0;
-        foreach (var member in occurrence.Properties())
+        foreach (var member in occurrence.Properties().ToArray())
         {
             cancellationToken.ThrowIfCancellationRequested();
             readBudget.ChargeWork();
-            if (member.Name.StartsWith('@') || member.Name == selector.Reference.PropertyName) { continue; }
-            var iri = await ExpandMemberIriAsync(document, selector.Reference.SourcePointer, member.Name,
-                documentUri, contexts, readBudget, cancellationToken).ConfigureAwait(false);
-            if (iri == "https://www.w3.org/2019/wot/td#hasForm") { forms++; }
-            if (iri == "https://www.w3.org/2019/wot/td#hasSecurityConfiguration") { security++; }
+            if (member.Name == selector.Reference.PropertyName) { continue; }
+            var iri = member.Name == "@type" ? "@type" :
+                member.Name.StartsWith('@')
+                    ? throw FederationJson.Invalid("A projection selector cannot contain other JSON-LD keywords.")
+                    : await ExpandMemberIriAsync(document, selector.Reference.SourcePointer, member.Name,
+                        documentUri, contexts, readBudget, cancellationToken).ConfigureAwait(false);
+            if (iri is null || !meanings.Add(iri))
+            {
+                throw FederationJson.Invalid("A projection selector annotation must have one unique expanded meaning.");
+            }
+
+            if (iri == "@type")
+            {
+                if (member.Value.Type != JTokenType.String &&
+                    (member.Value is not JArray { Count: > 0 } types ||
+                     types.Any(type => type.Type != JTokenType.String)))
+                {
+                    throw FederationJson.Invalid("A projection selector @type annotation must be an IRI string or nonempty array of strings.");
+                }
+                var expandedTypes = await ReadProjectionObjectTypesAsync(document,
+                    selector.Reference.SourcePointer, documentUri, contexts, readBudget, cancellationToken)
+                    .ConfigureAwait(false);
+                if (expandedTypes.Count == 0)
+                {
+                    throw FederationJson.Invalid("A projection selector @type annotation must expand to at least one IRI.");
+                }
+            }
+            else if (IsProjectionStandardAnnotation(iri))
+            {
+                if (iri == "https://www.w3.org/2019/wot/td#hasForm") { forms++; }
+                if (iri == "https://www.w3.org/2019/wot/td#hasSecurityConfiguration") { security++; }
+            }
+            else if (IsProjectionVendorAnnotation(member.Name, iri))
+            {
+                var separator = member.Name.IndexOf(':');
+                if (!await IsProjectionCompactPrefixBoundAsync(root, occurrence,
+                    selector.Reference.SourcePointer, member.Name[..separator], document, documentUri, contexts,
+                    readBudget, cancellationToken).ConfigureAwait(false))
+                {
+                    throw FederationJson.Invalid("A projection vendor annotation requires a bound compact-IRI prefix.");
+                }
+                _ = FederationJson.AbsoluteUri(iri);
+            }
+            else
+            {
+                throw FederationJson.Invalid("A projection selector cannot override a standardized TD, TM or projection member.");
+            }
+
+            using var value = JsonDocument.Parse(member.Value.ToString(Formatting.None));
+            annotations.Add(new(member.Name, iri, value.RootElement.Clone()));
         }
 
         if (forms > 1 || security > 1 ||
@@ -99,6 +150,98 @@ public static partial class WotJsonLdBaseResolver
                 ? "Source-routed projection selectors cannot override forms or security."
                 : "Projection-routed selectors must provide exactly one forms and security annotation.");
         }
+        cancellationToken.ThrowIfCancellationRequested();
+        return annotations.AsReadOnly();
+    }
+
+    private static bool IsProjectionStandardAnnotation(string iri) =>
+        iri is "https://www.w3.org/2019/wot/td#title" or
+            "https://www.w3.org/2019/wot/td#titles" or
+            "https://www.w3.org/2019/wot/td#description" or
+            "https://www.w3.org/2019/wot/td#descriptions" or
+            "https://www.w3.org/2019/wot/td#hasForm" or
+            "https://www.w3.org/2019/wot/td#hasSecurityConfiguration";
+
+    private static bool IsProjectionVendorAnnotation(string memberName, string iri)
+    {
+        var separator = memberName.IndexOf(':');
+        return separator > 0 && separator < memberName.Length - 1 &&
+            !iri.StartsWith("https://www.w3.org/2019/wot/td#", StringComparison.Ordinal) &&
+            !iri.StartsWith("https://www.w3.org/2019/wot/tm#", StringComparison.Ordinal) &&
+            !iri.StartsWith(ProjectionVocabulary, StringComparison.Ordinal);
+    }
+
+    private static async ValueTask<bool> IsProjectionCompactPrefixBoundAsync(JObject root, JObject occurrence,
+        string pointer, string prefix, FederationDocument document, Uri documentUri,
+        IReadOnlyDictionary<Uri, FederationDocument> contexts, FederationReadBudget budget,
+        CancellationToken cancellationToken)
+    {
+        var prefixAlreadyAuthored = occurrence.Property(prefix, StringComparison.Ordinal) is not null;
+        var prefixProbeValue = "urn:xregistry:projection-prefix:" +
+            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(pointer + "\n" + prefix)))
+                .ToLowerInvariant();
+        while (ContainsProjectionProbeValue(root, prefixProbeValue, budget, cancellationToken) ||
+            ContainsProjectionProbeValue(root, prefixProbeValue + ":compact", budget, cancellationToken))
+        {
+            prefixProbeValue += ":probe";
+        }
+        var compactProbeValue = prefixProbeValue + ":compact";
+        var prefixProbeName = prefix + ":__xregistry_prefix_probe__";
+        for (var suffix = 0; occurrence.Property(prefixProbeName, StringComparison.Ordinal) is not null; suffix++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            budget.ChargeWork();
+            prefixProbeName = prefix + ":__xregistry_prefix_probe_" +
+                suffix.ToString(CultureInfo.InvariantCulture) + "__";
+        }
+
+        if (!prefixAlreadyAuthored) { occurrence[prefix] = prefixProbeValue; }
+        occurrence[prefixProbeName] = compactProbeValue;
+        try
+        {
+            var contextDocuments = CaptureContextDocuments(contexts, budget, cancellationToken);
+            var loaded = new Dictionary<string, JToken>(StringComparer.Ordinal);
+            var documentBase = FederationJson.AbsoluteUri(document.Base ?? documentUri.AbsoluteUri);
+            var baseline = ExpandCapturedDocument(root, documentBase, contextDocuments, loaded, budget,
+                cancellationToken);
+            var expanded = ExpandProjectionObject(root, pointer, baseline, documentBase, contextDocuments, loaded,
+                budget, cancellationToken);
+            var prefixIri = prefixAlreadyAuthored
+                ? await ExpandMemberIriAsync(document, pointer, prefix, documentUri, contexts, budget,
+                    cancellationToken).ConfigureAwait(false)
+                : ExpandedProbeProperty(expanded, prefixProbeValue, budget, cancellationToken);
+            var compactIri = ExpandedProbeProperty(expanded, compactProbeValue, budget, cancellationToken);
+            return prefixIri is not null && compactIri is not null &&
+                compactIri.StartsWith(prefixIri, StringComparison.Ordinal) && compactIri.Length > prefixIri.Length;
+        }
+        finally
+        {
+            occurrence.Property(prefixProbeName, StringComparison.Ordinal)?.Remove();
+            if (!prefixAlreadyAuthored) { occurrence.Property(prefix, StringComparison.Ordinal)?.Remove(); }
+        }
+    }
+
+    private static string? ExpandedProbeProperty(JObject expanded, string expectedValue,
+        FederationReadBudget budget, CancellationToken cancellationToken)
+    {
+        var matches = expanded.Properties().Where(property =>
+            ContainsProjectionProbeValue(property.Value, expectedValue, budget, cancellationToken)).ToArray();
+        return matches.Length == 1 ? matches[0].Name : null;
+    }
+
+    private static bool ContainsProjectionProbeValue(JToken token, string expectedValue,
+        FederationReadBudget budget, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        budget.ChargeWork();
+        if (token is JValue value)
+        {
+            return value.Type == JTokenType.String &&
+                string.Equals(value.Value<string>(), expectedValue, StringComparison.Ordinal);
+        }
+        return token is JContainer container &&
+            container.Children().Any(child =>
+                ContainsProjectionProbeValue(child, expectedValue, budget, cancellationToken));
     }
 
     /// <summary>Discovers ordered source entries only when the root has the selected expanded projection marker.</summary>
