@@ -161,6 +161,7 @@ public static partial class WotJsonLdBaseResolver
             DocumentLoader = (uri, _) => LoadContext(uri, contexts, loaded, readBudget,
                 failure => contextFailure = failure, cancellationToken, transform)
         };
+        var typeArraySnapshot = ContainsAuthoredTypeArray(root) ? (JObject)root.DeepClone() : null;
         JArray expanded;
         try
         {
@@ -184,6 +185,23 @@ public static partial class WotJsonLdBaseResolver
             throw new FederationException(FederationErrorCode.InvalidPackage,
                 "The captured member or its contexts could not be expanded.", innerException: exception);
         }
+        catch (NullReferenceException exception)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (contextFailure is not null) { throw contextFailure; }
+            // dotNetRDF 3.5.2 mutates the input before crashing on a null-expanded final @type.
+            JArray retry = null!;
+            var confirmedNullType = typeArraySnapshot is not null &&
+                TryExpandWithFinalTypesMoved(typeArraySnapshot, options, readBudget, out retry);
+            if (contextFailure is not null) { throw contextFailure; }
+            if (confirmedNullType)
+            {
+                throw new FederationException(FederationErrorCode.InvalidPackage,
+                    "A captured JSON-LD @type value is disabled by its active context.",
+                    innerException: exception);
+            }
+            throw;
+        }
         catch (InvalidOperationException exception) when (exception.InnerException is FormatException)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -193,6 +211,129 @@ public static partial class WotJsonLdBaseResolver
         cancellationToken.ThrowIfCancellationRequested();
         readBudget.CheckResultBytes(Encoding.UTF8.GetByteCount(expanded.ToString(Formatting.None)));
         return expanded;
+    }
+
+    private static bool ContainsAuthoredTypeArray(JToken token)
+    {
+        if (token is JObject obj)
+        {
+            if (obj.Property("@type", StringComparison.Ordinal)?.Value is JArray { Count: > 1 }) { return true; }
+            return obj.Properties().Where(property => property.Name != "@context")
+                .Any(property => ContainsAuthoredTypeArray(property.Value));
+        }
+        return token is JArray array && array.Children().Any(ContainsAuthoredTypeArray);
+    }
+
+    private static bool TryExpandWithFinalTypesMoved(JObject root, JsonLdProcessorOptions options,
+        FederationReadBudget readBudget, out JArray expanded)
+    {
+        expanded = null!;
+        var authoredJson = root.ToString(Formatting.None);
+        var probeType = "urn:xregistry:internal:jsonld-type-probe:" +
+            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(authoredJson)))
+                .ToLowerInvariant();
+        while (authoredJson.Contains(probeType, StringComparison.Ordinal))
+        {
+            probeType += "-probe";
+        }
+        var typeArrayCount = CountAuthoredTypeArrays(root);
+        readBudget.ChargeWork(typeArrayCount);
+        for (var targetIndex = 0; targetIndex < typeArrayCount; targetIndex++)
+        {
+            var retryRoot = (JObject)root.DeepClone();
+            var currentIndex = 0;
+            if (!MoveFinalTypeValues(retryRoot, ref currentIndex, targetIndex, probeType)) { continue; }
+
+            try
+            {
+                var warnings = new List<JsonLdProcessorWarning>();
+                var retryExpanded = JsonLdProcessor.Expand(retryRoot, options, warnings);
+                if (warnings.Count != 0) { continue; }
+                readBudget.CheckResultBytes(Encoding.UTF8.GetByteCount(retryExpanded.ToString(Formatting.None)));
+                if (!ContainsNullFinalTypeExpansionWithProbe(retryExpanded, probeType))
+                {
+                    continue;
+                }
+                expanded = retryExpanded;
+                return true;
+            }
+            catch (JsonLdProcessorException)
+            {
+                continue;
+            }
+            catch (NullReferenceException)
+            {
+                continue;
+            }
+            catch (InvalidOperationException exception) when (exception.InnerException is FormatException)
+            {
+                continue;
+            }
+        }
+        return false;
+    }
+
+    private static int CountAuthoredTypeArrays(JToken token)
+    {
+        if (token is JObject obj)
+        {
+            var ownCount = obj.Property("@type", StringComparison.Ordinal)?.Value is JArray { Count: > 1 } ? 1 : 0;
+            return ownCount + obj.Properties()
+                .Where(property => property.Name != "@context")
+                .Sum(property => CountAuthoredTypeArrays(property.Value));
+        }
+        return token is JArray array ? array.Children().Sum(CountAuthoredTypeArrays) : 0;
+    }
+
+    private static bool MoveFinalTypeValues(JToken token, ref int currentIndex, int targetIndex, string probeType)
+    {
+        if (token is JObject obj)
+        {
+            if (obj.Property("@type", StringComparison.Ordinal)?.Value is JArray { Count: > 1 } types)
+            {
+                if (currentIndex == targetIndex)
+                {
+                    var last = types[types.Count - 1]!.DeepClone();
+                    types.RemoveAt(types.Count - 1);
+                    types.Insert(0, last);
+                    types.Add(probeType);
+                    return true;
+                }
+                currentIndex++;
+            }
+            foreach (var property in obj.Properties().Where(property => property.Name != "@context"))
+            {
+                if (MoveFinalTypeValues(property.Value, ref currentIndex, targetIndex, probeType)) { return true; }
+            }
+        }
+        else if (token is JArray array)
+        {
+            foreach (var child in array.Children())
+            {
+                if (MoveFinalTypeValues(child, ref currentIndex, targetIndex, probeType)) { return true; }
+            }
+        }
+        return false;
+    }
+
+    private static bool ContainsNullFinalTypeExpansionWithProbe(JToken token, string probeType)
+    {
+        if (token is JObject obj)
+        {
+            if (obj.Property("@type", StringComparison.Ordinal)?.Value is JArray types &&
+                types.Any(type => type.Type == JTokenType.String &&
+                    StringComparer.Ordinal.Equals(type.Value<string>(), probeType)) &&
+                types.Count > 0 &&
+                (types[0].Type == JTokenType.Null ||
+                    types[0].Type == JTokenType.String && types[0].Value<string>() is null))
+            {
+                return true;
+            }
+            return obj.Properties().Any(property =>
+                ContainsNullFinalTypeExpansionWithProbe(property.Value, probeType));
+        }
+        return token is JArray array && array.Children().Any(child =>
+            ContainsNullFinalTypeExpansionWithProbe(child, probeType));
     }
 
     private static Uri? ResolveReferenceValue(JObject root, JObject occurrence, string sourcePointer,

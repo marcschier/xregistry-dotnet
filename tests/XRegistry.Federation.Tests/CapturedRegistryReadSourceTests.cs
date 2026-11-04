@@ -2467,14 +2467,19 @@ public class CapturedRegistryReadSourceTests
     }
 
     [Test]
-    [Arguments("predicate")]
-    [Arguments("selector")]
-    [Arguments("source")]
-    public async Task ProjectionTypeArraysRejectAnExpandedNullBeforeAValidType(string owner)
+    [Arguments("predicate", true)]
+    [Arguments("predicate", false)]
+    [Arguments("selector", true)]
+    [Arguments("selector", false)]
+    [Arguments("source", true)]
+    [Arguments("source", false)]
+    public async Task ProjectionTypeArraysRejectAnExpandedNullInAnyPosition(string owner, bool nullFirst)
     {
         var root = await SelectionRuleDocument();
         root["@context"]!["Disabled"] = null;
-        var types = new JsonArray("Disabled", "urn:type:allowed");
+        var types = nullFirst
+            ? new JsonArray("Disabled", "urn:type:allowed")
+            : new JsonArray("urn:type:allowed", "Disabled");
         if (owner == "selector")
         {
             root["properties"] = new JsonObject
@@ -2527,13 +2532,17 @@ public class CapturedRegistryReadSourceTests
     }
 
     [Test]
-    [Arguments(false)]
-    [Arguments(true)]
-    public async Task ProjectionRootRejectsAnExpandedNullBeforeItsRequiredTypes(bool envelope)
+    [Arguments(false, false)]
+    [Arguments(false, true)]
+    [Arguments(true, false)]
+    [Arguments(true, true)]
+    public async Task ProjectionRootRejectsAnExpandedNullInAnyPosition(bool envelope, bool nullLast)
     {
         var root = await SelectionRuleDocument();
         root["@context"]!["Disabled"] = null;
-        root["@type"] = new JsonArray("Disabled", "tm:ThingModel", "p:projection");
+        root["@type"] = nullLast
+            ? new JsonArray("tm:ThingModel", "p:projection", "Disabled")
+            : new JsonArray("Disabled", "tm:ThingModel", "p:projection");
         var document = new FederationDocument(Encoding.UTF8.GetBytes(root.ToJsonString()));
         var uri = new Uri("https://example.test/plan.json");
         var contexts = new Dictionary<Uri, FederationDocument>();
@@ -2549,6 +2558,23 @@ public class CapturedRegistryReadSourceTests
                     WotReferenceTargetKind.ThingModel, contexts);
             }
         }).Throws<FederationException>() ?? throw new InvalidOperationException("Expected every root type to resolve.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    public async Task OrdinaryReferenceDiscoveryRejectsNullExpandedTrailingTypes()
+    {
+        var root = await RequirementDocument("""
+            {"a":{"@type":["urn:type:allowed","Disabled"],"tm:ref":"urn:inventory:tm"}}
+            """, "[]");
+        root["@context"]!["Disabled"] = null;
+        var document = new FederationDocument(Encoding.UTF8.GetBytes(root.ToJsonString()));
+        var failure = await Assert.That(async () =>
+            await WotJsonLdBaseResolver.DiscoverCapturedReferenceInventoryAsync(document,
+                new("https://example.test/entry.json"), WotReferenceTargetKind.ThingModel,
+                new Dictionary<Uri, FederationDocument>(), InventoryIndex(new Fixture().Open())))
+            .Throws<FederationException>() ??
+            throw new InvalidOperationException("Expected a disabled reference type to reject.");
         await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
     }
 
