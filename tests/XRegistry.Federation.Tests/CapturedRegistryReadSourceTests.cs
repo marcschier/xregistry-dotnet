@@ -522,6 +522,137 @@ public class CapturedRegistryReadSourceTests
     }
 
     [Test]
+    [Arguments(false, "ordinary")]
+    [Arguments(true, "ordinary")]
+    [Arguments(false, "link")]
+    [Arguments(true, "link")]
+    [Arguments(false, "scoped")]
+    [Arguments(true, "scoped")]
+    [Arguments(false, "projection")]
+    [Arguments(true, "projection")]
+    public async Task CapturedGraphRejectsAliasesThatChangeReferenceLocality(bool reverse, string kind)
+    {
+        var properties = reverse
+            ? """{"alias":{"tm:ref":"urn:graph:2"},"base":{"tm:ref":"https://graph.test/2.0.0.json"}}"""
+            : """{"base":{"tm:ref":"https://graph.test/2.0.0.json"},"alias":{"tm:ref":"urn:graph:2"}}""";
+        Action<JsonNode>? configureSecond = kind switch
+        {
+            "link" => root => root["links"] =
+                JsonNode.Parse("""[{"rel":"tm:extends","href":"#/properties/value"}]"""),
+            "scoped" => root => root["properties"]!["self"]!["@context"] =
+                new JsonObject { ["@base"] = "urn:graph:2" },
+            "projection" => root => MarkGraphProjection(root, "urn:graph:2"),
+            _ => null
+        };
+        var (entry, identities) = await DependencyGraphFixture(properties,
+            kind is "ordinary" or "scoped"
+                ? """{"self":{"tm:ref":"#/properties/value"},"value":{}}"""
+                : """{"value":{}}""",
+            configureSecond: configureSecond);
+        var aliases = GraphAliasIdentities(identities);
+        var failure = await Assert.That(async () =>
+        {
+            _ = await WotRegistryResolver.CaptureDependencyGraphAsync([entry],
+                new Dictionary<Uri, FederationDocument>(), aliases);
+        }).Throws<FederationException>() ?? throw new InvalidOperationException("Expected incompatible alias contexts to reject.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        await Assert.That(failure.Message).Contains("conflicting reference locality");
+    }
+
+    [Test]
+    public async Task CapturedVersionAliasesCanChangeOnlyReferenceLocality()
+    {
+        var (_, identities) = await DependencyGraphFixture(second:
+            """{"self":{"tm:ref":"#/properties/value"},"value":{}}""");
+        var target = identities.Resolve(new Uri("urn:graph:2"));
+        var version = await WotRegistryResolver.ResolveAsync(target.Source, target.ResourceCollection,
+            new(target.WotId!, WotReferenceTargetKind.ThingModel, WotReferenceOperator.ThingModel,
+                VersionIdPin: target.VersionId));
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var canonical = (await WotJsonLdBaseResolver.DiscoverOrdinaryReferencesAsync(version.Document,
+            new Uri("https://graph.test/2.0.0.json"), contexts)).Single();
+        var alias = (await WotJsonLdBaseResolver.DiscoverOrdinaryReferencesAsync(version.Document,
+            new Uri("urn:graph:2"), contexts)).Single();
+        await Assert.That(canonical.Target.DocumentUri).IsEqualTo(alias.Target.DocumentUri);
+        await Assert.That(canonical.Target.IsDocumentLocal).IsTrue();
+        await Assert.That(alias.Target.IsDocumentLocal).IsFalse();
+    }
+
+    [Test]
+    public async Task CapturedGraphReusesAliasesWhenReferenceLocalityIsUnchanged()
+    {
+        var (entry, identities) = await DependencyGraphFixture(
+            """{"base":{"tm:ref":"https://graph.test/2.0.0.json"},"alias":{"tm:ref":"urn:graph:2"}}""",
+            """{"other":{"tm:ref":"urn:graph:3"}}""");
+        var aliases = GraphAliasIdentities(identities, includeThird: true);
+        var graph = await WotRegistryResolver.CaptureDependencyGraphAsync([entry],
+            new Dictionary<Uri, FederationDocument>(), aliases);
+        await Assert.That(graph.Nodes.Count).IsEqualTo(3);
+        await Assert.That(graph.Edges.Count).IsEqualTo(3);
+        await Assert.That(ReferenceEquals(graph.Edges[0].Target, graph.Edges[1].Target)).IsTrue();
+        await Assert.That(graph.Edges[2].Target.VersionXid).IsEqualTo(Fixture.Resource + "/versions/3.0.0");
+        var closure = GraphClosure(
+            ("1.0.0", "/properties/base", "tm:ref", "https://graph.test/2.0.0.json", "2.0.0"),
+            ("1.0.0", "/properties/alias", "tm:ref", "urn:graph:2", "2.0.0"),
+            ("2.0.0", "/properties/other", "tm:ref", "urn:graph:3", "3.0.0"));
+        WotPublicationClosure.Parse(Encoding.UTF8.GetBytes(closure.ToJsonString())).ValidateAgainstGraph(graph);
+    }
+
+    [Test]
+    public async Task CapturedGraphAliasChecksShareAnInclusiveWorkBudgetAndCancellation()
+    {
+        var (entry, identities) = await DependencyGraphFixture(
+            """{"base":{"tm:ref":"https://graph.test/2.0.0.json"},"alias":{"tm:ref":"urn:graph:2"}}""",
+            """{"other":{"tm:ref":"urn:graph:3"}}""");
+        var aliases = GraphAliasIdentities(identities, includeThird: true);
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var baseline = new FederationReadBudget();
+        _ = await WotRegistryResolver.CaptureDependencyGraphAsync([entry], contexts, aliases, budget: baseline);
+        foreach (var delta in new[] { -1, 0, 1 })
+        {
+            var budget = new FederationReadBudget(new(maxWork: baseline.Work + delta));
+            if (delta < 0)
+            {
+                var failure = await Assert.That(async () =>
+                {
+                    _ = await WotRegistryResolver.CaptureDependencyGraphAsync([entry], contexts, aliases, budget: budget);
+                }).Throws<FederationException>() ?? throw new InvalidOperationException("Expected alias-check work exhaustion.");
+                await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.LimitExceeded);
+            }
+            else
+            {
+                var graph = await WotRegistryResolver.CaptureDependencyGraphAsync([entry], contexts, aliases, budget: budget);
+                await Assert.That(graph.Edges.Count).IsEqualTo(3);
+                await Assert.That(budget.Work).IsEqualTo(baseline.Work);
+            }
+        }
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        await Assert.That(async () =>
+        {
+            _ = await WotRegistryResolver.CaptureDependencyGraphAsync([entry], contexts, aliases,
+                cancellationToken: cancellation.Token);
+        }).Throws<OperationCanceledException>();
+    }
+
+    private static WotCapturedUriIdentityIndex GraphAliasIdentities(WotCapturedUriIdentityIndex identities,
+        bool includeThird = false)
+    {
+        var target = identities.Resolve(new Uri("urn:graph:2"));
+        var aliases = new List<WotCapturedUriIdentity>
+        {
+            new(new Uri("urn:graph:2"), WotCapturedUriIdentityKind.DocumentView, target),
+            new(new Uri("https://graph.test/2.0.0.json"), WotCapturedUriIdentityKind.DocumentView, target)
+        };
+        if (includeThird)
+        {
+            aliases.Add(new(new Uri("urn:graph:3"), WotCapturedUriIdentityKind.DocumentView,
+                identities.Resolve(new Uri("urn:graph:3"))));
+        }
+        return new(aliases);
+    }
+
+    [Test]
     public async Task ClosureBindingComparisonRejectsXidsThatCannotDistinguishCapturedRegistries()
     {
         var (first, identities) = await DependencyGraphFixture();
@@ -609,7 +740,16 @@ public class CapturedRegistryReadSourceTests
              "again":{"tm:ref":"urn:graph:2#/properties/value"},"local":{"tm:ref":"#/properties/first"}}
             """,
             """{"value":{},"next":{"tm:ref":"urn:graph:3"}}""",
-            """{"back":{"tm:ref":"urn:graph:1"}}""");
+            """{"back":{"tm:ref":"https://graph.test/1.0.0.json"}}""");
+        var target = identities.Resolve(new Uri("urn:graph:1"));
+        identities = new WotCapturedUriIdentityIndex(
+        [
+            new(new Uri("https://graph.test/1.0.0.json"), WotCapturedUriIdentityKind.DocumentView, target),
+            new(new Uri("urn:graph:2"), WotCapturedUriIdentityKind.DocumentView,
+                identities.Resolve(new Uri("urn:graph:2"))),
+            new(new Uri("urn:graph:3"), WotCapturedUriIdentityKind.DocumentView,
+                identities.Resolve(new Uri("urn:graph:3")))
+        ]);
         var graph = await WotRegistryResolver.CaptureDependencyGraphAsync([entry],
             new Dictionary<Uri, FederationDocument>(), identities);
         await Assert.That(graph.Entries.Count).IsEqualTo(1);
@@ -630,7 +770,7 @@ public class CapturedRegistryReadSourceTests
             ("1.0.0", "/properties/first", "tm:ref", "urn:graph:2#/properties/value", "2.0.0"),
             ("1.0.0", "/properties/again", "tm:ref", "urn:graph:2#/properties/value", "2.0.0"),
             ("2.0.0", "/properties/next", "tm:ref", "urn:graph:3", "3.0.0"),
-            ("3.0.0", "/properties/back", "tm:ref", "urn:graph:1", "1.0.0"));
+            ("3.0.0", "/properties/back", "tm:ref", "https://graph.test/1.0.0.json", "1.0.0"));
         WotPublicationClosure.Parse(Encoding.UTF8.GetBytes(closure.ToJsonString())).ValidateAgainstGraph(graph);
     }
 

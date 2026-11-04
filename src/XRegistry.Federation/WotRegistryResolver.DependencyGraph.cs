@@ -97,6 +97,8 @@ public static partial class WotRegistryResolver
                 {
                     throw FederationJson.Invalid("One captured Version has contradictory bytes, kind or document-base evidence.");
                 }
+                await CheckCapturedDocumentUriConsistencyAsync(existing, documentUri, contexts, readBudget,
+                    cancellationToken).ConfigureAwait(false);
                 return existing;
             }
             readBudget.CheckDepth(depth);
@@ -199,6 +201,30 @@ public static partial class WotRegistryResolver
         CheckCapturedProjectionCycles(nodes, edges, readBudget, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         return new(roots, nodes, edges);
+    }
+
+    private static async ValueTask CheckCapturedDocumentUriConsistencyAsync(WotCapturedDependencyNode existing,
+        Uri documentUri, IReadOnlyDictionary<Uri, FederationDocument> contexts, FederationReadBudget budget,
+        CancellationToken token)
+    {
+        if (WotReferenceUriResolver.ResolveTarget(existing.DocumentUri, documentUri).IsDocumentLocal) { return; }
+        var document = existing.Document.Document;
+        var references = await WotJsonLdBaseResolver.DiscoverOrdinaryReferencesAsync(document, existing.DocumentUri,
+            contexts, budget, token).ConfigureAwait(false);
+        var links = await WotJsonLdBaseResolver.DiscoverLinkReferencesAsync(document, existing.DocumentUri,
+            existing.Document.Kind, contexts, budget, token).ConfigureAwait(false);
+        var sources = await WotJsonLdBaseResolver.DiscoverProjectionSourceReferencesAsync(document, existing.DocumentUri,
+            existing.Document.Kind, contexts, budget, token).ConfigureAwait(false);
+        foreach (var reference in references.Concat(links).Concat(sources.Select(source => source.Reference)))
+        {
+            token.ThrowIfCancellationRequested();
+            budget.ChargeWork();
+            var alternate = WotReferenceUriResolver.ResolveTarget(reference.Target.DocumentUri, documentUri);
+            if (reference.Target.IsDocumentLocal != alternate.IsDocumentLocal)
+            {
+                throw FederationJson.Invalid("One captured Version has document URI aliases with conflicting reference locality.");
+            }
+        }
     }
 
     private static void CheckCapturedProjectionCycles(List<WotCapturedDependencyNode> nodes,
