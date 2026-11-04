@@ -1259,6 +1259,37 @@ public class WotReferenceUriResolverTests
     }
 
     [Test]
+    [Arguments("unmapped", "\"ignored\":{\"tm:ref\":\"urn:example:hidden\"}")]
+    [Arguments("json", "\"payload\":{\"tm:ref\":\"urn:example:hidden\"}")]
+    [Arguments("local-context-under-unmapped", "\"ignored\":{\"@context\":{\"tm\":\"https://www.w3.org/2019/wot/tm#\"},\"tm:ref\":\"urn:example:hidden\"}")]
+    public async Task OrdinaryDiscoveryIgnoresReferencesInsideUnexpandedJsonLdValues(string _, string members)
+    {
+        var json = "{\"@context\":{\"tm\":\"https://www.w3.org/2019/wot/tm#\",\"ignored\":null," +
+            "\"payload\":{\"@id\":\"https://example.test/payload\",\"@type\":\"@json\"}}," + members + "}";
+        var document = new FederationDocument(Encoding.UTF8.GetBytes(json));
+        var references = await WotJsonLdBaseResolver.DiscoverOrdinaryReferencesAsync(document,
+            new Uri("https://example.test/document.json"), new Dictionary<Uri, FederationDocument>());
+        await Assert.That(references.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments("@included")]
+    [Arguments("@graph")]
+    public async Task OrdinaryDiscoveryFindsReferencesInExpandedJsonLdNodeContainers(string container)
+    {
+        var document = new FederationDocument(Encoding.UTF8.GetBytes($$"""
+            {"@context":{"tm":"https://www.w3.org/2019/wot/tm#"},
+             "{{container}}":[{"tm:ref":"urn:example:visible"}]}
+            """));
+        var references = await WotJsonLdBaseResolver.DiscoverOrdinaryReferencesAsync(document,
+            new Uri("https://example.test/document.json"), new Dictionary<Uri, FederationDocument>());
+        await Assert.That(references.Count).IsEqualTo(1);
+        await Assert.That(references[0].SourcePointer).IsEqualTo($"/{container}/0");
+        await Assert.That(references[0].Operator).IsEqualTo("tm:ref");
+        await Assert.That(references[0].Href).IsEqualTo("urn:example:visible");
+    }
+
+    [Test]
     public async Task OrdinaryDiscoveryCancellationAndWorkExhaustionCannotReturnPartialOccurrences()
     {
         var document = new FederationDocument(Encoding.UTF8.GetBytes("""

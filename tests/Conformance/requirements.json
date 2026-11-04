@@ -141446,7 +141446,7 @@
       "text": "Each reachable in-scope external occurrence MUST have exactly one binding. A Consumer MUST reject duplicate binding keys, including duplicates with the same target, and MUST reject bindings to local, unreachable or nonexistent occurrences. Two different occurrences referring to the same target remain distinct bindings. If one pointed-to object contains several in-scope reference members, including aliases for the same expanded member, a Consumer MUST reject it as an ambiguous occurrence rather than choosing one. The binding's `href` MUST equal the source reference's JSON string value, including its fragment, without URI resolution or percent decoding.",
       "review": {
         "status": "reviewed",
-        "note": "The closure reader rejects duplicate source/pointer keys even when targets agree or source XIDs use equivalent escapes. The combined inventory classifies ordinary references, links and projection sources, excluding local and ordinary Schema targets before duplicate-pointer checks. Captured traversal establishes transitive reachability for discovered occurrences, retains distinct edges to repeated targets and ordinary cycles, and compares exact authored pointers, operators and hrefs with every binding. Projection selectors reuse their manifest edge; an extra selector binding rejects. Local, unreachable and missing bindings reject without partial success. Complete syntactic-subtree discovery, full projection admission and pinned offline composition remain unfinished; this compound requirement stays pending.",
+        "note": "The closure reader rejects duplicate source/pointer keys even when targets agree or source XIDs use equivalent escapes. The combined inventory classifies ordinary references, links and projection sources, excluding local and ordinary Schema targets before duplicate-pointer checks. Ordinary occurrence discovery checks candidate members against full captured-context JSON-LD expansion: members beneath undefined or ignored terms and inside @json values are not occurrences, while @included and @graph nodes retain their authored pointers. Captured traversal establishes transitive reachability for discovered occurrences, retains distinct edges to repeated targets and ordinary cycles, and compares exact authored pointers, operators and hrefs with every binding. Projection selectors reuse their manifest edge; an extra selector binding rejects. Local, unreachable and missing bindings reject without partial success. Remaining syntactic forms, full projection admission and pinned offline composition remain unfinished; this compound requirement stays pending.",
         "roles": [
           "client",
           "producer"
@@ -141472,7 +141472,9 @@
           "CapturedRegistryReadSourceTests.ClosureBindingsCannotReplaceIndependentOccurrenceOrTargetEvidence",
           "CapturedRegistryReadSourceTests.CapturedDependencyGraphsDoNotIncludeSchemaOrDocumentLocalOccurrences",
           "CapturedRegistryReadSourceTests.IndependentClosureBindingChecksUseInclusiveWorkAndCancellation",
-          "CapturedRegistryReadSourceTests.CapturedProjectionGraphsBindManifestSourcesRatherThanAffordanceSelectors"
+          "CapturedRegistryReadSourceTests.CapturedProjectionGraphsBindManifestSourcesRatherThanAffordanceSelectors",
+          "WotReferenceUriResolverTests.OrdinaryDiscoveryIgnoresReferencesInsideUnexpandedJsonLdValues",
+          "WotReferenceUriResolverTests.OrdinaryDiscoveryFindsReferencesInExpandedJsonLdNodeContainers"
         ],
         "nativeEvidence": []
       }
