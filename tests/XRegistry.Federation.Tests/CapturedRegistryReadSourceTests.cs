@@ -1634,6 +1634,49 @@ public class CapturedRegistryReadSourceTests
     }
 
     [Test]
+    [Arguments("plan", "@language", false)]
+    [Arguments("plan", "@index", false)]
+    [Arguments("source", "@language", false)]
+    [Arguments("source", "@index", true)]
+    public async Task ProjectionSelectionHonorsPrefixTermContainers(string owner, string container, bool conflict)
+    {
+        var binding = new JsonObject
+        {
+            ["@id"] = conflict ? "urn:other:" : "urn:plan:",
+            ["@prefix"] = true,
+            ["@container"] = container
+        };
+        var properties = new JsonObject
+        {
+            ["a"] = new JsonObject { ["const"] = "source" }
+        };
+        if (owner == "source")
+        {
+            properties["a"]!["@context"] = new JsonObject { ["vendor"] = binding.DeepClone() };
+        }
+        var source = await SelectionSource(properties.ToJsonString());
+        var root = await SelectionRuleDocument();
+        root["@context"]!["vendor"] = owner == "plan" ? binding : JsonValue.Create("urn:plan:");
+        root["properties"] = JsonNode.Parse("""
+            {"selected":{"tm:ref":"urn:inventory:tm#/properties/a","vendor:classification":"restricted"}}
+            """);
+
+        if (conflict)
+        {
+            var failure = await Assert.That(async () => { _ = await SelectProjection(root, source); })
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected a source prefix conflict.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+            await Assert.That(failure.Message).Contains("conflicts with the selected source");
+        }
+        else
+        {
+            var selection = (await SelectProjection(root, source)).Single();
+            await Assert.That(selection.Annotations.Single().VendorPrefixIri).IsEqualTo("urn:plan:");
+            await Assert.That(selection.Definition.GetProperty("const").GetString()).IsEqualTo("source");
+        }
+    }
+
+    [Test]
     [Arguments(false)]
     [Arguments(true)]
     public async Task ProjectionSelectionReadsImplicitAmbiguousPrefixFlags(bool shorthand)
@@ -2280,6 +2323,92 @@ public class CapturedRegistryReadSourceTests
         }
         var failure = await Assert.That(async () => { _ = await ReadSelectionRules(root); })
             .Throws<FederationException>() ?? throw new InvalidOperationException("Expected bounded projection grammar.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    [Arguments("predicate")]
+    [Arguments("selector")]
+    [Arguments("source")]
+    public async Task ProjectionTypeArraysRejectAnExpandedNullBeforeAValidType(string owner)
+    {
+        var root = await SelectionRuleDocument();
+        root["@context"]!["Disabled"] = null;
+        var types = new JsonArray("Disabled", "urn:type:allowed");
+        if (owner == "selector")
+        {
+            root["properties"] = new JsonObject
+            {
+                ["selected"] = new JsonObject
+                {
+                    ["tm:ref"] = "urn:inventory:tm#/properties/a",
+                    ["@type"] = types
+                }
+            };
+        }
+        else if (owner == "predicate")
+        {
+            root["p:projects"]![0]!["p:select"] = new JsonArray(new JsonObject { ["@type"] = types });
+        }
+        else
+        {
+            root["p:projects"]![0]!["p:select"] = JsonNode.Parse("""[{"@type":"urn:type:allowed"}]""");
+        }
+
+        var source = owner == "source"
+            ? await SelectionSource("""
+                {"a":{"@context":{"Disabled":null},"@type":["Disabled","urn:type:allowed"]}}
+                """)
+            : await SelectionSource("""{"a":{}}""");
+        var failure = await Assert.That(async () =>
+        {
+            if (owner == "predicate") { _ = await ReadSelectionRules(root); }
+            else { _ = await SelectProjection(root, source); }
+        }).Throws<FederationException>() ?? throw new InvalidOperationException("Expected every type to resolve.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
+    public async Task ProjectionTypesAllowAnUnusedDisabledTermAndRepeatedResolvedTypes()
+    {
+        var root = await SelectionRuleDocument();
+        root["@context"]!["Disabled"] = null;
+        root["p:projects"]![0]!["p:select"] = JsonNode.Parse("""
+            [{"@type":["urn:type:allowed","urn:type:allowed"]}]
+            """);
+
+        var rule = (await ReadSelectionRules(root)).Single();
+        var typeIris = rule.Filters.Single().TypeIris;
+        await Assert.That(typeIris.Count).IsEqualTo(2);
+        await Assert.That(typeIris[0]).IsEqualTo("urn:type:allowed");
+        await Assert.That(typeIris[1]).IsEqualTo("urn:type:allowed");
+        var source = await SelectionSource("""{"a":{"@type":"urn:type:allowed"}}""");
+        await Assert.That((await SelectProjection(root, source)).Single().Name).IsEqualTo("a");
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task ProjectionRootRejectsAnExpandedNullBeforeItsRequiredTypes(bool envelope)
+    {
+        var root = await SelectionRuleDocument();
+        root["@context"]!["Disabled"] = null;
+        root["@type"] = new JsonArray("Disabled", "tm:ThingModel", "p:projection");
+        var document = new FederationDocument(Encoding.UTF8.GetBytes(root.ToJsonString()));
+        var uri = new Uri("https://example.test/plan.json");
+        var contexts = new Dictionary<Uri, FederationDocument>();
+        var failure = await Assert.That(async () =>
+        {
+            if (envelope)
+            {
+                _ = await WotJsonLdBaseResolver.ReadProjectionPlanEnvelopeAsync(document, uri, contexts);
+            }
+            else
+            {
+                _ = await WotJsonLdBaseResolver.DiscoverProjectionSourceReferencesAsync(document, uri,
+                    WotReferenceTargetKind.ThingModel, contexts);
+            }
+        }).Throws<FederationException>() ?? throw new InvalidOperationException("Expected every root type to resolve.");
         await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
     }
 

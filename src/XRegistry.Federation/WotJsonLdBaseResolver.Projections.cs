@@ -58,7 +58,7 @@ public static partial class WotJsonLdBaseResolver
         var baseline = ExpandCapturedDocument(root, documentBase, contexts, loaded, readBudget, cancellationToken);
         var expandedRoot = ExpandProjectionRoot(root, baseline, documentBase, contexts, loaded,
             readBudget, cancellationToken);
-        var envelope = ValidateProjectionEnvelope(expandedRoot);
+        var envelope = ValidateProjectionEnvelope(expandedRoot, readBudget, cancellationToken);
         if (!string.Equals(envelope.ScenarioIri, scenarioIri, StringComparison.Ordinal))
         {
             throw FederationJson.Invalid("A projection scenario must retain its authored absolute IRI.");
@@ -434,8 +434,7 @@ public static partial class WotJsonLdBaseResolver
         var baseline = ExpandCapturedDocument(root, documentBase, contextDocuments, loaded, readBudget, cancellationToken);
         var expandedRoot = ExpandProjectionRoot(root, baseline, documentBase, contextDocuments, loaded,
             readBudget, cancellationToken);
-        var types = expandedRoot["@type"] is JArray rootTypes
-            ? rootTypes.Values<string>().ToHashSet(StringComparer.Ordinal) : [];
+        var types = ProjectionRootTypes(expandedRoot, readBudget, cancellationToken);
         if (!types.Contains(ProjectionVocabulary + "projection"))
         {
             return Array.Empty<WotProjectionSourceOccurrence>();
@@ -569,10 +568,44 @@ public static partial class WotJsonLdBaseResolver
         return valueText;
     }
 
-    private static WotProjectionPlanEnvelope ValidateProjectionEnvelope(JObject expandedRoot)
+    private static HashSet<string> ProjectionRootTypes(JObject expandedRoot, FederationReadBudget budget,
+        CancellationToken cancellationToken)
     {
-        var types = expandedRoot["@type"] is JArray rootTypes
-            ? rootTypes.Values<string>().ToHashSet(StringComparer.Ordinal) : [];
+        var types = new HashSet<string>(StringComparer.Ordinal);
+        var invalidType = false;
+        foreach (var value in expandedRoot["@type"] as JArray ?? [])
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            budget.ChargeWork();
+            if (value is not JValue { Type: JTokenType.String, Value: string iri })
+            {
+                invalidType = true;
+            }
+            else
+            {
+                types.Add(iri);
+            }
+        }
+        if (types.Contains(ProjectionVocabulary + "projection"))
+        {
+            if (invalidType)
+            {
+                throw FederationJson.Invalid("A projection root type did not expand to an IRI.");
+            }
+            foreach (var type in types)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                budget.ChargeWork();
+                _ = FederationJson.AbsoluteUri(type);
+            }
+        }
+        return types;
+    }
+
+    private static WotProjectionPlanEnvelope ValidateProjectionEnvelope(JObject expandedRoot,
+        FederationReadBudget budget, CancellationToken cancellationToken)
+    {
+        var types = ProjectionRootTypes(expandedRoot, budget, cancellationToken);
         if (!types.Contains(ProjectionVocabulary + "projection"))
         {
             throw FederationJson.Invalid("The root is not marked as a projection plan.");

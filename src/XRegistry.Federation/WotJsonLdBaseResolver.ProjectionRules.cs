@@ -204,11 +204,10 @@ public static partial class WotJsonLdBaseResolver
                         {
                             cancellationToken.ThrowIfCancellationRequested();
                             readBudget.ChargeWork();
-                            if (value is not JValue { Type: JTokenType.String } type)
+                            if (value is not JValue { Type: JTokenType.String, Value: string iri })
                             {
                                 throw FederationJson.Invalid("A projection type predicate did not expand to an IRI.");
                             }
-                            var iri = type.Value<string>()!;
                             _ = FederationJson.AbsoluteUri(iri);
                             names.Add(iri);
                         }
@@ -250,7 +249,10 @@ public static partial class WotJsonLdBaseResolver
         {
             token.ThrowIfCancellationRequested();
             budget.ChargeWork();
-            var iri = value.Value<string>()!;
+            if (value is not JValue { Type: JTokenType.String, Value: string iri })
+            {
+                throw FederationJson.Invalid("A projection type did not expand to an IRI.");
+            }
             _ = FederationJson.AbsoluteUri(iri);
             types.Add(iri);
         }
