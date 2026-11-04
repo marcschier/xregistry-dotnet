@@ -23,11 +23,11 @@ public class OciPackagedModelTests
     public async Task EveryPackagedModelProducesACompleteNativeSnapshotWithoutRuntimeModelGeneration(RegistryModelKind kind)
     {
         var compiled = BuiltInRegistryModels.Compile(kind);
-        using var original = BuiltInRegistryModels.LoadSource(kind);
-        var resolved = CapturePackagedIncludes(JsonNode.Parse(original.RootElement.GetRawText())!,
+        var source = JsonNode.Parse(compiled.Source.RootElement.GetRawText())!;
+        var resolved = CapturePackagedIncludes(source.DeepClone(),
             new Uri("https://packaged.example/" + kind.ToString().ToLowerInvariant() + "/model.json"), 0);
         var root = JsonNode.Parse(AuthoredCapture.Registry(RegistryJson.Parse(resolved.ToJsonString())).RootElement.GetRawText())!;
-        root["entity"]!["modelsource"] = JsonNode.Parse(original.RootElement.GetRawText());
+        root["entity"]!["modelsource"] = source;
         root["entity"]!["model"] = JsonNode.Parse(compiled.EffectiveModel.RootElement.GetRawText());
         var package = await OciSnapshotWriter.CreateAsync(new([RegistryJson.Parse(root.ToJsonString())]));
         await Assert.That(package.Validation.Configs).IsEqualTo(1);
@@ -69,8 +69,9 @@ public class OciPackagedModelTests
         {
             var uri = new Uri(source, include);
             var kind = Enum.Parse<RegistryModelKind>(uri.AbsolutePath.Split('/')[1], ignoreCase: true);
-            using var input = BuiltInRegistryModels.LoadSource(kind);
-            var selected = OciMetadataTests.Resolve(input.RootElement, uri.Fragment.Length == 0 ? "#" : uri.Fragment);
+            var input = BuiltInRegistryModels.Compile(kind);
+            var selected = OciMetadataTests.Resolve(input.Source.RootElement,
+                uri.Fragment.Length == 0 ? "#" : uri.Fragment);
             var expanded = CapturePackagedIncludes(JsonNode.Parse(selected.GetRawText())!, uri, depth + 1).AsObject();
             foreach (var property in expanded)
             {
