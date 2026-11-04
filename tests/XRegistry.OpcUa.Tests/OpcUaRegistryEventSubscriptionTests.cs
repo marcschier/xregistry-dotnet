@@ -21,6 +21,8 @@ public class OpcUaRegistryEventSubscriptionTests
     private static readonly NodeId s_registryCreated = new(300u, 2);
     private static readonly NodeId s_groupDeprecated = new(301u, 2);
     private static readonly NodeId s_resourceDeprecated = new(302u, 2);
+    private static readonly NodeId s_groupUndeprecated = new(303u, 2);
+    private static readonly NodeId s_resourceUndeprecated = new(304u, 2);
     private static readonly NodeId s_unknown = new(399u, 2);
     private static readonly byte[] s_continuationPoint = [1];
     private static readonly NamespaceTable s_namespaceUris =
@@ -42,15 +44,19 @@ public class OpcUaRegistryEventSubscriptionTests
         [
             new(s_groupDeprecated, "GroupDeprecatedEventType"),
             new(s_resourceDeprecated, "ResourceDeprecatedEventType"),
+            new(s_groupUndeprecated, "GroupUndeprecatedEventType"),
+            new(s_resourceUndeprecated, "ResourceUndeprecatedEventType"),
         ];
 
         var eventTypes = await OpcUaRegistryEventSubscription.DiscoverEventTypesAsync(
             session, s_namespaceUris, s_notifier);
 
-        await Assert.That(eventTypes.Count).IsEqualTo(3);
+        await Assert.That(eventTypes.Count).IsEqualTo(5);
         await Assert.That(eventTypes[s_registryCreated]).IsEqualTo("io.xregistry.registry.created");
         await Assert.That(eventTypes[s_groupDeprecated]).IsEqualTo("io.xregistry.group.deprecated");
         await Assert.That(eventTypes[s_resourceDeprecated]).IsEqualTo("io.xregistry.resource.deprecated");
+        await Assert.That(eventTypes[s_groupUndeprecated]).IsEqualTo("io.xregistry.group.deprecated");
+        await Assert.That(eventTypes[s_resourceUndeprecated]).IsEqualTo("io.xregistry.resource.deprecated");
         await Assert.That(proxy.BrowseRequests.Any(request =>
             request.NodeId == s_registryType && request.ReferenceTypeId == ReferenceTypeIds.GeneratesEvent)).IsTrue();
         await Assert.That(proxy.BrowseRequests.Any(request =>
