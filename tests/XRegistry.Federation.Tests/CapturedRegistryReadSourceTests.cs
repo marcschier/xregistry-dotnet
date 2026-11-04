@@ -1163,6 +1163,60 @@ public class CapturedRegistryReadSourceTests
             new("https://example.test/plan.json"), new Dictionary<Uri, FederationDocument>(), InventoryIndex(source));
 
     [Test]
+    public async Task ProjectionEnvelopeReaderRetainsTheAbsoluteScenarioAndOrdinaryKind()
+    {
+        var root = await SelectionRuleDocument();
+        var envelope = await WotJsonLdBaseResolver.ReadProjectionPlanEnvelopeAsync(
+            new(Encoding.UTF8.GetBytes(root.ToJsonString())), new("https://example.test/plan.json"),
+            new Dictionary<Uri, FederationDocument>());
+        await Assert.That(envelope.Kind).IsEqualTo(WotReferenceTargetKind.ThingModel);
+        await Assert.That(envelope.ScenarioIri).IsEqualTo("urn:example:scenario");
+    }
+
+    [Test]
+    [Arguments("missing-marker")]
+    [Arguments("missing-kind")]
+    [Arguments("multiple-kinds")]
+    [Arguments("relative-id")]
+    [Arguments("missing-scenario")]
+    [Arguments("relative-scenario")]
+    [Arguments("literal-scenario")]
+    public async Task ProjectionEnvelopeReaderRejectsMissingOrInvalidRequiredIdentity(string invalidField)
+    {
+        var root = await SelectionRuleDocument();
+        switch (invalidField)
+        {
+            case "missing-marker":
+                root["@type"] = new JsonArray("tm:ThingModel");
+                break;
+            case "missing-kind":
+                root["@type"] = new JsonArray("p:projection");
+                break;
+            case "multiple-kinds":
+                root["@type"] = new JsonArray("tm:ThingModel", "Thing", "p:projection");
+                break;
+            case "relative-id":
+                root["id"] = "relative";
+                break;
+            case "missing-scenario":
+                root.AsObject().Remove("p:scenario");
+                break;
+            case "relative-scenario":
+                root["p:scenario"] = "relative";
+                break;
+            case "literal-scenario":
+                root["@context"]!["p:scenario"] = WotJsonLdBaseResolver.ProjectionVocabulary + "scenario";
+                break;
+        }
+        var document = new FederationDocument(Encoding.UTF8.GetBytes(root.ToJsonString()));
+        var failure = await Assert.That(async () =>
+            await WotJsonLdBaseResolver.ReadProjectionPlanEnvelopeAsync(document,
+                new("https://example.test/plan.json"), new Dictionary<Uri, FederationDocument>()))
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected invalid projection envelope.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+    }
+
+    [Test]
     public async Task ProjectionSelectionRulesRetainDefaultsAndDoNotImplicitlySelectSources()
     {
         var rules = await ReadSelectionRules(await SelectionRuleDocument());
@@ -1172,6 +1226,17 @@ public class CapturedRegistryReadSourceTests
         await Assert.That(rules[0].NamePrefix).IsNull();
         await Assert.That(rules[0].Filters.Count).IsEqualTo(0);
         await Assert.That(rules[0].Matches("property", new HashSet<string>())).IsFalse();
+    }
+
+    [Test]
+    public async Task CapturedProjectionRejectsAnEmptyResolvedSelectionSet()
+    {
+        var source = await SelectionSource("""{"notSelected":{}}""");
+        var root = await SelectionRuleDocument();
+        root["p:projects"]![0]!["p:select"] = JsonNode.Parse("""[{"@type":"urn:example:unmatched"}]""");
+        var failure = await Assert.That(async () => { _ = await SelectProjection(root, source); })
+            .Throws<FederationException>() ?? throw new InvalidOperationException("Expected empty projection rejection.");
+        await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
     }
 
     [Test]
@@ -1707,11 +1772,19 @@ public class CapturedRegistryReadSourceTests
     {
         var root = await RequirementDocument("{}", "[]");
         root["@context"]!["p"] = WotJsonLdBaseResolver.ProjectionVocabulary;
+        root["@context"]!["Thing"] = "https://www.w3.org/2019/wot/td#Thing";
+        root["@context"]!["id"] = "@id";
+        root["@context"]!["p:scenario"] = new JsonObject
+        {
+            ["@id"] = WotJsonLdBaseResolver.ProjectionVocabulary + "scenario", ["@type"] = "@id"
+        };
         root["@context"]!["p:projects"] = new JsonObject
         {
             ["@id"] = WotJsonLdBaseResolver.ProjectionVocabulary + "projects", ["@container"] = "@list"
         };
         root["@type"] = new JsonArray("tm:ThingModel", "p:projection");
+        root["id"] = "urn:example:projection";
+        root["p:scenario"] = "urn:example:scenario";
         root["p:projects"] = new JsonArray(entry);
         return root;
     }

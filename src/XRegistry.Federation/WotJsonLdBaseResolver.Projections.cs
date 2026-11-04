@@ -19,11 +19,44 @@ public sealed record WotProjectionSourceOccurrence(WotAuthoredReferenceOccurrenc
 public sealed record WotProjectionSelectorOccurrence(WotAuthoredReferenceOccurrence Reference,
     WotProjectionSourceOccurrence Source, string TargetPointer);
 
+/// <summary>Validated immutable facts about a marked projection-plan envelope.</summary>
+public sealed record WotProjectionPlanEnvelope(WotReferenceTargetKind Kind, string ScenarioIri);
+
 public static partial class WotJsonLdBaseResolver
 {
     /// <summary>The selected experimental projection vocabulary; earlier placeholder IRIs are not aliases.</summary>
     public const string ProjectionVocabulary =
         "https://raw.githubusercontent.com/marcschier/wot-thing-description/main/proposals/wot-projections/context.experimental-v1.jsonld#";
+
+    /// <summary>Validates the marked envelope's absolute identity, scenario and single ordinary root kind.</summary>
+    public static async ValueTask<WotProjectionPlanEnvelope> ReadProjectionPlanEnvelopeAsync(
+        FederationDocument document, Uri documentUri,
+        IReadOnlyDictionary<Uri, FederationDocument> capturedContexts,
+        FederationReadBudget? budget = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(documentUri);
+        ArgumentNullException.ThrowIfNull(capturedContexts);
+        var readBudget = budget ?? new();
+        var contexts = CaptureContextDocuments(capturedContexts, readBudget, cancellationToken);
+        var contextSnapshot = ContextSnapshot(contexts);
+        var root = await ParseDocumentAsync(document, readBudget, cancellationToken).ConfigureAwait(false);
+        var documentBase = FederationJson.AbsoluteUri(document.Base ?? documentUri.AbsoluteUri);
+        _ = await ReadAbsoluteRootIriAsync(document, root, "@id", documentUri, contextSnapshot, readBudget,
+            cancellationToken).ConfigureAwait(false);
+        var scenarioIri = await ReadAbsoluteRootIriAsync(document, root, ProjectionVocabulary + "scenario",
+            documentUri, contextSnapshot, readBudget, cancellationToken).ConfigureAwait(false);
+        var loaded = new Dictionary<string, JToken>(StringComparer.Ordinal);
+        var baseline = ExpandCapturedDocument(root, documentBase, contexts, loaded, readBudget, cancellationToken);
+        var expandedRoot = ExpandProjectionRoot(root, baseline, documentBase, contexts, loaded,
+            readBudget, cancellationToken);
+        var envelope = ValidateProjectionEnvelope(expandedRoot);
+        if (!string.Equals(envelope.ScenarioIri, scenarioIri, StringComparison.Ordinal))
+        {
+            throw FederationJson.Invalid("A projection scenario must retain its authored absolute IRI.");
+        }
+        return envelope;
+    }
 
     /// <summary>Discovers ordered source entries only when the root has the selected expanded projection marker.</summary>
     /// <remarks>
@@ -147,6 +180,71 @@ public static partial class WotJsonLdBaseResolver
         }
         cancellationToken.ThrowIfCancellationRequested();
         return occurrences.AsReadOnly();
+    }
+
+    private static async ValueTask<string> ReadAbsoluteRootIriAsync(FederationDocument document, JObject root,
+        string semanticIri, Uri documentUri, IReadOnlyDictionary<Uri, FederationDocument> contexts,
+        FederationReadBudget budget, CancellationToken cancellationToken)
+    {
+        JToken? value = null;
+        if (semanticIri == "@id" && root.Property("@id", StringComparison.Ordinal) is { } keywordId)
+        {
+            value = keywordId.Value;
+        }
+        foreach (var member in root.Properties())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            budget.ChargeWork();
+            if (member.Name.StartsWith('@')) { continue; }
+            var iri = await ExpandMemberIriAsync(document, "", member.Name, documentUri, contexts, budget,
+                cancellationToken).ConfigureAwait(false);
+            if (iri != semanticIri) { continue; }
+            if (value is not null)
+            {
+                throw FederationJson.Invalid("A projection root cannot declare competing identifier or scenario members.");
+            }
+            value = member.Value;
+        }
+        if (value is not JValue { Type: JTokenType.String } authored)
+        {
+            throw FederationJson.Invalid(semanticIri == "@id"
+                ? "A projection root must have an absolute id."
+                : "A projection root must have exactly one IRI-valued scenario.");
+        }
+        var valueText = authored.Value<string>()!;
+        _ = FederationJson.AbsoluteUri(valueText);
+        return valueText;
+    }
+
+    private static WotProjectionPlanEnvelope ValidateProjectionEnvelope(JObject expandedRoot)
+    {
+        var types = expandedRoot["@type"] is JArray rootTypes
+            ? rootTypes.Values<string>().ToHashSet(StringComparer.Ordinal) : [];
+        if (!types.Contains(ProjectionVocabulary + "projection"))
+        {
+            throw FederationJson.Invalid("The root is not marked as a projection plan.");
+        }
+        var thing = types.Contains("https://www.w3.org/2019/wot/td#Thing");
+        var model = types.Contains("https://www.w3.org/2019/wot/tm#ThingModel");
+        if (thing == model)
+        {
+            throw FederationJson.Invalid("A projection root must declare exactly one ordinary TD or TM kind.");
+        }
+        if (expandedRoot["@id"] is not JValue { Type: JTokenType.String } id)
+        {
+            throw FederationJson.Invalid("A projection root must have an absolute id.");
+        }
+        _ = FederationJson.AbsoluteUri(id.Value<string>()!);
+        if (expandedRoot[ProjectionVocabulary + "scenario"] is not JArray scenarioValues ||
+            scenarioValues.Count != 1 || scenarioValues[0] is not JObject scenarioNode ||
+            scenarioNode["@id"] is not JValue { Type: JTokenType.String } scenario)
+        {
+            throw FederationJson.Invalid("A projection root must have exactly one IRI-valued scenario.");
+        }
+        var scenarioIri = scenario.Value<string>()!;
+        _ = FederationJson.AbsoluteUri(scenarioIri);
+        return new(thing ? WotReferenceTargetKind.ThingDescription : WotReferenceTargetKind.ThingModel,
+            scenarioIri);
     }
 
     /// <summary>Associates explicit affordance selectors with their declared source entries without acquiring targets.</summary>

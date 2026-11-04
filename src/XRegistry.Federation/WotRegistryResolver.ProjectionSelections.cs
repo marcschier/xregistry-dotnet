@@ -31,6 +31,12 @@ public static partial class WotRegistryResolver
         ArgumentNullException.ThrowIfNull(capturedIdentities);
         var readBudget = budget ?? new();
         var contexts = WotJsonLdBaseResolver.SnapshotProjectionContexts(capturedContexts, readBudget, cancellationToken);
+        var envelope = await WotJsonLdBaseResolver.ReadProjectionPlanEnvelopeAsync(containingRevision.Document,
+            documentUri, contexts, readBudget, cancellationToken).ConfigureAwait(false);
+        if (envelope.Kind != containingRevision.Kind)
+        {
+            throw FederationJson.Invalid("A projection root kind must match its captured Registry model kind.");
+        }
         var rules = await WotJsonLdBaseResolver.ReadProjectionSelectionRulesAsync(containingRevision.Document,
             documentUri, containingRevision.Kind, contexts, readBudget, cancellationToken).ConfigureAwait(false);
         if (rules.Count == 0)
@@ -146,6 +152,10 @@ public static partial class WotRegistryResolver
                 Encoding.UTF8.GetByteCount(selection.Name) + Encoding.UTF8.GetByteCount(selection.SourcePointer);
             readBudget.CheckResultBytes(resultBytes);
             ordered.Add((ProjectionCategory(selection.Category), selection.Name, ""), selection);
+        }
+        if (ordered.Count == 0)
+        {
+            throw FederationJson.Invalid("A projection plan must resolve at least one imported or local affordance.");
         }
         cancellationToken.ThrowIfCancellationRequested();
         return ordered.Values.ToList().AsReadOnly();

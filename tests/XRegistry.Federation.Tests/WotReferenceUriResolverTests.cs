@@ -681,13 +681,20 @@ public class WotReferenceUriResolverTests
             {"@context":{
               "Thing":"https://www.w3.org/2019/wot/td#Thing",
               "tm":"https://www.w3.org/2019/wot/tm#",
+              "id":"@id",
               "p":"https://raw.githubusercontent.com/marcschier/wot-thing-description/main/proposals/wot-projections/context.experimental-v1.jsonld#",
+              "p:scenario":{
+                "@id":"https://raw.githubusercontent.com/marcschier/wot-thing-description/main/proposals/wot-projections/context.experimental-v1.jsonld#scenario",
+                "@type":"@id"
+              },
               "p:projects":{
                 "@id":"https://raw.githubusercontent.com/marcschier/wot-thing-description/main/proposals/wot-projections/context.experimental-v1.jsonld#projects",
                 "@container":"@list"
               }
             },"@type":
-            """ + System.Text.Json.JsonSerializer.Serialize(types) + ",\"p:projects\":" + entries + "}"));
+            """ + System.Text.Json.JsonSerializer.Serialize(types) +
+            ",\"id\":\"urn:example:projection\",\"p:scenario\":\"urn:example:scenario\",\"p:projects\":" +
+            entries + "}"));
     }
 
     [Test]
