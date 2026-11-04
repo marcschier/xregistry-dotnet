@@ -1240,6 +1240,42 @@ public class CapturedRegistryReadSourceTests
     }
 
     [Test]
+    [Arguments("source", false, false, false, true)]
+    [Arguments("source", true, false, false, false)]
+    [Arguments("source", false, true, false, false)]
+    [Arguments("projection", true, true, false, true)]
+    [Arguments("projection", true, true, true, false)]
+    [Arguments("projection", false, true, false, false)]
+    [Arguments("projection", true, false, false, false)]
+    public async Task ProjectionSelectionEnforcesFormAndSecurityRouting(string routing,
+        bool hasForms, bool hasSecurity, bool duplicateForms, bool valid)
+    {
+        var source = await SelectionSource("""{"a":{}}""");
+        var root = await SelectionRuleDocument();
+        root["p:projects"]![0]!["p:routing"] = routing;
+        root["@context"]!["forms"] = JsonNode.Parse("""{"@id":"td:hasForm"}""");
+        root["@context"]!["security"] = JsonNode.Parse("""{"@id":"td:hasSecurityConfiguration"}""");
+        if (duplicateForms) { root["@context"]!["alternateForms"] = "td:hasForm"; }
+        var selector = new JsonObject { ["tm:ref"] = "urn:inventory:tm#/properties/a" };
+        if (hasForms) { selector["forms"] = new JsonArray(); }
+        if (duplicateForms) { selector["alternateForms"] = new JsonArray(); }
+        if (hasSecurity) { selector["security"] = "nosec"; }
+        root["properties"] = new JsonObject { ["selected"] = selector };
+
+        if (valid)
+        {
+            var selections = await SelectProjection(root, source);
+            await Assert.That(selections.Single().Name).IsEqualTo("selected");
+        }
+        else
+        {
+            var failure = await Assert.That(async () => { _ = await SelectProjection(root, source); })
+                .Throws<FederationException>() ?? throw new InvalidOperationException("Expected routing annotation rejection.");
+            await Assert.That(failure.Code).IsEqualTo(FederationErrorCode.InvalidPackage);
+        }
+    }
+
+    [Test]
     public async Task ProjectionSelectionRulesExpandTypesAndApplyConjunctiveDisjunctivePredicates()
     {
         var root = await SelectionRuleDocument();

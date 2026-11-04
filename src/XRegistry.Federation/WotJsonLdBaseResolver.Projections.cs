@@ -58,6 +58,49 @@ public static partial class WotJsonLdBaseResolver
         return envelope;
     }
 
+    /// <summary>Checks that selector forms and security remain on the side chosen by projection routing.</summary>
+    public static async ValueTask ValidateProjectionSelectorRoutingAsync(
+        FederationDocument document, Uri documentUri,
+        IReadOnlyDictionary<Uri, FederationDocument> capturedContexts,
+        WotProjectionSelectorOccurrence selector, string routing,
+        FederationReadBudget? budget = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(documentUri);
+        ArgumentNullException.ThrowIfNull(capturedContexts);
+        ArgumentNullException.ThrowIfNull(selector);
+        if (routing is not ("source" or "projection"))
+        {
+            throw new ArgumentOutOfRangeException(nameof(routing));
+        }
+
+        var readBudget = budget ?? new();
+        var contexts = ContextSnapshot(CaptureContextDocuments(capturedContexts, readBudget, cancellationToken));
+        var root = await ParseDocumentAsync(document, readBudget, cancellationToken).ConfigureAwait(false);
+        var occurrence = ObjectAtPointer(root, selector.Reference.SourcePointer, readBudget, cancellationToken);
+        var forms = 0;
+        var security = 0;
+        foreach (var member in occurrence.Properties())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            readBudget.ChargeWork();
+            if (member.Name.StartsWith('@') || member.Name == selector.Reference.PropertyName) { continue; }
+            var iri = await ExpandMemberIriAsync(document, selector.Reference.SourcePointer, member.Name,
+                documentUri, contexts, readBudget, cancellationToken).ConfigureAwait(false);
+            if (iri == "https://www.w3.org/2019/wot/td#hasForm") { forms++; }
+            if (iri == "https://www.w3.org/2019/wot/td#hasSecurityConfiguration") { security++; }
+        }
+
+        if (forms > 1 || security > 1 ||
+            routing == "source" && (forms != 0 || security != 0) ||
+            routing == "projection" && (forms != 1 || security != 1))
+        {
+            throw FederationJson.Invalid(routing == "source"
+                ? "Source-routed projection selectors cannot override forms or security."
+                : "Projection-routed selectors must provide exactly one forms and security annotation.");
+        }
+    }
+
     /// <summary>Discovers ordered source entries only when the root has the selected expanded projection marker.</summary>
     /// <remarks>
     /// This validates root-kind and manifest shape, not complete projection admission, target metadata,

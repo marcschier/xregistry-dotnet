@@ -46,6 +46,28 @@ public static partial class WotRegistryResolver
         var selectors = await WotJsonLdBaseResolver.DiscoverProjectionSelectorReferencesAsync(
             containingRevision.Document, documentUri, containingRevision.Kind, contexts,
             readBudget, cancellationToken).ConfigureAwait(false);
+        foreach (var selector in selectors)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            readBudget.ChargeWork();
+            WotProjectionSourceSelectionRule? matchingRule = null;
+            var matches = 0;
+            foreach (var rule in rules)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                readBudget.ChargeWork();
+                if (rule.Source != selector.Source) { continue; }
+                matchingRule = rule;
+                matches++;
+            }
+            if (matches != 1 || matchingRule is null)
+            {
+                throw FederationJson.Invalid("A projection selector must belong to exactly one source rule.");
+            }
+            await WotJsonLdBaseResolver.ValidateProjectionSelectorRoutingAsync(containingRevision.Document,
+                documentUri, contexts, selector, matchingRule.Routing, readBudget, cancellationToken)
+                .ConfigureAwait(false);
+        }
         var root = await ParseAcquiredDocumentAsync(containingRevision, readBudget, cancellationToken).ConfigureAwait(false);
         var planMaps = await ProjectionMapsAsync(containingRevision, root, documentUri, contexts, readBudget,
             cancellationToken).ConfigureAwait(false);
