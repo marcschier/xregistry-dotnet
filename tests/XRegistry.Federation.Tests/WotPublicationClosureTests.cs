@@ -20,9 +20,9 @@ public class WotPublicationClosureTests
     public async Task ClosureRepresentationRetainsExactAuthoredStringsAndReadOnlyOrder(string href)
     {
         var root = Example();
-        root["entries"]!.AsArray().Add(Target);
+        root["entries"]!.AsArray().Add((JsonNode?)JsonValue.Create(Target));
         root["bindings"]![0]!["href"] = href;
-        root["bindings"]!.AsArray().Add(new JsonObject
+        root["bindings"]!.AsArray().Add((JsonNode)new JsonObject
         {
             ["source"] = Target, ["pointer"] = "", ["operator"] = "td:ref", ["href"] = "#",
             ["target"] = Source
@@ -195,7 +195,7 @@ public class WotPublicationClosureTests
     public async Task ClosureRepresentationRejectsDuplicateKeysUnderCoreSourceIdentity(string equivalent)
     {
         var entry = Example();
-        entry["entries"]!.AsArray().Add(equivalent);
+        entry["entries"]!.AsArray().Add((JsonNode?)JsonValue.Create(equivalent));
         await Invalid(entry);
         var binding = Example();
         var duplicate = binding["bindings"]![0]!.DeepClone();

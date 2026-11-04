@@ -395,7 +395,7 @@ public class CapturedRegistryReadSourceTests
         root["bindings"]![0]!["target"] = Fixture.Resource.Replace("team", "%74eam", StringComparison.Ordinal) +
             "/versions/2.0.0";
         if (change == "missing") { root["entries"]!.AsArray().RemoveAt(0); }
-        if (change == "extra") { root["entries"]!.AsArray().Add(Fixture.Resource + "/versions/3.0.0"); }
+        if (change == "extra") { root["entries"]!.AsArray().Add((JsonNode?)JsonValue.Create(Fixture.Resource + "/versions/3.0.0")); }
         var closure = WotPublicationClosure.Parse(Encoding.UTF8.GetBytes(root.ToJsonString()));
         if (change == "complete")
         {
@@ -501,7 +501,7 @@ public class CapturedRegistryReadSourceTests
             ["operator"] = "tm:ref", ["href"] = "urn:graph:2#/properties/value",
             ["target"] = Fixture.Resource + "/versions/2.0.0"
         };
-        closureJson["bindings"]!.AsArray().Add(extra);
+        closureJson["bindings"]!.AsArray().Add((JsonNode)extra);
         await Assert.That(() => WotPublicationClosure.Parse(Encoding.UTF8.GetBytes(closureJson.ToJsonString()))
             .ValidateAgainstGraph(graph)).Throws<FederationException>();
     }
@@ -996,7 +996,7 @@ public class CapturedRegistryReadSourceTests
         var values = new JsonArray();
         foreach (var binding in bindings)
         {
-            values.Add(new JsonObject
+            values.Add((JsonNode)new JsonObject
             {
                 ["source"] = Fixture.Resource + "/versions/" + binding.Source, ["pointer"] = binding.Pointer,
                 ["operator"] = binding.Operator, ["href"] = binding.Href,
@@ -1146,7 +1146,7 @@ public class CapturedRegistryReadSourceTests
         var second = await SelectionSource("""{"other":{"const":"second"}}""");
         var root = await SelectionRuleDocument();
         root["p:projects"]![0]!["p:selectAll"] = true;
-        root["p:projects"]!.AsArray().Add(new JsonObject
+        root["p:projects"]!.AsArray().Add((JsonNode)new JsonObject
         {
             ["p:sourceName"] = "second", ["href"] = "urn:source:second", ["type"] = "application/tm+json"
         });
@@ -1677,7 +1677,7 @@ public class CapturedRegistryReadSourceTests
         var root = await SelectionRuleDocument();
         root["@context"]!["semantic"] = "urn:plan:";
         if (firstSourceWins) { root["p:projects"]![0]!["p:selectAll"] = true; }
-        root["p:projects"]!.AsArray().Add(new JsonObject
+        root["p:projects"]!.AsArray().Add((JsonNode)new JsonObject
         {
             ["p:sourceName"] = "second", ["href"] = "urn:source:second", ["type"] = "application/tm+json"
         });
@@ -3727,7 +3727,7 @@ public class CapturedRegistryReadSourceTests
     {
         var index = InventoryIndex(new Fixture().Open());
         var failure = await Assert.That(async () => await WotJsonLdBaseResolver.DiscoverCapturedReferenceInventoryAsync(
-            InventoryDocument("{}", "[{\"rel\":\"describedby\",\"href\":" + JsonSerializer.Serialize(href) + "}]"),
+            InventoryDocument("{}", "[{\"rel\":\"describedby\",\"href\":" + FederationTestJson.Serialize(href) + "}]"),
             new("https://example.test/entry.json"), WotReferenceTargetKind.ThingDescription,
             new Dictionary<Uri, FederationDocument>(), index)).Throws<FederationException>() ??
             throw new InvalidOperationException("Expected no Schema exclusion without captured Schema identity.");
@@ -3859,7 +3859,7 @@ public class CapturedRegistryReadSourceTests
         var source = new Fixture().Open();
         var index = InventoryIndex(source);
         var failure = await Assert.That(async () => await WotJsonLdBaseResolver.DiscoverCapturedReferenceInventoryAsync(
-            InventoryDocument("""{"a":{"td:ref":""" + JsonSerializer.Serialize(href) + "}}", "[]"),
+            InventoryDocument("""{"a":{"td:ref":""" + FederationTestJson.Serialize(href) + "}}", "[]"),
             new("https://example.test/entry.json"), WotReferenceTargetKind.ThingModel,
             new Dictionary<Uri, FederationDocument>(), index)).Throws<FederationException>() ??
             throw new InvalidOperationException("Expected unresolved or incorrectly typed captured metadata.");

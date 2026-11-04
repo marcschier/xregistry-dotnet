@@ -49,7 +49,7 @@ public class WotReferenceUriResolverTests
             {"a":{"tm:ref":"control.json#/properties/start"},"b":{"tm:ref":"source.json#/properties/speed"}}
             """);
         var root = System.Text.Json.Nodes.JsonNode.Parse(await ReadBytesAsync(document))!;
-        root["p:projects"]!.AsArray().Add(new System.Text.Json.Nodes.JsonObject
+        root["p:projects"]!.AsArray().Add((System.Text.Json.Nodes.JsonNode)new System.Text.Json.Nodes.JsonObject
         {
             ["p:sourceName"] = "control",
             ["href"] = "./control.json",
@@ -126,7 +126,7 @@ public class WotReferenceUriResolverTests
     public async Task ProjectionSelectorsRejectUndeclaredSourcesWrongCategoriesAndMalformedPointers(string href)
     {
         var document = await ProjectionSelectorDocument("{\"a\":{\"tm:ref\":" +
-            System.Text.Json.JsonSerializer.Serialize(href) + "}}");
+            FederationTestJson.Serialize(href) + "}}");
         var failure = await Assert.That(async () =>
             await WotJsonLdBaseResolver.DiscoverProjectionSelectorReferencesAsync(document,
                 new Uri("https://example.test/plans/plan.json"), WotReferenceTargetKind.ThingDescription,
@@ -396,7 +396,7 @@ public class WotReferenceUriResolverTests
     {
         var document = new FederationDocument(Encoding.UTF8.GetBytes("""
             {"@type":["https://www.w3.org/2019/wot/td#Thing",
-            """ + System.Text.Json.JsonSerializer.Serialize(marker) + "]}"));
+            """ + FederationTestJson.Serialize(marker) + "]}"));
         var references = await WotJsonLdBaseResolver.DiscoverProjectionSourceReferencesAsync(document,
             new Uri("https://example.test/plan.json"), WotReferenceTargetKind.ThingDescription,
             new Dictionary<Uri, FederationDocument>());
@@ -426,7 +426,7 @@ public class WotReferenceUriResolverTests
     [Arguments("""["https://example.test/NotAThing"]""")]
     public async Task MarkedProjectionRequiresExactlyItsCapturedOrdinaryRootKind(string ordinaryTypes)
     {
-        var types = System.Text.Json.JsonSerializer.Deserialize<string[]>(ordinaryTypes)!;
+        var types = FederationTestJson.DeserializeStringArray(ordinaryTypes);
         var document = ProjectionDocument("""
             [{"p:sourceName":"source","href":"source.json","type":"application/td+json"}]
             """, types);
@@ -484,8 +484,8 @@ public class WotReferenceUriResolverTests
         var entries = """
             [{"p:sourceName":"pump","href":"source.json","type":"application/td+json"},
              {"p:sourceName":
-            """ + System.Text.Json.JsonSerializer.Serialize(secondName) + ",\"href\":" +
-            System.Text.Json.JsonSerializer.Serialize(secondHref) + ""","type":"application/tm+json"}]""";
+            """ + FederationTestJson.Serialize(secondName) + ",\"href\":" +
+            FederationTestJson.Serialize(secondHref) + ""","type":"application/tm+json"}]""";
         var failure = await Assert.That(async () =>
             await WotJsonLdBaseResolver.DiscoverProjectionSourceReferencesAsync(ProjectionDocument(entries, "Thing"),
                 new Uri("https://example.test/plan.json"), WotReferenceTargetKind.ThingDescription,
@@ -519,7 +519,7 @@ public class WotReferenceUriResolverTests
     {
         var document = ProjectionDocument("""
             [{"p:sourceName":"pump","href":"source.json","type":
-            """ + System.Text.Json.JsonSerializer.Serialize(mediaType) + "}]", "Thing");
+            """ + FederationTestJson.Serialize(mediaType) + "}]", "Thing");
         var references = await WotJsonLdBaseResolver.DiscoverProjectionSourceReferencesAsync(document,
             new Uri("https://example.test/plan.json"), WotReferenceTargetKind.ThingDescription,
             new Dictionary<Uri, FederationDocument>());
@@ -692,7 +692,7 @@ public class WotReferenceUriResolverTests
                 "@container":"@list"
               }
             },"@type":
-            """ + System.Text.Json.JsonSerializer.Serialize(types) +
+            """ + FederationTestJson.Serialize(types) +
             ",\"id\":\"urn:example:projection\",\"p:scenario\":\"urn:example:scenario\",\"p:projects\":" +
             entries + "}"));
     }
@@ -706,7 +706,7 @@ public class WotReferenceUriResolverTests
     [Arguments("describedby")]
     public async Task DiscoversLiteralReferenceLinksWithUnchangedHrefAndLinkObjectPointer(string relation)
     {
-        var document = LinkDocument("[{\"rel\":" + System.Text.Json.JsonSerializer.Serialize(relation) +
+        var document = LinkDocument("[{\"rel\":" + FederationTestJson.Serialize(relation) +
             ""","href":"../models/target.json#/properties/a%2Fb"}]""");
         var references = await WotJsonLdBaseResolver.DiscoverLinkReferencesAsync(document,
             new Uri("https://example.test/td/document.json"), WotReferenceTargetKind.ThingDescription,
@@ -763,7 +763,7 @@ public class WotReferenceUriResolverTests
     [Arguments("@type")]
     public async Task LinkRelationsAreLiteralRatherThanVocabularyExpandedOrCaseFolded(string relation)
     {
-        var document = LinkDocument("[{\"rel\":" + System.Text.Json.JsonSerializer.Serialize(relation) +
+        var document = LinkDocument("[{\"rel\":" + FederationTestJson.Serialize(relation) +
             ""","href":"urn:example:target"}]""");
         var references = await WotJsonLdBaseResolver.DiscoverLinkReferencesAsync(document,
             new Uri("https://example.test/document.json"), WotReferenceTargetKind.ThingDescription,
@@ -1401,7 +1401,7 @@ public class WotReferenceUriResolverTests
               "@id":"https://www.w3.org/2019/wot/tm#ref",
               "@context":{"@base":"https://scoped.example.test/models/current.json#inherited"}
             }},"ref":
-            """ + System.Text.Json.JsonSerializer.Serialize(href) + "}"));
+            """ + FederationTestJson.Serialize(href) + "}"));
         var references = await WotJsonLdBaseResolver.DiscoverOrdinaryReferencesAsync(document,
             new Uri("https://example.test/document.json"), new Dictionary<Uri, FederationDocument>());
 
