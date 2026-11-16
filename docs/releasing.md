@@ -1,11 +1,13 @@
 # Releasing xRegistry .NET
 
-The source version is `0.1.2-alpha.3`. This patch release refreshes the .NET
-SDK (`10.0.401` to `10.0.403`), TUnit (`1.74.0` to `1.76.28`), and
-`Microsoft.Data.Sqlite` (`10.0.12` to `10.0.14`) without changing the public
-API or supported target frameworks. The existing `alpha.3` prerelease
-identifier is retained exactly; the numeric patch version advances from
-`0.1.1`.
+The source version is `0.1.2-alpha.4`. This patch release refreshes the .NET
+SDK (`10.0.403` to `10.0.404`), TUnit (`1.76.28` to `1.85.0`),
+`Microsoft.Data.Sqlite` (`10.0.14` to `10.0.15`), and pytest (`9.1.1` to
+`9.2.0`). GitHub Actions setup-dotnet moves from `v6.0.0` to `v6.1.0`, and
+setup-python from `v7.0.0` to `v7.1.0`; both remain pinned to immutable
+commits. These compatible maintenance updates do not change the public API or
+supported target frameworks. The numbered alpha identifier advances from
+`alpha.3` to `alpha.4`.
 Packages and samples are implemented but
 not release-qualified; incomplete native/conformance requirements are not
 marked qualified merely to publish an early alpha, and publishing does not by
@@ -13,12 +15,11 @@ itself certify runtime/specification qualification. Publishing this alpha does
 not itself claim conformance: NuGet.org visibly marks a prerelease version, and
 that exact version string can never be reused by a later stable/`rc` release.
 
-For the dependency refresh, the user authorized a narrowly scoped exception
-to the no-test-change requirement: only immutable Action SHA expectation
-values in the tooling tests may change. The original 35 release/CI/Git
-contract tests passed before the upgrade; replacing workflow pins without
-updating those identities produced 10 failures. Their behavioral, structural,
-security, permissions and qualification assertions remain unchanged.
+For the prior alpha.3 action-pin refresh, only immutable Action SHA expectation
+values in the tooling tests changed. The original 35 release/CI/Git contract
+tests passed before that upgrade; replacing workflow pins without updating
+those identities produced 10 failures. Their behavioral, structural,
+security, permissions and qualification assertions remained unchanged.
 
 The user separately authorized peer-version-specific accounting/fixture
 expectation updates for source `10d3ce1f2280874930326aa02d11eb79152ae8cc`,
